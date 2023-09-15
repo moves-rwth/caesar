@@ -1,0 +1,253 @@
+use crate::ast::*;
+use crate::front::parser::parser_util::*;
+use std::str::FromStr;
+use std::cell::RefCell;
+
+grammar(
+    file: FileId,
+);
+
+Comma<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+CommaPlus<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T> => {
+        v.push(e);
+        v
+    },
+};
+
+OptSemi<T>: Vec<T> = {
+    <v:(<T> ";"?)*> => v,
+};
+
+Span<Rule>: Span = {
+    <l: @L> <op: Rule> <r: @L> => span(file, l, r),
+}
+
+Symbol: Symbol = {
+    r"[_a-zA-Z][_a-zA-Z0-9']*" => Symbol::intern(<>),
+}
+
+Ident: Ident = {
+    <l: @L> <name: Symbol> <r: @R> => {
+        Ident { name, span: span(file, l, r) }
+    },
+}
+
+// ---------------------------------------
+// Types
+
+Ty: TyKind = {
+    <ident: Ident> => TyKind::Unresolved(ident),
+    "[]" <ty: Ty> => TyKind::List(Box::new(ty)),
+}
+
+// ---------------------------------------
+// Expressions
+
+ExprTier<Rule>: Expr = {
+    <l: @L> <kind: Rule> <r: @R> =>
+        Shared::new(ExprData {
+            kind,
+            ty: None,
+            span: span(file, l, r)
+        })
+};
+
+ExprKindStart = ExprKindQuant;
+
+pub Expr = ExprTier<ExprKindStart>;
+
+ExprKindQuant: ExprKind = {
+    <quant: QuantOp> <vars: CommaPlus<QuantVar>> "." <expr: ExprTier<ExprKindQuant>> => ExprKind::Quant(quant, vars, expr),
+    ExprKindOr,
+}
+
+QuantOp: QuantOp = {
+    <span: Span<"inf">> => Spanned::new(span, QuantOpKind::Inf),
+    <span: Span<"sup">> => Spanned::new(span, QuantOpKind::Sup),
+    <span: Span<"exists">> => Spanned::new(span, QuantOpKind::Exists),
+    <span: Span<"forall">> => Spanned::new(span, QuantOpKind::Forall),
+}
+
+QuantVar: QuantVar = {
+    <l: @L> <name: Ident> ":" <ty: Ty> <r: @R> 
+        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty: ty, kind: VarKind::Const, init: None, span: span(file, l, r) }))
+}
+
+ExprKindOr: ExprKind = {
+    <l: ExprTier<ExprKindOr>> <span: Span<"||">> <r: ExprTier<ExprKindAnd>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Or), l, r),
+    ExprKindAnd,
+}
+
+ExprKindAnd: ExprKind = {
+    <l: ExprTier<ExprKindCompare>> <span: Span<"&&">> <r: ExprTier<ExprKindAnd>> => ExprKind::Binary(Spanned::new(span, BinOpKind::And), l, r),
+    ExprKindCompare,
+}
+
+ExprKindCompare: ExprKind = {
+    <l: ExprTier<ExprKindLattice>> <span: Span<"==">> <r: ExprTier<ExprKindCompare>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Eq), l, r),
+    <l: ExprTier<ExprKindLattice>> <span: Span<"<">> <r: ExprTier<ExprKindCompare>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Lt), l, r),
+    <l: ExprTier<ExprKindLattice>> <span: Span<"<=">> <r: ExprTier<ExprKindCompare>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Le), l, r),
+    <l: ExprTier<ExprKindLattice>> <span: Span<"!=">> <r: ExprTier<ExprKindCompare>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Ne), l, r),
+    <l: ExprTier<ExprKindLattice>> <span: Span<">=">> <r: ExprTier<ExprKindCompare>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Ge), l, r),
+    <l: ExprTier<ExprKindLattice>> <span: Span<">">> <r: ExprTier<ExprKindCompare>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Gt), l, r),
+    ExprKindLattice,
+}
+
+SymCap: () = { "⊓", "\\cap" }
+SymCup: () = { "⊔", "\\cup" }
+SymRightarrow: () = { "→", "==>" }
+SymLeftarrow: () = { "←", "<==" }
+
+ExprKindLattice: ExprKind = {
+    <l: ExprTier<ExprKindSummand>> <span: Span<SymCap>> <r: ExprTier<ExprKindLattice>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Inf), l, r),
+    <l: ExprTier<ExprKindSummand>> <span: Span<SymCup>> <r: ExprTier<ExprKindLattice>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Sup), l, r),
+    <l: ExprTier<ExprKindSummand>> <span: Span<SymRightarrow>> <r: ExprTier<ExprKindLattice>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Impl), l, r),
+    <l: ExprTier<ExprKindSummand>> <span: Span<SymLeftarrow>> <r: ExprTier<ExprKindLattice>> => ExprKind::Binary(Spanned::new(span, BinOpKind::CoImpl), l, r),
+    <l: ExprTier<ExprKindSummand>> <span: Span<"↘">> <r: ExprTier<ExprKindLattice>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Compare), l, r),
+    <l: ExprTier<ExprKindSummand>> <span: Span<"↖">> <r: ExprTier<ExprKindLattice>> => ExprKind::Binary(Spanned::new(span, BinOpKind::CoCompare), l, r),
+    ExprKindSummand,
+}
+
+ExprKindSummand: ExprKind = {
+    <l: ExprTier<ExprKindFactor>> <span: Span<"+">> <r: ExprTier<ExprKindSummand>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Add), l, r),
+    <l: ExprTier<ExprKindFactor>> <span: Span<"-">> <r: ExprTier<ExprKindSummand>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Sub), l, r),
+    ExprKindFactor,
+}
+
+ExprKindFactor: ExprKind = {
+    <l: ExprTier<ExprKindTerm>> <span: Span<"*">> <r: ExprTier<ExprKindFactor>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Mul), l, r),
+    <l: ExprTier<ExprKindTerm>> <span: Span<"/">> <r: ExprTier<ExprKindFactor>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Div), l, r),
+    <l: ExprTier<ExprKindTerm>> <span: Span<"%">> <r: ExprTier<ExprKindFactor>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Mod), l, r),
+    ExprKindTerm,
+}
+
+ExprKindTerm: ExprKind = {
+    "let" "(" <ident: Ident> "," <val: Expr> "," <expr: Expr> ")" => ExprKind::Subst(ident, val, expr),
+    "ite" "(" <cond: Expr> "," <a: Expr> "," <b: Expr> ")" => ExprKind::Ite(cond, a, b),
+    <call: ExprCall> => call,
+    <span: Span<"!">> <expr: ExprTier<ExprKindTerm>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Not), expr),
+    <span: Span<"~">> <expr: ExprTier<ExprKindTerm>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Non), expr),
+    <span: Span<"?">> <expr: ExprTier<ExprKindTerm>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Embed), expr),
+    <l: @L> "[" <expr: Expr> "]" <r: @R> => ExprKind::Unary(Spanned::new(span(file, l, r), UnOpKind::Iverson), expr),
+    <l: @L> "(" <expr: Expr> ")" <r: @R> => ExprKind::Unary(Spanned::new(span(file, l, r), UnOpKind::Parens), expr),
+    <l: @L> <lit: LitKind> <r: @R> => ExprKind::Lit(spanned(file, l, r, lit)),
+    <ident: Ident> => ExprKind::Var(ident),
+}
+
+ExprCall: ExprKind = {
+    <ident: Ident> "(" <args: Comma<Expr>> ")" => ExprKind::Call(ident, args),
+}
+
+SymInfty: () = { "∞", "\\infty" }
+
+pub LitKind: LitKind = {
+    <s:r#""[^"]*""#> => LitKind::Str(Symbol::intern(&s[1..s.len()-1])),
+    <num: r"[0-9]+"> => LitKind::UInt(u128::from_str(num).unwrap()),
+    <num: r"[0-9]+\.[0-9]+"> => LitKind::Frac(parse_decimal(num).unwrap()),
+    SymInfty => LitKind::Infinity,
+    "true" => LitKind::Bool(true),
+    "false" => LitKind::Bool(false),
+}
+
+// ---------------------------------------
+// Statements
+
+Stmt: Stmt = {
+    <l: @L> <kind: StmtKind> <r: @R> => spanned(file, l, r, kind),
+}
+
+pub Stmts: Vec<Stmt> = {
+    <stmts: OptSemi<Stmt>> => stmts,
+}
+
+StmtKind: StmtKind = {
+    <block: Block> => StmtKind::Block(block),
+    <l: @L> "var" <ident: Ident> ":" <ty: Ty> "=" <rhs: Expr> <r: @R> 
+        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: Some(rhs), span: span(file, l, r) })),
+    <l: @L> "var" <ident: Ident> ":" <ty: Ty> <r: @R> 
+        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: None, span: span(file, l, r) })),
+    <lhs: CommaPlus<Ident>> "=" <rhs: Expr> => StmtKind::Assign(lhs, rhs),
+    <call: ExprTier<ExprCall>> => StmtKind::Assign(vec![], call),
+    "havoc" <vars: CommaPlus<Ident>> => StmtKind::Havoc(Direction::Down, vars),
+    "cohavoc" <vars: CommaPlus<Ident>> => StmtKind::Havoc(Direction::Up, vars),
+    "assert" <expr: Expr> => StmtKind::Assert(Direction::Down, expr),
+    "coassert" <expr: Expr> => StmtKind::Assert(Direction::Up, expr),
+    "assume" <expr: Expr> => StmtKind::Assume(Direction::Down, expr),
+    "coassume" <expr: Expr> => StmtKind::Assume(Direction::Up, expr),
+    "compare" <expr: Expr> => StmtKind::Compare(Direction::Down, expr),
+    "cocompare" <expr: Expr> => StmtKind::Compare(Direction::Up, expr),
+    "tick" <expr: Expr> => StmtKind::Tick(expr),
+    "negate" => StmtKind::Negate(Direction::Down),
+    "conegate" => StmtKind::Negate(Direction::Up),
+    "validate" => StmtKind::Validate(Direction::Down),
+    "covalidate" => StmtKind::Validate(Direction::Up),
+    "if" SymCap <block1: Block> "else" <block2: Block> => StmtKind::Demonic(block1, block2),
+    "if" SymCup <block1: Block> "else" <block2: Block> => StmtKind::Angelic(block1, block2),
+    "if" <cond: Expr> <block1: Block> "else" <block2: Block> => StmtKind::If(cond, block1, block2),
+    "while" "(" <cond: Expr> ")" <block1: Block> => StmtKind::While(cond, block1),
+    "@" <ident: Ident> "(" <inputs: Comma<Expr>> ")" <stmt: Stmt> => StmtKind::Annotation(ident, inputs, Box::new(stmt)),
+    "label" <ident: Ident> => StmtKind::Label(ident),
+}
+
+Block: Block = {
+    "{" <stmts: Stmts> "}" => stmts,
+}
+
+// ---------------------------------------
+// Declarations
+
+pub Decl: DeclKind = {
+    <proc: ProcDecl> => DeclKind::ProcDecl(DeclRef::new(proc)),
+    <domain: DomainDecl> => DeclKind::DomainDecl(DeclRef::new(domain)),
+}
+
+ProcDecl: ProcDecl = {
+    <l: @L> "proc" <name: Ident> <inputs: ParamList> "->" <outputs: ParamList> <spec: ProcSpec*> <body: Block?> <r: @R>
+         => ProcDecl { direction: Direction::Down, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r) },
+    <l: @L> "coproc" <name: Ident> <inputs: ParamList> "->" <outputs: ParamList> <spec: ProcSpec*> <body: Block?> <r: @R>
+         => ProcDecl { direction: Direction::Up, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r) }
+}
+
+ParamList: Spanned<Vec<Param>> = {
+    <l: @L> "(" <params: Comma<Param>> ")" <r: @R> => spanned(file, l, r, params),
+}
+
+Param: Param = {
+    <l: @L> <name: Ident> ":" <ty: Ty> <r: @R> => Param { name, ty: Box::new(ty), span: span(file, l, r) }
+}
+
+ProcSpec: ProcSpec = {
+    "pre" <expr: Expr> => ProcSpec::Requires(expr),
+    "post" <expr: Expr> => ProcSpec::Ensures(expr),
+}
+
+DomainDecl: DomainDecl = {
+    <l: @L> "domain" <name: Ident> "{" <body: DomainSpec*> "}" <r: @R> 
+        => DomainDecl { name, body, span: span(file, l, r) }
+}
+
+DomainSpec: DomainSpec = {
+    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> <r: @R> 
+        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output: output, body: RefCell::new(None), span: span(file, l, r) })),
+    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> "=" <body: Expr> <r: @R> 
+        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output: output, body: RefCell::new(Some(body)), span: span(file, l, r) })),
+    <l: @L> "axiom" <name: Ident> <axiom: Expr> <r: @R> 
+        => DomainSpec::Axiom(DeclRef::new(AxiomDecl{ name, axiom, span: span(file, l, r) }))
+}
+
+// ---------------------------------------
+// Input file
+
+pub Decls: Vec<DeclKind> = {
+    <decls: Decl*> => decls,
+}

@@ -1,0 +1,149 @@
+// RUN: @caesar @file --no-simplify
+
+domain Sums {
+    
+    // The sum of elements given in the list of at indices [start,start+len],
+    // i.e. \sum\limits_{i=start}^{start+len-1} elements[i].
+    func sum(elements: []UReal, start: UInt, len: UInt): UReal = ite(len>0, select(elements, start+len - 1) + sum(elements, start, len-1), 0)
+
+    // This is a helper function to specify the pre-expectation of the unif assignment in inner_loop.
+    // It returns a list of unspecified length with identical elements `N/x`.
+    func summands1(N: UInt, x: UInt, i: UInt): []UReal
+    axiom summands1_def forall N: UInt, x: UInt, i: UInt.
+        (forall j: UInt. (j<=N) ==> (select(summands1(N, x, i), j) == [0 < x && x < j] *  (N/x)))
+
+    // The harmonic function can be defined as follows:
+    // 
+    //      func harmonic(n: UInt) : UReal = ite(n==0, 0, (1/n) + harmonic(n-1))
+    // 
+    // However, this definition allows the SMT solver to apply the definition
+    // infinitely often, which leads to nontermination. We apply a standard
+    // trick here that allows the unfolding of harmonic to be done only once.
+    // After one unfolding, we get only `harmonic0`, which is not recursively
+    // defined. This is a standard trick that is even automatically applied in
+    // many verification tools. We do it manually here.
+    func harmonic(n: UInt): UReal
+    func harmonic0(n: UInt): UReal 
+    axiom harmonic_def forall n: UInt.
+        (harmonic(n) == ite(n==0, 0, (1/n) + harmonic0(n-1)))
+    axiom harmonic_zero forall n: UInt.
+        (harmonic(n) >= 0)
+    axiom harmonic0_zero forall n: UInt.
+        (harmonic0(n) >= 0)    
+}
+
+// Verifies the outer loop of the coupon collector. It uses inner_loop and
+// harmonic_lemma.
+coproc outer_loop(N: UInt, x: UInt, i: UInt) -> ()
+    pre [0 < x && x <=N] * N * harmonic(x) + [N<x]*(N * harmonic(N) + (x-N))
+    post 0
+{
+    // These if branches will generate some case distinctions which help the SMT
+    // solver to decide this problem.
+    if x==1 {
+    } else {
+        if 1<x && x<=N {
+            // This implements a call to harmonic_lemma. We encode the call here
+            // by hand and intentionally use a `coassume` instruction instead of
+            // `covalidate; coassume`. This enables framing. Omitting the
+            // `covalidate` here is sound because harmonic_lemma is just a
+            // Boolean procedure and it does not modify the program state. In
+            // the future, we plan to integrate Boolean lemmas as specialized
+            // built-in constructs into Caesar.
+            coassert ?((1>=x || x>N))
+            coassume ?(
+                ( N * (harmonic(x-1)) + ite(N>=x, (N/x), 1) )
+                >
+                ([0 < x && x <=N] * N * harmonic(x))
+            )
+        } else {
+           if x == N+1 {      
+           } else { 
+           }
+        }
+    }
+
+    // this encodes the loop using Park induction. we omit the assert; havoc;
+    // validate; assume here since that's given by the procedure's pre already.
+    if 0 < x {
+        // current pre: [1 < x && x <= N+1] * N * (harmonic(x-1)) + [N+1<x]*(N * harmonic(N) + ((x-1)-N)) + [0 < x && x < N+1] * ite(N>=x, (N/x), 1)
+
+        var new_i: UInt = N+1
+
+        // current pre: [1 < x && x <= i] * N * (harmonic(x-1)) + [N+1<x]*(N * harmonic(N) + ((x-1)-N)) + [0 < x && x < i] * ite(N>=x, (N/x), 1)
+        inner_loop(N,x,new_i)
+        var new_x: UInt = x-1
+
+        // encodes the constant invariant as per the default Park induction encoding
+        coassert [0 < new_x && new_x <=N] * N * harmonic(new_x) + [N<new_x]*(N * harmonic(N) + (new_x-N))
+        coassume ?(true)
+    } else {}
+
+}
+
+// Verify inductive invariant of inner coupon collector loop using sum_lemma.
+coproc inner_loop(N: UInt, x: UInt, i: UInt) -> ()
+    pre !?(i == N+1)
+    pre [0 < x && x < i] * (ite(N>=x, (N/x), 1)) + [1 < x && x <= N+1] * N * harmonic(x-1) + [N+1<x]*(N * harmonic(N) + ((x-1)-N))
+    post [1 < x && x <= N+1] * N * harmonic(x-1) + [N+1<x]*(N * harmonic(N) + ((x-1)-N))
+{
+    // Encoding of the inner loop using Park induction again.
+    if 0 < x && x < i {
+        tick 1
+
+        // Below, we invoke sum_lemma(N,x,i, summands1(N,x,i), N) as a Boolean
+        // lemma using the simplified `coassume` encoding without a
+        // `covalidate`. As noted above (in `outer_loop`), this is sound here
+        // because `sum_lemma` is a Boolean coprocedure.
+        coassert !?(0<x && 0<N && (forall j: UInt. (j<=N) ==> (select(summands1(N,x,i), j) == [0 < x && x < j] * (N/x))))
+        coassume !?(sum(summands1(N,x,i), 1, N) ==  ite(N>=x, N-x, 0) * (N/x))
+
+        // The call below encodes the uniform assignment `i = unif(1, N)`.
+        unif_1_n(N, x, i, 1, N)
+
+        // Standard Park induction encoding for the invariant at the end of the
+        // loop body.
+        coassert [0 < x && x < i] * ite(N>=x, (N/x), 1) + [1 < x && x <= N+1] * N * harmonic(x-1) + [N+1<x]*(N * harmonic(N) + ((x-1)-N))
+        coassume ?(true)
+    } else {}
+
+}
+
+// Encoding the uniform assignment of for values between 1 and N for a specific
+// post-expectation. While our tool cannot yet generate a pre-expectation
+// expression for these sums of arbitrary size (`N` is a program variable), we
+// can encode it as a normal coproc. This way, we can talk about `summands1`
+// explicitly e.g. when we call harmonic_lemma.
+coproc unif_1_n(N: UInt, x: UInt, i: UInt, start: UInt, len: UInt) -> ()
+    pre (1/len) * sum(summands1(N, x, i), start, len) + [1 < x && x <= N+1] * N * harmonic(x-1) + [N+1<x]*(N * harmonic(N) + ((x-1)-N))
+    post  [0 < x && x < i] * ite(N>=x, (N/x), 1) + [1 < x && x <= N+1] * N * harmonic(x-1) + [N+1<x]*(N * harmonic(N) + ((x-1)-N)) 
+
+// This lemma states that if `x` is a number in `(1,N]`, then the difference of
+// the `x-1`'s harmonic number to the `x`'s harmonic number is bounded by `x`.
+// Furthermore, this statement is scaled by `N` because we use it that way in
+// the pre-expectation of the uniform assignment.
+coproc harmonic_lemma(N: UInt, x: UInt) -> ()
+    pre !?(1<x && x<=N)
+    post !?(( N * (harmonic(x-1)) + ite(N>=x, (N/x), 1) )
+                <=
+                ([0 < x && x <=N] * N * harmonic(x)))
+{
+    // The proof simply requires the following hint, allowing the solver to
+    // further unfold the definition of harmonic.
+    coassume !?(harmonic0(x-1) == harmonic(x-1))
+}
+
+// We now prove a lemma about the anonymous sum by induction on the number of
+// summands len.
+coproc sum_lemma(N: UInt, x: UInt, i: UInt, list : []UReal, len: UInt) -> ()
+    pre !?(0 < x && 0<len && (forall j: UInt. (j<=len) ==> (select(list, j) ==
+                [0 < x && x < j] * (N/x))))
+    post !?(sum(list, 1, len) ==  ite(len>=x, len-x, 0) * (N/x))
+{
+    if len == 1 {
+        coassert !?(sum(list, 1, len) ==  ite(len>=x, len-x, 0) * (N/x))
+    } else {
+        sum_lemma(N, x, i, list, len-1)
+        coassert !?(sum(list, 1, len) ==  ite(len>=x, len-x, 0) * (N/x))
+    }
+}

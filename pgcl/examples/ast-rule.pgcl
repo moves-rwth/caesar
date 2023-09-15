@@ -1,0 +1,10 @@
+// ARGS: --encoding "encode-ast" --invariant "true" --variant "3 * [(not (x % 2 = 0))] + ([10 <= x] * (x-10) + [not (10 <= x)] * (10 - x))" --prob "0.5" --decrease "2"
+
+nat x;
+while((not (x = 10))){
+    if(x % 2 = 0){
+        {x := x-2}[1/2]{x := x+2};
+    } else {
+         x := x+1;
+    }
+}

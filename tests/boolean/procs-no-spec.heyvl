@@ -1,0 +1,6 @@
+// RUN: @caesar @file
+
+proc bla(x: UInt) -> () {
+    assume ?(x >= 10)
+    assert ?(x >= 5)
+}

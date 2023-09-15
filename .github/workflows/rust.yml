@@ -1,0 +1,33 @@
+on: [push, pull_request]
+
+name: Rust
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: [self-hosted, Linux]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --workspace
+
+  fmt:
+    name: Rustfmt
+    runs-on: [self-hosted, Linux]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with: 
+          components: rustfmt
+      - run: rustup component add rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: [self-hosted, Linux]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with: 
+          components: clippy
+      - run: cargo clippy --workspace -- -D warnings

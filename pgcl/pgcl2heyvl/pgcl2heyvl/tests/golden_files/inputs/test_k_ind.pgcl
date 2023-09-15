@@ -1,0 +1,30 @@
+// ARGS: --encoding "encode-k-induction" --post "totalFailed" --pre "[toSend <= 4]*(totalFailed + 1) + [not (toSend <= 4)]*\\infty" --k 5
+
+# Adapted from Jip's MA
+# The number of total packages to send
+nat toSend;
+
+# Number of packages sent
+nat sent;
+
+# The maximal number of retransmission tries
+nat maxFailed;
+
+# The number of failed retransmission tries
+nat failed;
+
+nat totalFailed;
+
+while(failed < maxFailed & sent < toSend){
+    {
+        # Transmission of current packages successful
+        failed := 0;
+        sent := sent + 1;
+    }
+    [0.9]
+    {
+        # Transmission not successful
+        failed := failed +1;
+        totalFailed := totalFailed + 1;
+    }
+}

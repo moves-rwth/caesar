@@ -1,0 +1,80 @@
+// HeyVL file to show that C is almost-surely terminating
+// using AST rule by McIver et al. (2018) with
+// invariant = true, variant = x, probability function p(v) = 1 / (v + 1), decrease function d(v) = 1
+// for the pGCL program C:
+//
+//     nat x;
+//     while (0 < x) {
+//         {
+//             x := 0;
+//         } [1 / (x + 1)] {
+//             x := x + 1;
+//         }
+//     }
+
+// forall l. (v <= l) ==> (prob(l) <= prob(v))
+proc prob_antitone(x: UInt, v: UReal) -> ()
+{
+    assert ?(forall l: UReal.  (v <= l) ==> (1 / (l + 1) <= 1 / (v + 1)))
+}
+
+// forall l. (v <= l) ==> (decrease(l) <= decrease(v))
+proc decrease_antitone(x: UInt, v: UReal) -> ()
+{
+    assert ?(forall l: UReal. (v <= l) ==> (1 <= 1))
+}
+
+// [I] <= \Phi_{[I]}([I])
+proc I_wp_subinvariant(init_x: UInt) -> (x: UInt)
+    pre [true]
+    post [true]
+{
+    var prob_choice: Bool
+    x = init_x
+    if 0 < x {
+        prob_choice = flip(1 / (x + 1))
+        if prob_choice {
+            x = 0
+        } else {
+            x = x + 1
+        }
+    } else {}
+}
+
+// !G iff V = 0
+proc termination_condition(x: UInt) -> ()
+{
+    assert ?(!(0 < x) == (x == 0))
+}
+
+// \Phi_{V}(V) <= V
+coproc V_wp_superinvariant(init_x: UInt) -> (x: UInt)
+    pre init_x
+    post x
+{
+    var prob_choice: Bool
+    x = init_x
+    if 0 < x {
+        prob_choice = flip(1 / (x + 1))
+        if prob_choice {
+            x = 0
+        } else {
+            x = x + 1
+        }
+    } else {}
+}
+
+// [I] * [G] * (p o V) <= \s. wp[P]([V < V(s) - d(V(s))])(s)
+proc progress_condition(init_x: UInt) -> (x: UInt)
+    pre [true] * ([0 < init_x] * (1 / (init_x + 1)))
+    post [x <= (init_x - 1)]
+{
+    var prob_choice: Bool
+    x = init_x
+    prob_choice = flip(1 / (x + 1))
+    if prob_choice {
+        x = 0
+    } else {
+        x = x + 1
+    }
+}

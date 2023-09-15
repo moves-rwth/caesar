@@ -1,0 +1,25 @@
+{
+  "name": "heyvl",
+  "displayName": "HeyVL",
+  "description": "HeyVL language support",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.71.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "heyvl",
+      "aliases": ["HeyVL", "heyvl"],
+      "extensions": [".heyvl"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "heyvl",
+      "scopeName": "source.heyvl",
+      "path": "./syntaxes/heyvl.tmLanguage.json"
+    }]
+  }
+}

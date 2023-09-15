@@ -1,0 +1,7 @@
+// ARGS: --encoding "encode-omega-invariant" --calculus "ert" --invariant "[x <= n] * x" --post "0"
+
+nat x;
+while(0 < x){
+    x := x - 1;
+    tick(1);
+}

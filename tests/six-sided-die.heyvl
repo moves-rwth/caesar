@@ -1,0 +1,23 @@
+// RUN: @caesar @file
+
+coproc die_wp() -> (r: EUReal)
+    pre 2.625
+    post r
+{
+    var a: Bool = flip(0.5)
+    var b: Bool = flip(0.5)
+    var c: Bool = flip(0.5)
+    r = 4 * [a] + 2 * [b] + [c] + 1
+    assert ?(r <= 6)
+}
+
+proc die_wlp() -> (r: EUReal)
+    pre 6/8
+    post 1
+{
+    var a: Bool = flip(0.5)
+    var b: Bool = flip(0.5)
+    var c: Bool = flip(0.5)
+    r = 4 * [a] + 2 * [b] + [c] + 1
+    assert ?(r <= 6)
+}

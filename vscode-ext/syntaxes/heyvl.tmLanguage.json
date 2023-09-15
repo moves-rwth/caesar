@@ -1,0 +1,93 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "HeyVL",
+  "patterns": [
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#type"
+    },
+    {
+      "include": "#constant"
+    }
+  ],
+  "repository": {
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.heyvl",
+          "match": "\\b(var|(co)?assume|(co)?assert|(co)?negate|(co)?validate|if|else|(co)?proc|pre|post|(co)?compare|tick|while|(co)?havoc|domain|func|axiom)\\b"
+        },
+        {
+          "name": "keyword.operator.heyvl",
+          "match": "\\b(forall|exists|inf|sup|ite|let)\\b"
+        }
+      ]
+    },
+    "type": {
+      "patterns": [
+        {
+          "name": "entity.name.type",
+          "match": "(\\[\\])+[a-zA-Z]+\\b"
+        },
+        {
+          "name": "entity.name.type",
+          "match": "\\b(Bool|Int|UInt|Real|UReal|EUReal)\\b"
+        }
+      ]
+    },
+    "paren-expr": {
+      "begin": "\\(",
+      "end": "\\)",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.paren.open"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.paren.close"
+        }
+      },
+      "name": "expression.group",
+      "patterns": [
+        {
+          "include": "#expr"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "match": "/{2}.*",
+          "name": "comment.single.heyvl"
+        },
+        {
+          "begin": "/\\*",
+          "end": "\\*/",
+          "name": "comment.block.heyvl"
+        }
+      ]
+    },
+    "constant": {
+      "patterns": [
+        {
+          "name": "constant.numeric.heyvl",
+          "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.language.heyvl",
+          "match": "\\b(true|false|∞|\\\\[a-zA-Z]+)\\b"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.heyvl"
+}

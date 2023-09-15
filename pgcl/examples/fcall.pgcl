@@ -1,0 +1,10 @@
+// ARGS: --encoding "encode-k-induction" --calculus "ert" --post 0 --pre "2*(n-x)" --k 1
+// examples/NCH-18/linear/fcall.imp
+nat x;
+nat n;
+nat r;
+while (x < n) {
+    { r := 0; } [1/2] { r := 1; }
+    x := x + r;
+    tick(1);
+}

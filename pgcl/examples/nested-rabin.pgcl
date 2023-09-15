@@ -1,0 +1,19 @@
+// ARGS: --encoding "encode-k-induction" --calculus "wlp" --post "[bounds] * [i=1]" --pre "[bounds] * ([1=i] + [1 < i] * (2/3))" --k 1 --k 1 --invariant "[bounds] * [0 <= n & n <= i] * ((2/3) * invar1 + invar2)"
+
+nat i;
+nat n;
+nat d;
+
+const bounds := n <= 5 & i <= 5; # rec_pown_2 is only defined for a finite set of values
+const invar1 := 1 - ([i=n] * (n+1) * rec_pown_2 + [i=n+1] * rec_pown_2);
+const invar2 := [i=n] * n * rec_pown_2 + [i=n+1] * rec_pown_2;
+const rec_pown_2 := [n=0]*1 + [n=1]*(1/2) + [n=2]*(1/4) + [n=3]*(1/8) + [n=4]*(1/16) + [n=5]*(1/32);
+
+while (1<i) {
+    n := i;
+    while (0 < n) {
+        {d:=0}[0.5]{d:=1};
+        i:=i-d;
+        n:=n-1;
+    }
+}

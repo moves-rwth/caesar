@@ -1,0 +1,25 @@
+// RUN: @caesar @file
+
+domain Harmonic {
+    func harmonic(n: UInt): UReal
+
+    axiom harmonic_base harmonic(0) == 0
+    axiom harmonic_step forall n: UInt. harmonic(n + 1) == 1/(n+1) + harmonic(n)
+}
+
+coproc harmonic_sum(init_x: UReal, init_n: UInt) -> (x: UReal, n: UInt)
+    pre init_x + harmonic(init_n)
+    post x
+{
+    x = init_x
+    n = init_n
+    coassert x + harmonic(n)
+    cohavoc n, x
+    cocompare x + harmonic(n)
+    if (n > 0) {
+        x = x + 1/n
+        n = n - 1
+        coassert x + harmonic(n)
+        coassume ?(true)
+    } else {}
+}

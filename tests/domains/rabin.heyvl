@@ -1,0 +1,44 @@
+// RUN: @caesar @file
+
+domain Exponentials {
+    func rec_pown_2(exponent: UInt): UReal
+
+    axiom rec_pown_2_base rec_pown_2(0) == 1
+    axiom rec_pown_2_step forall exponent: UInt. rec_pown_2(exponent + 1) == rec_pown_2(exponent) / 2
+}
+
+proc rabin(init_i: UInt, init_n: UInt, init_d: UInt) -> (i: UInt, n: UInt, d: UInt)
+    pre ([1 == init_i] + ([1 < init_i] * (2/3)))
+    post [i == 1]
+{
+    i = init_i
+    n = init_n
+    d = init_d
+    var prob_choice: Bool;
+    compare ([1 == i] + ([1 < i] * (2/3)));
+    assert ([1 == i] + ([1 < i] * (2/3)));
+    havoc d, i, n;
+    compare ([1 == i] + ([1 < i] * (2/3)));
+    if 1 < i {
+        n = i;
+        assert ([(0 <= n) && (n <= i)]) * (((2/3) * (1 - ((([i == n] * (n + 1)) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n))))) + ((([i == n] * n) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n))));
+        havoc d, i, n;
+        compare ([(0 <= n) && (n <= i)]) * (((2/3) * (1 - ((([i == n] * (n + 1)) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n))))) + ((([i == n] * n) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n))));
+        if 0 < n {
+            prob_choice = ber(1, 1);
+            if prob_choice {
+                d = 0;
+            } else {
+                d = 1;
+            };
+            i = i - d;
+            n = n - 1;
+            assert ([(0 <= n) && (n <= i)]) * (((2/3) * (1 - ((([i == n] * (n + 1)) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n))))) + ((([i == n] * n) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n))));
+            assume 0;
+        } else {
+        };
+        assert ([1 == i] + ([1 < i] * (2/3)));
+        assume 0;
+    } else {
+    };
+}

@@ -1,0 +1,46 @@
+// ARGS: --encoding "encode-k-induction" --calculus "ert" --post 0 --pre "5*n" --k 1
+// examples/NCH-18/linear/bayesian_network.imp
+nat i;
+nat d;
+nat s;
+nat l;
+nat g;
+nat n;
+while (0 < n) {
+    {i := 1}[0.3]{i := 0};
+    tick(1);
+    {d := 1}[0.4]{d := 0};
+    tick(1);
+    if ((i < 1 & d < 1)) {
+        {g := 1}[0.7]{g := 0};
+        tick(1);
+    } else {
+        if ((i < 1 & 0 < d)) {
+            {g := 1}[0.95]{g := 0};
+            tick(1);
+        } else {
+            if ((0 < i & d < 1)) {
+                {g := 1}[0.1]{g := 0};
+                tick(1);
+            } else {
+                {g := 1}[0.5]{g := 0};
+                tick(1);
+            }
+        }
+    }
+    if (i < 1) {
+        {s := 1}[0.05]{s := 0};
+        tick(1);
+    } else {
+        {s := 1}[0.8]{s := 0};
+        tick(1);
+    }
+    if (g < 1) {
+        {l := 1}[0.1]{l := 0};
+        tick(1);
+    } else {
+        {l := 1}[0.6]{l := 0};
+        tick(1);
+    }
+    n := n - 1;
+}

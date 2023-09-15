@@ -1,0 +1,22 @@
+// ARGS: --encoding "encode-k-induction" --calculus "ert" --post 0 --pre "2*(m-y) + 0.6666667*(n-x)" --k 1
+// examples/NCH-18/linear/prspeed.imp
+nat x;
+nat y;
+nat m;
+nat n;
+while ((x + 3 <= n)) {
+    if (y < m) {
+        { y := y + 1; } [1/2] {
+            y := y + 0;
+        }
+    } else {
+        { x := x + 0; } [1/4] {
+            { x := x + 1; } [1/3] {
+                { x := x + 2; } [1/2] {
+                    x := x + 3;
+                }
+            }
+        }
+    }
+    tick(1);
+}

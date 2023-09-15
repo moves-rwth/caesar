@@ -1,0 +1,13 @@
+// RUN: @caesar @file
+
+proc M(n: UInt) -> (r: UInt)
+    pre ?(true)
+    post ?(r == ite(n <= 100, 91, n - 10))
+{
+    if (n > 100) {
+        r = n - 10
+    } else {
+        r = M(n + 11)
+        r = M(r)
+    }
+}

@@ -1,0 +1,11 @@
+// ARGS: --encoding "encode-past-rule" --invariant "x+1" --eps "0.5" --k "1"
+
+# Convert to HeyVL for the proof rule for 
+# positive almost-sure termination by
+# Chakarov et al. (2013)
+# with I = x + 1, eps = 0.5, k = 1
+
+nat x;
+while(0 < x) { 
+    {x := x-1}[0.5]{};
+}

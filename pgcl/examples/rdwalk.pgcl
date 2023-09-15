@@ -1,0 +1,10 @@
+// ARGS: --encoding "encode-k-induction" --calculus "ert" --post 0 --pre "2*(n+1-x)" --k 1
+// examples/NCH-18/linear/rdwalk.imp
+nat x;
+nat n;
+while (x < n) {
+    { x := x + 2; } [1/2] {
+        x := x - 1;
+    }
+    tick(1);
+}

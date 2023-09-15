@@ -1,0 +1,33 @@
+// RUN: @caesar @file
+
+domain Tree {
+    func leaf(value: Int): Tree
+    func node(left: Tree, right: Tree): Tree
+
+    func is_leaf(tree: Tree): Bool
+    axiom is_leaf_leaf forall value: Int. is_leaf(leaf(value)) == true
+    axiom is_leaf_node forall t1: Tree, t2: Tree. is_leaf(node(t1, t2)) == false
+
+    func get_value(tree: Tree): Int
+    axiom get_value_def forall value: Int. get_value(leaf(value)) == value
+
+    func sum(tree: Tree): Int
+    axiom sum_leaf forall tree: Tree. is_leaf(tree) ==> (sum(tree) == get_value(tree))
+    axiom sum_node forall t1: Tree, t2: Tree. sum(node(t1, t2)) == sum(t1) + sum(t2)
+}
+
+proc recursive_sum(tree: Tree) -> (res: Int)
+    pre ?(true)
+    post ?(sum(tree) == res)
+{
+    if is_leaf(tree) {
+        res = get_value(tree)
+    } else {
+        var t1: Tree
+        var t2: Tree
+        assume ?(tree == node(t1, t2))
+        var a: Int = recursive_sum(t1)
+        var b: Int = recursive_sum(t2)
+        res = a + b
+    }
+}

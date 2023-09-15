@@ -1,0 +1,10 @@
+// ARGS: --encoding "encode-k-induction" --calculus "ert" --post 0 --pre "m+n" --k 1
+// examples/NCH-18/linear/condand.imp
+nat n;
+nat m;
+while ((0 < n & 0 < m)) {
+    { n := n - 1; } [1/2] {
+        m := m - 1;
+    }
+    tick(1);
+}

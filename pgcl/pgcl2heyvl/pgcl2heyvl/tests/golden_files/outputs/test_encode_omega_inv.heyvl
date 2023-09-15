@@ -1,0 +1,39 @@
+// HeyVL file to show
+//     (sup n. [x <= n] * x) <= ert[C](0)
+// using omega-invariant = [x <= n] * x for the pGCL program C:
+//
+//     nat x;
+//     while (0 < x) {
+//         x := x - 1;
+//         tick(1);
+//     }
+
+// I_0 <= Phi_{post}(0)
+proc condition_1(init_x: UInt, init_n: UInt) -> (x: UInt, n: UInt)
+    pre [init_x <= 0] * init_x
+    post 0
+{
+    x = init_x
+    n = init_n
+    if 0 < x {
+        x = x - 1
+        tick 1
+        assert 0
+        assume 0
+    } else {}
+}
+
+// for all n. I_{n+1} <= Phi_{post}(I_n)
+proc condition_2(init_x: UInt, init_n: UInt) -> (x: UInt, n: UInt)
+    pre [init_x <= (init_n + 1)] * init_x
+    post 0
+{
+    x = init_x
+    n = init_n
+    if 0 < x {
+        x = x - 1
+        tick 1
+        assert [x <= n] * x
+        assume 0
+    } else {}
+}

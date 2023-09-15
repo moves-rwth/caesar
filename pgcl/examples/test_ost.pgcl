@@ -1,0 +1,14 @@
+//ARGS: --encoding "encode-ost-rule" --post "b" --invariant "b + [a]" --c "1" --past_invariant "2 * [a]"
+
+# Convert to HeyVL for the optional stopping theorem proof rule for 
+# wp lowerbound proofs
+# with I = b + [a], c = 1, past_I = 2 * [a], and post = b
+
+bool a;
+nat b;
+nat k;
+
+while(a){
+     { a := false } [0.5] { b := b + 1 };
+     k := k + 1;
+}

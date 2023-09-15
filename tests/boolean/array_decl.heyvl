@@ -1,0 +1,16 @@
+// RUN: @caesar @file
+
+domain ArrayQ {
+    func get(q: ArrayQ, i: UInt): UReal
+    func put(q: ArrayQ, i: UInt, v: UReal): ArrayQ 
+
+    func length_ArrayQ(): UInt
+
+    axiom ax_length length_ArrayQ() > 0
+    axiom get_put forall q: ArrayQ, i: UInt, v: UReal . get(put(q, i, v), i) == v
+}
+
+proc get_put_check(q: ArrayQ, i: UInt, v: UReal) -> ()
+    pre ?(true)
+    post ?(get(put(q, i, v), i) == v)
+{}

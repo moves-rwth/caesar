@@ -1,0 +1,9 @@
+// RUN: @caesar @file
+
+proc xyz(init_x: UInt) -> (x: UInt)
+    pre ?(init_x == 2)
+    post ?(x == 3)
+{
+    x = init_x
+    x = 3
+}
