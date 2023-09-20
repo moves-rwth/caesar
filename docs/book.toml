@@ -6,8 +6,8 @@ src = "src"
 title = "Caesar Documentation"
 
 [output.html]
-git-repository-url = "https://github.com/Philipp15b/caesar"
-edit-url-template = "https://github.com/Philipp15b/caesar/edit/master/docs/{path}"
+git-repository-url = "https://github.com/moves-rwth/caesar"
+edit-url-template = "https://github.com/moves-rwth/caesar/edit/master/docs/{path}"
 
 [preprocessor.graphviz]
 command = "mdbook-graphviz"

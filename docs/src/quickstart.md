@@ -48,7 +48,7 @@ Refer to the [pGCL frontend documentation](./frontends/pgcl.md) for instructions
 
 Clone the GitHub repository:
 ```
-git clone https://github.com/Philipp15b/caesar.git
+git clone https://github.com/moves-rwth/caesar.git
 cd caesar
 ```
 
@@ -76,7 +76,7 @@ You can also [run all available benchmarks](./caesar.md#benchmarks).
 
 ## 2. Write Some HeyVL Code
 
-Be inspired by the existing examples at [`pgcl/examples-heyvl`](https://github.com/Philipp15b/caesar/tree/master/pgcl/examples-heyvl).
+Be inspired by the existing examples at [`pgcl/examples-heyvl`](https://github.com/moves-rwth/caesar/tree/master/pgcl/examples-heyvl).
 
 Read the [HeyVL language reference](./heyvl/README.md).
 
@@ -86,7 +86,7 @@ Refer to the [documentation of the pGCL frontend](./frontends/pgcl.md).
 
 ## 4. Ask Questions and Report Bugs!
 
-Please [open issues](https://github.com/Philipp15b/caesar/issues) or [write emails](mailto:phisch@cs.rwth-aachen.de) if you encountered any issues.
+Please [open issues](https://github.com/moves-rwth/caesar/issues) or [write emails](mailto:phisch@cs.rwth-aachen.de) if you encountered any issues.
 
 If you struggled with _anything_, chances are that others will struggle as well.
 So please complain and we'll improve Caesar.

@@ -2,7 +2,7 @@
 
 This guide explains how Caesar and related tools work internally and how to contribute to the code.
 
-The whole project currently lives in a GitHub repository: [`github.com/Philipp15b/caesar`](https://github.com/Philipp15b/caesar).
+The whole project currently lives in a GitHub repository: [`github.com/moves-rwth/caesar`](https://github.com/moves-rwth/caesar).
 We use GitHub's issue tracker.
 
 This project is being built at the [Chair for Software Modeling and Verification (MOVES)](https://moves.rwth-aachen.de/) at RWTH Aachen University.
@@ -17,19 +17,19 @@ Just run `cargo doc --open` to build and open the Rust API documentation of the 
 
 To run all tests, execute `cargo test --all`.
 
-The source code for the `caesar` crate lives in [`src/`](https://github.com/Philipp15b/caesar/tree/master/src).
+The source code for the `caesar` crate lives in [`src/`](https://github.com/moves-rwth/caesar/tree/master/src).
 
-Integration tests live in the [`tests/`](https://github.com/Philipp15b/caesar/tree/master/tests) directory.
-Read the associated [`tests/README.md`](https://github.com/Philipp15b/caesar/blob/master/tests/README.md) for more information about these tests.
+Integration tests live in the [`tests/`](https://github.com/moves-rwth/caesar/tree/master/tests) directory.
+Read the associated [`tests/README.md`](https://github.com/moves-rwth/caesar/blob/master/tests/README.md) for more information about these tests.
 
 `z3rro` is our dedicated crate for basic SMT functionality.
-It lives in [`z3rro/`](https://github.com/Philipp15b/caesar/tree/master/z3rro).
+It lives in [`z3rro/`](https://github.com/moves-rwth/caesar/tree/master/z3rro).
 The idea is that this code is independent of Caesar itself and may be useful to other projects.
 
 ## pgcl2heyvl
 
 `pgcl2heyvl` is our [pGCL frontend](./frontends/pgcl.md).
-It lives in [`pgcl/pgcl2heyvl`](https://github.com/Philipp15b/caesar/tree/master/pgcl/pgcl2heyvl).
+It lives in [`pgcl/pgcl2heyvl`](https://github.com/moves-rwth/caesar/tree/master/pgcl/pgcl2heyvl).
 The tool is written in Python and we use [poetry](https://python-poetry.org/) for its dependency management.
 The most important dependency is [`probably`](https://github.com/Philipp15b/probably) which defines the accepted pGCL syntax.
 

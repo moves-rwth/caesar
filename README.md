@@ -11,7 +11,7 @@ If a counter-example is found, Caesar will reject the input program.
 Do not hesitate to open an issue or send an email to phisch@cs.rwth-aachen.de with questions or ideas.
 I am also happy to discuss anything via Zoom as well!
 
-**The documentation is available at [philipp15b.github.io/caesar/](https://philipp15b.github.io/caesar/).**
-Start at with the [introduction](https://philipp15b.github.io/caesar/), then walk through the [quick start guide](https://philipp15b.github.io/caesar/quickstart.html).
+**The documentation is available at [moves-rwth.github.io/caesar/](https://moves-rwth.github.io/caesar/).**
+Start at with the [introduction](https://moves-rwth.github.io/caesar/), then walk through the [quick start guide](https://moves-rwth.github.io/caesar/quickstart.html).
 
-There is also a [development guide](https://philipp15b.github.io/caesar/devguide.html) if you want to work on Caesar itself.
+There is also a [development guide](https://moves-rwth.github.io/caesar/devguide.html) if you want to work on Caesar itself.

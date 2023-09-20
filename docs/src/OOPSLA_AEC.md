@@ -2,8 +2,6 @@
 
 Welcome to the artifact for our OOPSLA '23 submission _"A Deductive Verification Infrastructure for Probabilistic Programs"_.
 
-This document is available as a website: https://philipp15b.github.io/caesar/OOPSLA_AEC.html.
-
 Contained within the artifact:
  * Our tool *Caesar*, which parses HeyVL programs and tries to verify them. Caesar constitutes our main implementation contribution and is the focus of this artifact.
     * A script to reproduce our benchmarks (Table 2).
