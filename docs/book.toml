@@ -8,6 +8,7 @@ title = "Caesar Documentation"
 [output.html]
 git-repository-url = "https://github.com/moves-rwth/caesar"
 edit-url-template = "https://github.com/moves-rwth/caesar/edit/master/docs/{path}"
+cname = "www.caesarverifier.org"
 
 [preprocessor.graphviz]
 command = "mdbook-graphviz"
