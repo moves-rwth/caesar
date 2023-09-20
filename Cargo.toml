@@ -6,8 +6,8 @@ members = [
 
 [package]
 name = "caesar"
-version = "0.1.0"
-authors = ["Philipp Schröer <hebipp1@googlemail.com>"]
+version = "1.0.0"
+authors = ["Philipp Schroer <phisch@cs.rwth-aachen.de>"]
 edition = "2018"
 build = "build.rs" # LALRPOP preprocessing
 

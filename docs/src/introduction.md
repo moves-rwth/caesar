@@ -1,7 +1,10 @@
 # Introduction
 
 Hello and welcome!
-This is the user documentation for [_Caesar_](https://github.com/Philipp15b/caesar), a deductive verification framework for quantitative programs.
+This is the user documentation for [_Caesar_](https://github.com/Philipp15b/caesar), a deductive verification framework for probabilistic programs.
+
+We have an OOPSLA 2023 paper on Caesar and its theory: [_A Deductive Verification Infrastructure for Probabilistic Programs_](https://doi.org/10.1145/3622870).
+You can [find the preprint on arxiv](https://arxiv.org/abs/2309.07781).
 
 ---
 

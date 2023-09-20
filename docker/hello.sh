@@ -23,7 +23,7 @@ echo "For usage information, run"
 echo "    caesar --help"
 echo 
 echo "Online documentation is available on"
-echo "    https://philipp15b.github.io/caesar/"
+echo "    https://www.caesarverifier.org/"
 
 # we cannot use poetry shell, since that's bugged in virtualized environments
 # where it for some reason cannot detect the current shell application and then

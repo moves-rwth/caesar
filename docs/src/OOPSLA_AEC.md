@@ -54,7 +54,7 @@ After completion, the results will be printed as an ASCII table to the terminal 
 
 **Documentation.**
 
-* We provide more detailed usage and syntax instructions in our documentation. It is [available online](https://philipp15b.github.io/caesar/) and the source code can be found in `docs/src` (Markdown files).
+* We provide more detailed usage and syntax instructions in our documentation. It is [available online](https://www.caesarverifier.org) and the source code can be found in `docs/src` (Markdown files).
 * Caesar has Rustdoc documentation, but we do not include the generated files or the Rust compiler in this artifact.
 
 ## 2. Piece by Piece: How Our Artifact Supports the Paper's Claims
