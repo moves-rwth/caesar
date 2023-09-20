@@ -43,9 +43,7 @@ impl<'a> Subst<'a> {
         self.stack.push(self.cur.clone());
         let mut free_var_collector = FreeVariableCollector::new();
         free_var_collector.visit_expr(&mut expr).unwrap();
-        self.cur
-            .free_vars
-            .extend(free_var_collector.variables.into_iter());
+        self.cur.free_vars.extend(free_var_collector.variables);
         self.cur.substs.insert(ident, expr);
     }
 

@@ -15,7 +15,7 @@ use crate::ast::{DeclKind, DeclRef, DomainDecl, Ident, LitKind, SpanVariant, Sym
 #[derive(Debug)]
 pub struct TyCtx {
     /// A map of identifiers to the associated declaration.
-    /// 
+    ///
     /// It's an [`IndexMap`] to ensure stable iteration order over declarations.
     /// This keeps the SMT-LIB output deterministic.
     declarations: RefCell<IndexMap<Ident, Rc<DeclKind>>>,
