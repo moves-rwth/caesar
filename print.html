@@ -1,0 +1,935 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Caesar Documentation</title>
+        <meta name="robots" content="noindex" />
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var html = document.querySelector('html');
+            var sidebar = null;
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="quickstart.html"><strong aria-hidden="true">2.</strong> Quick Start</a></li><li class="chapter-item expanded affix "><li class="part-title">Frontends</li><li class="chapter-item expanded "><a href="frontends/pgcl.html"><strong aria-hidden="true">3.</strong> pGCL</a></li><li class="chapter-item expanded affix "><li class="part-title">HeyVL</li><li class="chapter-item expanded "><a href="caesar.html"><strong aria-hidden="true">4.</strong> Caesar</a></li><li class="chapter-item expanded "><a href="heyvl/index.html"><strong aria-hidden="true">5.</strong> Language Reference</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="heyvl/procs.html"><strong aria-hidden="true">5.1.</strong> Procedures</a></li><li class="chapter-item expanded "><a href="heyvl/statements.html"><strong aria-hidden="true">5.2.</strong> Statements</a></li><li class="chapter-item expanded "><a href="heyvl/expressions.html"><strong aria-hidden="true">5.3.</strong> Expressions</a></li><li class="chapter-item expanded "><a href="heyvl/domains.html"><strong aria-hidden="true">5.4.</strong> Domains</a></li></ol></li><li class="chapter-item expanded "><a href="stdlib/index.html"><strong aria-hidden="true">6.</strong> Standard Library</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="stdlib/booleans.html"><strong aria-hidden="true">6.1.</strong> Booleans</a></li><li class="chapter-item expanded "><a href="stdlib/numbers.html"><strong aria-hidden="true">6.2.</strong> Numbers</a></li><li class="chapter-item expanded "><a href="stdlib/lists.html"><strong aria-hidden="true">6.3.</strong> Lists</a></li><li class="chapter-item expanded "><a href="stdlib/distributions.html"><strong aria-hidden="true">6.4.</strong> Distributions</a></li></ol></li><li class="chapter-item expanded "><li class="part-title">Appendix</li><li class="chapter-item expanded "><a href="devguide.html"><strong aria-hidden="true">7.</strong> Development Guide</a></li><li class="chapter-item expanded "><a href="OOPSLA_AEC.html"><strong aria-hidden="true">8.</strong> OOPSLA '23 Artifact Evaluation Guide</a></li><li class="chapter-item expanded "><a href="related-work.html"><strong aria-hidden="true">9.</strong> Related Work</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Caesar Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/moves-rwth/caesar" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
+<p>Hello and welcome!
+This is the user documentation for <a href="https://github.com/Philipp15b/caesar"><em>Caesar</em></a>, a deductive verification framework for quantitative programs.</p>
+<hr />
+<p><strong>This is research software</strong> and we're still working on a nice user interface, documentation, and fixing bugs.
+Do not hesitate to open an issue or send an email to <a href="mailto:phisch@cs.rwth-aachen.de">phisch@cs.rwth-aachen.de</a> with questions or ideas.
+I am also happy to discuss anything via Zoom as well!</p>
+<hr />
+<p>Start with the  <a href="./quickstart.html">quick start guide</a>!</p>
+<p>General things about the tool is documented in the <a href="caesar.html">Caesar</a> chapter.
+We have a section on the <a href="frontends/pgcl.html">pGCL frontend</a>.
+There is also a chapter on the <a href="heyvl/">HeyVL language</a> and the <a href="stdlib/">standard library</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h1>
+<h2 id="0-installation-either-docker-or-locally-compiled"><a class="header" href="#0-installation-either-docker-or-locally-compiled">0. Installation (Either Docker or Locally Compiled)</a></h2>
+<p>You can build Caesar using Docker or compile it locally.</p>
+<h3 id="01-installation-via-docker"><a class="header" href="#01-installation-via-docker">0.1. Installation via Docker</a></h3>
+<p>First, install <a href="https://www.docker.com/">Docker</a>. </p>
+<h4 id="011-building-the-docker-image"><a class="header" href="#011-building-the-docker-image">0.1.1. Building the Docker image</a></h4>
+<ol>
+<li>Enter the project root directory</li>
+<li><code>docker build -t caesar -f docker/Dockerfile .</code></li>
+<li>You now have a Docker image with the name <code>caesar</code> available.</li>
+</ol>
+<h4 id="012-loading-the-docker-image"><a class="header" href="#012-loading-the-docker-image">0.1.2. Loading the Docker image</a></h4>
+<p>If the Docker image was already provided, you can load it into your Docker installation using <code>docker load -i caesar.tar.gz</code>.</p>
+<h4 id="013-running-the-docker-image"><a class="header" href="#013-running-the-docker-image">0.1.3. Running the Docker image</a></h4>
+<ul>
+<li>The command <code>docker run -it caesar /bin/bash</code> will open a shell inside the container where you can use Caesar.</li>
+<li>The command <code>docker run -it caesar -v $PWD/results:/root/caesar/results/ /bin/bash</code> will open a shell and mount the <code>results</code> directory into the container.</li>
+</ul>
+<h3 id="02-installation-by-local-compilation"><a class="header" href="#02-installation-by-local-compilation">0.2. Installation By Local Compilation</a></h3>
+<h4 id="021-installing-rust"><a class="header" href="#021-installing-rust">0.2.1. Installing Rust</a></h4>
+<p>Caesar is written in the <a href="https://www.rust-lang.org/">Rust programming language</a>.
+You'll need <a href="https://doc.rust-lang.org/cargo/">cargo</a>, Rust's default package manager, to build the project.</p>
+<p>One very easy way to install Rust is by using <a href="https://rustup.rs/">rustup</a>.</p>
+<h4 id="022-installing-z3"><a class="header" href="#022-installing-z3">0.2.2. Installing Z3</a></h4>
+<p>We use Rust bindings to the <a href="https://github.com/Z3Prover/z3">Z3 theorem prover</a>.
+By default, Caesar will compile Z3 itself (using the <code>static-link-z3</code> option of <a href="https://github.com/prove-rs/z3.rs">z3.rs</a>).
+This will require <a href="https://cmake.org/">cmake</a> and <code>libclang</code>.
+On Debian/Ubuntu, you can run <code>apt-get install cmake llvm-dev libclang-dev clang</code> to install the required dependencies.</p>
+<p>You can compile Caesar without the <code>static-link-z3</code> feature (enabled by default) to link against the system-installed Z3.</p>
+<h4 id="023-python-for-the-pgcl-frontend"><a class="header" href="#023-python-for-the-pgcl-frontend">0.2.3. Python (for the pGCL frontend)</a></h4>
+<p>This is only required if you want to use the pGCL frontend.
+It is not necessary if you just want to write HeyVL code.
+Refer to the <a href="./frontends/pgcl.html">pGCL frontend documentation</a> for instructions.</p>
+<h4 id="024-compiling-caesar-itself"><a class="header" href="#024-compiling-caesar-itself">0.2.4. Compiling Caesar Itself</a></h4>
+<p>Clone the GitHub repository:</p>
+<pre><code>git clone https://github.com/moves-rwth/caesar.git
+cd caesar
+</code></pre>
+<p>To build caesar, run</p>
+<pre><code>cargo build --release
+</code></pre>
+<p>The result will be at <code>target/release/caesar</code>.
+Omit the <code>--release</code> for faster compilation in debug mode.
+Then, the executable can be found at <code>target/debug/caesar</code>.</p>
+<p>The command-line API and more compilation options are documented in the <a href="./caesar.html">Caesar chapter</a>.</p>
+<h2 id="1-run-some-benchmarks"><a class="header" href="#1-run-some-benchmarks">1. Run Some Benchmarks</a></h2>
+<p>Enter the following two commands.
+They should terminate in under a minute.</p>
+<pre><code>cd pgcl/examples-heyvl
+caesar unif_gen1.heyvl rabin1.heyvl rabin2.heyvl brp1.heyvl geo1.heyvl
+</code></pre>
+<p>You can also <a href="./caesar.html#benchmarks">run all available benchmarks</a>.</p>
+<h2 id="2-write-some-heyvl-code"><a class="header" href="#2-write-some-heyvl-code">2. Write Some HeyVL Code</a></h2>
+<p>Be inspired by the existing examples at <a href="https://github.com/moves-rwth/caesar/tree/master/pgcl/examples-heyvl"><code>pgcl/examples-heyvl</code></a>.</p>
+<p>Read the <a href="./heyvl/README.html">HeyVL language reference</a>.</p>
+<h2 id="3-write-some-pgcl-code-and-compile-it-to-heyvl"><a class="header" href="#3-write-some-pgcl-code-and-compile-it-to-heyvl">3. Write Some pGCL Code And Compile It To HeyVL</a></h2>
+<p>Refer to the <a href="./frontends/pgcl.html">documentation of the pGCL frontend</a>.</p>
+<h2 id="4-ask-questions-and-report-bugs"><a class="header" href="#4-ask-questions-and-report-bugs">4. Ask Questions and Report Bugs!</a></h2>
+<p>Please <a href="https://github.com/moves-rwth/caesar/issues">open issues</a> or <a href="mailto:phisch@cs.rwth-aachen.de">write emails</a> if you encountered any issues.</p>
+<p>If you struggled with <em>anything</em>, chances are that others will struggle as well.
+So please complain and we'll improve Caesar.
+This is all complicated stuff and we want to make it as nice to use as possible.
+Do not hesitate to complain about minor things!
+Don't like the colors?
+Typos in the documentation?
+You don't like the syntax?
+Think there may be a bug?
+Ugly code?
+This is research software and we're here to find out how to make it perfect.</p>
+<p>If you're curious how the code works (or doesn't) and how to modify Caesar, refer to the <a href="./devguide.html">development guide</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="pgcl-frontend"><a class="header" href="#pgcl-frontend">pGCL Frontend</a></h1>
+<p>At the moment, <em>pGCL</em>, the probabilistic guarded command langage, is the only supported frontend.
+We have a tool, <code>pgcl2heyvl</code>, that automatically generates HeyVL code from pGCL programs.</p>
+<p>Most of pGCL's syntax can be encoded in fairly straightforward manner, but loops are a bit more complicated and require additional user annotations (loop invariants).
+The tool supports both Park induction and the more general k-induction.</p>
+<h2 id="using-pgcl2heyvl"><a class="header" href="#using-pgcl2heyvl">Using pgcl2heyvl</a></h2>
+<p><a href="https://github.com/moves-rwth/caesar/tree/master/pgcl/pgcl2heyvl"><code>pgcl2heyvl</code></a> is a Python program that reads a pGCL program from a file and uses additional user-provided annotations to encode loops.
+The output is a HeyVL file.</p>
+<p>To run <code>pgcl2heyl</code>, enter its source code directory and execute it using <a href="https://python-poetry.org/">poetry</a>.
+Poetry is a build system and dependency manager for Python.
+<a href="https://python-poetry.org/docs/">Here are installation instructions for Poetry</a>.</p>
+<p>For example:</p>
+<pre><code>cd pgcl/pgcl2heyvl
+poetry run pgcl2heyvl FILE --post POST --pre PRE --k K &gt; OUTFILE
+</code></pre>
+<p>where <code>FILE</code> is a file name with the pGCL program, <code>POST</code> is a post-expectation, and <code>PRE</code> is a pre-expectation (in <a href="frontends/pgcl.html#pgcl-syntax">pGCL syntax</a>).
+The <code>K</code> argument is an integer that specifies which <code>k</code>-induction to use for the encoding.
+<code>OUTFILE</code> is the name of the output file with the HeyVL code.</p>
+<p>If the pGCL program includes a single loop, then <code>PRE</code> will be used as the loop invariant.
+When the program includes multiple loops, additional invariants must be specified using <code>--invariant</code>.</p>
+<p>If the input file starts with a comment <code>// ARGS: </code> followed by command-line arguments, it will use these as defaults.</p>
+<p>The command-line interface documentation is available by invoking <code>poetry run pgcl2heyvl --help</code>.</p>
+<p>And yes, we're aware the user experience of this tool is particularly horrible.
+We're working on it!</p>
+<h2 id="pgcl-examples"><a class="header" href="#pgcl-examples">pGCL Examples</a></h2>
+<p>You can find pGCL examples in the <a href="https://github.com/moves-rwth/caesar/tree/master/pgcl/examples"><code>pgcl/examples</code></a> directory.
+They include all necessary parameters to generate verifying HeyVL files.</p>
+<p>For these examples, the generated HeyVL files are located under <a href="https://github.com/moves-rwth/caesar/tree/master/pgcl/examples-heyvl"><code>pgcl/examples-heyvl</code></a>.
+Verification with <code>caesar</code> requires the <code>--raw</code> command-line flag since these files are just sequences of HeyVL statements.</p>
+<p>Instructions on how to (re-)generate these examples are located in <a href="https://github.com/moves-rwth/caesar/blob/master/pgcl/examples-heyvl/README.md"><code>pgcl/examples-heyvl/README.md</code></a>.</p>
+<p>To execute <code>caesar</code> with the generated HeyVL files, refer to the <a href="frontends/../caesar.html#benchmarks">benchmarks section of Caesar's documentation</a>.</p>
+<h2 id="pgcl-syntax"><a class="header" href="#pgcl-syntax">pGCL Syntax</a></h2>
+<p><code>pgcl2heyvl</code> uses the <a href="https://github.com/Philipp15b/probably"><code>probably</code></a> Python library to parse and type-check pGCL programs.
+That means the pGCL syntax of <code>probably</code> is used for the pGCL programs and the <code>--pre</code>, <code>--post</code>, and <code>--invariant</code> command-line parameters.</p>
+<p>There is no formal specification for the exact pGCL syntax that <code>probably</code> accepts, but here are some pointers:</p>
+<ul>
+<li>pGCL examples in <a href="https://github.com/moves-rwth/caesar/tree/master/pgcl/examples"><code>pgcl/examples</code></a>.</li>
+<li>The <a href="https://philipp15b.github.io/probably/pgcl.html"><code>probably</code> documentation</a>. There are many doctests with examples.</li>
+<li>The <a href="https://philipp15b.github.io/probably/pgcl_grammar.html#pgcl-grammar">grammar specification</a> used by <code>probably</code> built on top of the <a href="https://github.com/lark-parser/lark">Lark parsing toolkit</a>.</li>
+<li><a href="https://github.com/Philipp15b/probably/tree/master/tests"><code>probably</code>'s tests</a>.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="the-caesar-deductive-verifier"><a class="header" href="#the-caesar-deductive-verifier">The Caesar Deductive Verifier</a></h1>
+<p>The <code>caesar</code> verifier takes a HeyVL program as input and tries to determine whether it <em>verifies</em>.</p>
+<p><strong>Compile</strong> the <code>caesar</code> binary with <code>cargo build --release</code>.
+The executable can be found at <code>target/release/caesar</code>.
+In the following, we just write <code>caesar</code> for the executable.
+Omit <code>--release</code> for the a binary with less optimizations; the result will be in <code>target/debug/caesar</code>.</p>
+<p><strong>Print help:</strong>
+<code>caesar --help</code>.</p>
+<p><strong>Verify HeyVL files:</strong>
+<code>caesar file1.heyvl file2.heyvl ...</code>
+Adding <code>--raw</code> indicates that input files consist only of a sequence <a href="./heyvl/statements.html">HeyVL statements</a> and that no declarations such as procedures are expected.</p>
+<p><strong>Timeouts and memory limits:</strong>
+Set a timeout of 60 seconds using <code>--timeout 60</code>.
+Set a memory limit of 16000 megabytes with <code>--mem 16000</code>.</p>
+<p><strong>Print tracing messages:</strong>
+Caesar uses the <a href="https://github.com/tokio-rs/tracing"><code>tracing</code> library</a> to print (debugging) information during its operation.
+Set the <code>RUST_LOG</code> environment variable to specify a filter, e.g. <code>export RUST_LOG=&quot;caesar=debug&quot;</code> or <code>export RUST_LOG=&quot;caesar::smt=trace&quot;</code>.</p>
+<p><strong>Print intermediate data:</strong></p>
+<ul>
+<li>With the <code>--print-parsed</code> flag, Caesar pretty-prints the HeyVL code after parsing.</li>
+<li>With the <code>--print-core</code> flag, Caesar prints the HeyVL code after parsing, type-checking, and desugaring.</li>
+<li>With the <code>--print-theorem</code> flag, Caesar prints the theorem that is encoded into SMT.</li>
+<li>With the <code>--print-smt</code> flag, Caesar prints the SMT-LIB query for each verification task. You can also use <code>--smt-dir DIR</code> with a directory <code>DIR</code> to have Caesar write the SMT-LIB queries to files in <code>DIR</code>.</li>
+</ul>
+<h2 id="benchmarks"><a class="header" href="#benchmarks">Benchmarks</a></h2>
+<p>The following command checks all examples that we know to work.
+It completes in about 20s on my machine.</p>
+<pre><code class="language-shell">export RUST_LOG=&quot;caesar=trace&quot;
+cd pgcl/examples-heyvl
+cargo run --release  -- --raw unif_gen1.heyvl rabin1.heyvl rabin2.heyvl brp1.heyvl geo1.heyvl
+</code></pre>
+<p>You can run the benchmark set with evaluations by executing <code>fish run-benchmarks.fish</code> (<a href="https://fishshell.com/">fish shell</a> is required).</p>
+<p>One possible output of <code>fish run-benchmarks.fish | column -ts &quot;,&quot;</code> is the following:</p>
+<pre><code>Name             Result  Total Time  VCgen Time  SAT Check Time
+brp1.heyvl       IND     1.54s       0.02s       1.2s
+brp2.heyvl       OOM     17.39s
+brp3.heyvl       OOM     17.29s
+fail-geo1.heyvl  REF     0.18s       0s          0.03s
+geo1.heyvl       IND     0.2s        0s          0.04s
+linear01.heyvl   IND     0.19s       0s          0.02s
+rabin1.heyvl     IND     0.5s        0s          0.03s
+rabin2.heyvl     IND     13.95s      0.23s       10.1s
+unif_gen1.heyvl  IND     6.97s       0.02s       6.61s
+unif_gen2.heyvl  TO      0.52s
+unif_gen3.heyvl  TO      0.48s
+unif_gen4.heyvl  OOM     17.54s
+</code></pre>
+<h2 id="optimizations--alternative-implementations"><a class="header" href="#optimizations--alternative-implementations">Optimizations &amp; Alternative Implementations</a></h2>
+<p>By default, Caesar uses a set of optimizations to speed up validity checking of verification conditions.
+You can experiment with them by disabling them and choosing between alternative implementations of some algorithms.</p>
+<h3 id="command-line-options"><a class="header" href="#command-line-options">Command-Line Options</a></h3>
+<p>See <code>--help</code> for more detailed information.</p>
+<ul>
+<li>Disabling quantifier elimination: <code>--no-qelim</code>.</li>
+<li>Strict verification condition unfolding: <code>--strict</code>.</li>
+<li>Enable e-graph optimization: <code>--egraph</code>. The result is currently not used for the SMT encoding.</li>
+</ul>
+<h3 id="compilation-options"><a class="header" href="#compilation-options">Compilation Options</a></h3>
+<p>Most of Caesar's behaviour can be changed with command-line flags, but there are three possible SMT encodings of the <code>EUReal</code> type which must be chosen from at compile time.</p>
+<p>Compile with <code>--features datatype-eureal</code> to build an executable that encodes <code>EUReal</code> values using SMT-LIB datatypes instead of an encoding that uses a Boolean and a Real number directly.
+Our experiments have shown that this is usually slower.</p>
+<p>You can also compile with <code>--features datatype-eureal-funcs</code> to use the datatype SMT-LIB encoding where additionally implementations of multiplications, additions, and less-than-or-equal relations are encoded as SMT-LIB functions.
+This is the slowest encoding, but it's the easiest to read.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="heyvl"><a class="header" href="#heyvl">HeyVL</a></h1>
+<p>HeyVL is a verification language similar to Viper and Boogie (see <a href="heyvl/../related-work.html">related work</a>).
+The main innovation is that it supports <em>quantitative</em> reasoning via its constructs inspired by Gödel logic.</p>
+<p>A HeyVL file consists of a sequence of declarations: <a href="heyvl/./procs.html">procedure</a> and <a href="heyvl/./domains.html">domain declarations</a>.
+<small>If <code>--raw</code> is passed to the command line, then HeyVL files are parsed as sequences of statements without declarations. See <a href="heyvl/../caesar.html">Caesar documentation</a> for more information.</small></p>
+<h2 id="use-the-source-luke"><a class="header" href="#use-the-source-luke">Use the source, Luke</a></h2>
+<p>We do not formally describe the syntax of HeyVL in this documentation.
+You can find a more formal definition in the <a href="https://github.com/Philipp15b/caesar/blob/master/src/front/parser/grammar.lalrpop"><code>src/front/parser/grammar.lalrpop</code></a> file that specifies the syntax used to generate Caesar's parser.
+It is written in the <a href="https://lalrpop.github.io/lalrpop/tutorial/index.html">LALRPOP language</a>.</p>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<p>The <a href="https://github.com/Philipp15b/caesar/tree/master/pgcl/examples-heyvl"><code>pgcl/examples-heyvl</code></a> directory contains the machine-translated HeyVL code for our pGCL examples.
+Note that they are just sequences of HeyVL statements without wrapping procedure declarations.
+Refer to the page on the <a href="heyvl/../frontends/pgcl.html">pGCL frontend</a> for more information.</p>
+<p>Caesar's integration tests in <a href="https://github.com/Philipp15b/caesar/tree/master/tests"><code>tests/</code></a> can also serve as a reference.
+Refer to the <a href="heyvl/../devguide.html#caesar">development guide</a> for more information about these tests.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="procedures"><a class="header" href="#procedures">Procedures</a></h1>
+<p>HeyVL <a href="heyvl/statements.html">statements</a> are placed inside the body of <em>procedures</em> or <em>procs</em> for short.
+A procedure has a name, a list of parameters, a list of return values, and a list of specification attributes.
+Caesar tries to verify each procedure in the given HeyVL files using the specification.</p>
+<p>Procedures can be called inside other procedures.
+This enables modular reasoning about code: Prove that some code satisfies the specification once, and then use the specification when at the call site - without reasoning about the procedure's body again.</p>
+<p>There are also procedures without an associated body.
+They are not verified by Caesar, but can be called inside other procedures.</p>
+<h2 id="example"><a class="header" href="#example">Example</a></h2>
+<p>The following procedure named <code>forty_two</code> accepts a single parameter, <code>x</code> of type <code>UInt</code> and returns a value <code>y</code> of type <code>UInt</code>:</p>
+<pre><code>proc forty_two(x: UInt) -&gt; (y: UInt)
+    pre ?(x == 41)
+    post ?(y == 42)
+{
+    y := x + 1;
+}
+</code></pre>
+<p>There are two specification attributes: <code>pre</code> and <code>post</code>.
+Intuitively, both attributes assert that if <code>forty_two</code> is called with <code>x == 41</code>, the result <code>y</code> will have value <code>42</code>.
+The expressions inside the <code>pre</code> and <code>post</code> statements are expectations, i.e. have type <a href="heyvl/types.html"><code>EUReal</code></a>.
+We use <a href="heyvl/expressions.html">embed expressions</a> to convert Boolean expressions to <code>EUReal</code> values.
+The procedure has a body with just a single assignment statement that increments <code>x</code> by 1 and saves the result in <code>y</code>.</p>
+<p>Writing <code>coproc</code> instead of <code>proc</code> will will do an upper bound check for verification instead of a lower bound one.</p>
+<p>The specification is optional; if it's not provided, Caesar will add a default specification: <code>pre ?(true)</code> and <code>post ?(true)</code> for procedures and <code>pre ?(false)</code> and <code>post ?(false)</code> for coprocedures.</p>
+<h2 id="verification-of-procedures"><a class="header" href="#verification-of-procedures">Verification of Procedures</a></h2>
+<p>If a procedure has a body with statements, then Caesar will try to verify the procedure based on the specification attributes.
+The verificiation of procedures can be entirely framed as a verification of HeyVL statements.</p>
+<p>To verify the <code>forty_two</code> procedure, Caesar generates the following HeyVL statements:</p>
+<pre><code>assume ?(x == 41)
+y := x + 1;
+assert ?(y == 42)
+</code></pre>
+<p>Each <code>pre</code> attribute generates an <code>assume</code>/<code>coassume</code> statement at the beginning.
+Then the unmodified procedure body follows.
+After that, an <code>assert</code>/<code>coassert</code> statement is generated for each <code>post</code> attribute.</p>
+<p>For coprocedures, the generated HeyVL statements will be preceded by a <code>negate</code> and ended by a <code>conegate</code> statement.</p>
+<h2 id="calling-procedures"><a class="header" href="#calling-procedures">Calling Procedures</a></h2>
+<p>Procedures can be called inside other procedures.
+Just like for the verification task, a call of a procedure is replaced by a sequence of HeyVL statements based on the specification.</p>
+<p>A call to <code>forty_two</code>, e.g. <code>y := forty_two(x);</code> is replaced by three basic HeyVL statements:</p>
+<pre><code>assert ?(x == 41)
+havoc y
+compare ?(y == 42)
+</code></pre>
+<p>Now we <code>assert</code> each <code>pre</code> to ensure that the preceding code has actually established the pre-condition.
+Then we <code>havoc</code> the modified variable <code>y</code>.
+At this point, we know nothing about the value of <code>y</code>.
+At the end, we <code>compare</code> the expression from the <code>post</code> attribute.
+Now we know <code>y</code> has value <code>42</code>.</p>
+<p>The body of the procedure is completely irrelevant for the encoding of a procedure call.
+This is why it is also possible to declare <code>forty_two</code> without an associated body, but still call it inside another procedure.</p>
+<p>You might ask, why not use <code>assume</code> at the end of the encoding?
+Would that not be more symmetrical?
+Yes, but that would be unsound.
+And that is not the only tricky detail here.</p>
+<p><strong>An important note on soundness:</strong>
+This encoding is <em>not sound in general!</em>
+At the moment, <em>you must ensure soundness yourself!</em>
+<em>This is not checked by Caesar at the moment!</em></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="heyvl-statements"><a class="header" href="#heyvl-statements">HeyVL Statements</a></h1>
+<p>Statements in HeyVL are instructions that are interpreted sequentially and that have side-effects.
+They are usually used inside the body of <a href="heyvl/./procs.html">procedures</a>, but caesar also accepts an input file that consists solely of a sequence of statements without any declarations (via <code>--raw</code>, cf. <a href="heyvl/../caesar.html">caesar documentation</a>).</p>
+<p>Since HeyVL is an intermediate verification language, not all statements allow an operational interpretation of their effects.
+All HeyVL statements should be understood through their (quantitative) verification condition semantics.
+These are defined in reverse order, starting from an initial verification condition and proceeding from the last statement backwards to the front.</p>
+<p>More information can be found on the <a href="heyvl/./statements.html">statements</a> page.</p>
+<h2 id="blocks"><a class="header" href="#blocks">Blocks</a></h2>
+<p>A block is a sequence of statements enclosed by curly braces.
+Statements <em>may</em> be separated by semicolons, but those can be omitted.
+Each block creates a <em>local scope</em> into which variables are declared.
+Blocks can be nested.
+For example:</p>
+<pre><code>x = 1
+{
+    var y: UInt
+}
+y = 1 // y is not declared in this scope
+</code></pre>
+<h2 id="variable-declarations"><a class="header" href="#variable-declarations">Variable Declarations</a></h2>
+<p>A variable declaration <code>var name: Type</code> creates a new local variable in the current scope.
+A variable declaration can be combined with an assignment to initialize the variable:</p>
+<pre><code>var forty_two: UInt = 42
+</code></pre>
+<h2 id="assignments"><a class="header" href="#assignments">Assignments</a></h2>
+<p>An assignment <code>x = 39 + y</code> evaluates the expression on the right-hand side in the current state and assigns the result to the variable on the left-hand side.</p>
+<p>The left-hand side of an assignment may be a list of variables to unpack a tuple.
+For example, imagine a procedure <code>two_numbers</code> whose return type is <code>(x: UInt, y: UInt)</code>.
+The following statement assigns the result of a call to <code>two_numbers</code> to <code>x</code> and <code>y</code>:</p>
+<pre><code>x, y = two_numbers()
+</code></pre>
+<p>If the right-hand side of the assignment is a (pure) expression, then the verification condition semantics amounts to a substitution of the left-hand side by the right-hand side.</p>
+<p>If the right-hand side is a call to a procedure, then the assignment is translated to a combination of <code>assert</code>, <code>havoc</code>, and <code>compare</code> statements.
+See the <a href="heyvl/./procs.html">reference on procedures</a> for more information.</p>
+<p>If the procedure does not have any return values, the call may be written without the equals sign and the left-hand side, i.e. simply <code>fn(arg1, arg2)</code>.</p>
+<h2 id="havoc"><a class="header" href="#havoc">Havoc</a></h2>
+<p>A <code>havoc</code> statement can be used to &quot;forget&quot; previous values of variables in the following code.
+It also comes in a <code>co</code> variant.</p>
+<pre><code>havoc x, y, z
+cohavoc a, b, c
+</code></pre>
+<p>The verification condition semantics of <code>havoc</code> and <code>cohavoc</code> create an infimum respectively supremum over the specified variables.</p>
+<h2 id="assert-assume-compare"><a class="header" href="#assert-assume-compare">Assert, Assume, Compare</a></h2>
+<p>These statements generate binary operators in the verification condition semantics.
+All three statements also come in <code>co</code> variants.
+<code>(co)assert</code> generates an infimum respectively supremum.
+<code>(co)assume</code> generates an implication respectively co-implication.
+<code>(co)compare</code> generates a hard (co-)implication.</p>
+<pre><code>assert 1 + x
+assume 0
+cocompare 7 * 10
+</code></pre>
+<h2 id="tick"><a class="header" href="#tick">Tick</a></h2>
+<p>The <code>tick</code> statement accepts an expression and adds it to the current verification condition.
+For example,</p>
+<pre><code>tick 2 * x
+</code></pre>
+<p>has the following semantics: <code>vc[tick 2 * x](f) = f + (2 * x)</code>.</p>
+<h2 id="negations"><a class="header" href="#negations">Negations</a></h2>
+<p>We have a <code>negate</code> and an <code>conegate</code> statement.</p>
+<h2 id="nondeterministic-choices"><a class="header" href="#nondeterministic-choices">Nondeterministic Choices</a></h2>
+<p>HeyVL supports two kinds of binary nondeterministic choices: The &quot;demonic&quot; one (<code>if ⊓</code>) and the &quot;angelic&quot; one (<code>if ⊔</code>).</p>
+<pre><code>if ⊓ {
+    ...
+} else {
+    ...
+}
+</code></pre>
+<h2 id="boolean-choices"><a class="header" href="#boolean-choices">Boolean Choices</a></h2>
+<p>HeyVL supports a binary choice depending on the value of a Boolean expression:</p>
+<pre><code>if x + 1 == 2 {
+    ...
+} else {
+    ...
+}
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="expressions"><a class="header" href="#expressions">Expressions</a></h1>
+<h2 id="if-then-else"><a class="header" href="#if-then-else">If-Then-Else</a></h2>
+<p>The <code>ite</code> built-in function allows to choose one of two expressions based on the result of a Boolean expression.
+For example:</p>
+<pre><code>var x: UInt = ite(true, 32, 64);
+</code></pre>
+<p>The first parameter is the Boolean expression.
+If it evaluates to <code>true</code>, the result of evaluating the second expression is returned.
+Otherwise, the third expression is evaluated.</p>
+<h2 id="let"><a class="header" href="#let">Let</a></h2>
+<p><code>let</code> expressions enable the declaration of local variables within an expression.
+For example:</p>
+<pre><code>var x: UInt = let(b, true, ite(b, 32, 64));
+</code></pre>
+<p>The <code>let</code> expression creates a new local variable <code>b</code> and sets its value to <code>true</code>.
+This variable <code>b</code> is available within the <code>let</code> expression's third argument.</p>
+<p>In contrast to variable declaration statements using <code>var</code>, <code>let</code> expressions do not require type annotations.
+The type of the variable is inferred from the second expression.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="domains-uninterpreted-functions-and-axioms"><a class="header" href="#domains-uninterpreted-functions-and-axioms">Domains, Uninterpreted Functions, and Axioms</a></h1>
+<p><code>domain</code> blocks are used to create user-defined types and uninterpreted functions.
+A domain has a name which can be used as a type in HeyVL code.
+The domain block contains a list of functions and axioms defined on this domain.</p>
+<p>Every domain type supports the binary operators <code>==</code> and <code>!=</code>.
+All other operations must be encoded using functions and axioms.</p>
+<h2 id="example-exponentials-of-½"><a class="header" href="#example-exponentials-of-½">Example: Exponentials of ½</a></h2>
+<p>HeyVL does not support exponentiation expressions natively.
+But we can define an uninterpreted function <code>ohfive_exp</code> and add axioms that specify its result.
+<code>ohfive_exp(n)</code> should evaluate to <code>(½)ⁿ</code>, so we add two axioms that define this exponential recursively.</p>
+<p><code>ohfive_exp_base</code> states that <code>ohfive_exp(0) == 1</code> and <code>ohfive_exp_step</code> ensures that <code>ohfive_exp(exponent + 1) == 0.5 * ohfive_exp(exponent)</code> holds.
+This is sufficient to axiomatize our exponential function.</p>
+<pre><code>domain Exponentials {
+    func ohfive_exp(exponent: UInt): EUReal
+
+    axiom ohfive_exp_base ohfive_exp(0) == 1
+    axiom ohfive_exp_step forall exponent: UInt. ohfive_exp(exponent + 1) == 0.5 * ohfive_exp(exponent)
+}
+</code></pre>
+<p>Note that this domain declaration creates a new type <code>Exponentials</code>, but we do not use it.</p>
+<p>We can check that <code>ohfive_exp(3)</code> evaluates to <code>0.125</code> by declaring a <a href="heyvl/procs.html">procedure</a> with pre-condition <code>true</code> and post-condition <code>ohfive_exp(3) == 0.125</code>.
+This procedure verifies:</p>
+<pre><code>proc ohfive_3() -&gt; ()
+    pre ?(true)
+    post ?(ohfive_exp(3) == 0.125)
+{}
+</code></pre>
+<p><strong>Do not forget the <em>empty</em> block of statements <code>{}</code> at the end!</strong>
+If you omit it, Caesar will not attempt to verify the procedure and thus will not check the specification.</p>
+<h2 id="pure-functions"><a class="header" href="#pure-functions">Pure Functions</a></h2>
+<p>You can also declare <em>pure</em> or <em>interpreted</em> functions.
+These are defined by a single expression that computes the result of the function.</p>
+<p>The following function declaration has a such a definition (<code>= x + 1</code>):</p>
+<pre><code>func plus_one(x: UInt): UInt = x + 1
+</code></pre>
+<p>This syntax is just syntactic sugar for a function declaration with an additional axiom, i.e.</p>
+<pre><code>func plus_one(x: UInt): UInt
+axiom plus_one_def forall x: UInt. plus_one(x) == x + 1
+</code></pre>
+<h2 id="unsoundness-from-axioms"><a class="header" href="#unsoundness-from-axioms">Unsoundness From Axioms</a></h2>
+<p>Axioms are a dangerous feature because they can make verification unsound.</p>
+<p>An easy example is this one:</p>
+<pre><code>domain Unsound {
+    axiom unsound false
+}
+
+proc wrong() -&gt; ()
+    pre ?(true)
+    post ?(true)
+{
+    assert ?(false)
+}
+</code></pre>
+<p>The axiom <code>unsound</code> always evaluates to <code>false</code>.
+But for verification, Caesar assumes the axioms hold for all program states.
+In other words, Caesar only verifies the program states in which the axioms evaluate to <code>true</code>.
+Thus, Caesar does not verify any program state and the procedure <code>wrong</code> incorrectly verifies!</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="standard-library"><a class="header" href="#standard-library">Standard Library</a></h1>
+<p>The &quot;standard library&quot; consists of all built-in types, functions, and procedures of Caesar.</p>
+<p>Contents:</p>
+<ul>
+<li><a href="stdlib/./booleans.html">Booleans</a>,</li>
+<li><a href="stdlib/./numbers.html">Number types</a>,</li>
+<li><a href="stdlib/./lists.html">Lists</a>,</li>
+<li><a href="stdlib/./distributions.html">Distribution expressions</a>.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="booleans"><a class="header" href="#booleans">Booleans</a></h1>
+<p>The <code>Bool</code> type contains the values <code>true</code> and <code>false</code>.
+It can be used as the condition inside of <code>if</code> statements.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="number-types"><a class="header" href="#number-types">Number Types</a></h1>
+<p>The following diagram illustrates the hierarchy of numeric types supported by Caesar.</p>
+<p>An arrow from a type to another type indicates that it is a <em>subtype</em> and that a value can be converted into the supertype.
+This is done automatically by Caesar when appropriate.</p>
+<div><!-- Generated by graphviz version 2.43.0 (0)
+ --><!-- Title: %3 Pages: 1 --><svg width="191pt" height="188pt"
+ viewBox="0.00 0.00 190.50 188.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 184)"><title>%3</title><polygon fill="white" stroke="transparent" points="-4,4 -4,-184 186.5,-184 186.5,4 -4,4"/><!-- UInt --><g id="node1" class="node"><title>UInt</title><g id="a_node1"><a xlink:href="stdlib/numbers.html#uint" xlink:title="UInt"><polygon fill="none" stroke="black" points="129,-180 75,-180 75,-144 129,-144 129,-180"/><text text-anchor="middle" x="102" y="-158.3" font-family="Times,serif" font-size="14.00">UInt</text></a></g></g><!-- Int --><g id="node2" class="node"><title>Int</title><g id="a_node2"><a xlink:href="stdlib/numbers.html#int" xlink:title="Int"><polygon fill="none" stroke="black" points="54,-108 0,-108 0,-72 54,-72 54,-108"/><text text-anchor="middle" x="27" y="-86.3" font-family="Times,serif" font-size="14.00">Int</text></a></g></g><!-- UInt&#45;&gt;Int --><g id="edge1" class="edge"><title>UInt&#45;&gt;Int</title><path fill="none" stroke="black" d="M83.46,-143.7C74.2,-135.05 62.84,-124.45 52.74,-115.03"/><polygon fill="black" stroke="black" points="55.02,-112.37 45.33,-108.1 50.25,-117.49 55.02,-112.37"/></g><!-- UReal --><g id="node4" class="node"><title>UReal</title><g id="a_node4"><a xlink:href="stdlib/numbers.html#ureal" xlink:title="UReal"><polygon fill="none" stroke="black" points="132,-108 72,-108 72,-72 132,-72 132,-108"/><text text-anchor="middle" x="102" y="-86.3" font-family="Times,serif" font-size="14.00">UReal</text></a></g></g><!-- UInt&#45;&gt;UReal --><g id="edge2" class="edge"><title>UInt&#45;&gt;UReal</title><path fill="none" stroke="black" d="M102,-143.7C102,-135.98 102,-126.71 102,-118.11"/><polygon fill="black" stroke="black" points="105.5,-118.1 102,-108.1 98.5,-118.1 105.5,-118.1"/></g><!-- EUReal --><g id="node5" class="node"><title>EUReal</title><g id="a_node5"><a xlink:href="stdlib/numbers.html#eureal" xlink:title="EUReal"><polygon fill="none" stroke="black" points="182.5,-36 111.5,-36 111.5,0 182.5,0 182.5,-36"/><text text-anchor="middle" x="147" y="-14.3" font-family="Times,serif" font-size="14.00">EUReal</text></a></g></g><!-- UInt&#45;&gt;EUReal --><g id="edge6" class="edge"><title>UInt&#45;&gt;EUReal</title><path fill="none" stroke="black" d="M118.53,-143.87C126.83,-134.15 136.13,-121.3 141,-108 148.22,-88.28 149.47,-64.47 149.06,-46.45"/><polygon fill="black" stroke="black" points="152.55,-46.16 148.63,-36.32 145.55,-46.45 152.55,-46.16"/></g><!-- Real --><g id="node3" class="node"><title>Real</title><g id="a_node3"><a xlink:href="stdlib/numbers.html#real" xlink:title="Real"><polygon fill="none" stroke="black" points="80,-36 26,-36 26,0 80,0 80,-36"/><text text-anchor="middle" x="53" y="-14.3" font-family="Times,serif" font-size="14.00">Real</text></a></g></g><!-- Int&#45;&gt;Real --><g id="edge3" class="edge"><title>Int&#45;&gt;Real</title><path fill="none" stroke="black" d="M33.43,-71.7C36.36,-63.81 39.89,-54.3 43.14,-45.55"/><polygon fill="black" stroke="black" points="46.45,-46.7 46.65,-36.1 39.88,-44.26 46.45,-46.7"/></g><!-- UReal&#45;&gt;Real --><g id="edge4" class="edge"><title>UReal&#45;&gt;Real</title><path fill="none" stroke="black" d="M89.89,-71.7C84.13,-63.47 77.14,-53.48 70.79,-44.42"/><polygon fill="black" stroke="black" points="73.58,-42.29 64.97,-36.1 67.84,-46.3 73.58,-42.29"/></g><!-- UReal&#45;&gt;EUReal --><g id="edge5" class="edge"><title>UReal&#45;&gt;EUReal</title><path fill="none" stroke="black" d="M113.12,-71.7C118.36,-63.56 124.7,-53.69 130.48,-44.7"/><polygon fill="black" stroke="black" points="133.54,-46.41 136,-36.1 127.65,-42.62 133.54,-46.41"/></g></g></svg></div>
+<h2 id="mathematical-number-types"><a class="header" href="#mathematical-number-types">Mathematical Number Types</a></h2>
+<p>Caesar supports various number types that are not restricted by a finite bit size.
+Therefore, all of these types have infinitely many values.</p>
+<h3 id="uint"><a class="header" href="#uint">UInt</a></h3>
+<p>Unsigned integers, i.e. values <code>0</code>, <code>1</code>, <code>2</code>, and so on.</p>
+<p><small>This type was previously called <code>Uint</code>. For the moment, Caesar also accepts this name.</small></p>
+<h3 id="int"><a class="header" href="#int">Int</a></h3>
+<p>Signed integers.</p>
+<h3 id="ureal"><a class="header" href="#ureal">UReal</a></h3>
+<p>Unsigned real numbers, i.e. values x ∈ ℝ such that x ≥ 0.</p>
+<p>This is the type of fraction expressions <code>a/b</code> where <code>a</code> and <code>b</code> are unsigned integer literals, as well as decimals such as <code>3.14</code>.</p>
+<h3 id="real"><a class="header" href="#real">Real</a></h3>
+<p>Actual real numbers!</p>
+<h3 id="eureal"><a class="header" href="#eureal">EUReal</a></h3>
+<p>Extended unsigned real numbers.
+This type includes all values from the <code>UReal</code> type and also allows the value <code>∞</code>.</p>
+<p>This type admits a Heyting algebra and can be used as a verification domain.</p>
+<p><small>This type was previously called <code>Realplus</code>. For the moment, Caesar also accepts this name.</small></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="lists"><a class="header" href="#lists">Lists</a></h1>
+<p>The standard library includes a type for lists <code>[]T</code> where <code>T</code> is the type of elements.</p>
+<ul>
+<li><strong>Length</strong>: <code>func len(list: []T): UInt</code>.</li>
+<li><strong>Element Access</strong>: <code>func select(list: []T, index: UInt): T</code>.</li>
+<li><strong>Storing elements</strong>: <code>func store(list: []T, index: UInt, value: T): []T</code>.</li>
+</ul>
+<h2 id="discussion"><a class="header" href="#discussion">Discussion</a></h2>
+<p>The SMT-LIB translation of lists is based on SMT-LIB's arrays, but our lists have a length associated with it.
+You are only supposed to access elements at indices <code>&lt; len(list)</code>.</p>
+<p>Some SMT solvers also support <a href="https://microsoft.github.io/z3guide/docs/theories/Sequences">Sequences</a>, but we do not yet understand those well enough to say how they compare to our lists.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="distribution-expressions"><a class="header" href="#distribution-expressions">Distribution Expressions</a></h1>
+<p>Caesar supports a limited number of distributions as built-ins.
+They are allowed as the right-hand side of an assignment, e.g. <code>x = ber(1, 1);</code>.
+Distribution expressions are not allowed to occur nested inside expressions.</p>
+<p>All distribution expressions except for <code>flip</code> take <em>literal</em> arguments, i.e. numbers.
+Expressions such as <code>1+x</code> or even <code>1+1</code> are not supported as arguments.</p>
+<h2 id="bernoulli"><a class="header" href="#bernoulli">Bernoulli</a></h2>
+<p>The <a href="https://en.wikipedia.org/wiki/Bernoulli_distribution">Bernoulli distribution</a>.</p>
+<h3 id="constant-only-with-odds"><a class="header" href="#constant-only-with-odds">Constant-only with Odds</a></h3>
+<pre><code>proc ber(pa: UInt, pb: UInt) -&gt; (r: Bool)
+</code></pre>
+<p>This version takes two <em>odds</em>: <code>ber(pa, pb)</code> returns <code>true</code> with probability <code>pa/(pa+pb)</code> and <code>false</code> with probability <code>pb/(pa+pb)</code>.</p>
+<p>Formally: <code>vc[x = ber(pa, pb)](φ) = (pa/(pa+pb)) * φ[x/true] + (pb/(pa+pb)) * φ[x/false]</code>.</p>
+<p><small>Note that calls with <code>pa+pb = 0</code> will result in a constant zero expectation.</small></p>
+<h3 id="symbolic-with-probabilities"><a class="header" href="#symbolic-with-probabilities">Symbolic with Probabilities</a></h3>
+<pre><code>proc flip(p: UReal) -&gt; (r: Bool)
+</code></pre>
+<p>Returns <code>true</code> with probability <code>p</code> and <code>false</code> with probability <code>1-p</code>.
+Note: if <code>p</code> is not a valid probability (not in the range <code>[0,1]</code>), then the result of this distribution is undefined!</p>
+<p>This distribution accepts symbolic parameters (not just constants).</p>
+<h2 id="uniform"><a class="header" href="#uniform">Uniform</a></h2>
+<pre><code>proc unif(a: UInt, b: UInt) -&gt; (r: UInt)
+</code></pre>
+<p>The <a href="https://en.wikipedia.org/wiki/Discrete_uniform_distribution">uniform distribution</a> returns the values in the closed interval <code>[a,b]</code> with uniform probability.</p>
+<p><small>Note that calls with <code>a &lt;= b</code> will result in a constant zero expectation.</small></p>
+<h2 id="binomial"><a class="header" href="#binomial">Binomial</a></h2>
+<pre><code>proc binom(n: UInt, pa: UInt, pb: UInt) -&gt; (r: UInt)
+</code></pre>
+<p>Returns values <code>r</code> according to the <a href="https://en.wikipedia.org/wiki/Binomial_distribution">binomial distribution</a> where <code>n</code> is the number of trials, <code>pa</code> are the odds of success and <code>pb</code> are the odds of failure.</p>
+<h2 id="hypergeometric"><a class="header" href="#hypergeometric">Hypergeometric</a></h2>
+<pre><code>proc hyper(pN: UInt, k: UInt, pn: UInt) -&gt; (r: UInt)
+</code></pre>
+<p>Return values according to the <a href="https://en.wikipedia.org/wiki/Hypergeometric_distribution">hypergeometric distribution</a> where <code>pN</code> is the population size, <code>k</code> is the number of success states in the population and <code>pn</code> is the number of draws.
+The result <code>r</code> is the number of observed successes, weighted by its probability.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="development-guide"><a class="header" href="#development-guide">Development Guide</a></h1>
+<p>This guide explains how Caesar and related tools work internally and how to contribute to the code.</p>
+<p>The whole project currently lives in a GitHub repository: <a href="https://github.com/moves-rwth/caesar"><code>github.com/moves-rwth/caesar</code></a>.
+We use GitHub's issue tracker.</p>
+<p>This project is being built at the <a href="https://moves.rwth-aachen.de/">Chair for Software Modeling and Verification (MOVES)</a> at RWTH Aachen University.</p>
+<h2 id="caesar"><a class="header" href="#caesar">Caesar</a></h2>
+<p><a href="./caesar.html">Caesar's</a>'s source code is begins at the root level of the Git repository.
+It is a <a href="https://doc.rust-lang.org/book/ch14-03-cargo-workspaces.html">cargo workspace</a> containing the main <code>caesar</code> crate and the <code>z3rro</code> crate.</p>
+<p>We try to use <a href="https://doc.rust-lang.org/rustdoc/what-is-rustdoc.html">rustdoc</a> as much as possible to document how <code>caesar</code> works.
+Just run <code>cargo doc --open</code> to build and open the Rust API documentation of the project.</p>
+<p>To run all tests, execute <code>cargo test --all</code>.</p>
+<p>The source code for the <code>caesar</code> crate lives in <a href="https://github.com/moves-rwth/caesar/tree/master/src"><code>src/</code></a>.</p>
+<p>Integration tests live in the <a href="https://github.com/moves-rwth/caesar/tree/master/tests"><code>tests/</code></a> directory.
+Read the associated <a href="https://github.com/moves-rwth/caesar/blob/master/tests/README.md"><code>tests/README.md</code></a> for more information about these tests.</p>
+<p><code>z3rro</code> is our dedicated crate for basic SMT functionality.
+It lives in <a href="https://github.com/moves-rwth/caesar/tree/master/z3rro"><code>z3rro/</code></a>.
+The idea is that this code is independent of Caesar itself and may be useful to other projects.</p>
+<h2 id="pgcl2heyvl"><a class="header" href="#pgcl2heyvl">pgcl2heyvl</a></h2>
+<p><code>pgcl2heyvl</code> is our <a href="./frontends/pgcl.html">pGCL frontend</a>.
+It lives in <a href="https://github.com/moves-rwth/caesar/tree/master/pgcl/pgcl2heyvl"><code>pgcl/pgcl2heyvl</code></a>.
+The tool is written in Python and we use <a href="https://python-poetry.org/">poetry</a> for its dependency management.
+The most important dependency is <a href="https://github.com/Philipp15b/probably"><code>probably</code></a> which defines the accepted pGCL syntax.</p>
+<p>The tool has a terrible user interface (need to specify invariants as command-line arguments!).
+Someone should improve that.</p>
+<h2 id="mdbook-documentation"><a class="header" href="#mdbook-documentation">mdbook Documentation</a></h2>
+<p>The documentation you are reading right now is built using <a href="https://rust-lang.github.io/mdBook/">mdbook</a>.
+We also require <a href="https://graphviz.org/">graphviz</a> to be installed as well as <a href="https://github.com/dylanowen/mdbook-graphviz"><code>mdbook-graphviz</code></a>.</p>
+<p>After installing graphviz and running <code>cargo install mdbook mdbook-graphviz</code>, you can host a local server with the documentation and open it in a web browser:</p>
+<pre><code>cd docs
+mdbook serve --open
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="oopsla-23-artifact-evaluation-guide"><a class="header" href="#oopsla-23-artifact-evaluation-guide">OOPSLA '23 Artifact Evaluation Guide</a></h1>
+<p>Welcome to the artifact for our OOPSLA '23 submission <em>&quot;A Deductive Verification Infrastructure for Probabilistic Programs&quot;</em>.</p>
+<p>Contained within the artifact:</p>
+<ul>
+<li>Our tool <em>Caesar</em>, which parses HeyVL programs and tries to verify them. Caesar constitutes our main implementation contribution and is the focus of this artifact.
+<ul>
+<li>A script to reproduce our benchmarks (Table 2).</li>
+</ul>
+</li>
+<li>We also include our prototypical tool <em>pgcl2heyvl</em>, which takes pGCL programs with annotations and produces a HeyVL file that encodes the required proof obligations.</li>
+<li>Our full source code is contained within the artifact as well.</li>
+</ul>
+<h2 id="contents"><a class="header" href="#contents">Contents</a></h2>
+<ol>
+<li>Getting Started</li>
+<li>Piece by Piece: How Our Artifact Supports the Paper's Claims
+<ol>
+<li>Running Our Benchmarks</li>
+<li>The Caesar Tool and Its Source Code</li>
+<li>pgcl2heyvl: Generating HeyVL Files From pGCL</li>
+</ol>
+</li>
+<li>A Guide to Custom Examples</li>
+<li>Appendix: Accepted pGCL Syntax by the pglc2heyvl Tool</li>
+</ol>
+<h2 id="1-getting-started"><a class="header" href="#1-getting-started">1. Getting Started</a></h2>
+<p><strong>Requirements.</strong></p>
+<ul>
+<li>We use <a href="https://www.docker.com/">Docker</a>, and provide images for both x86 and ARM architectures.</li>
+<li>16 GB of RAM, enough disk space for the artifact.</li>
+<li>Our benchmark set should terminate in under 10 minutes.</li>
+<li>Note: We provide an x86 Docker image. On ARM machines, Docker will run it in a virtual machine and will print a warning. In these setups, we have observed a slowdown of about 10x.</li>
+</ul>
+<p><strong>Downloading the artifact.</strong>
+Either download from Zenodo (<strong>TODO</strong>) and then run <code>docker image load -i caesar.tar.gz</code>.</p>
+<p>Alternatively, <a href="https://github.com/Philipp15b/caesar/pkgs/container/caesar">via Github packages</a>:</p>
+<pre><code>docker pull ghcr.io/philipp15b/caesar:oopsla23-aec --platform linux/amd64
+</code></pre>
+<p><strong>Entering the artifact environment.</strong>
+Simply run the <code>caesar</code> image with Docker.
+This will open a <code>bash</code> shell in the <code>/root/caesar</code> directory with the <code>caesar</code> and <code>pgcl2heyvl</code> commands available.</p>
+<pre><code class="language-bash">docker run -it ghcr.io/philipp15b/caesar:oopsla23-aec
+</code></pre>
+<p>The image is based on on Debian Bullseye (slim), so the <code>apt</code> package manager is available.
+The editors <code>vim</code> and <code>nano</code> are installed already.</p>
+<p><strong>Running the benchmarks.</strong>
+To reproduce our benchmarks (Table 2), execute</p>
+<pre><code class="language-bash">fish run-benchmarks.fish
+</code></pre>
+<p>The script will run the list of benchmarks specified in <code>benchmarks.txt</code> in sequence (usually in &lt; 10min).
+After completion, the results will be printed as an ASCII table to the terminal as well to the CSV file <code>benchmark-results.csv</code>.</p>
+<p><strong>Documentation.</strong></p>
+<ul>
+<li>We provide more detailed usage and syntax instructions in our documentation. It is <a href="https://philipp15b.github.io/caesar/">available online</a> and the source code can be found in <code>docs/src</code> (Markdown files).</li>
+<li>Caesar has Rustdoc documentation, but we do not include the generated files or the Rust compiler in this artifact.</li>
+</ul>
+<h2 id="2-piece-by-piece-how-our-artifact-supports-the-papers-claims"><a class="header" href="#2-piece-by-piece-how-our-artifact-supports-the-papers-claims">2. Piece by Piece: How Our Artifact Supports the Paper's Claims</a></h2>
+<p><em>Section 5.2</em> of our paper states our key claims with respect to this artifact.</p>
+<p>In this document,</p>
+<ul>
+<li><strong>Section 2.1.</strong> explains how to run our benchmarks (Table 2).</li>
+<li><strong>Section 2.3.</strong> explains how to automatically generate HeyVL files using our prototypical frontend pgcl2heyvl.</li>
+</ul>
+<h3 id="21-running-our-benchmarks"><a class="header" href="#21-running-our-benchmarks">2.1. Running Our Benchmarks</a></h3>
+<p>To reproduce our benchmarks (Table 2), execute</p>
+<pre><code class="language-bash">fish run-benchmarks.fish
+</code></pre>
+<p>The script will run the list of benchmarks specified in <code>benchmarks.txt</code> in sequence.
+After completion (usually in &lt; 10min), the results will be printed as an ASCII table to the terminal as well to the CSV file <code>benchmark-results.csv</code>.</p>
+<p>Note: To allow reproducing results on slower machines and virtualized environments, we increased the timeout for each benchmark from 10s to 60s.</p>
+<h3 id="22-the-caesar-tool-and-its-source-code"><a class="header" href="#22-the-caesar-tool-and-its-source-code">2.2. The Caesar Tool and Its Source Code</a></h3>
+<p>Our tool is available as the <code>caesar</code> command.
+The source code is in the entry directory (<code>/root/caesar</code>).
+In particular, the <code>src</code> and <code>z3rro</code> directories are relevant.
+Both are documented using Rust doc comments.</p>
+<p><strong>Running Caesar directly.</strong>
+It can be executed with <code>caesar [filename]</code> where the file contains a HeyVL program.
+Our benchmarks can be found in the following directories:</p>
+<ul>
+<li><code>pgcl/examples-heyvl</code>: This directory contains the 85% of our benchmarks which were automatically generated using pgcl2heyvl.</li>
+<li><code>tests</code>: This directory contains remaining 15% of the benchmarks which are hand-written HeyVL files (cf. Section 5.2 in our paper).</li>
+</ul>
+<p>The <code>--timeout [SECONDS]</code> and <code>--mem [MEGABYTES]</code> command-line options are useful to set runtime and memory limits.</p>
+<p><strong>HeyVL Syntax.</strong>
+Caesar accepts a modified version of our syntax from the paper.
+We refer to our documentation section on the language: <a href="https://philipp15b.github.io/caesar/heyvl/index.html">It is online</a>, and contained in the artifact in <code>docs/src/heyvl</code>.
+Example HeyVL files in the <code>pgcl/examples</code> and <code>tests/</code> directories.</p>
+<p><strong>VSCode extension for syntax highlighting.</strong>
+We have a VSCode extension for HeyVL syntax highlighting.
+See <code>vscode-ext/README.md</code> for installation instructions.
+You might need to do this outside of your Docker container, so run <code>docker cp CONTAINER:/root/caesar/vscode-ext $PWD</code> to copy the directory out of the container and then run the installation.</p>
+<p>We recommend using this extension with a <a href="https://code.visualstudio.com/remote/advancedcontainers/develop-remote-host">VSCode Remote connection to the Docker container</a> when editing HeyVL files for convenience.</p>
+<h3 id="23-pgcl2heyvl-generating-heyvl-files-from-pgcl"><a class="header" href="#23-pgcl2heyvl-generating-heyvl-files-from-pgcl">2.3. pgcl2heyvl: Generating HeyVL Files From pGCL</a></h3>
+<p>This pGCL frontend is available as the <code>pgcl2heyvl</code> command.
+Its source code is provided in the <code>pgcl/pgcl2heyvl</code> directory as a <a href="https://python-poetry.org/">Poetry</a> package.</p>
+<p><strong>Automatically generated benchmarks.</strong>
+In our paper, we claim that 85% of our benchmarks are automatically generated from pGCL code.
+These pGCL examples are located in the <code>pgcl/examples</code> directory.</p>
+<p>The corresponding generated HeyVL files are located in <code>pgcl/examples-heyvl</code>.
+We already generated all these HeyVL files with pgcl2heyvl.</p>
+<p>In order to reproduce the process of automatically generating the HeyVL files, run</p>
+<pre><code class="language-bash">rm pgcl/examples-heyvl/*.heyvl # delete existing files
+fish pgcl/examples-heyvl/generate.fish # generate files
+</code></pre>
+<p>See Section 2.2. for how to run the individual HeyVL files with Caesar.</p>
+<p><strong>Details.</strong>
+pgcl2heyvl parses pGCL programs in the syntax accepted by the <a href="https://philipp15b.github.io/probably/">probably</a> Python package.
+See the last section of this file for the grammar of pGCL programs.</p>
+<p>At the top of every file must be a comment of the style</p>
+<pre><code>// ARGS: --encoding ... --pre ... --post ...
+</code></pre>
+<p>according to the CLI documentation of the pgcl2heyvl tool (run <code>pgcl2heyvl --help</code>).</p>
+<h1 id="3-a-guide-to-custom-examples"><a class="header" href="#3-a-guide-to-custom-examples">3. A Guide To Custom Examples</a></h1>
+<p>We will look at our <code>geo1</code> example to see how you can create your own examples for pgcl2heyvl and Caesar.</p>
+<h2 id="31-from-pgcl-to-heyvl"><a class="header" href="#31-from-pgcl-to-heyvl">3.1. From pGCL to HeyVL</a></h2>
+<p>There is a pGCL file for <code>geo1</code> in <code>pgcl/examples/geo1.pgcl</code>:</p>
+<pre><code>// ARGS: --encoding &quot;encode-k-induction&quot; --calculus &quot;wp&quot; --post c --pre &quot;c+1&quot; --k 2
+
+nat c;
+nat f;
+
+while(f=1){
+   {f := 0}[0.5]{c := c+1}
+}
+</code></pre>
+<p>pgcl2heyvl can be used to create a corresponding HeyVL file that uses the annotations in the first line to prove that <code>wp[geo1](c) &lt;= c+1</code> holds using <code>k</code>-induction with <code>k=2</code>.</p>
+<pre><code>pgcl2heyvl pgcl/examples/geo1.pgcl &gt; mygeo.heyvl
+</code></pre>
+<p>This will create a <code>mygeo.heyvl</code> file.</p>
+<p><strong>Things to Try:</strong></p>
+<ul>
+<li>Set the <code>pre</code> to <code>c+2</code>. This is still a valid upper bound (and the HeyVL file should verify.)</li>
+<li>Set the <code>pre</code> to <code>c</code>. This is <em>not</em> a valid upper bound (and Caesar should give a counter-example later).</li>
+</ul>
+<p><strong>Note:</strong> 
+pgcl2heyvl has a slighly different syntax for programs than Caesar accepts.
+It also does not accept domain declarations (including user-defined functions and axioms).
+We are working on a more convenient implementation.</p>
+<h2 id="32-verifying-heyvl-files-with-caesar"><a class="header" href="#32-verifying-heyvl-files-with-caesar">3.2. Verifying HeyVL Files With Caesar</a></h2>
+<p>Simply run <code>caesar</code> with your new file:</p>
+<pre><code>caesar mygeo.heyvl
+</code></pre>
+<p>and it prints that the main generated <code>coproc</code> either verifies or not (depending on your modifications).</p>
+<p>You can of course create HeyVL files directly.
+To encode loops, use the encodings detailed in the appendix of our paper.</p>
+<h1 id="4-appendix-accepted-syntax-by-the-pgcl2heyvl-tool"><a class="header" href="#4-appendix-accepted-syntax-by-the-pgcl2heyvl-tool">4. Appendix: Accepted Syntax by the pgcl2heyvl Tool</a></h1>
+<p>An excerpt from the <a href="https://github.com/lark-parser/lark">Lark</a> grammar for pGCL programs used in the probably library:</p>
+<pre><code>declaration: &quot;bool&quot; var                  -&gt; bool
+            | &quot;nat&quot; var bounds?           -&gt; nat
+            | &quot;const&quot; var &quot;:=&quot; expression -&gt; const
+
+bounds: &quot;[&quot; expression &quot;,&quot; expression &quot;]&quot;
+
+instruction: &quot;skip&quot;                                      -&gt; skip
+           | &quot;while&quot; &quot;(&quot; expression &quot;)&quot; block            -&gt; while
+           | &quot;if&quot; &quot;(&quot; expression &quot;)&quot; block &quot;else&quot;? block -&gt; if
+           | var &quot;:=&quot; rvalue                             -&gt; assign
+           | block &quot;[&quot; expression &quot;]&quot; block              -&gt; choice
+           | &quot;tick&quot; &quot;(&quot; expression &quot;)&quot;                   -&gt; tick
+
+rvalue: &quot;unif&quot; &quot;(&quot; expression &quot;,&quot; expression &quot;)&quot; -&gt; uniform
+      | expression
+
+literal: &quot;true&quot;  -&gt; true
+       | &quot;false&quot; -&gt; false
+       | INT     -&gt; nat
+       | FLOAT   -&gt; float
+       | &quot;∞&quot;     -&gt; infinity
+       | &quot;\infty&quot; -&gt; infinity
+</code></pre>
+<p>Expressions in programs and expectations can be built from the following operators, grouped by precedence:</p>
+<ol>
+<li><code>||</code>, <code>&amp;</code></li>
+<li><code>&lt;=</code>, <code>&lt;</code>, <code>=</code></li>
+<li><code>+</code>, <code>-</code></li>
+<li><code>*</code>, <code>:</code></li>
+<li><code>/</code></li>
+<li><code>not </code>, <code>( ... )</code>, <code>[ ... ]</code>, <code>literal</code>, <code>var</code></li>
+</ol>
+<p>Whitespace is generally ignored.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="related-work-on-deductive-verification"><a class="header" href="#related-work-on-deductive-verification">Related Work on Deductive Verification</a></h1>
+<p>Although caesar is first quantitative deductive verification infrastructure, there has been lots of previous work in deductive verification.
+In this section, we collect links to related work for inspiration and reference.</p>
+<h2 id="the-viper-project"><a class="header" href="#the-viper-project">The Viper Project</a></h2>
+<p><a href="https://www.pm.inf.ethz.ch/research/viper.html">Viper</a> is a verification infrastructure from ETH Zurich that supports <em>permissions</em>.
+There are front-ends for Go (<a href="https://www.pm.inf.ethz.ch/research/gobra.html">Gobra</a>), Python (<a href="https://www.pm.inf.ethz.ch/research/nagini.html">Nagini</a>), and Rust (<a href="https://www.pm.inf.ethz.ch/research/prusti.html">Prusti</a>)
+There are also projects that use it for the verification of OpenCL and Java (<a href="https://vercors.ewi.utwente.nl/">VerCors</a>).</p>
+<p>There is an extensive <a href="http://viper.ethz.ch/tutorial/">tutorial for the Viper intermediate language</a> and a <a href="http://viper.ethz.ch/examples/">collection of examples</a>.</p>
+<p>Viper in turn uses Boogie for verification condition generation.
+The translation from Viper to Boogie is implemented in the <a href="https://github.com/viperproject/carbon/">Carbon verifier</a>.</p>
+<h2 id="boogie"><a class="header" href="#boogie">Boogie</a></h2>
+<p><a href="https://github.com/boogie-org/boogie">Boogie</a> is an intermediate verification language and verification condition generator.
+Various verifiers are built on top, e.g. <a href="https://github.com/microsoft/vcc">VCC</a> and <a href="https://www.microsoft.com/en-us/research/project/havoc">HAVOC</a> for C, as well as the &quot;verification-ready&quot; languages <a href="https://github.com/dafny-lang/dafny">Dafny</a>, <a href="https://www.microsoft.com/en-us/research/project/chalice">Chalice</a> and <a href="https://www.microsoft.com/en-us/research/project/spec">Spec#</a>.</p>
+<p>There is also a <a href="https://arxiv.org/abs/2105.14381">paper by Parthasarathy et al.</a>  on the formal verification of Boogie's verification condition generation.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+    </div>
+    </body>
+</html>
