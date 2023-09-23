@@ -41,7 +41,7 @@ pub enum ExprKind {
     /// Type casting.
     Cast(Expr),
     /// A quantifier over some variables.
-    Quant(QuantOp, Vec<QuantVar>, Expr),
+    Quant(QuantOp, Vec<QuantVar>, QuantAnn, Expr),
     /// A substitution.
     Subst(Ident, Expr, Expr),
     /// A value literal.
@@ -86,9 +86,10 @@ impl SimplePretty for Expr {
                     .append(Doc::line_())
                     .append(operand.pretty()),
             )),
-            ExprKind::Quant(quant_op, quant_vars, expr) => Doc::text(quant_op.node.as_str())
+            ExprKind::Quant(quant_op, quant_vars, ann, expr) => Doc::text(quant_op.node.as_str())
                 .append(Doc::space())
                 .append(pretty_list(quant_vars))
+                .append(ann.pretty())
                 .append(Doc::text(". "))
                 .append(expr.pretty()),
             ExprKind::Subst(var, subst, expr) => parens_group(expr.pretty())
@@ -267,6 +268,65 @@ impl SimplePretty for QuantVar {
     }
 }
 
+/// Annotations on quantifiers. Right now, that's just (optional) triggers.
+#[derive(Debug, Clone, Default)]
+pub struct QuantAnn {
+    pub triggers: Vec<Trigger>,
+}
+
+impl QuantAnn {
+    /// Add the annotations from `other` to `self`.
+    pub fn add(&mut self, other: Self) {
+        self.triggers.extend(other.triggers);
+    }
+}
+
+impl SimplePretty for QuantAnn {
+    fn pretty(&self) -> Doc {
+        let mut doc = Doc::nil();
+        doc = doc.append(Doc::concat(self.triggers.iter().map(|trigger| {
+            Doc::space()
+                .append(Doc::text("@trigger("))
+                .append(trigger.pretty())
+                .append(Doc::text(")"))
+        })));
+        doc
+    }
+}
+
+/// A *trigger* represents one [`z3::Pattern`] for a quantifier. Usually, it's a
+/// single [`Expr`], but multiple expressions create what's called a
+/// *multi-pattern*.
+#[derive(Debug, Clone)]
+pub struct Trigger {
+    pub span: Span,
+    terms: Vec<Expr>,
+}
+
+impl Trigger {
+    /// Create a new trigger (multi-)pattern.
+    ///
+    /// Panics if the list of terms is empty.
+    pub fn new(span: Span, terms: Vec<Expr>) -> Self {
+        assert!(!terms.is_empty());
+        Trigger { span, terms }
+    }
+
+    pub fn terms(&self) -> &[Expr] {
+        &self.terms
+    }
+
+    pub fn terms_mut(&mut self) -> &mut [Expr] {
+        &mut self.terms
+    }
+}
+
+impl SimplePretty for Trigger {
+    fn pretty(&self) -> Doc {
+        pretty_list(self.terms.iter())
+    }
+}
+
 pub type Lit = Spanned<LitKind>;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -405,8 +465,9 @@ impl ExprBuilder {
     ) -> Expr {
         let quant_vars = idents.into_iter().map(QuantVar::Shadow).collect();
         let ty = operand.ty.clone();
+        let ann = QuantAnn::default();
         Shared::new(ExprData {
-            kind: ExprKind::Quant(Spanned::new(self.span, kind), quant_vars, operand),
+            kind: ExprKind::Quant(Spanned::new(self.span, kind), quant_vars, ann, operand),
             ty,
             span: self.span,
         })

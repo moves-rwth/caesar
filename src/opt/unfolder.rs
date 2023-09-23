@@ -165,7 +165,7 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                 }
                 _ => walk_expr(self, e),
             },
-            ExprKind::Quant(_, quant_vars, expr) => {
+            ExprKind::Quant(_, quant_vars, _, expr) => {
                 self.subst.push_quant(quant_vars, self.translate.ctx.tcx());
                 let scope = self.translate.push();
 

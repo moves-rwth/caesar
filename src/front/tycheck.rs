@@ -1,17 +1,19 @@
 //! Type checking and type inference happens here.
 
-use std::{cmp::Ordering, ops::DerefMut, rc::Rc};
+use std::{cmp::Ordering, collections::HashSet, ops::DerefMut, rc::Rc};
 
 use ariadne::ReportKind;
 use replace_with::replace_with_or_abort;
 
 use crate::{
     ast::{
-        visit::{walk_expr, walk_func, walk_stmt, VisitorMut},
+        util::FreeVariableCollector,
+        visit::{walk_expr, walk_func, walk_quant_ann, walk_stmt, VisitorMut},
         AxiomDecl, BinOpKind, DeclKind, DeclRef, Diagnostic, Expr, ExprData, ExprKind, FuncDecl,
-        Ident, Label, Param, ProcDecl, ProcSpec, QuantOpKind, Shared, Span, SpanVariant, Stmt,
-        StmtKind, TyKind, UnOpKind, VarDecl, VarKind,
+        Ident, Label, Param, ProcDecl, ProcSpec, QuantOpKind, QuantVar, Shared, Span, SpanVariant,
+        Stmt, StmtKind, TyKind, UnOpKind, VarDecl, VarKind,
     },
+    pretty::join_commas,
     tyctx::TyCtx,
 };
 
@@ -236,6 +238,10 @@ pub enum TycheckError {
         span: Span,
         var_decl: DeclRef<VarDecl>,
     },
+    TriggerCapture {
+        span: Span,
+        captured: HashSet<Ident>,
+    },
 }
 
 #[derive(Debug)]
@@ -338,6 +344,18 @@ impl TycheckError {
                         Label::new(*span).with_message("... so you cannot use it in the pre"),
                     )
             }
+            TycheckError::TriggerCapture { span, captured } => Diagnostic::new(
+                ReportKind::Error,
+                *span,
+            )
+            .with_message("Trigger does not capture all quantified variables")
+            .with_label(Label::new(*span).with_message(format!(
+                "Trigger captures {}",
+                join_commas(captured.iter().map(|ident| format!("`{}`", ident)))
+            )))
+            .with_note(
+                "Triggers on quantifiers must capture all variables bound by the quantifier.",
+            ),
         }
     }
 }
@@ -662,14 +680,29 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
                 .ty
                 .clone()
                 .unwrap_or_else(|| operand.ty.clone().unwrap()),
-            ExprKind::Quant(quant_op, _idents, operand) => {
+            ExprKind::Quant(quant_op, idents, ann, operand) => {
                 let operand_ty = operand.ty.clone().unwrap();
+                walk_quant_ann(self, ann)?;
                 match quant_op.node {
                     QuantOpKind::Inf | QuantOpKind::Sup => {
                         op_ty_check!(expr_span, operand, TyKind::EUReal)
                     }
                     QuantOpKind::Forall | QuantOpKind::Exists => {
                         op_ty_check!(expr_span, operand, TyKind::Bool)
+                    }
+                }
+                // check that triggers contain all quantified variables
+                let quantified: HashSet<Ident> = idents.iter().map(QuantVar::name).collect();
+                for trigger in &mut ann.triggers {
+                    let mut captured = FreeVariableCollector::default();
+                    for term in trigger.terms_mut() {
+                        captured.visit_expr(term).unwrap();
+                    }
+                    if !quantified.is_subset(&captured.variables) {
+                        return Err(TycheckError::TriggerCapture {
+                            span: trigger.span,
+                            captured: captured.variables,
+                        });
                     }
                 }
                 operand_ty

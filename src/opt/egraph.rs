@@ -111,7 +111,7 @@ pub fn expr_to_egg(expr: &Expr) -> RecExpr<ExprLanguage> {
                 // graph.add(ExprLanguage::ToRealPlus(arg))
                 arg
             }
-            ExprKind::Quant(_, _, _) => todo!(),
+            ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(lit) => graph.add(ExprLanguage::Lit(lit.node.clone())),
         }

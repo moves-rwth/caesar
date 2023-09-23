@@ -28,7 +28,7 @@ impl VisitorMut for FreeVariableCollector {
                 self.variables.insert(*ident);
                 Ok(())
             }
-            ExprKind::Quant(_, bound, ref mut expr) => {
+            ExprKind::Quant(_, bound, _, ref mut expr) => {
                 // which variables are bound here and *not* free?
                 let bound_and_not_free: Vec<Ident> = bound
                     .iter()

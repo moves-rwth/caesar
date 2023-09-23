@@ -104,7 +104,7 @@ impl<'ctx> SmtCtx<'ctx> {
                             if let Some(invariant) = app_z3.smt_invariant() {
                                 axioms.push((
                                     func.name, // TODO: create a new name for the axiom
-                                    translate.local_scope().forall(&invariant),
+                                    translate.local_scope().forall(&[], &invariant),
                                 ));
                             }
                             translate.pop();

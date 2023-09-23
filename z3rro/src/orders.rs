@@ -9,7 +9,10 @@
 //! [`Opp`].
 
 use ref_cast::RefCast;
-use z3::ast::{Ast, Bool, Int, Real};
+use z3::{
+    ast::{Ast, Bool, Int, Real},
+    Pattern,
+};
 
 use crate::{scope::SmtAlloc, Factory, SmtAst, SmtInvariant};
 
@@ -201,30 +204,40 @@ pub trait SmtCompleteLattice<'ctx>: SmtFresh<'ctx> + SmtLattice<'ctx> {
     /// Return an expression representing the infimum of `self`, quantifying
     /// over the variables specified in `bounds`. Additional variables to
     /// specify the infimum may be added to the outer scope `ctx`.
-    fn infimum(&self, inf_vars: SmtScope<'ctx>, ctx: &mut SmtScope<'ctx>) -> Self {
+    fn infimum(
+        &self,
+        inf_vars: SmtScope<'ctx>,
+        patterns: &[&Pattern<'ctx>],
+        ctx: &mut SmtScope<'ctx>,
+    ) -> Self {
         let factory = self.factory();
 
         // the resulting infimum is created in the outer context
         let inf = Self::fresh(&factory, ctx, "extremum");
 
         // infimum is a lower bound to all self
-        let inf_is_lower_bound = &inf_vars.forall(&inf.smt_le(self));
+        let inf_is_lower_bound = &inf_vars.forall(patterns, &inf.smt_le(self));
         ctx.add_constraint(inf_is_lower_bound);
 
         // `other_lb` is another lower bound to self...
         let mut inf_vars_and_other = inf_vars.clone();
         let other_lb = Self::fresh(&factory, &mut inf_vars_and_other, "bound");
-        let other_is_lb = inf_vars.forall(&other_lb.smt_le(self));
+        let other_is_lb = inf_vars.forall(patterns, &other_lb.smt_le(self));
         // infimum is the greatest lower bound, i.e. `other_lb <= inf`
         let inf_glb = other_is_lb.implies(&other_lb.smt_le(&inf));
-        ctx.add_constraint(&inf_vars_and_other.forall(&inf_glb));
+        ctx.add_constraint(&inf_vars_and_other.forall(&[], &inf_glb));
 
         inf
     }
 
     /// Dual of [`SmtCompleteLattice::infimum`].
-    fn supremum(&self, sup_vars: SmtScope<'ctx>, ctx: &mut SmtScope<'ctx>) -> Self {
-        Opp::with_opp(self, |a| a.infimum(sup_vars, ctx))
+    fn supremum(
+        &self,
+        sup_vars: SmtScope<'ctx>,
+        patterns: &[&Pattern<'ctx>],
+        ctx: &mut SmtScope<'ctx>,
+    ) -> Self {
+        Opp::with_opp(self, |a| a.infimum(sup_vars, patterns, ctx))
     }
 }
 
@@ -325,7 +338,7 @@ mod test {
         test_prove(|ctx, scope| {
             let x = Int::fresh(&ctx, scope, "x");
             let x_is_5 = x._eq(&Int::from_u64(ctx, 5));
-            let inf = x_is_5.infimum(scope.clone(), scope);
+            let inf = x_is_5.infimum(scope.clone(), &[], scope);
             inf.not()
         });
     }

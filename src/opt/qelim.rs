@@ -53,7 +53,7 @@ impl<'tcx> Qelim<'tcx> {
                 }
             }
             ExprKind::Cast(ref mut inner) => self.qelim_inf(inner),
-            ExprKind::Quant(quant_op, quant_vars, operand) => match quant_op.node {
+            ExprKind::Quant(quant_op, quant_vars, _, operand) => match quant_op.node {
                 QuantOpKind::Inf | QuantOpKind::Forall => {
                     self.qelim_inf(operand);
                     *expr = self.elim_quant(expr_data.span, quant_vars, operand.clone());
@@ -99,7 +99,7 @@ impl<'tcx> Qelim<'tcx> {
                 }
             }
             ExprKind::Cast(ref mut inner) => self.qelim_sup(inner),
-            ExprKind::Quant(quant_op, quant_vars, operand) => match quant_op.node {
+            ExprKind::Quant(quant_op, quant_vars, _, operand) => match quant_op.node {
                 QuantOpKind::Sup | QuantOpKind::Exists => {
                     self.qelim_sup(operand);
                     *expr = self.elim_quant(expr_data.span, quant_vars, operand.clone());

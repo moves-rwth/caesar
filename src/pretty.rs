@@ -52,3 +52,16 @@ pub fn pretty_string<T: SimplePretty>(value: &T) -> String {
     value.pretty().render_fmt(80, &mut buf).unwrap();
     buf
 }
+
+/// Join normal (non-pretty) Strings with commas.
+pub fn join_commas(iter: impl IntoIterator<Item = String>) -> String {
+    let mut iter = iter.into_iter().peekable();
+    let mut buf = String::new();
+    while let Some(next) = iter.next() {
+        buf.push_str(&next);
+        if iter.peek().is_some() {
+            buf.push_str(", ");
+        }
+    }
+    buf
+}

@@ -141,7 +141,7 @@ mod test {
             let zero = UInt::from_u64(ctx, 0);
             let one = UInt::from_u64(ctx, 1);
             let x = UInt::fresh(&ctx, &mut inner_scope, "x");
-            inner_scope.exists(&(x + one).smt_eq(&zero)).not()
+            inner_scope.exists(&[], &(x + one).smt_eq(&zero)).not()
         });
     }
 }
