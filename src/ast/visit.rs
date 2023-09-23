@@ -2,7 +2,7 @@ use std::ops::DerefMut;
 
 use super::{
     AxiomDecl, DeclKind, DeclRef, DomainDecl, DomainSpec, Expr, ExprKind, FuncDecl, Ident, Param,
-    ProcDecl, ProcSpec, QuantVar, Stmt, StmtKind, TyKind, VarDecl,
+    ProcDecl, ProcSpec, QuantAnn, QuantVar, Stmt, StmtKind, TyKind, VarDecl,
 };
 
 pub trait VisitorMut: Sized {
@@ -184,7 +184,7 @@ pub fn walk_expr<V: VisitorMut>(visitor: &mut V, e: &mut Expr) -> Result<(), V::
         ExprKind::Cast(ref mut expr) => {
             visitor.visit_expr(expr)?;
         }
-        ExprKind::Quant(_op, ref mut quant_vars, ref mut expr) => {
+        ExprKind::Quant(_op, ref mut quant_vars, ref mut ann, ref mut expr) => {
             for quant_var in quant_vars {
                 match quant_var {
                     QuantVar::Shadow(var) => visitor.visit_ident(var)?,
@@ -193,6 +193,7 @@ pub fn walk_expr<V: VisitorMut>(visitor: &mut V, e: &mut Expr) -> Result<(), V::
                     }
                 }
             }
+            walk_quant_ann(visitor, ann)?;
             visitor.visit_expr(expr)?;
         }
         ExprKind::Subst(ref mut ident, ref mut by, ref mut expr) => {
@@ -201,6 +202,15 @@ pub fn walk_expr<V: VisitorMut>(visitor: &mut V, e: &mut Expr) -> Result<(), V::
             visitor.visit_expr(expr)?;
         }
         ExprKind::Lit(_) => {}
+    }
+    Ok(())
+}
+
+pub fn walk_quant_ann<V: VisitorMut>(visitor: &mut V, ann: &mut QuantAnn) -> Result<(), V::Err> {
+    for trigger in &mut ann.triggers {
+        for term in trigger.terms_mut() {
+            visitor.visit_expr(term)?;
+        }
     }
     Ok(())
 }

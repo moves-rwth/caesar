@@ -4,7 +4,7 @@
 
 use z3::{
     ast::{exists_const, forall_const, Ast, Bool, Datatype, Dynamic, Int, Real},
-    Context,
+    Context, Pattern,
 };
 
 use crate::{prover::Prover, Factory, SmtAst, SmtInvariant};
@@ -65,24 +65,24 @@ impl<'ctx> SmtScope<'ctx> {
 
     /// Create a new existential quantifier around `body`, quantifying over all
     /// bound expressions in this solver.
-    pub fn exists(&self, body: &Bool<'ctx>) -> Bool<'ctx> {
+    pub fn exists(&self, patterns: &[&Pattern<'ctx>], body: &Bool<'ctx>) -> Bool<'ctx> {
         let ctx = body.get_ctx();
         exists_const(
             ctx,
             &self.bounds_dyn(),
-            &[],
+            patterns,
             &z3_and!(self.all_constraints(ctx), body),
         )
     }
 
     /// Create a new universal quantifier around `body`, quantifying over all
     /// bound expressions in this solver.
-    pub fn forall(&self, body: &Bool<'ctx>) -> Bool<'ctx> {
+    pub fn forall(&self, patterns: &[&Pattern<'ctx>], body: &Bool<'ctx>) -> Bool<'ctx> {
         let ctx = body.get_ctx();
         forall_const(
             ctx,
             &self.bounds_dyn(),
-            &[],
+            patterns,
             &self.all_constraints(ctx).implies(body),
         )
     }

@@ -68,7 +68,7 @@ impl VisitorMut for StatsVisitor {
         self.depth += 1;
         self.stats.num_exprs += 1;
         match &e.kind {
-            ExprKind::Quant(_, _, _) => {
+            ExprKind::Quant(_, _, _, _) => {
                 self.stats.num_quants += 1;
             }
             ExprKind::Var(_) | ExprKind::Lit(_) => {

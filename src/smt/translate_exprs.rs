@@ -8,12 +8,15 @@ use std::{
 };
 
 use ref_cast::RefCast;
-use z3::ast::{Ast, Bool, Dynamic, Int, Real};
+use z3::{
+    ast::{Ast, Bool, Dynamic, Int, Real},
+    Pattern,
+};
 
 use crate::{
     ast::{
-        BinOpKind, DeclKind, Expr, ExprKind, Ident, LitKind, QuantOpKind, QuantVar, Shared, TyKind,
-        UnOpKind,
+        BinOpKind, DeclKind, Expr, ExprKind, Ident, LitKind, QuantOpKind, QuantVar, Shared,
+        Trigger, TyKind, UnOpKind,
     },
     scope_map::ScopeMap,
 };
@@ -158,12 +161,14 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 UnOpKind::Embed | UnOpKind::Iverson => panic!("illegal exprkind"),
             },
             ExprKind::Cast(_) => panic!("illegal exprkind"),
-            ExprKind::Quant(quant_op, quant_vars, operand) => {
+            ExprKind::Quant(quant_op, quant_vars, ann, operand) => {
                 let operand = self.t_bool(operand);
                 let scope = self.mk_scope(quant_vars);
+                let patterns: Vec<_> = self.t_triggers(&ann.triggers);
+                let patterns: Vec<_> = patterns.iter().collect();
                 match quant_op.node {
-                    QuantOpKind::Forall | QuantOpKind::Inf => scope.forall(&operand),
-                    QuantOpKind::Exists | QuantOpKind::Sup => scope.exists(&operand),
+                    QuantOpKind::Forall | QuantOpKind::Inf => scope.forall(&patterns, &operand),
+                    QuantOpKind::Exists | QuantOpKind::Sup => scope.exists(&patterns, &operand),
                 }
             }
             ExprKind::Subst(_, _, _) => panic!("illegal exprkind"),
@@ -217,7 +222,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                     _ => panic!("illegal cast"),
                 }
             }
-            ExprKind::Quant(_, _, _) => todo!(),
+            ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(_) => panic!("illegal exprkind"),
         };
@@ -258,7 +263,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 _ => panic!("illegal exprkind"),
             },
             ExprKind::Cast(_) => panic!("illegal cast"),
-            ExprKind::Quant(_, _, _) => todo!(),
+            ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(lit) => match lit.node {
                 LitKind::UInt(value) => {
@@ -318,7 +323,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                     _ => panic!("illegal cast"),
                 }
             }
-            ExprKind::Quant(_, _, _) => todo!(),
+            ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(_) => panic!("illegal exprkind"),
         };
@@ -373,7 +378,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                     _ => panic!("illegal cast"),
                 }
             }
-            ExprKind::Quant(_, _, _) => todo!(),
+            ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(lit) => match &lit.node {
                 LitKind::Frac(frac) => {
@@ -448,13 +453,15 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                     _ => panic!("illegal cast"),
                 }
             }
-            ExprKind::Quant(quant_op, quant_vars, operand) => {
+            ExprKind::Quant(quant_op, quant_vars, ann, operand) => {
                 let operand = self.t_eureal(operand);
                 let scope = self.mk_scope(quant_vars);
+                let patterns: Vec<_> = self.t_triggers(&ann.triggers);
+                let patterns: Vec<_> = patterns.iter().collect();
                 let outer_scope = &mut self.limits_stack.last_mut().unwrap();
                 match quant_op.node {
-                    QuantOpKind::Inf => operand.infimum(scope, outer_scope),
-                    QuantOpKind::Sup => operand.supremum(scope, outer_scope),
+                    QuantOpKind::Inf => operand.infimum(scope, &patterns, outer_scope),
+                    QuantOpKind::Sup => operand.supremum(scope, &patterns, outer_scope),
                     QuantOpKind::Forall | QuantOpKind::Exists => panic!("illegal quantopkind"),
                 }
             }
@@ -498,7 +505,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 _ => panic!("illegal exprkind"),
             },
             ExprKind::Cast(_) => panic!("illegal exprkind"),
-            ExprKind::Quant(_, _, _) => todo!(),
+            ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(_) => panic!("illegal exprkind"),
         };
@@ -534,7 +541,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 _ => panic!("illegal exprkind"),
             },
             ExprKind::Cast(_) => panic!("illegal exprkind"),
-            ExprKind::Quant(_, _, _) => todo!(),
+            ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(_) => panic!("illegal exprkind"),
         };
@@ -618,6 +625,22 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             bounds.append(&self.get_local(quant_var.name()).scope);
         }
         bounds
+    }
+
+    /// Translate our [`Trigger`]s to z3's [`Pattern`]s.
+    fn t_triggers(&mut self, triggers: &[Trigger]) -> Vec<Pattern<'ctx>> {
+        triggers
+            .iter()
+            .map(|trigger| {
+                let terms: Vec<_> = trigger
+                    .terms()
+                    .iter()
+                    .map(|term| self.t_symbolic(term).into_dynamic(self.ctx))
+                    .collect();
+                let terms_ref: Vec<_> = terms.iter().map(|term| term as &dyn Ast).collect();
+                Pattern::new(self.ctx.ctx, &terms_ref)
+            })
+            .collect()
     }
 }
 

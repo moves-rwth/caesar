@@ -67,8 +67,14 @@ ExprKindStart = ExprKindQuant;
 pub Expr = ExprTier<ExprKindStart>;
 
 ExprKindQuant: ExprKind = {
-    <quant: QuantOp> <vars: CommaPlus<QuantVar>> "." <expr: ExprTier<ExprKindQuant>> => ExprKind::Quant(quant, vars, expr),
-    ExprKindOr,
+    <quant: QuantOp> <vars: CommaPlus<QuantVar>> <anns: QuantAnn*> "." <expr: ExprTier<ExprKindQuant>> => {
+        let mut all_anns = QuantAnn::default();
+        for ann in anns {
+            all_anns.add(ann);
+        }
+        ExprKind::Quant(quant, vars, all_anns, expr)
+    },
+    ExprKindOr
 }
 
 QuantOp: QuantOp = {
@@ -81,6 +87,14 @@ QuantOp: QuantOp = {
 QuantVar: QuantVar = {
     <l: @L> <name: Ident> ":" <ty: Ty> <r: @R> 
         => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty: ty, kind: VarKind::Const, init: None, span: span(file, l, r) }))
+}
+
+QuantAnn: QuantAnn = {
+    <l: @L> "@trigger" "(" <exprs: Comma<Expr>> ")" <r: @R> => {
+        let mut ann = QuantAnn::default();
+        ann.triggers.push(Trigger::new(span(file, l, r), exprs));
+        ann
+    }
 }
 
 ExprKindOr: ExprKind = {

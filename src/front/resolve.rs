@@ -234,7 +234,7 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
     fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
         let span = e.span;
         match &mut e.kind {
-            ExprKind::Quant(_, _, _) => self.with_subscope(|this| walk_expr(this, e)),
+            ExprKind::Quant(_, _, _, _) => self.with_subscope(|this| walk_expr(this, e)),
             ExprKind::Subst(ident, val, expr) => {
                 self.visit_expr(val)?;
                 let decl = DeclKind::VarDecl(DeclRef::new(VarDecl {
