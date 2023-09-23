@@ -509,6 +509,8 @@ For example,</p>
 }
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="expressions"><a class="header" href="#expressions">Expressions</a></h1>
+<p>For now, expressions are sparsely documented.
+We refer to <a href="https://github.com/Philipp15b/caesar/blob/master/src/front/parser/grammar.lalrpop"><code>src/front/parser/grammar.lalrpop</code></a> for now for an exhaustive grammar for the complete language.</p>
 <h2 id="if-then-else"><a class="header" href="#if-then-else">If-Then-Else</a></h2>
 <p>The <code>ite</code> built-in function allows to choose one of two expressions based on the result of a Boolean expression.
 For example:</p>
@@ -526,6 +528,21 @@ For example:</p>
 This variable <code>b</code> is available within the <code>let</code> expression's third argument.</p>
 <p>In contrast to variable declaration statements using <code>var</code>, <code>let</code> expressions do not require type annotations.
 The type of the variable is inferred from the second expression.</p>
+<h2 id="quantifiers"><a class="header" href="#quantifiers">Quantifiers</a></h2>
+<p>HeyVL features Boolean and quantitative quantifiers: <code>forall</code>, <code>exists</code>, <code>inf</code>, <code>sup</code>.
+For example:</p>
+<pre><code>forall x: Int, y: UInt. x == y || x != y
+</code></pre>
+<p><strong>Triggers.</strong>
+We also support <em>triggers</em> for quantifiers via annotations.
+They are <em>patterns</em> that will instruct the SMT solver to instantiate quantifiers if the pattern is found in the current list of terms it maintains.
+For example:</p>
+<pre><code>forall list: []Int @trigger(len(list)). len(list) &gt;= 0
+</code></pre>
+<p><em>Multi-patterns</em> are also supported, by writing a comma-separated list inside the <code>@trigger</code> annotation:</p>
+<pre><code>forall list: []Int @trigger(len(list), len(list)). len(list) &gt;= 0
+</code></pre>
+<p>For more information on how triggers/patterns work in general, see the <a href="https://microsoft.github.io/z3guide/docs/logic/Quantifiers/#patterns">Z3 User Guide</a> and the <a href="https://dafny.org/latest/DafnyRef/DafnyRef#sec-trigger">Dafny documentation</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="domains-uninterpreted-functions-and-axioms"><a class="header" href="#domains-uninterpreted-functions-and-axioms">Domains, Uninterpreted Functions, and Axioms</a></h1>
 <p><code>domain</code> blocks are used to create user-defined types and uninterpreted functions.
 A domain has a name which can be used as a type in HeyVL code.
