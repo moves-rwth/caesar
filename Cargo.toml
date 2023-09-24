@@ -58,6 +58,7 @@ lit = "1.0"
 clap = "2.33"
 glob = "0.3"
 proptest = "1.0"
+pretty_assertions = "1.4.0"
 
 [[test]]
 name = "integration"

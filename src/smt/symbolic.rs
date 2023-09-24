@@ -57,7 +57,9 @@ impl<'ctx> Symbolic<'ctx> {
                 Symbolic::List(list)
             }
             TyKind::Domain(_) => Symbolic::Uninterpreted(value.clone()),
-            TyKind::Unresolved(_) | TyKind::None => unreachable!(),
+            TyKind::SpecTy | TyKind::Unresolved(_) | TyKind::None => {
+                unreachable!()
+            }
         }
     }
 

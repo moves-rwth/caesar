@@ -1,8 +1,9 @@
 //! Type checking and type inference happens here.
 
-use std::{cmp::Ordering, collections::HashSet, ops::DerefMut, rc::Rc};
+use std::{cmp::Ordering, ops::DerefMut, rc::Rc};
 
 use ariadne::ReportKind;
+use indexmap::IndexSet;
 use replace_with::replace_with_or_abort;
 
 use crate::{
@@ -41,6 +42,11 @@ impl<'tcx> Tycheck<'tcx> {
         expr: &mut Expr,
     ) -> Result<(), TycheckError> {
         let expr_ty = expr.ty.as_ref().unwrap();
+        let target_ty = if *target_ty == TyKind::SpecTy {
+            self.tcx.spec_ty()
+        } else {
+            target_ty
+        };
         match target_ty.partial_cmp(expr_ty) {
             Some(Ordering::Equal) => Ok(()),
             Some(Ordering::Greater) => {
@@ -140,7 +146,7 @@ impl<'tcx> Tycheck<'tcx> {
     }
 
     /// Check the call with the given formal inputs and argument expressions.
-    fn check_call(
+    pub fn check_call(
         &self,
         span: Span,
         inputs: &[Param],
@@ -154,6 +160,13 @@ impl<'tcx> Tycheck<'tcx> {
             });
         }
         for (input, arg) in inputs.iter().zip(args) {
+            if input.literal_only && !matches!(arg.kind, ExprKind::Lit(_)) {
+                return Err(TycheckError::ExpectedKind {
+                    span,
+                    expr: arg.clone(),
+                    kind: ExpectedKind::Literal,
+                });
+            }
             self.try_cast(arg.span, &input.ty, arg)?;
         }
         Ok(())
@@ -240,7 +253,7 @@ pub enum TycheckError {
     },
     TriggerCapture {
         span: Span,
-        captured: HashSet<Ident>,
+        captured: IndexSet<Ident>,
     },
 }
 
@@ -516,7 +529,16 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
             StmtKind::Angelic(_, _) => {}
             StmtKind::If(ref mut cond, _, _) => self.try_cast(s.span, &TyKind::Bool, cond)?,
             StmtKind::While(ref mut cond, _) => self.try_cast(s.span, &TyKind::Bool, cond)?,
-            StmtKind::Annotation(_, _, _) => todo!(),
+            StmtKind::Annotation(ref ident, ref mut args, _) => {
+                match self.tcx.get(*ident).as_deref() {
+                    None => {} // Declaration not found
+                    Some(DeclKind::AnnotationDecl(intrin)) => {
+                        let intrin = intrin.clone(); // clone so we can mutably borrow self
+                        intrin.tycheck(self, s.span, args)?
+                    }
+                    _ => {} // Not an annotation declaration
+                }
+            }
             StmtKind::Label(_) => {}
         }
         Ok(())
@@ -692,7 +714,7 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
                     }
                 }
                 // check that triggers contain all quantified variables
-                let quantified: HashSet<Ident> = idents.iter().map(QuantVar::name).collect();
+                let quantified: IndexSet<Ident> = idents.iter().map(QuantVar::name).collect();
                 for trigger in &mut ann.triggers {
                     let mut captured = FreeVariableCollector::default();
                     for term in trigger.terms_mut() {

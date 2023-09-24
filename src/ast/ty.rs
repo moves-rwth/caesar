@@ -25,6 +25,8 @@ pub enum TyKind {
     List(Box<TyKind>),
     /// A domain type.
     Domain(DeclRef<DomainDecl>),
+    /// This is the current TyCtx's spec_ty
+    SpecTy,
     /// A type defined somewhere which is not resolved yet.
     Unresolved(Ident),
     /// A placeholder or an error.
@@ -61,6 +63,7 @@ impl fmt::Debug for TyKind {
             Self::Tuple(arg0) => f.debug_tuple("Tuple").field(arg0).finish(),
             Self::List(arg0) => f.debug_tuple("List").field(arg0).finish(),
             Self::Domain(arg0) => f.debug_tuple("Domain").field(&arg0.borrow().name).finish(),
+            Self::SpecTy => write!(f, "<spec ty>"),
             Self::Unresolved(arg0) => f.debug_tuple("Unresolved").field(arg0).finish(),
             Self::None => write!(f, "None"),
         }
@@ -88,6 +91,7 @@ impl fmt::Display for TyKind {
             }
             Self::List(element_ty) => write!(f, "[]{}", element_ty),
             Self::Domain(arg0) => write!(f, "{}", &arg0.borrow().name),
+            Self::SpecTy => write!(f, "<spec ty>"),
             Self::Unresolved(name) => write!(f, "{}", name),
             Self::None => write!(f, "<none>"),
         }

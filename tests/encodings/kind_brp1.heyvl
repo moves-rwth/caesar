@@ -1,0 +1,26 @@
+// RUN: @caesar @file
+// Test file to check brp1.pgcl with caesar encodings
+// k = 5, invariant = "[toSend <= 4] * (totalFailed + 1)) + ([!(toSend <= 4)] * ∞"
+
+coproc k_ind(toSend: UInt, init_sent: UInt, maxFailed: UInt, init_totalFailed: UInt) -> ( sent: UInt, failed: UInt, totalFailed: UInt)
+    pre ([toSend <= 4] * (init_totalFailed + 1)) + ([!(toSend <= 4)] * ∞)
+    post totalFailed
+{
+    
+    sent = init_sent
+    totalFailed = init_totalFailed
+
+    failed = 0
+
+    @k_induction(5, ([toSend <= 4] * (totalFailed + 1)) + ([!(toSend <= 4)] * ∞))
+    while (failed < maxFailed) && (sent < toSend) {
+        var prob_choice: Bool = flip(0.9)
+        if prob_choice {
+            failed = 0
+            sent = sent + 1
+        } else {
+            failed = failed + 1
+            totalFailed = totalFailed + 1
+        }
+    }
+}

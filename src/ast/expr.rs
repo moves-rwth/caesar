@@ -415,12 +415,13 @@ impl ExprBuilder {
     pub fn call(&self, ident: Ident, args: impl IntoIterator<Item = Expr>, tcx: &TyCtx) -> Expr {
         let decl = tcx.get(ident).unwrap();
         let ty = match decl.as_ref() {
-            DeclKind::FuncDecl(func_ref) => func_ref.borrow().output.clone(),
+            DeclKind::FuncDecl(func_ref) => Some(func_ref.borrow().output.clone()),
+            DeclKind::ProcDecl(_) => None,
             _ => panic!("expected variable declaration"),
         };
         Shared::new(ExprData {
             kind: ExprKind::Call(ident, args.into_iter().collect()),
-            ty: Some(ty),
+            ty,
             span: self.span,
         })
     }

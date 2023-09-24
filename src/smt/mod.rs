@@ -197,6 +197,9 @@ fn ty_to_sort<'ctx>(ctx: &SmtCtx<'ctx>, ty: &TyKind) -> Sort<'ctx> {
             .get_sort(domain_ref.borrow().name)
             .unwrap()
             .clone(),
-        TyKind::Unresolved(_) | TyKind::None => panic!("invalid type"),
+
+        TyKind::SpecTy | TyKind::Unresolved(_) | TyKind::None => {
+            panic!("invalid type")
+        }
     }
 }

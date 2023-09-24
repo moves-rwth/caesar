@@ -203,6 +203,20 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
                 self.visit_expr(cond)?;
                 self.with_subscope(|this| this.visit_stmts(block))
             }
+            StmtKind::Annotation(ref mut ident, ref mut args, ref mut inner_stmt) => {
+                self.visit_ident(ident)?;
+
+                match self.tcx.get(*ident).as_deref() {
+                    None => {} // Declaration not found
+                    Some(DeclKind::AnnotationDecl(intrin)) => {
+                        let intrin = intrin.clone(); // clone so we can mutably borrow self
+                        intrin.resolve(self, s.span, args)?;
+                    }
+                    _ => {} // Not an annotation declaration
+                }
+
+                self.with_subscope(|this| this.visit_stmt(inner_stmt))
+            }
             StmtKind::Label(ident) => self.declare(DeclKind::LabelDecl(*ident)),
             _ => walk_stmt(self, s),
         }
@@ -226,6 +240,10 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
                 }
             }
             TyKind::List(ref mut element_ty) => self.visit_ty(element_ty)?,
+            TyKind::SpecTy => {
+                *ty = self.tcx.spec_ty().clone(); // replace SpecTy with the actual type
+                return Ok(());
+            }
             _ => (),
         }
         Ok(())

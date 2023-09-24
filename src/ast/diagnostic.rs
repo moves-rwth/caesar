@@ -24,6 +24,7 @@ impl FileId {
 pub enum SourceFilePath {
     Path(PathBuf),
     Builtin,
+    Generated,
 }
 
 impl SourceFilePath {
@@ -37,6 +38,7 @@ impl SourceFilePath {
                 Ok(SourceFilePath::Path(path_buf))
             }
             SourceFilePath::Builtin => Ok(SourceFilePath::Builtin),
+            SourceFilePath::Generated => Ok(SourceFilePath::Generated),
         }
     }
 
@@ -44,6 +46,7 @@ impl SourceFilePath {
         match self {
             SourceFilePath::Path(path) => path.to_string_lossy(),
             SourceFilePath::Builtin => Cow::from("<builtin>"),
+            SourceFilePath::Generated => Cow::from("<generated>"),
         }
     }
 }
@@ -141,6 +144,7 @@ pub enum SpanVariant {
     VC,
     ImplicitCast,
     SpecCall,
+    Encoding,
     Qelim,
     Boolify,
     Subst,
@@ -177,6 +181,15 @@ impl Span {
         }
     }
 
+    pub fn dummy_file_span(file: FileId) -> Self {
+        Span {
+            file,
+            start: 0,
+            end: 0,
+            variant: SpanVariant::Parser,
+        }
+    }
+
     pub fn variant(self, variant: SpanVariant) -> Self {
         Span {
             file: self.file,
@@ -195,6 +208,7 @@ impl fmt::Debug for Span {
             SpanVariant::VC => "vc/",
             SpanVariant::ImplicitCast => "cast/",
             SpanVariant::SpecCall => "spec-call/",
+            SpanVariant::Encoding => "encoding/",
             SpanVariant::Qelim => "qelim/",
             SpanVariant::Boolify => "boolify/",
             SpanVariant::Subst => "subst/",
@@ -218,6 +232,13 @@ impl<T> Spanned<T> {
         Spanned {
             node,
             span: Span::dummy_span(),
+        }
+    }
+
+    pub fn with_dummy_file_span(node: T, file: FileId) -> Self {
+        Spanned {
+            node,
+            span: Span::dummy_file_span(file),
         }
     }
 
