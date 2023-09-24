@@ -1,8 +1,0 @@
-// ARGS: --encoding "encode-k-induction" --calculus "wp" --post c --pre "c+0.999999" --k 2
-
-nat c;
-nat f;
-
-while(f=1){
-   {f := 0}[0.5]{c := c+1}
-}

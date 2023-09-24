@@ -65,6 +65,7 @@ from probably.util.ref import Mut
 
 _encode_direction: Direction = Direction.DOWN
 _loop_annotation_stack: List[Tuple[int, Expr]] = []
+_bmc: bool = False
 
 
 def encode_k_ind(program: Program, post: Expr, pre: Expr, calculus: Calculus,
@@ -127,6 +128,81 @@ def encode_k_ind(program: Program, post: Expr, pre: Expr, calculus: Calculus,
             + "for the pGCL program C:\n\n" +
             f"{indent(str(program), '    ')}"),
         _encode_proc(name="k_induction",
+                     body=prob_choice_decl + _encode_init_assign(program) +
+                     _encode_instrs(program.instructions),
+                     input=_encode_var_dict(_get_init_vars(program)),
+                     output=_encode_var_dict(program.variables),
+                     direction=_encode_direction,
+                     pre=hey_init_pre,
+                     post=hey_post)
+    ]
+
+
+def encode_bounded_mc(program: Program, post: Expr, pre: Expr,
+                      calculus: Calculus,
+                      loop_annotations: List[Tuple[int, Expr]]) -> HeyObjects:
+    """
+    Encode the proof for refuting a lower/upper bound of an expectation of a pGCL loop using bounded model checking.
+
+    Parameters
+    ----------
+
+    program: Program
+        The pGCL Program to be encoded.
+    invariant: Expr
+        The loop invariant.
+    post: Expr
+        The post expectation.
+    pre: Expr
+        The pre expectation.
+    direction: Direction
+    loop_annotations: List[Tupe[int,Expr]]
+
+    Returns
+    -------
+    HeyObjects
+        Encoding of the proof using k-induction.
+
+    """
+    hey_post = _encode_expr(post)
+
+    # Replace the variables with their initial versions before encoding
+    hey_init_pre = _encode_expr(_to_init_expr(pre))
+
+    global _encode_direction
+
+    if calculus == Calculus.WLP:
+        _encode_direction = Direction.DOWN
+    elif calculus == Calculus.WP or calculus == Calculus.ERT:
+        _encode_direction = Direction.UP
+    else:
+        raise Exception("unsupported calculus.")
+
+    # Set the bmc flag to true, the rest is the same as k-induction
+    global _bmc
+    _bmc = True
+
+    global _loop_annotation_stack
+    assert len(_loop_annotation_stack) == 0
+    _loop_annotation_stack = [(k, _encode_expr(inv))
+                              for (k, inv) in loop_annotations]
+
+    prob_choice_decl = []
+    if _has_prob_choices(program):
+        prob_choice_decl = [HeyDecl("prob_choice", BoolType())]
+
+    if calculus != Calculus.ERT:
+        _remove_tick_instrs(program)
+
+    return [
+        HeyComment(
+            "HeyVL file to show that\n" +
+            f"    {str(_encode_expr(pre))} {'>=' if _encode_direction == Direction.UP else '<='} {calculus}[C]({str(hey_post)})\n"
+            + "DOES NOT HOLD\n" +
+            f"using bounded model checking with {', '.join([f'k = {k} and invariant = {_encode_expr(inv)}' for (k,inv) in loop_annotations])}\n"
+            + "for the pGCL program C:\n\n" +
+            f"{indent(str(program), '    ')}"),
+        _encode_proc(name="bounded_model_checking",
                      body=prob_choice_decl + _encode_init_assign(program) +
                      _encode_instrs(program.instructions),
                      input=_encode_var_dict(_get_init_vars(program)),
@@ -666,10 +742,27 @@ def _encode_expr(expr: Expr) -> HeyExpr:
 
 
 def _encode_loop(loop: WhileInstr, invariant: HeyExpr, k: int) -> HeyBlock:
+    global _bmc
+    global _encode_direction
+
     modified_vars = _collect_modified_vars(loop.body)
-    next_iter = _encode_extend(loop, invariant, k - 1, _hey_const(invariant))
-    return _encode_spec(invariant, modified_vars, invariant) + _encode_iter(
-        loop, invariant, next_iter)
+    spec_or_empty = _encode_spec(invariant, modified_vars,
+                                 invariant) if not _bmc else []
+
+    if k <= 0:
+        return spec_or_empty
+
+    if _bmc:
+        if _encode_direction == Direction.UP:
+            const_prog = _hey_const(HeyExpr("0"))
+        else:
+            const_prog = _hey_const(HeyExpr("1"))
+        next_iter = _encode_bmc(loop, invariant, k - 1, const_prog)
+    else:
+        const_prog = _hey_const(invariant)
+        next_iter = _encode_extend(loop, invariant, k - 1, const_prog)
+
+    return spec_or_empty + _encode_iter(loop, invariant, next_iter)
 
 
 def _encode_iter(loop: WhileInstr, invariant: HeyExpr,
@@ -714,6 +807,15 @@ def _hey_const(expr: HeyExpr) -> HeyBlock:
         HeyAssert(Direction.DOWN, expr),
         HeyAssume(Direction.DOWN, HeyExpr("0"))
     ]
+
+
+def _encode_bmc(loop: WhileInstr, invariant: HeyExpr, k: int,
+                next_iter: HeyBlock):
+    if k == 0:
+        return next_iter
+    next_iter = _encode_bmc(loop, invariant, k - 1, next_iter)
+    global _encode_direction
+    return _encode_iter(loop, invariant, next_iter)
 
 
 def _encode_extend(loop: WhileInstr, invariant: HeyExpr, k: int,
