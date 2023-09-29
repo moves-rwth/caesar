@@ -1,7 +1,7 @@
 # Expressions
 
 For now, expressions are sparsely documented.
-We refer to [`src/front/parser/grammar.lalrpop`](https://github.com/Philipp15b/caesar/blob/master/src/front/parser/grammar.lalrpop) for now for an exhaustive grammar for the complete language.
+We refer to [`src/front/parser/grammar.lalrpop`](https://github.com/moves-rwth/caesar/blob/master/src/front/parser/grammar.lalrpop) for now for an exhaustive grammar for the complete language.
 
 ## If-Then-Else
 

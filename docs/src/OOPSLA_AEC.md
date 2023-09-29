@@ -93,7 +93,7 @@ The `--timeout [SECONDS]` and `--mem [MEGABYTES]` command-line options are usefu
 
 **HeyVL Syntax.**
 Caesar accepts a modified version of our syntax from the paper.
-We refer to our documentation section on the language: [It is online](https://philipp15b.github.io/caesar/heyvl/index.html), and contained in the artifact in `docs/src/heyvl`.
+We refer to our documentation section on the language: [It is online](https://moves-rwth.github.io/caesar/heyvl/index.html), and contained in the artifact in `docs/src/heyvl`.
 Example HeyVL files in the `pgcl/examples` and `tests/` directories.
 
 **VSCode extension for syntax highlighting.**
