@@ -172,7 +172,7 @@
                     <main>
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <p>Hello and welcome!
-This is the user documentation for <a href="https://github.com/Philipp15b/caesar"><em>Caesar</em></a>, a deductive verification framework for probabilistic programs.</p>
+This is the user documentation for <a href="https://github.com/moves-rwth/caesar"><em>Caesar</em></a>, a deductive verification framework for probabilistic programs.</p>
 <p>We have an OOPSLA 2023 paper on Caesar and its theory: <a href="https://doi.org/10.1145/3622870"><em>A Deductive Verification Infrastructure for Probabilistic Programs</em></a>.
 You can <a href="https://arxiv.org/abs/2309.07781">find the preprint on arxiv</a>.</p>
 <hr />
@@ -365,13 +365,13 @@ The main innovation is that it supports <em>quantitative</em> reasoning via its 
 <small>If <code>--raw</code> is passed to the command line, then HeyVL files are parsed as sequences of statements without declarations. See <a href="heyvl/../caesar.html">Caesar documentation</a> for more information.</small></p>
 <h2 id="use-the-source-luke"><a class="header" href="#use-the-source-luke">Use the source, Luke</a></h2>
 <p>We do not formally describe the syntax of HeyVL in this documentation.
-You can find a more formal definition in the <a href="https://github.com/Philipp15b/caesar/blob/master/src/front/parser/grammar.lalrpop"><code>src/front/parser/grammar.lalrpop</code></a> file that specifies the syntax used to generate Caesar's parser.
+You can find a more formal definition in the <a href="https://github.com/moves-rwth/caesar/blob/master/src/front/parser/grammar.lalrpop"><code>src/front/parser/grammar.lalrpop</code></a> file that specifies the syntax used to generate Caesar's parser.
 It is written in the <a href="https://lalrpop.github.io/lalrpop/tutorial/index.html">LALRPOP language</a>.</p>
 <h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
-<p>The <a href="https://github.com/Philipp15b/caesar/tree/master/pgcl/examples-heyvl"><code>pgcl/examples-heyvl</code></a> directory contains the machine-translated HeyVL code for our pGCL examples.
+<p>The <a href="https://github.com/moves-rwth/caesar/tree/master/pgcl/examples-heyvl"><code>pgcl/examples-heyvl</code></a> directory contains the machine-translated HeyVL code for our pGCL examples.
 Note that they are just sequences of HeyVL statements without wrapping procedure declarations.
 Refer to the page on the <a href="heyvl/../frontends/pgcl.html">pGCL frontend</a> for more information.</p>
-<p>Caesar's integration tests in <a href="https://github.com/Philipp15b/caesar/tree/master/tests"><code>tests/</code></a> can also serve as a reference.
+<p>Caesar's integration tests in <a href="https://github.com/moves-rwth/caesar/tree/master/tests"><code>tests/</code></a> can also serve as a reference.
 Refer to the <a href="heyvl/../devguide.html#caesar">development guide</a> for more information about these tests.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="procedures"><a class="header" href="#procedures">Procedures</a></h1>
 <p>HeyVL <a href="heyvl/statements.html">statements</a> are placed inside the body of <em>procedures</em> or <em>procs</em> for short.
@@ -510,7 +510,7 @@ For example,</p>
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="expressions"><a class="header" href="#expressions">Expressions</a></h1>
 <p>For now, expressions are sparsely documented.
-We refer to <a href="https://github.com/Philipp15b/caesar/blob/master/src/front/parser/grammar.lalrpop"><code>src/front/parser/grammar.lalrpop</code></a> for now for an exhaustive grammar for the complete language.</p>
+We refer to <a href="https://github.com/moves-rwth/caesar/blob/master/src/front/parser/grammar.lalrpop"><code>src/front/parser/grammar.lalrpop</code></a> for now for an exhaustive grammar for the complete language.</p>
 <h2 id="if-then-else"><a class="header" href="#if-then-else">If-Then-Else</a></h2>
 <p>The <code>ite</code> built-in function allows to choose one of two expressions based on the result of a Boolean expression.
 For example:</p>
@@ -798,7 +798,7 @@ Our benchmarks can be found in the following directories:</p>
 <p>The <code>--timeout [SECONDS]</code> and <code>--mem [MEGABYTES]</code> command-line options are useful to set runtime and memory limits.</p>
 <p><strong>HeyVL Syntax.</strong>
 Caesar accepts a modified version of our syntax from the paper.
-We refer to our documentation section on the language: <a href="https://philipp15b.github.io/caesar/heyvl/index.html">It is online</a>, and contained in the artifact in <code>docs/src/heyvl</code>.
+We refer to our documentation section on the language: <a href="https://moves-rwth.github.io/caesar/heyvl/index.html">It is online</a>, and contained in the artifact in <code>docs/src/heyvl</code>.
 Example HeyVL files in the <code>pgcl/examples</code> and <code>tests/</code> directories.</p>
 <p><strong>VSCode extension for syntax highlighting.</strong>
 We have a VSCode extension for HeyVL syntax highlighting.
