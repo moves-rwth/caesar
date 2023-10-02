@@ -11,8 +11,11 @@ cd ../pgcl2heyvl
 set -l pgcl2heyvl
 if poetry run pgcl2heyvl --help &> /dev/null
     set pgcl2heyvl poetry run pgcl2heyvl
-else 
+else if pgcl2heyvl &> /dev/null
     set pgcl2heyvl pgcl2heyvl
+else
+    echo "Could not find pgcl2heyvl. Make sure poetry is installed and you have run poetry install in the source directory." 1>&2
+    exit 1
 end 
 
 for file in ../examples/*.pgcl; 
