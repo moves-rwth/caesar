@@ -194,7 +194,7 @@ def encode_ast_mciver(program: Program, invariant: Expr, variant: Expr,
     # Replace all variables with their init versions for the preexpectation
     progress_pre_expr = _to_init_expr(progress_pre_expr)
 
-    #  V < V(s) - d(V(s))
+    #  V <= V(s) - d(V(s))
     progress_post_expr = _iverson(
         _leq(
             variant,
@@ -288,7 +288,7 @@ def encode_ast_mciver(program: Program, invariant: Expr, variant: Expr,
             direction=Direction.DOWN,
             pre=_encode_expr(progress_pre_expr),
             post=_encode_expr(progress_post_expr),
-            comment="[I] * [G] * (p o V) <= \\s. wp[P]([V < V(s) - d(V(s))])(s)"
+            comment="[I] * [G] * (p o V) <= \\s. wp[P]([V <= V(s) - d(V(s))])(s)"
         )
     ]
 

@@ -78,7 +78,7 @@ coproc V_wp_superinvariant(init_x: UInt) -> (x: UInt)
     } else {}
 }
 
-// [I] * [G] * (p o V) <= \s. wp[P]([V < V(s) - d(V(s))])(s)
+// [I] * [G] * (p o V) <= \s. wp[P]([V <= V(s) - d(V(s))])(s)
 proc progress_condition(init_x: UInt) -> (x: UInt)
     pre [true] * ([!(init_x == 10)] * 0.5)
     post [((3 * [!((x % 2) == 0)]) + (([10 <= x] * (x - 10)) + ([!(10 <= x)] * (10 - x)))) <= (((3 * [!((init_x % 2) == 0)]) + (([10 <= init_x] * (init_x - 10)) + ([!(10 <= init_x)] * (10 - init_x)))) - 2)]
