@@ -153,14 +153,19 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                         _ => panic!("illegal smtpair {:?}", &t_pair),
                     }
                 }
-                _ => panic!("illegal exprkind {:?} for expr: {}", bin_op, &expr),
+                _ => panic!("illegal exprkind {:?} of expression {}", bin_op, &expr),
             },
             ExprKind::Unary(un_op, operand) => match un_op.node {
                 UnOpKind::Not | UnOpKind::Non => self.t_bool(operand).not(),
                 UnOpKind::Parens => self.t_bool(operand),
-                UnOpKind::Embed | UnOpKind::Iverson => panic!("illegal exprkind"),
+                UnOpKind::Embed | UnOpKind::Iverson => panic!(
+                    "illegal exprkind {:?} of expression {:?}",
+                    &un_op.node, &expr
+                ),
             },
-            ExprKind::Cast(_) => panic!("illegal exprkind"),
+            ExprKind::Cast(operand) => {
+                panic!("illegal cast to {:?} from {:?}", &expr.ty, &operand.ty)
+            }
             ExprKind::Quant(quant_op, quant_vars, ann, operand) => {
                 let operand = self.t_bool(operand);
                 let scope = self.mk_scope(quant_vars);
@@ -174,7 +179,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Subst(_, _, _) => panic!("illegal exprkind"),
             ExprKind::Lit(lit) => match lit.node {
                 LitKind::Bool(value) => Bool::from_bool(self.ctx.ctx, value),
-                _ => panic!("illegal exprkind: {:?}", expr),
+                _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
         };
 
@@ -206,11 +211,11 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 BinOpKind::Sub => self.t_int(lhs) - self.t_int(rhs),
                 BinOpKind::Mul => self.t_int(lhs) * self.t_int(rhs),
                 BinOpKind::Mod => self.t_int(lhs).modulo(&self.t_int(rhs)),
-                _ => panic!("illegal exprkind"),
+                _ => panic!("illegal exprkind {:?} of expression {:?}", bin_op, &expr),
             },
             ExprKind::Unary(un_op, operand) => match un_op.node {
                 UnOpKind::Parens => self.t_int(operand),
-                _ => panic!("illegal exprkind"),
+                _ => panic!("illegal exprkind {:?} of expression {:?}", un_op, &expr),
             },
             ExprKind::Cast(operand) => {
                 let operand_ty = operand.ty.as_ref().unwrap();
@@ -219,12 +224,14 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                         let operand = self.t_uint(operand);
                         operand.into_int()
                     }
-                    _ => panic!("illegal cast"),
+                    _ => panic!("illegal cast to {:?} from {:?}", &expr.ty, &operand.ty),
                 }
             }
             ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
-            ExprKind::Lit(_) => panic!("illegal exprkind"),
+            ExprKind::Lit(lit) => {
+                panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr)
+            }
         };
 
         if is_expr_worth_caching(expr) {
@@ -256,13 +263,15 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 BinOpKind::Sub => self.t_uint(lhs) - self.t_uint(rhs),
                 BinOpKind::Mul => self.t_uint(lhs) * self.t_uint(rhs),
                 BinOpKind::Mod => self.t_uint(lhs).modulo(&self.t_uint(rhs)),
-                _ => panic!("illegal exprkind"),
+                _ => panic!("illegal exprkind {:?} of expression {:?}", bin_op, &expr),
             },
             ExprKind::Unary(un_op, operand) => match un_op.node {
                 UnOpKind::Parens => self.t_uint(operand),
                 _ => panic!("illegal exprkind"),
             },
-            ExprKind::Cast(_) => panic!("illegal cast"),
+            ExprKind::Cast(operand) => {
+                panic!("illegal cast to {:?} from {:?}", &expr.ty, &operand.ty)
+            }
             ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(lit) => match lit.node {
@@ -270,7 +279,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                     // TODO: actually handle u128s
                     UInt::from_u64(self.ctx.ctx, u64::try_from(value).unwrap())
                 }
-                _ => panic!("illegal exprkind"),
+                _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
         };
 
@@ -303,11 +312,11 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 BinOpKind::Sub => self.t_real(lhs) - self.t_real(rhs),
                 BinOpKind::Mul => self.t_real(lhs) * self.t_real(rhs),
                 BinOpKind::Div => self.t_real(lhs) / self.t_real(rhs),
-                _ => panic!("illegal exprkind"),
+                _ => panic!("illegal exprkind {:?} of expression {:?}", bin_op, &expr),
             },
             ExprKind::Unary(un_op, operand) => match un_op.node {
                 UnOpKind::Parens => self.t_real(operand),
-                _ => panic!("illegal exprkind"),
+                _ => panic!("illegal exprkind {:?} of expression {:?}", un_op, &expr),
             },
             ExprKind::Cast(operand) => {
                 let operand_ty = operand.ty.as_ref().unwrap();
@@ -320,12 +329,14 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                         let operand = self.t_int(operand);
                         Real::from_int(&operand)
                     }
-                    _ => panic!("illegal cast"),
+                    _ => panic!("illegal cast to {:?} from {:?}", &expr.ty, &operand.ty),
                 }
             }
             ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
-            ExprKind::Lit(_) => panic!("illegal exprkind"),
+            ExprKind::Lit(lit) => {
+                panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr)
+            }
         };
 
         if is_expr_worth_caching(expr) {
@@ -362,11 +373,11 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 BinOpKind::Sub => self.t_ureal(lhs) - self.t_ureal(rhs),
                 BinOpKind::Mul => self.t_ureal(lhs) * self.t_ureal(rhs),
                 BinOpKind::Div => self.t_ureal(lhs) / self.t_ureal(rhs),
-                _ => panic!("illegal exprkind"),
+                _ => panic!("illegal exprkind {:?} of expression {:?}", bin_op, &expr),
             },
             ExprKind::Unary(un_op, operand) => match un_op.node {
                 UnOpKind::Parens => self.t_ureal(operand),
-                _ => panic!("illegal exprkind"),
+                _ => panic!("illegal exprkind {:?} of expression {:?}", un_op, &expr),
             },
             ExprKind::Cast(operand) => {
                 let operand_ty = operand.ty.as_ref().unwrap();
@@ -375,7 +386,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                         let operand = self.t_uint(operand);
                         UReal::from_uint(&operand)
                     }
-                    _ => panic!("illegal cast"),
+                    _ => panic!("illegal cast to {:?} from {:?}", &expr.ty, &operand.ty),
                 }
             }
             ExprKind::Quant(_, _, _, _) => todo!(),
@@ -384,7 +395,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 LitKind::Frac(frac) => {
                     UReal::unchecked_from_real(real_from_big_rational(self.ctx.ctx, frac))
                 }
-                _ => panic!("illegal exprkind"),
+                _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
         };
 
@@ -423,7 +434,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                     BinOpKind::CoImpl => lhs.coimplication(&rhs),
                     BinOpKind::Compare => lhs.compare(&rhs),
                     BinOpKind::CoCompare => lhs.cocompare(&rhs),
-                    _ => panic!("illegal exprkind"),
+                    _ => panic!("illegal exprkind {:?} of expression {:?}", bin_op, &expr),
                 }
             }
             ExprKind::Unary(un_op, operand) => match un_op.node {
@@ -450,7 +461,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                         let operand = self.t_ureal(operand);
                         EUReal::from_ureal(self.ctx.eureal(), &operand)
                     }
-                    _ => panic!("illegal cast"),
+                    _ => panic!("illegal cast to {:?} from {:?}", &expr.ty, &operand.ty),
                 }
             }
             ExprKind::Quant(quant_op, quant_vars, ann, operand) => {
@@ -472,7 +483,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                     self.ctx.eureal(),
                     &UReal::unchecked_from_real(real_from_big_rational(self.ctx.ctx, frac)),
                 ),
-                _ => panic!("illegal exprkind"),
+                _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
         }
     }
@@ -502,12 +513,17 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Binary(_, _, _) => panic!("illegal exprkind"),
             ExprKind::Unary(un_op, operand) => match un_op.node {
                 UnOpKind::Parens => self.t_uninterpreted(operand),
-                _ => panic!("illegal exprkind"),
+                _ => panic!(
+                    "illegal exprkind {:?} of expression {:?}",
+                    &un_op.node, &expr
+                ),
             },
             ExprKind::Cast(_) => panic!("illegal exprkind"),
             ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
-            ExprKind::Lit(_) => panic!("illegal exprkind"),
+            ExprKind::Lit(lit) => {
+                panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr)
+            }
         };
 
         if is_expr_worth_caching(expr) {
