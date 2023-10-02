@@ -24,7 +24,8 @@ use crate::{
 use z3rro::{
     eureal::EUReal,
     orders::{
-        smt_bool_embed, SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering, SmtPartialOrd,
+        smt_bool_embed, smt_max, smt_min, SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering,
+        SmtPartialOrd,
     },
     scope::SmtScope,
     util::real_from_big_rational,
@@ -135,6 +136,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                     }
                 }
                 BinOpKind::Impl => self.t_bool(lhs).implies(&self.t_bool(rhs)),
+                BinOpKind::Inf => self.t_bool(lhs).inf(&self.t_bool(rhs)),
+                BinOpKind::Sup => self.t_bool(lhs).sup(&self.t_bool(rhs)),
                 BinOpKind::Lt | BinOpKind::Le | BinOpKind::Ge | BinOpKind::Gt => {
                     let smt_ordering = match bin_op.node {
                         BinOpKind::Lt => SmtOrdering::Less,
@@ -211,6 +214,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 BinOpKind::Sub => self.t_int(lhs) - self.t_int(rhs),
                 BinOpKind::Mul => self.t_int(lhs) * self.t_int(rhs),
                 BinOpKind::Mod => self.t_int(lhs).modulo(&self.t_int(rhs)),
+                BinOpKind::Inf => smt_min(&self.t_int(lhs), &self.t_int(rhs)),
+                BinOpKind::Sup => smt_max(&self.t_int(lhs), &self.t_int(rhs)),
                 _ => panic!("illegal exprkind {:?} of expression {:?}", bin_op, &expr),
             },
             ExprKind::Unary(un_op, operand) => match un_op.node {
@@ -263,6 +268,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 BinOpKind::Sub => self.t_uint(lhs) - self.t_uint(rhs),
                 BinOpKind::Mul => self.t_uint(lhs) * self.t_uint(rhs),
                 BinOpKind::Mod => self.t_uint(lhs).modulo(&self.t_uint(rhs)),
+                BinOpKind::Inf => smt_min(&self.t_uint(lhs), &self.t_uint(rhs)),
+                BinOpKind::Sup => smt_max(&self.t_uint(lhs), &self.t_uint(rhs)),
                 _ => panic!("illegal exprkind {:?} of expression {:?}", bin_op, &expr),
             },
             ExprKind::Unary(un_op, operand) => match un_op.node {
@@ -312,6 +319,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 BinOpKind::Sub => self.t_real(lhs) - self.t_real(rhs),
                 BinOpKind::Mul => self.t_real(lhs) * self.t_real(rhs),
                 BinOpKind::Div => self.t_real(lhs) / self.t_real(rhs),
+                BinOpKind::Inf => smt_min(&self.t_real(lhs), &self.t_real(rhs)),
+                BinOpKind::Sup => smt_max(&self.t_real(lhs), &self.t_real(rhs)),
                 _ => panic!("illegal exprkind {:?} of expression {:?}", bin_op, &expr),
             },
             ExprKind::Unary(un_op, operand) => match un_op.node {
@@ -373,6 +382,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 BinOpKind::Sub => self.t_ureal(lhs) - self.t_ureal(rhs),
                 BinOpKind::Mul => self.t_ureal(lhs) * self.t_ureal(rhs),
                 BinOpKind::Div => self.t_ureal(lhs) / self.t_ureal(rhs),
+                BinOpKind::Inf => smt_min(&self.t_ureal(lhs), &self.t_ureal(rhs)),
+                BinOpKind::Sup => smt_max(&self.t_ureal(lhs), &self.t_ureal(rhs)),
                 _ => panic!("illegal exprkind {:?} of expression {:?}", bin_op, &expr),
             },
             ExprKind::Unary(un_op, operand) => match un_op.node {
