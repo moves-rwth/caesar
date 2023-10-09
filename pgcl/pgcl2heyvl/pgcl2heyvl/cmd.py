@@ -6,6 +6,7 @@ import click
 import probably.pgcl.substitute as substitute
 from pgcl2heyvl.encode import (
     encode_ast_mciver,
+    encode_bounded_mc,
     encode_k_ind,
     encode_omega_inv,
     encode_optional_stopping,
@@ -39,7 +40,8 @@ def main(ctx, file, encoding, **kwargs):
         "encode-ost-rule": encode_ost_rule,
         "encode-past-rule": encode_past_rule,
         "encode-omega-invariant": encode_omega_invariant,
-        "encode-k-induction": encode_k_induction
+        "encode-k-induction": encode_k_induction,
+        "encode-bmc": encode_bmc,
     }
     try:
         command = dispatcher[encoding]
@@ -355,8 +357,6 @@ def encode_ast(file, invariant: str, variant: str, prob: str, decrease: str):
 @main.command(help="""
     Encode the proof for lower/upper bound of an expectation of a pGCL loop using k-induction.
 
-    At the moment, only upper bound proofs (wp/ert) are supported.
-
     Loops are encoded using k-induction and the user needs to provide the parameters `--k` and `--invariant` for each loop. Repeated parameters are assigned to the loops in a depth-first manner. When the input program consists only of one loop, the `--invariant` parameter for it must be omitted and the value of `--pre` will be used as its invariant.
 
     All parameters except for `FILE` can be written as a comment in the first line of the input file, like this:
@@ -448,6 +448,104 @@ def encode_k_induction(file, post: str, pre: str, k: List[int], calculus: str,
         _auto_gen_comment(file) + hey_objects_str(
             encode_k_ind(program, post_expr, pre_expr, calculus_type,
                          loop_annotations)))
+
+
+@main.command(help="""
+    Encode the proof for refuting lower/upper bound of an expectation of a pGCL loop using bounded model checking.
+
+    Loops are encoded using bounded model checking and the user needs to provide the parameters `--k` and `--invariant` for each loop. Repeated parameters are assigned to the loops in a depth-first manner. When the input program consists only of one loop, the `--invariant` parameter for it must be omitted and the value of `--pre` will be used as its invariant.
+
+    All parameters except for `FILE` can be written as a comment in the first line of the input file, like this:
+
+        // ARGS: --post c --pre "c+0.999999" --k 2
+
+    If no overriding parameters are passed via the command-line, parameters from such a leading comment will be used.
+
+    Note that the resulting program must not verify for a correct result.
+    """)
+@click.argument('file', type=click.Path(exists=True))
+@click.option('--post',
+              type=click.STRING,
+              help="The post-expectation.",
+              metavar="EXPR")
+@click.option('--pre',
+              type=click.STRING,
+              help="The upper bound to the pre-expectation.",
+              metavar="EXPR")
+@click.option('--calculus',
+              type=click.STRING,
+              help="The calculus for the encoding.",
+              metavar="EXPR")
+@click.option('--k',
+              type=click.INT,
+              multiple=True,
+              help="The k for the k-induction encoding.")
+@click.option('--invariant',
+              type=click.STRING,
+              multiple=True,
+              help="The invariant for the k-induction encoding.",
+              metavar="EXPR")
+# pylint: disable=redefined-builtin
+def encode_bmc(file, post: str, pre: str, k: List[int], calculus: str,
+               invariant: List[str]):
+    k = list(map(int, k))
+
+    with open(file, 'r') as handle:
+        program_source = handle.read()
+
+    program = parse_pgcl(program_source)
+    if isinstance(program, CheckFail):
+        print("Error: Cannot parse program:", program)
+        sys.exit(1)
+    substitute.substitute_constants(program)
+
+    if post is None:
+        print("Error: You need to provide a --post parameter")
+        sys.exit(1)
+
+    post_expr = parse_expectation_with_constants(program, post)
+    if isinstance(post_expr, CheckFail):
+        print("Error parsing post:", post_expr)
+        sys.exit(1)
+
+    if pre is None:
+        print("Error: You need to provide a --pre parameter.")
+        sys.exit(1)
+    pre_expr = parse_expectation_with_constants(program, pre)
+    if isinstance(pre_expr, CheckFail):
+        print("Error: Cannot parse pre:", pre_expr)
+        return
+
+    if calculus == "wp":
+        calculus_type = Calculus.WP
+    elif calculus == "ert":
+        calculus_type = Calculus.ERT
+    elif calculus == "wlp":
+        calculus_type = Calculus.WLP
+    else:
+        print("Error: unsupported calculus type")
+        sys.exit(1)
+
+    invariant_expr: List[Expr] = []
+    for inv in invariant:
+        inv_expr = parse_expectation_with_constants(program, inv)
+        if isinstance(inv_expr, CheckFail):
+            print("Error: cannot parse invariant:", inv_expr)
+            sys.exit(1)
+        invariant_expr.append(inv_expr)
+
+    if isinstance(program.instructions[0], WhileInstr) and len(
+            program.instructions) == 1:
+        invariant_expr = [pre_expr] + invariant_expr
+    assert len(invariant_expr) > 0
+    assert len(invariant_expr) == len(k)
+
+    loop_annotations = list(zip(k, invariant_expr))
+
+    print(
+        _auto_gen_comment(file) + hey_objects_str(
+            encode_bounded_mc(program, post_expr, pre_expr, calculus_type,
+                              loop_annotations)))
 
 
 def parse_expectation_with_constants(program: Program,

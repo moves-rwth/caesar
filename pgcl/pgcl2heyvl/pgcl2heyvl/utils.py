@@ -2,8 +2,7 @@ import logging
 import re
 import shlex
 import sys
-from optparse import OptionParser
-from typing import Set
+from typing import Callable
 
 import click
 
@@ -20,20 +19,15 @@ class CommentArgsCommand(click.Group):
             with open(program_path, "r") as program_file:
                 program_code = program_file.read()
                 _read_args_from_code(self, ctx, program_code)
-
+        # del ctx.params["file"]
         return super(CommentArgsCommand, self).invoke(ctx)
 
 
-def _click_sysargs(ctx: click.Context) -> Set[str]:
-    """
-    Return the set of args given via the command-line. This is necessary to
-    distinguish default values from non-default values in click's Context. With
-    the `ParameterSource` in the as of yet unreleased click 8.0 this would be
-    unnecessary. Oh well.
-    """
-    args_parser = ctx.command.make_parser(ctx)
-    args_values, _args_args, _args_order = args_parser.parse_args(sys.argv[1:])
-    return set(args_values.keys())
+def _list_after_first_match(list: list, predicate: Callable):
+    for i in range(len(list)):
+        if predicate(list[i]):
+            return list[i:]
+    return []
 
 
 def _read_args_from_code(group: click.Group, ctx: click.Context, code: str):
@@ -47,44 +41,45 @@ def _read_args_from_code(group: click.Group, ctx: click.Context, code: str):
     args_str = match.group(2)
     args_parser = ctx.command.make_parser(ctx)
 
+    args_list = shlex.split(args_str)
+
+    # A copy is passed because parse_args modifies the input list
     try:
         args_values, _args_args, _args_order = args_parser.parse_args(
-            shlex.split(args_str))
+            args_list.copy())
     except Exception as e:
         raise Exception(
             "exception occurred during parsing of description comment", e)
-    sysargs = _click_sysargs(ctx)
-    used_defaults = dict()
+
     encoding_command = group.get_command(ctx, args_values["encoding"])
+
+    # Add "encoding" to the params to be able to invoke the corresponding function later im cmd.py
     ctx.params["encoding"] = encoding_command.name
 
-    # Using the built-in module 'optparse'
-    # Because I couldn't find a way to do it with click
-    encoding_parser = OptionParser()
-    for param in encoding_command.params:
-        action = "store"
-        default = None
-        if param.multiple:
-            action = "append"
-            default = []
-        elif param.type == click.BOOL:
-            action = "store_true"
-            default = False
+    # Make a new parser for the specific encoding_command
+    encoding_parser = encoding_command.make_parser(ctx)
 
-        encoding_parser.add_option(f"--{param.name}",
-                                   dest=param.name,
-                                   action=action,
-                                   default=default)
-    new_args_list = shlex.split(args_str)
-    new_args_list.remove("--encoding")
-    new_args_list.remove(args_values["encoding"])
-    opts_values, _ = encoding_parser.parse_args(new_args_list)
-    opts_dict = opts_values.__dict__
+    # Remove encoding parameter and parse again the new parser
 
-    for param, value in opts_dict.items():
-        if param not in args_values and param not in sysargs:
-            ctx.params[param] = opts_dict[param]
-            used_defaults[param] = opts_dict[param]
+    args_list.remove("--encoding")
+    args_list.remove(args_values["encoding"])
+    opts_values, _, _ = encoding_parser.parse_args(args_list)
 
+    # Parse the command line args to overwrite file ARGS (if present)
+    sysargs, _, _ = encoding_parser.parse_args(
+        _list_after_first_match(sys.argv[2:], lambda x: x.startswith("--")))
+    # Add "encoding" to the params to be able to invoke the corresponding function later im cmd.py
+    ctx.params["encoding"] = encoding_command.name
+
+    used_defaults = dict()
+    for param in opts_values:
+        # If not already parsed in the first round and
+        # if not overwritten by CLI
+        if param not in args_values:
+            if param in sysargs:
+                ctx.params[param] = sysargs[param]
+                used_defaults[param] = sysargs[param]
+            else:
+                ctx.params[param] = opts_values[param]
     logging.getLogger("pgcl2heyvl").info(
         "using default arguments from file comments: %s", used_defaults)

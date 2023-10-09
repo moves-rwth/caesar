@@ -1,0 +1,21 @@
+// ARGS: --encoding "encode-bmc" --calculus "wp" --post "[i=1]" --pre "[1<i & phase=0] * (0.6) + [not (1<i & phase=0)]*1" --k 9
+
+nat i;
+nat n; # Does not need to be initialized
+nat d;
+
+nat phase; # Initially 0
+while(1<i || phase=1){
+    if(phase=0){
+      n:=i;
+      phase:=1;
+    }{
+        if(0<n){
+            {d:=0}[0.5]{d:=1};
+            i:=i-d;
+            n:=n-1;
+        }{ #leave inner loop
+            phase:=0;
+        }
+     }
+}
