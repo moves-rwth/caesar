@@ -23,7 +23,7 @@
       "patterns": [
         {
           "name": "keyword.control.heyvl",
-          "match": "\\b(var|(co)?assume|(co)?assert|(co)?negate|(co)?validate|if|else|(co)?proc|pre|post|(co)?compare|tick|while|(co)?havoc|domain|func|axiom)\\b"
+          "match": "\\b(var|(co)?assume|(co)?assert|(co)?negate|(co)?validate|if|else|(co)?proc|pre|post|(co)?compare|tick|reward|while|(co)?havoc|domain|func|axiom)\\b"
         },
         {
           "name": "keyword.operator.heyvl",

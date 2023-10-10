@@ -1,8 +1,5 @@
 // RUN: @caesar @file
 
-// The file `lossy_list.heyvl` in this directory is a simplified version of this example.
-// We're just keeping this file as it was used in our OOPSLA '23 benchmarks.
-
 domain Exponentials {
     func exp(base: UReal, exponent: UInt): EUReal
 
@@ -14,12 +11,12 @@ domain List {
     func len(l: List): UInt
     func pop(l: List): List 
 
-    axiom list_len forall l: List. len(pop(l)) == len(l) - 1
+    axiom list_pop forall l: List. len(pop(l)) == len(l) - 1
 }
 
-coproc lossy_list(init_l: List) -> (l: List)
-    pre ?(len(init_l) == 1) ==> ([true] * 0.5)
-    post 1
+proc lossy_list(init_l: List) -> (l: List)
+    pre [len(init_l) == 1] * 0.5
+    post [true]
 {
     l = init_l
     @invariant(exp(0.5, len(l)))
@@ -28,7 +25,7 @@ coproc lossy_list(init_l: List) -> (l: List)
         if prob_choice {
             l = pop(l)
         } else {
-            assert 0 // this is abort
+            assert [false]
         }
     }
 }
