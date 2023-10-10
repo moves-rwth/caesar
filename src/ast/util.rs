@@ -19,7 +19,7 @@ impl FreeVariableCollector {
         Self::default()
     }
 
-    /// Collect variables from given [`Expr`] and clear the [`variables`] for further use
+    /// Collect variables from given [`Expr`] and clear the variables set for further use
     pub fn collect_and_clear(&mut self, expr: &mut Expr) -> IndexSet<Ident> {
         self.visit_expr(expr).unwrap();
         let vars = self.variables.clone();
@@ -69,7 +69,7 @@ impl VisitorMut for FreeVariableCollector {
 }
 
 #[derive(Debug, Default)]
-/// Collect modified and declared variables in a [`Stmt`]. Note that modified variables can contain declared variables.
+/// Collect modified and declared variables in a statement. Note that modified variables can contain declared variables.
 pub struct ModifiedVariableCollector {
     /// [`Ident`]s of variables that are declared in the statement
     pub declared_variables: IndexSet<Ident>,

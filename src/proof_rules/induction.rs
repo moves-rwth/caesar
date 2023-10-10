@@ -1,9 +1,17 @@
+//! Encode the proof for a lower/upper bound of an expectation of a loop using k-induction
+//!
+//! @k-induction takes the arguments:
+//!
+//! - `k`: the number of times the loop will be extended
+//! - `invariant`: the invariant of the loop
+//! `@invariant` is a syntactic sugar for 1-induction and it is equivalent to `@k-induction(1, expr)`.
+
 use std::fmt;
 
 use crate::{
     ast::{
-        util::ModifiedVariableCollector, visit::VisitorMut, DeclKind, Direction, Expr, ExprBuilder,
-        Files, Ident, SourceFilePath, Span, Spanned, Stmt, Symbol, TyKind,
+        util::ModifiedVariableCollector, visit::VisitorMut, Direction, Expr, Files, Ident,
+        SourceFilePath, Span, Spanned, Stmt, Symbol, TyKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -13,7 +21,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::Encoding;
+use super::{Encoding, EncodingGenerated};
 
 use super::util::*;
 
@@ -25,7 +33,7 @@ impl InvariantAnnotation {
         let file = files
             .add(SourceFilePath::Builtin, "invariant".to_string())
             .id;
-
+        // TODO: replace the dummy span with a proper span
         let name = Ident::with_dummy_file_span(Symbol::intern("invariant"), file);
 
         let invariant_param = intrinsic_param(file, "inv", TyKind::SpecTy, false);
@@ -80,7 +88,7 @@ impl Encoding for InvariantAnnotation {
         args: &[Expr],
         inner_stmt: &Stmt,
         direction: Direction,
-    ) -> Result<(Span, Vec<Stmt>, Option<Vec<DeclKind>>), AnnotationError> {
+    ) -> Result<EncodingGenerated, AnnotationError> {
         let mut visitor = ModifiedVariableCollector::new();
         visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
         let havoc_vars = visitor.modified_variables.into_iter().collect();
@@ -112,7 +120,11 @@ impl Encoding for InvariantAnnotation {
         // Encode the last iteration in the normal direction
         buf.push(encode_iter(annotation_span, inner_stmt, next_iter).unwrap());
 
-        Ok((annotation_span, buf, None))
+        Ok(EncodingGenerated {
+            span: annotation_span,
+            stmts: buf,
+            decls: None,
+        })
     }
 
     fn is_one_loop(&self) -> bool {
@@ -127,7 +139,7 @@ impl KIndAnnotation {
         let file = files
             .add(SourceFilePath::Builtin, "k_induction".to_string())
             .id;
-
+        // TODO: replace the dummy span with a proper span
         let name = Ident::with_dummy_file_span(Symbol::intern("k_induction"), file);
 
         let k_param = intrinsic_param(file, "k", TyKind::UInt, true);
@@ -184,7 +196,7 @@ impl Encoding for KIndAnnotation {
         args: &[Expr],
         inner_stmt: &Stmt,
         direction: Direction,
-    ) -> Result<(Span, Vec<Stmt>, Option<Vec<DeclKind>>), AnnotationError> {
+    ) -> Result<EncodingGenerated, AnnotationError> {
         let mut visitor = ModifiedVariableCollector::new();
         visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
         let havoc_vars = visitor.modified_variables.into_iter().collect();
@@ -218,109 +230,11 @@ impl Encoding for KIndAnnotation {
         // Encode the last iteration in the normal direction
         buf.push(encode_iter(annotation_span, inner_stmt, next_iter).unwrap());
 
-        Ok((annotation_span, buf, None))
-    }
-
-    fn is_one_loop(&self) -> bool {
-        false
-    }
-}
-
-pub struct BMCAnnotation(AnnotationInfo);
-
-impl BMCAnnotation {
-    pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
-        let file = files.add(SourceFilePath::Builtin, "bmc".to_string()).id;
-
-        let name = Ident::with_dummy_file_span(Symbol::intern("bmc"), file);
-
-        let k_param = intrinsic_param(file, "k", TyKind::UInt, true);
-        let invariant_param = intrinsic_param(file, "inv", TyKind::SpecTy, false);
-
-        let anno_info = AnnotationInfo {
-            name,
-            inputs: Spanned::with_dummy_file_span(vec![k_param, invariant_param], file),
-            span: Span::dummy_file_span(file),
-        };
-
-        BMCAnnotation(anno_info)
-    }
-}
-
-impl fmt::Debug for BMCAnnotation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("BMCAnnotation")
-            .field("annotation", &self.0)
-            .finish()
-    }
-}
-
-impl Encoding for BMCAnnotation {
-    fn name(&self) -> Ident {
-        self.0.name
-    }
-
-    fn tycheck(
-        &self,
-        tycheck: &mut Tycheck<'_>,
-        call_span: Span,
-        args: &mut [Expr],
-    ) -> Result<(), TycheckError> {
-        check_annotation_call(tycheck, call_span, &self.0, args)?;
-        Ok(())
-    }
-
-    fn resolve(
-        &self,
-        resolve: &mut Resolve<'_>,
-        _call_span: Span,
-        args: &mut [Expr],
-    ) -> Result<(), ResolveError> {
-        let [k, invariant] = mut_two_args(args);
-        resolve.visit_expr(k)?;
-        resolve.visit_expr(invariant)
-    }
-
-    fn transform(
-        &self,
-        tcx: &TyCtx,
-        annotation_span: Span,
-        args: &[Expr],
-        inner_stmt: &Stmt,
-        direction: Direction,
-    ) -> Result<(Span, Vec<Stmt>, Option<Vec<DeclKind>>), AnnotationError> {
-        let [k, invariant] = two_args(args);
-
-        let k: u128 = lit_u128(k);
-
-        let builder = ExprBuilder::new(annotation_span);
-
-        // Innermost constant expression is 0 for upper bounds and 1 for lower bounds
-        let const_prog = match direction {
-            Direction::Down => hey_const(
-                annotation_span,
-                &builder.cast(tcx.spec_ty().clone(), builder.uint(1)),
-                tcx,
-            ),
-            Direction::Up => hey_const(
-                annotation_span,
-                &builder.cast(tcx.spec_ty().clone(), builder.uint(0)),
-                tcx,
-            ),
-        };
-
-        // Extend the loop k times without asserts (unlike k-induction) because bmc flag is set
-        let buf = encode_extend(
-            annotation_span,
-            inner_stmt,
-            k,
-            invariant,
-            direction,
-            true,
-            const_prog,
-        );
-
-        Ok((annotation_span, buf, None))
+        Ok(EncodingGenerated {
+            span: annotation_span,
+            stmts: buf,
+            decls: None,
+        })
     }
 
     fn is_one_loop(&self) -> bool {

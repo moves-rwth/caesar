@@ -1,11 +1,21 @@
+//! Encode Encode the proof rule for positive almost-sure termination by Chakarov et al. (2013)
+//!
+//! @past takes the arguments:
+//!
+//! - `inv`: the invariant of the loop
+//! - `eps`: a positive real number used for the epsilon value from the proof rule, must be a literal
+//! - `k`: a positive real number used for the k value from the proof rule, must be a literal
+//!
+//! Note that eps must be smaller than k!
+//!
 use std::fmt;
 
 use crate::{
     ast::{
         util::{FreeVariableCollector, ModifiedVariableCollector},
         visit::VisitorMut,
-        BinOpKind, DeclKind, Direction, Expr, ExprBuilder, Files, Ident, ProcSpec, SourceFilePath,
-        Span, Spanned, Stmt, StmtKind, Symbol, TyKind, UnOpKind,
+        BinOpKind, Direction, Expr, ExprBuilder, Files, Ident, ProcSpec, SourceFilePath, Span,
+        Spanned, Stmt, StmtKind, Symbol, TyKind, UnOpKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -15,7 +25,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::Encoding;
+use super::{Encoding, EncodingGenerated, ProcInfo};
 
 use super::util::*;
 
@@ -24,7 +34,7 @@ pub struct PASTAnnotation(AnnotationInfo);
 impl PASTAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
         let file = files.add(SourceFilePath::Builtin, "past".to_string()).id;
-
+        // TODO: replace the dummy span with a proper span
         let name = Ident::with_dummy_file_span(Symbol::intern("past"), file);
 
         let invariant_param = intrinsic_param(file, "inv", TyKind::SpecTy, false);
@@ -82,7 +92,7 @@ impl Encoding for PASTAnnotation {
         args: &[Expr],
         inner_stmt: &Stmt,
         _direction: Direction,
-    ) -> Result<(Span, Vec<Stmt>, Option<Vec<DeclKind>>), AnnotationError> {
+    ) -> Result<EncodingGenerated, AnnotationError> {
         let [inv, eps, k] = three_args(args);
         let builder = ExprBuilder::new(annotation_span);
 
@@ -163,19 +173,18 @@ impl Encoding for PASTAnnotation {
             .into_iter()
             .collect();
 
-        let cond1_proc = generate_proc(
-            annotation_span,
-            "condition_1",
-            params_from_idents(cond1_expr_vars, tcx),
-            vec![],
-            vec![],
-            vec![Spanned::new(
+        let cond1_proc_info = ProcInfo {
+            name: "condition_1".to_string(),
+            inputs: params_from_idents(cond1_expr_vars, tcx),
+            outputs: vec![],
+            spec: vec![],
+            body: vec![Spanned::new(
                 annotation_span,
                 StmtKind::Assert(Direction::Down, cond1_expr),
             )],
-            Direction::Down,
-            tcx,
-        );
+            direction: Direction::Down,
+        };
+        let cond1_proc = generate_proc(annotation_span, cond1_proc_info, tcx);
 
         // [guard] * k <= (([guard] * invariant) + [!guard])
         let cond2_expr = builder.binary(
@@ -215,19 +224,18 @@ impl Encoding for PASTAnnotation {
             .into_iter()
             .collect();
 
-        let cond2_proc = generate_proc(
-            annotation_span,
-            "condition_2",
-            params_from_idents(cond2_expr_vars, tcx),
-            vec![],
-            vec![],
-            vec![Spanned::new(
+        let cond2_proc_info = ProcInfo {
+            name: "condition_2".to_string(),
+            inputs: params_from_idents(cond2_expr_vars, tcx),
+            outputs: vec![],
+            spec: vec![],
+            body: vec![Spanned::new(
                 annotation_span,
                 StmtKind::Assert(Direction::Down, cond2_expr),
             )],
-            Direction::Down,
-            tcx,
-        );
+            direction: Direction::Down,
+        };
+        let cond2_proc = generate_proc(annotation_span, cond2_proc_info, tcx);
 
         // Condition 3: \Phi_0(I) <= [G] * (I - eps)
         let mut cond3_body = init_assigns;
@@ -247,25 +255,25 @@ impl Encoding for PASTAnnotation {
             builder.binary(BinOpKind::Sub, Some(TyKind::EUReal), init_inv, eps.clone()),
         );
 
-        let cond3_proc = generate_proc(
-            annotation_span,
-            "past",
-            params_from_idents(init_idents, tcx),
-            params_from_idents(modified_vars, tcx),
-            vec![
+        let cond3_proc_info = ProcInfo {
+            name: "past".to_string(),
+            inputs: params_from_idents(init_idents, tcx),
+            outputs: params_from_idents(modified_vars, tcx),
+            spec: vec![
                 ProcSpec::Requires(cond3_pre),
                 ProcSpec::Ensures(builder.cast(TyKind::EUReal, builder.uint(0))),
             ],
-            cond3_body,
-            Direction::Up,
-            tcx,
-        );
+            body: cond3_body,
+            direction: Direction::Up,
+        };
 
-        Ok((
-            annotation_span,
-            vec![],
-            Some(vec![cond1_proc, cond2_proc, cond3_proc]),
-        ))
+        let cond3_proc = generate_proc(annotation_span, cond3_proc_info, tcx);
+
+        Ok(EncodingGenerated {
+            span: annotation_span,
+            stmts: vec![],
+            decls: Some(vec![cond1_proc, cond2_proc, cond3_proc]),
+        })
     }
 
     fn is_one_loop(&self) -> bool {

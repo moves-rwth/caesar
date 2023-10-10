@@ -1,3 +1,11 @@
+//! Encoding of omega invariant proof rule for lower/upper-bounds of expectations of a loop
+//!
+//! @omega_invariant takes the arguments:
+//!
+//! - `free_variable`: the variable that is used in the omega invariant
+//! - `omega_inv`: the omega invariant of the loop
+//!
+
 use std::fmt;
 
 use crate::{
@@ -14,7 +22,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::Encoding;
+use super::{Encoding, EncodingGenerated};
 
 use super::util::*;
 
@@ -23,10 +31,10 @@ pub struct OmegaInvAnnotation(AnnotationInfo);
 impl OmegaInvAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
         let file = files
-            .add(SourceFilePath::Builtin, "omega_inv".to_string())
+            .add(SourceFilePath::Builtin, "omega_invariant".to_string())
             .id;
-
-        let name = Ident::with_dummy_file_span(Symbol::intern("omega_inv"), file);
+        // TODO: replace the dummy span with a proper span
+        let name = Ident::with_dummy_file_span(Symbol::intern("omega_invariant"), file);
 
         let omega_inv_param = intrinsic_param(file, "omega_inv", TyKind::EUReal, false);
         let free_var_param = intrinsic_param(file, "free_variable", TyKind::UInt, false);
@@ -92,7 +100,7 @@ impl Encoding for OmegaInvAnnotation {
         args: &[Expr],
         inner_stmt: &Stmt,
         direction: Direction,
-    ) -> Result<(Span, Vec<Stmt>, Option<Vec<DeclKind>>), AnnotationError> {
+    ) -> Result<EncodingGenerated, AnnotationError> {
         let [free_var, omega_inv] = two_args(args);
 
         let omega_var = if let ExprKind::Var(var_ref) = &free_var.kind {
@@ -183,7 +191,11 @@ impl Encoding for OmegaInvAnnotation {
             ),
         ];
 
-        Ok((annotation_span, buf, None))
+        Ok(EncodingGenerated {
+            span: annotation_span,
+            stmts: buf,
+            decls: None,
+        })
     }
 
     fn is_one_loop(&self) -> bool {

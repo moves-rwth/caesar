@@ -1,3 +1,5 @@
+//! Shared utility functions for proof rules
+
 use std::cell::RefCell;
 
 use num::ToPrimitive;
@@ -5,11 +7,13 @@ use num::ToPrimitive;
 use crate::{
     ast::{
         DeclKind, DeclRef, Direction, Expr, ExprBuilder, ExprData, ExprKind, FileId, Ident,
-        LitKind, Param, ProcDecl, ProcSpec, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind,
-        Symbol, TyKind, VarDecl, VarKind,
+        LitKind, Param, ProcDecl, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind, Symbol,
+        TyKind, VarDecl, VarKind,
     },
     tyctx::TyCtx,
 };
+
+use super::ProcInfo;
 
 /// Encode the given specification
 pub fn encode_spec(
@@ -115,7 +119,7 @@ pub fn new_ident_with_name(tcx: &TyCtx, ty: &TyKind, span: Span, name: &str) -> 
 }
 
 /// Get the init versions of the given idents and declare them
-pub fn get_init_idents(tcx: &TyCtx, span: Span, idents: &Vec<Ident>) -> Vec<Ident> {
+pub fn get_init_idents(tcx: &TyCtx, span: Span, idents: &[Ident]) -> Vec<Ident> {
     let mut new_idents = vec![];
     for ident in idents.iter() {
         let ty = match tcx.get(*ident).unwrap().as_ref() {
@@ -172,7 +176,7 @@ pub fn ident_to_expr(tcx: &TyCtx, span: Span, ident: Ident) -> Expr {
 
 /// Construct an expression from the given expression
 /// in which all variables given in the variables input are replaced by init versions of the corresponding variable
-pub fn to_init_expr(tcx: &TyCtx, span: Span, expr: &Expr, variables: &Vec<Ident>) -> Expr {
+pub fn to_init_expr(tcx: &TyCtx, span: Span, expr: &Expr, variables: &[Ident]) -> Expr {
     let builder = ExprBuilder::new(span);
 
     // Construct "init_{}" versions of variables in the invariant parameters and transform them into expressions
@@ -182,11 +186,8 @@ pub fn to_init_expr(tcx: &TyCtx, span: Span, expr: &Expr, variables: &Vec<Ident>
         .collect();
 
     // To substitute the variables with init versions, create a mapping by zipping the two vectors
-    let init_mapping: Vec<(Ident, Expr)> = variables
-        .clone()
-        .into_iter()
-        .zip(init_expressions)
-        .collect();
+    let init_mapping: Vec<(Ident, Expr)> =
+        variables.iter().copied().zip(init_expressions).collect();
 
     // Construct the version of the invariant with all variables substituted by init versions
     let new_expr: Expr = builder.subst(expr.clone(), init_mapping);
@@ -195,23 +196,15 @@ pub fn to_init_expr(tcx: &TyCtx, span: Span, expr: &Expr, variables: &Vec<Ident>
 }
 
 /// Construct and declare a [`DeclKind::ProcDecl`] instance with the given arguments
-pub fn generate_proc(
-    span: Span,
-    name: &str,
-    inputs: Vec<Param>,
-    outputs: Vec<Param>,
-    spec: Vec<ProcSpec>,
-    body: Vec<Stmt>,
-    direction: Direction,
-    tcx: &TyCtx,
-) -> DeclKind {
+pub fn generate_proc(span: Span, proc_info: ProcInfo, tcx: &TyCtx) -> DeclKind {
     let decl = DeclKind::ProcDecl(DeclRef::new(ProcDecl {
-        direction,
-        name: Ident::with_dummy_span(Symbol::intern(name)),
-        inputs: Spanned::new(span, inputs),
-        outputs: Spanned::new(span, outputs),
-        spec,
-        body: RefCell::new(Some(body)),
+        direction: proc_info.direction,
+        // TODO: replace the dummy span with a proper span
+        name: Ident::with_dummy_span(Symbol::intern(proc_info.name.as_str())),
+        inputs: Spanned::new(span, proc_info.inputs),
+        outputs: Spanned::new(span, proc_info.outputs),
+        spec: proc_info.spec,
+        body: RefCell::new(Some(proc_info.body)),
         span,
     }));
 
@@ -327,6 +320,7 @@ pub fn lit_u128(expr: &Expr) -> u128 {
 /// Construct a [`Param`] for intrinsic annotations
 pub fn intrinsic_param(file: FileId, name: &str, ty: TyKind, literal_only: bool) -> Param {
     Param {
+        // TODO: replace the dummy span with a proper span
         name: Ident::with_dummy_file_span(Symbol::intern(name), file),
         ty: Box::new(ty),
         literal_only,

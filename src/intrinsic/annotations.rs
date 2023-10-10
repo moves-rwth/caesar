@@ -1,9 +1,10 @@
+//! Intrinsic annotations 
 use std::rc::Rc;
 
 use ariadne::ReportKind;
 
 use crate::{
-    ast::{Diagnostic, Expr, Ident, Label, Param, Span, Spanned, Stmt, Symbol},
+    ast::{Diagnostic, Expr, Ident, Label, Param, Span, Spanned, Stmt},
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
@@ -56,7 +57,7 @@ impl AnnotationError {
             }
             AnnotationError::OneLoopOnly(span,encoding_name) => Diagnostic::new(ReportKind::Error, span)
                 .with_message(format!(
-                    "The '{}' encoding only supports programs that consists of only one loop and no other statements, other than variable declarations.",
+                    "The '{}' encoding is only supported for programs that consists of only one loop and no other statements, other than variable declarations.",
                     encoding_name.name
                 ))
                 .with_label(Label::new(span).with_message("There shouldn't be any statements, other than variable declarations, before or after this annotated loop.")),

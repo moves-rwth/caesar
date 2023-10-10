@@ -1,3 +1,13 @@
+//! Encode the proof rule for almost-sure termination of a loop by McIver et al. (2018)
+//!
+//! @ast takes the arguments:
+//!
+//! - `invariant`: a boolean-valued invariant
+//! - `variant` : a variant function
+//! - `free_variable`: the free variable used in prob and decrease
+//! - `prob`: a probability function
+//! - `decrease`: a decrease function
+
 use std::fmt;
 
 use indexmap::IndexSet;
@@ -16,7 +26,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::Encoding;
+use super::{Encoding, EncodingGenerated, ProcInfo};
 
 use super::util::*;
 
@@ -25,7 +35,7 @@ pub struct ASTAnnotation(AnnotationInfo);
 impl ASTAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
         let file = files.add(SourceFilePath::Builtin, "ast".to_string()).id;
-
+        // TODO: replace the dummy span with a proper span
         let name = Ident::with_dummy_file_span(Symbol::intern("ast"), file);
 
         let invariant_param = intrinsic_param(file, "invariant", TyKind::Bool, false);
@@ -113,7 +123,7 @@ impl Encoding for ASTAnnotation {
         args: &[Expr],
         inner_stmt: &Stmt,
         _direction: Direction,
-    ) -> Result<(Span, Vec<Stmt>, Option<Vec<DeclKind>>), AnnotationError> {
+    ) -> Result<EncodingGenerated, AnnotationError> {
         let [invariant, variant, free_var, prob, decrease] = five_args(args);
         let builder = ExprBuilder::new(annotation_span);
 
@@ -228,34 +238,34 @@ impl Encoding for ASTAnnotation {
         );
 
         // prob antitone
-        let cond1_proc = generate_proc(
-            annotation_span,
-            "prob_antitone",
-            params_from_idents(vec![a_ident, b_ident], tcx),
-            vec![],
-            vec![
+        let cond1_proc_info = ProcInfo {
+            name: "prob_antitone".to_string(),
+            inputs: params_from_idents(vec![a_ident, b_ident], tcx),
+            outputs: vec![],
+            spec: vec![
                 ProcSpec::Requires(cond1_2_pre.clone()),
                 ProcSpec::Ensures(cond1_post),
             ],
-            vec![],
-            Direction::Down,
-            tcx,
-        );
+            body: vec![],
+            direction: Direction::Down,
+        };
 
-        // decrease antitone
-        let cond2_proc = generate_proc(
-            annotation_span,
-            "decrease_antitone",
-            params_from_idents(vec![a_ident, b_ident], tcx),
-            vec![],
-            vec![
+        let cond1_proc = generate_proc(annotation_span, cond1_proc_info, tcx);
+
+        let cond2_proc_info = ProcInfo {
+            name: "decrease_antitone".to_string(),
+            inputs: params_from_idents(vec![a_ident, b_ident], tcx),
+            outputs: vec![],
+            spec: vec![
                 ProcSpec::Requires(cond1_2_pre),
                 ProcSpec::Ensures(cond2_post),
             ],
-            vec![],
-            Direction::Down,
-            tcx,
-        );
+            body: vec![],
+            direction: Direction::Down,
+        };
+
+        // decrease antitone
+        let cond2_proc = generate_proc(annotation_span, cond2_proc_info, tcx);
 
         let cond3_expr = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), invariant.clone());
 
@@ -271,12 +281,11 @@ impl Encoding for ASTAnnotation {
         );
 
         // [I] <= Phi_{[I]}([I])
-        let cond3_proc = generate_proc(
-            annotation_span,
-            "I_wp_subinvariant",
-            params_from_idents(input_init_vars.clone(), tcx),
-            params_from_idents(modified_vars.clone(), tcx),
-            vec![
+        let cond3_proc_info = ProcInfo {
+            name: "I_wp_subinvariant".to_string(),
+            inputs: params_from_idents(input_init_vars.clone(), tcx),
+            outputs: params_from_idents(modified_vars.clone(), tcx),
+            spec: vec![
                 ProcSpec::Requires(to_init_expr(
                     tcx,
                     annotation_span,
@@ -285,10 +294,11 @@ impl Encoding for ASTAnnotation {
                 )),
                 ProcSpec::Ensures(cond3_expr.clone()),
             ],
-            cond3_body,
-            Direction::Down,
-            tcx,
-        );
+            body: cond3_body,
+            direction: Direction::Down,
+        };
+
+        let cond3_proc = generate_proc(annotation_span, cond3_proc_info, tcx);
 
         // ?((~loop_guard) == (variant = 0))
         let cond4_expr = builder.unary(
@@ -306,20 +316,21 @@ impl Encoding for ASTAnnotation {
                 ),
             ),
         );
+
         // !G iff V = 0
-        let cond4_proc = generate_proc(
-            annotation_span,
-            "termination_condition",
-            params_from_idents(input_vars, tcx),
-            vec![],
-            vec![],
-            vec![Spanned::new(
+        let cond4_proc_info = ProcInfo {
+            // create the ProcInfo according to the generate_proc function below
+            name: "termination_condition".to_string(),
+            inputs: params_from_idents(input_vars, tcx),
+            outputs: vec![],
+            spec: vec![],
+            body: vec![Spanned::new(
                 annotation_span,
                 StmtKind::Assert(Direction::Down, cond4_expr),
             )],
-            Direction::Down,
-            tcx,
-        );
+            direction: Direction::Down,
+        };
+        let cond4_proc = generate_proc(annotation_span, cond4_proc_info, tcx);
         let mut cond5_body = init_assigns.clone();
         cond5_body.push(
             encode_iter(
@@ -332,19 +343,19 @@ impl Encoding for ASTAnnotation {
         );
 
         // Phi_{V}(V) <= V
-        let cond5_proc = generate_proc(
-            annotation_span,
-            "V_wp_superinvariant",
-            params_from_idents(input_init_vars.clone(), tcx),
-            params_from_idents(modified_vars.clone(), tcx),
-            vec![
+        let cond5_proc_info = ProcInfo {
+            name: "V_wp_superinvariant".to_string(),
+            inputs: params_from_idents(input_init_vars.clone(), tcx),
+            outputs: params_from_idents(modified_vars.clone(), tcx),
+            spec: vec![
                 ProcSpec::Requires(to_init_expr(tcx, annotation_span, variant, &modified_vars)),
                 ProcSpec::Ensures(variant.clone()),
             ],
-            cond5_body,
-            Direction::Up,
-            tcx,
-        );
+            body: cond5_body,
+            direction: Direction::Up,
+        };
+
+        let cond5_proc = generate_proc(annotation_span, cond5_proc_info, tcx);
 
         let cond6_pre = builder.binary(
             BinOpKind::Mul,
@@ -386,12 +397,11 @@ impl Encoding for ASTAnnotation {
         cond6_body.extend(loop_body.clone());
 
         //[I] * [G] * (p o V) <= \\s. wp[P]([V < V(s) - d(V(s))])(s)
-        let cond6_proc = generate_proc(
-            annotation_span,
-            "progress_condition",
-            params_from_idents(input_init_vars, tcx),
-            params_from_idents(modified_vars.clone(), tcx),
-            vec![
+        let cond6_proc_info = ProcInfo {
+            name: "progress_condition".to_string(),
+            inputs: params_from_idents(input_init_vars, tcx),
+            outputs: params_from_idents(modified_vars.clone(), tcx),
+            spec: vec![
                 ProcSpec::Requires(to_init_expr(
                     tcx,
                     annotation_span,
@@ -400,17 +410,18 @@ impl Encoding for ASTAnnotation {
                 )),
                 ProcSpec::Ensures(cond6_post),
             ],
-            cond6_body,
-            Direction::Down,
-            tcx,
-        );
+            body: cond6_body,
+            direction: Direction::Down,
+        };
 
-        Ok((
-            annotation_span,
-            vec![],
-            Some(vec![
+        let cond6_proc = generate_proc(annotation_span, cond6_proc_info, tcx);
+
+        Ok(EncodingGenerated {
+            span: annotation_span,
+            stmts: vec![],
+            decls: Some(vec![
                 cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,
             ]),
-        ))
+        })
     }
 }

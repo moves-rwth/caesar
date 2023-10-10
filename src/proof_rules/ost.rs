@@ -1,11 +1,20 @@
+//! Encode the proof for a lower bound to the wp of a program using the optional stopping theorem from Aiming Low is Harder paper.
+//!
+//! @ost takes the arguments:
+//!
+//! - `inv`: the invariant of the loop
+//! - `past_inv`: the invariant for the PAST rule
+//! - `c`: the constant c from the theorem, must be a literal
+//! - `post`: the postcondition of the loop
+//!
 use std::fmt;
 
 use crate::{
     ast::{
         util::{FreeVariableCollector, ModifiedVariableCollector},
         visit::VisitorMut,
-        BinOpKind, DeclKind, Direction, Expr, ExprBuilder, Files, Ident, ProcSpec, SourceFilePath,
-        Span, Spanned, Stmt, StmtKind, Symbol, TyKind, UnOpKind,
+        BinOpKind, Direction, Expr, ExprBuilder, Files, Ident, ProcSpec, SourceFilePath, Span,
+        Spanned, Stmt, StmtKind, Symbol, TyKind, UnOpKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -15,7 +24,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::Encoding;
+use super::{Encoding, EncodingGenerated, ProcInfo};
 
 use super::util::*;
 
@@ -24,7 +33,7 @@ pub struct OSTAnnotation(AnnotationInfo);
 impl OSTAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
         let file = files.add(SourceFilePath::Builtin, "ost".to_string()).id;
-
+        // TODO: replace the dummy span with a proper span
         let name = Ident::with_dummy_file_span(Symbol::intern("ost"), file);
 
         let invariant_param = intrinsic_param(file, "inv", TyKind::SpecTy, false);
@@ -88,7 +97,7 @@ impl Encoding for OSTAnnotation {
         args: &[Expr],
         inner_stmt: &Stmt,
         _direction: Direction,
-    ) -> Result<(Span, Vec<Stmt>, Option<Vec<DeclKind>>), AnnotationError> {
+    ) -> Result<EncodingGenerated, AnnotationError> {
         let [inv, past_inv, c, post] = four_args(args);
 
         let builder = ExprBuilder::new(annotation_span);
@@ -101,7 +110,7 @@ impl Encoding for OSTAnnotation {
             .collect();
 
         // Collect and store the variables from the past_invariant
-        let past_inv_variables = free_var_collector
+        let past_inv_variables: Vec<Ident> = free_var_collector
             .collect_and_clear(&mut past_inv.clone())
             .into_iter()
             .collect();
@@ -171,19 +180,18 @@ impl Encoding for OSTAnnotation {
             .collect();
 
         // Condition 1: past_I < ∞
-        let cond1_proc = generate_proc(
-            annotation_span,
-            "lt_infinity",
-            params_from_idents(past_inv_variables, tcx),
-            vec![],
-            vec![],
-            vec![Spanned::new(
+        let cond1_proc_info = ProcInfo {
+            name: "lt_infinity".to_string(),
+            inputs: params_from_idents(past_inv_variables, tcx),
+            outputs: vec![],
+            spec: vec![],
+            body: vec![Spanned::new(
                 annotation_span,
                 StmtKind::Assert(Direction::Down, cond1_assert),
             )],
-            Direction::Down,
-            tcx,
-        );
+            direction: Direction::Down,
+        };
+        let cond1_proc = generate_proc(annotation_span, cond1_proc_info, tcx);
 
         // Condition 2 : \Phi_{0}(past_I) <= past_I, so ert[P](0) <= past_I
         let mut cond2_body = init_assigns.clone();
@@ -196,19 +204,18 @@ impl Encoding for OSTAnnotation {
             .unwrap(),
         );
 
-        let cond2_proc = generate_proc(
-            annotation_span,
-            "past",
-            params_from_idents(init_idents.clone(), tcx),
-            params_from_idents(modified_vars.clone(), tcx),
-            vec![
+        let cond2_proc_info = ProcInfo {
+            name: "past".to_string(),
+            inputs: params_from_idents(init_idents.clone(), tcx),
+            outputs: params_from_idents(modified_vars.clone(), tcx),
+            spec: vec![
                 ProcSpec::Requires(init_past_inv),
                 ProcSpec::Ensures(builder.cast(TyKind::EUReal, builder.uint(0))),
             ],
-            cond2_body,
-            Direction::Up,
-            tcx,
-        );
+            body: cond2_body,
+            direction: Direction::Up,
+        };
+        let cond2_proc = generate_proc(annotation_span, cond2_proc_info, tcx);
 
         // Init assigns followed by the loop body
         let mut cond3_body = init_assigns.clone();
@@ -236,36 +243,35 @@ impl Encoding for OSTAnnotation {
                 inv.clone(),
             ),
         );
-
-        let cond3_proc = generate_proc(
-            annotation_span,
-            "conditional_difference_bounded",
-            params_from_idents(init_idents.clone(), tcx),
-            params_from_idents(modified_vars.clone(), tcx),
-            vec![
+        let cond3_proc_info = ProcInfo {
+            name: "conditional_difference_bounded".to_string(),
+            inputs: params_from_idents(init_idents.clone(), tcx),
+            outputs: params_from_idents(modified_vars.clone(), tcx),
+            spec: vec![
                 // Cast c to EUReal otherwise the type is not a complete lattice
                 ProcSpec::Requires(builder.cast(TyKind::EUReal, c.clone())),
                 ProcSpec::Ensures(cond3_post),
             ],
-            cond3_body,
-            Direction::Up,
-            tcx,
-        );
+            body: cond3_body,
+            direction: Direction::Up,
+        };
+
+        let cond3_proc = generate_proc(annotation_span, cond3_proc_info, tcx);
 
         // Condition 4: !guard ==> (I = f)
-        let cond4_proc = generate_proc(
-            annotation_span,
-            "harmonize_I_f",
-            params_from_idents(harmonize_expr_vars, tcx),
-            vec![],
-            vec![],
-            vec![Spanned::new(
+        let cond4_proc_info = ProcInfo {
+            name: "harmonize_I_f".to_string(),
+            inputs: params_from_idents(harmonize_expr_vars, tcx),
+            outputs: vec![],
+            spec: vec![],
+            body: vec![Spanned::new(
                 annotation_span,
                 StmtKind::Assert(Direction::Down, harmonize_expr),
             )],
-            Direction::Down,
-            tcx,
-        );
+            direction: Direction::Down,
+        };
+
+        let cond4_proc = generate_proc(annotation_span, cond4_proc_info, tcx);
 
         // Condition 5: \Phi_f(I) < ∞
         // The following block should be inserted before the iter encoding to check Phi < ∞
@@ -290,19 +296,18 @@ impl Encoding for OSTAnnotation {
             .unwrap(),
         ]);
 
-        let cond5_proc = generate_proc(
-            annotation_span,
-            "loopiter_lt_infty",
-            params_from_idents(init_idents.clone(), tcx),
-            params_from_idents(modified_vars.clone(), tcx),
-            vec![
+        let cond5_proc_info = ProcInfo {
+            name: "loopiter_lt_infty".to_string(),
+            inputs: params_from_idents(init_idents.clone(), tcx),
+            outputs: params_from_idents(modified_vars.clone(), tcx),
+            spec: vec![
                 ProcSpec::Requires(builder.cast(TyKind::EUReal, builder.uint(0))),
                 ProcSpec::Ensures(post.clone()),
             ],
-            cond5_body,
-            Direction::Up,
-            tcx,
-        );
+            body: cond5_body,
+            direction: Direction::Up,
+        };
+        let cond5_proc = generate_proc(annotation_span, cond5_proc_info, tcx);
 
         // Condition 6: I <= \Phi_{post}(I)
         let mut cond6_body = init_assigns;
@@ -315,19 +320,18 @@ impl Encoding for OSTAnnotation {
             .unwrap(),
         );
 
-        let cond6_proc = generate_proc(
-            annotation_span,
-            "lower_bound",
-            params_from_idents(init_idents, tcx),
-            params_from_idents(modified_vars.clone(), tcx),
-            vec![
+        let cond6_proc_info = ProcInfo {
+            name: "lower_bound".to_string(),
+            inputs: params_from_idents(init_idents, tcx),
+            outputs: params_from_idents(modified_vars.clone(), tcx),
+            spec: vec![
                 ProcSpec::Requires(init_inv),
                 ProcSpec::Ensures(post.clone()),
             ],
-            cond6_body,
-            Direction::Down,
-            tcx,
-        );
+            body: cond6_body,
+            direction: Direction::Down,
+        };
+        let cond6_proc = generate_proc(annotation_span, cond6_proc_info, tcx);
 
         // Call to the lower_bound proc from Condition 6
         let proc_call = builder.call(
@@ -344,13 +348,13 @@ impl Encoding for OSTAnnotation {
             StmtKind::Assign(modified_vars, proc_call),
         )];
 
-        Ok((
-            annotation_span,
-            buf,
-            Some(vec![
+        Ok(EncodingGenerated {
+            span: annotation_span,
+            stmts: buf,
+            decls: Some(vec![
                 cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,
             ]),
-        ))
+        })
     }
 
     fn is_one_loop(&self) -> bool {
