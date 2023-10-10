@@ -200,6 +200,7 @@ StmtKind: StmtKind = {
     "coassume" <expr: Expr> => StmtKind::Assume(Direction::Up, expr),
     "compare" <expr: Expr> => StmtKind::Compare(Direction::Down, expr),
     "cocompare" <expr: Expr> => StmtKind::Compare(Direction::Up, expr),
+    "reward" <expr: Expr> => StmtKind::Tick(expr),
     "tick" <expr: Expr> => StmtKind::Tick(expr),
     "negate" => StmtKind::Negate(Direction::Down),
     "conegate" => StmtKind::Negate(Direction::Up),

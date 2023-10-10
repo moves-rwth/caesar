@@ -1,0 +1,93 @@
+---
+description: You can install Caesar locally or build a Docker image.
+sidebar_position: 1
+---
+
+# Installing Caesar
+
+You can install Caesar locally or build a Docker image.
+
+```mdx-code-block
+import CodeBlock from '@theme/CodeBlock';
+import Link from '@docusaurus/Link';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+```
+
+```mdx-code-block
+import TOCInline from '@theme/TOCInline';
+
+<TOCInline toc={toc} />
+```
+
+## Option A: Compiling Locally (Recommended)
+
+### Installing Dependencies
+
+You will need to install some dependencies manually:
+
+**Rust:** To install [Rust](https://www.rust-lang.org/), we recommend [installation via rustup](https://rustup.rs/).
+
+**Fish Shell**: We write some scripts written in [fish](https://fishshell.com/).
+
+**Build Tools:** Caesar builds [Z3](https://github.com/Z3Prover/z3) itself, so we need Python and [cmake](https://cmake.org/).
+
+```mdx-code-block
+<Tabs groupId="operating-systems">
+  <TabItem value="mac" label="macOS">
+    <CodeBlock language="bash">{`# Install Rust via rustup
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# Install CMake and fish
+brew install cmake fish`}
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="debian" label="Debian/Linux">
+    <CodeBlock language="bash">{`# Install Rust via rustup
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# Install CMake, LLVM, clang, and fish
+apt-get install cmake llvm libclang clang fish`}
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="win" label="Windows">
+    We do not have build instructions for Windows at the moment. We recommend that you use <Link to="https://learn.microsoft.com/en-us/windows/wsl/install">WSL</Link> and refer to the Debian/Linux instructions.
+  </TabItem>
+</Tabs>
+```
+
+### Compiling Caesar
+
+Simply run the following, and `caesar` will be available on the command-line.
+Because this will compile a large number of dependencies, this might take a couple of minutes (especially Z3 takes some time).
+
+```bash
+git clone git@github.com:moves-rwth/caesar.git
+cd caesar
+cargo install --path . caesar
+```
+
+Then, you can run an example:
+```bash
+caesar tests/zeroconf.heyvl 
+```
+And this will print:
+```
+tests/zeroconf.heyvl::arp: Verified.
+tests/zeroconf.heyvl::zeroconf: Verified.
+```
+
+## Option B: Docker
+
+We also support building a Docker image.
+This does not require installing dependencies and will package everything in a Docker image named `caesar`.
+
+```bash
+git clone git@github.com:moves-rwth/caesar.git
+cd caesar
+docker build -t caesar -f docker/Dockerfile .
+```
+
+With the Docker image `caesar` built, you can enter the Docker container and work in there.
+The following command also mounts the `./caesar/` directory as `/root/caesar/results/` inside the container.
+```bash
+docker run -it caesar -v $PWD/results:/root/caesar/results/ /bin/bash
+```
