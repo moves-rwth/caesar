@@ -16,11 +16,13 @@ use crate::{
         parser::ParseError,
         tycheck::{Tycheck, TycheckError},
     },
+    intrinsic::annotations::AnnotationError,
     pretty::{Doc, SimplePretty},
     procs::{
         monotonicity::{MonotonicityError, MonotonicityVisitor},
         verify_proc, SpecCall,
     },
+    proof_rules::EncCall,
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
 };
@@ -173,6 +175,35 @@ pub enum SourceUnit {
 }
 
 impl SourceUnit {
+    #[instrument(skip(self, tcx))]
+    pub fn desugar(
+        &mut self,
+        tcx: &mut TyCtx,
+        source_units_buf: &mut Vec<Item<SourceUnit>>,
+    ) -> Result<(), AnnotationError> {
+        let mut enc_call = EncCall::new(tcx, source_units_buf);
+
+        match self {
+            SourceUnit::Decl(decl) => enc_call.visit_decl(decl),
+            SourceUnit::Raw(block) => enc_call.visit_stmts(block),
+        }
+    }
+
+    /// Return a new [`Item`] by wrapping it around the [`SourceUnit`]
+    /// and set the file path of the new [`SourceUnitName`] to the given file_path argument
+    /// This function is used to generate [`Item`]s from generated [`SourceUnit`] objects (through AST transformations)
+    pub fn wrap_item(self, file_path: &SourceFilePath) -> Item<SourceUnit> {
+        match self {
+            SourceUnit::Decl(decl) => Item::new(
+                SourceUnitName::new_decl(file_path, &decl),
+                SourceUnit::Decl(decl),
+            ),
+            SourceUnit::Raw(block) => {
+                Item::new(SourceUnitName::new_raw(file_path), SourceUnit::Raw(block))
+            }
+        }
+    }
+
     pub fn parse(file: &StoredFile, raw: bool) -> Result<Vec<Item<Self>>, ParseError> {
         if raw {
             let name = SourceUnitName::new_raw(&file.path);

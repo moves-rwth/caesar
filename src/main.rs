@@ -30,6 +30,7 @@ use driver::{Item, SourceUnit, SourceUnitName, VerifyUnit};
 use intrinsic::{distributions::init_distributions, list::init_lists};
 use opt::{boolify::Boolify, RemoveParens};
 use procs::add_default_specs;
+use proof_rules::init_encodings;
 use resource_limits::{await_with_resource_limits, LimitError};
 use thiserror::Error;
 use timing::DispatchBuilder;
@@ -54,6 +55,7 @@ pub mod intrinsic;
 pub mod opt;
 pub mod pretty;
 mod procs;
+mod proof_rules;
 mod resource_limits;
 mod scope_map;
 mod smt;
@@ -153,6 +155,10 @@ pub struct Options {
     /// Print the raw HeyVL program to the command-line after desugaring.
     #[structopt(long)]
     pub print_core: bool,
+
+    /// Print the HeyVL program with generated procs after annotation desugaring
+    #[structopt(long)]
+    pub print_core_procs: bool,
 
     /// Print the theorem that is sent to the SMT solver to prove. That is, the
     /// result of preparing vc(S)[⊤] = ⊤. Note that axioms are not included.
@@ -281,6 +287,74 @@ pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, Files) {
     (res, files_mutex.into_inner().unwrap())
 }
 
+#[cfg(test)]
+pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
+    let mut files = Files::new();
+    let file_id = files.add(SourceFilePath::Builtin, source.to_owned()).id;
+    let files_mutex = Mutex::new(files);
+    let options = Options::default();
+
+    let mut files = files_mutex.lock().unwrap();
+    let file = files.get(file_id).unwrap();
+    let mut source_units: Vec<Item<SourceUnit>> =
+        SourceUnit::parse(file, options.raw).map_err(|parse_err| parse_err.diagnostic())?;
+
+    let mut source_unit = source_units.remove(0);
+
+    // 2. Resolving (and declaring) idents
+    let mut tcx = TyCtx::new(TyKind::EUReal);
+    init_encodings(&mut files, &mut tcx);
+    init_distributions(&mut files, &mut tcx);
+    init_lists(&mut files, &mut tcx);
+    drop(files);
+
+    let mut resolve = Resolve::new(&mut tcx);
+    // first, do forward declarations
+    source_unit
+        .enter()
+        .forward_declare(&mut resolve)
+        .map_err(|resolve_err| resolve_err.diagnostic())?;
+    // then, the actual resolving
+    source_unit
+        .enter()
+        .resolve(&mut resolve)
+        .map_err(|resolve_err| resolve_err.diagnostic())?;
+
+    // 3. Type checking
+    add_default_specs(&mut tcx);
+
+    let mut tycheck = Tycheck::new(&mut tcx);
+
+    {
+        // Make a new scope to be able to drop 'entered' afterwards
+        let mut entered = source_unit.enter();
+        entered
+            .tycheck(&mut tycheck)
+            .map_err(|ty_err| ty_err.diagnostic())?;
+        let monotonicity_res = entered
+            .check_monotonicity()
+            .map_err(|ty_err| ty_err.diagnostic());
+        if let Err(err) = monotonicity_res {
+            let files = files_mutex.lock().unwrap();
+            print_warning(&options, &files, err)?;
+        }
+    }
+    let mut new_source_units: Vec<Item<SourceUnit>> = vec![];
+    // Desugar encodings from source units
+    source_unit
+        .enter()
+        .desugar(&mut tcx, &mut new_source_units)
+        .map_err(|ann_err| ann_err.diagnostic())?;
+
+    new_source_units.push(source_unit);
+
+    Ok(new_source_units
+        .into_iter()
+        .map(|unit: Item<SourceUnit>| unit.to_string())
+        .collect::<Vec<String>>()
+        .join("\n"))
+}
+
 /// Synchronously verify the given files.
 fn verify_files_main(
     options: &Options,
@@ -308,6 +382,7 @@ fn verify_files_main(
 
     // 2. Resolving (and declaring) idents
     let mut tcx = TyCtx::new(TyKind::EUReal);
+    init_encodings(&mut files, &mut tcx);
     init_distributions(&mut files, &mut tcx);
     init_lists(&mut files, &mut tcx);
     drop(files);
@@ -346,13 +421,31 @@ fn verify_files_main(
         }
     }
 
+    let mut source_units_buf = vec![];
+
+    for source_unit in &mut source_units {
+        source_unit
+            .enter()
+            .desugar(&mut tcx, &mut source_units_buf)
+            .map_err(|ann_err| ann_err.diagnostic())?;
+    }
+
+    source_units.extend(source_units_buf);
+
+    if options.print_core_procs {
+        println!("HeyVL query with generated procs:");
+        for source_unit in &mut source_units {
+            println!("{}", source_unit);
+        }
+    }
+
     let mut verify_units: Vec<Item<VerifyUnit>> = source_units
         .into_iter()
         .flat_map(|item| item.flat_map(SourceUnit::into_verify_unit))
         .collect();
 
     if options.z3_trace && verify_units.len() > 1 {
-        warn!("Z3 tracing is enabled with multiple verification units. Intermediate tracing results will be overwrriten.");
+        warn!("Z3 tracing is enabled with multiple verification units. Intermediate tracing results will be overwritten.");
     }
 
     let mut all_proven: bool = true;

@@ -93,6 +93,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             TyKind::Tuple(_) => todo!(),
             TyKind::List(_) => Symbolic::List(self.t_list(expr)),
             TyKind::Domain(_) => Symbolic::Uninterpreted(self.t_uninterpreted(expr)),
+            TyKind::SpecTy => unreachable!(),
             TyKind::Unresolved(_) => unreachable!(),
             TyKind::None => unreachable!(),
         }
@@ -637,6 +638,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 }
                 TyKind::Tuple(_) => todo!(),
                 TyKind::List(element_ty) => ScopeSymbolic::fresh_list(self.ctx, ident, element_ty),
+                TyKind::SpecTy => unreachable!(),
                 TyKind::Unresolved(_) => todo!(),
                 TyKind::None => todo!(),
             },

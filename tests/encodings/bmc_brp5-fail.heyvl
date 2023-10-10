@@ -1,0 +1,29 @@
+// RUN: bash -c '! @caesar @file'
+// 
+// Test file to check refute_brp5_bmc.pgcl with caesar encodings
+// k = 14, invariant = totalFailed + 1
+
+coproc bounded_model_checking(init_toSend: UInt, init_sent: UInt, init_maxFailed: UInt, init_failed: UInt, init_totalFailed: UInt) -> (toSend: UInt, sent: UInt, maxFailed: UInt, failed: UInt, totalFailed: UInt)
+    pre init_totalFailed + 1
+    post totalFailed
+{
+    var prob_choice: Bool
+    toSend = init_toSend
+    sent = init_sent
+    maxFailed = init_maxFailed
+    failed = init_failed
+    totalFailed = init_totalFailed
+
+    @bmc(14, totalFailed + 1)
+    while (failed < maxFailed) && (sent < toSend) {
+        prob_choice = flip(0.9)
+        if prob_choice {
+            failed = 0
+            sent = sent + 1
+        } else {
+            failed = failed + 1
+            totalFailed = totalFailed + 1
+        }
+
+    } 
+}

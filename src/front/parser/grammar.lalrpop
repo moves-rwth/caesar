@@ -208,7 +208,7 @@ StmtKind: StmtKind = {
     "if" SymCap <block1: Block> "else" <block2: Block> => StmtKind::Demonic(block1, block2),
     "if" SymCup <block1: Block> "else" <block2: Block> => StmtKind::Angelic(block1, block2),
     "if" <cond: Expr> <block1: Block> "else" <block2: Block> => StmtKind::If(cond, block1, block2),
-    "while" "(" <cond: Expr> ")" <block1: Block> => StmtKind::While(cond, block1),
+    "while" <cond: Expr> <block1: Block> => StmtKind::While(cond, block1),
     "@" <ident: Ident> "(" <inputs: Comma<Expr>> ")" <stmt: Stmt> => StmtKind::Annotation(ident, inputs, Box::new(stmt)),
     "label" <ident: Ident> => StmtKind::Label(ident),
 }
@@ -237,7 +237,7 @@ ParamList: Spanned<Vec<Param>> = {
 }
 
 Param: Param = {
-    <l: @L> <name: Ident> ":" <ty: Ty> <r: @R> => Param { name, ty: Box::new(ty), span: span(file, l, r) }
+    <l: @L> <name: Ident> ":" <ty: Ty> <r: @R> => Param { name, ty: Box::new(ty), literal_only: false ,span: span(file, l, r) }
 }
 
 ProcSpec: ProcSpec = {

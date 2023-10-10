@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    intrinsic::{FuncIntrin, ProcIntrin},
+    intrinsic::{annotations::AnnotationKind, FuncIntrin, ProcIntrin},
     pretty::{parens_group, pretty_block, Doc, SimplePretty},
 };
 
@@ -27,6 +27,7 @@ pub enum DeclKind {
     ProcIntrin(Rc<dyn ProcIntrin>),
     FuncIntrin(Rc<dyn FuncIntrin>),
     LabelDecl(Ident),
+    AnnotationDecl(AnnotationKind),
 }
 
 impl DeclKind {
@@ -42,6 +43,7 @@ impl DeclKind {
             DeclKind::ProcIntrin(proc_intrin) => proc_intrin.name(),
             DeclKind::FuncIntrin(func_intrin) => func_intrin.name(),
             DeclKind::LabelDecl(ident) => *ident,
+            DeclKind::AnnotationDecl(anno_intrin) => anno_intrin.name(),
         }
     }
 }
@@ -54,12 +56,12 @@ impl SimplePretty for DeclKind {
             DeclKind::DomainDecl(domain_decl) => domain_decl.pretty(),
             DeclKind::FuncDecl(func_decl) => func_decl.pretty(),
             DeclKind::AxiomDecl(axiom_decl) => axiom_decl.pretty(),
-            DeclKind::ProcIntrin(proc_intrin) => Doc::text("instrinsic")
+            DeclKind::ProcIntrin(proc_intrin) => Doc::text("intrinsic")
                 .append(Doc::space())
                 .append(Doc::text("proc"))
                 .append(Doc::space())
                 .append(Doc::as_string(proc_intrin.name().name)),
-            DeclKind::FuncIntrin(fn_intrin) => Doc::text("instrinsic")
+            DeclKind::FuncIntrin(fn_intrin) => Doc::text("intrinsic")
                 .append(Doc::space())
                 .append(Doc::text("fn"))
                 .append(Doc::space())
@@ -67,6 +69,11 @@ impl SimplePretty for DeclKind {
             DeclKind::LabelDecl(ident) => Doc::text("label")
                 .append(Doc::space())
                 .append(Doc::as_string(ident.name)),
+            DeclKind::AnnotationDecl(anno_intrin) => Doc::text("intrinsic")
+                .append(Doc::space())
+                .append(Doc::text("annotation"))
+                .append(Doc::space())
+                .append(Doc::as_string(anno_intrin.name().name)),
         }
     }
 }
@@ -281,6 +288,7 @@ impl SimplePretty for ProcDecl {
 pub struct Param {
     pub name: Ident,
     pub ty: Box<TyKind>,
+    pub literal_only: bool,
     pub span: Span,
 }
 

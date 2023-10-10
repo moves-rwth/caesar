@@ -207,6 +207,7 @@ dependencies = [
  "once_cell",
  "pathdiff",
  "pretty",
+ "pretty_assertions",
  "proptest",
  "ref-cast",
  "replace_with",
@@ -1344,6 +1345,16 @@ dependencies = [
  "log",
  "typed-arena",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "pretty_assertions"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af7cee1a6c8a5b9208b3cb1061f10c0cb689087b3d8ce85fb9d2dd7a29b6ba66"
+dependencies = [
+ "diff",
+ "yansi",
 ]
 
 [[package]]

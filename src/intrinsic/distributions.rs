@@ -11,8 +11,8 @@ use crate::{
         ProcDecl, SourceFilePath, Span, TyKind,
     },
     front::parser,
+    front::resolve::Resolve,
     front::tycheck::{Tycheck, TycheckError},
-    front::{resolve::Resolve, tycheck::ExpectedKind},
     tyctx::TyCtx,
 };
 
@@ -29,7 +29,6 @@ enum DistProcKind {
 }
 
 struct DistProc {
-    kind: DistProcKind,
     decl: ProcDecl,
     dist_fn: DistFn,
 }
@@ -50,7 +49,7 @@ impl DistProc {
 
         // resolve all identifiers
         let mut resolve = Resolve::new(tcx);
-        // we need to declare this ProcDecl temporarily
+        // we need to declare this ProcDecl temporarily (to replace TyKind::Unresolved by the resolved type)
         resolve.declare(decl.clone()).unwrap();
         resolve.visit_decl(&mut decl).unwrap();
         // now remove the ProcDecl
@@ -58,14 +57,19 @@ impl DistProc {
 
         // extract the ProcDecl from the Decl. We do `try_unwrap` because we're
         // now the only owner of the ProcDecl.
-        let proc_decl = if let DeclKind::ProcDecl(proc_decl) = decl {
+        let mut proc_decl = if let DeclKind::ProcDecl(proc_decl) = decl {
             proc_decl.try_unwrap().unwrap()
         } else {
             unreachable!()
         };
 
+        if kind == DistProcKind::ConstantOnly {
+            for param in proc_decl.params_iter_mut() {
+                param.literal_only = true;
+            }
+        }
+
         DistProc {
-            kind,
             decl: proc_decl,
             dist_fn,
         }
@@ -93,17 +97,6 @@ impl ProcIntrin for DistProc {
         args: &mut [Expr],
     ) -> Result<TyKind, TycheckError> {
         let ty = tycheck.check_proc_call(call_span, &self.decl, args)?;
-        if self.kind == DistProcKind::ConstantOnly {
-            for arg in args {
-                if !matches!(arg.kind, ExprKind::Lit(_)) {
-                    return Err(TycheckError::ExpectedKind {
-                        span: call_span,
-                        expr: arg.clone(),
-                        kind: ExpectedKind::Literal,
-                    });
-                }
-            }
-        }
         Ok(ty)
     }
 

@@ -22,7 +22,9 @@ pub trait VisitorMut: Sized {
             DeclKind::DomainDecl(domain) => self.visit_domain(domain),
             DeclKind::FuncDecl(func) => self.visit_func(func),
             DeclKind::AxiomDecl(axiom) => self.visit_axiom(axiom),
-            DeclKind::ProcIntrin(_) | DeclKind::FuncIntrin(_) => Ok(()),
+            DeclKind::ProcIntrin(_) | DeclKind::FuncIntrin(_) | DeclKind::AnnotationDecl(_) => {
+                Ok(())
+            }
             DeclKind::LabelDecl(ref mut ident) => self.visit_ident(ident),
         }
     }

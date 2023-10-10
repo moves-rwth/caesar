@@ -91,6 +91,14 @@ impl SimplePretty for StmtKind {
                 .append(Doc::text("}"))
         }
 
+        fn pretty_loop(cond: Doc, body: &Block) -> Doc {
+            Doc::text("while")
+                .append(Doc::space())
+                .append(cond)
+                .append(Doc::space())
+                .append(pretty_block(body.pretty()))
+        }
+
         let res = match self {
             StmtKind::Block(stmts) => pretty_block(stmts.pretty()),
             StmtKind::Var(decl_ref) => {
@@ -120,8 +128,16 @@ impl SimplePretty for StmtKind {
             StmtKind::Demonic(lhs, rhs) => pretty_branch(Doc::text("⊓"), lhs, rhs),
             StmtKind::Angelic(lhs, rhs) => pretty_branch(Doc::text("⊔"), lhs, rhs),
             StmtKind::If(cond, lhs, rhs) => pretty_branch(cond.pretty(), lhs, rhs),
-            StmtKind::While(_, _) => todo!(),
-            StmtKind::Annotation(_, _, _) => todo!(),
+            StmtKind::While(cond, body) => pretty_loop(cond.pretty(), body),
+            StmtKind::Annotation(ident, inputs, stmt) => Doc::text("@")
+                .append(Doc::as_string(ident.name))
+                .append(Doc::text("("))
+                .append(Doc::intersperse(
+                    inputs.iter().map(|expr| expr.pretty()),
+                    Doc::text(", "),
+                ))
+                .append(Doc::text(")"))
+                .append(Doc::line().append(stmt.pretty())),
             StmtKind::Label(ident) => Doc::text("label")
                 .append(Doc::space())
                 .append(Doc::as_string(ident.name)),

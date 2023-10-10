@@ -1,4 +1,5 @@
 use super::Span;
+use crate::ast::FileId;
 use once_cell::sync::Lazy;
 use std::fmt;
 use std::sync::Mutex;
@@ -49,6 +50,13 @@ impl Ident {
         Ident {
             name,
             span: Span::dummy_span(),
+        }
+    }
+
+    pub fn with_dummy_file_span(name: Symbol, file: FileId) -> Ident {
+        Ident {
+            name,
+            span: Span::dummy_file_span(file),
         }
     }
 }

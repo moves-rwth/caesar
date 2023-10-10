@@ -1,8 +1,9 @@
-use std::collections::HashSet;
+// Using [`IndexSet`], which is a HashSet that preserves the insertion order, for deterministic results
+use indexmap::IndexSet;
 
 use super::{
-    visit::{walk_expr, VisitorMut},
-    Expr, ExprKind, Ident,
+    visit::{walk_expr, walk_stmt, VisitorMut},
+    Expr, ExprKind, Ident, StmtKind,
 };
 
 /// Helper to find all free variables in expressions.
@@ -10,12 +11,21 @@ use super::{
 /// Expressions with substitutions in them are not allowed and will lead to a panic!
 #[derive(Debug, Default)]
 pub struct FreeVariableCollector {
-    pub variables: HashSet<Ident>,
+    pub variables: IndexSet<Ident>,
 }
 
 impl FreeVariableCollector {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Collect variables from given [`Expr`] and clear the variables set for further use
+    pub fn collect_and_clear(&mut self, expr: &mut Expr) -> IndexSet<Ident> {
+        self.visit_expr(expr).unwrap();
+        let vars = self.variables.clone();
+        self.variables.clear();
+
+        vars
     }
 }
 
@@ -54,6 +64,50 @@ impl VisitorMut for FreeVariableCollector {
                 )
             }
             _ => walk_expr(self, expr),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+/// Collect modified and declared variables in a statement. Note that modified variables can contain declared variables.
+pub struct ModifiedVariableCollector {
+    /// [`Ident`]s of variables that are declared in the statement
+    pub declared_variables: IndexSet<Ident>,
+    /// [`Ident`]s of variables that are modified in the statement
+    pub modified_variables: IndexSet<Ident>,
+    /// [`Ident`]s of variables that are used in an expression in the statement
+    pub used_variables: IndexSet<Ident>,
+}
+
+impl ModifiedVariableCollector {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl VisitorMut for ModifiedVariableCollector {
+    type Err = ();
+    fn visit_stmt(&mut self, s: &mut super::Stmt) -> Result<(), Self::Err> {
+        match &s.node {
+            StmtKind::Assign(vars, _) => {
+                self.modified_variables.extend(vars);
+            }
+            StmtKind::Var(var) => {
+                self.declared_variables.insert(var.borrow().name);
+            }
+            _ => {}
+        }
+        walk_stmt(self, s)?;
+        Ok(())
+    }
+
+    fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
+        match &mut e.kind {
+            ExprKind::Var(ident) => {
+                self.used_variables.insert(*ident);
+                Ok(())
+            }
+            _ => walk_expr(self, e),
         }
     }
 }

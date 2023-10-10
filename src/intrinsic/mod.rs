@@ -4,7 +4,9 @@
 //!
 //! This module provides a framework to define intrinsics in a modular way.
 
+pub mod annotations;
 pub mod distributions;
+
 pub mod list;
 
 use std::fmt;
