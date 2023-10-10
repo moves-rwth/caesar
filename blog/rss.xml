@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+    <channel>
+        <title>Caesar Blog</title>
+        <link>https://caesarverifier.org/blog</link>
+        <description>Caesar Blog</description>
+        <lastBuildDate>Thu, 28 Sep 2023 00:00:00 GMT</lastBuildDate>
+        <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
+        <generator>https://github.com/jpmonette/feed</generator>
+        <language>en</language>
+        <item>
+            <title><![CDATA[Paper Accepted at OOPSLA '23]]></title>
+            <link>https://caesarverifier.org/blog/oopsla23</link>
+            <guid>https://caesarverifier.org/blog/oopsla23</guid>
+            <pubDate>Thu, 28 Sep 2023 00:00:00 GMT</pubDate>
+            <description><![CDATA[HeyVL and Caesar were accepted at OOPSLA '23: A Deductive Verification Infrastructure for Probabilistic Programs by Schröer et al.]]></description>
+            <content:encoded><![CDATA[<p>HeyVL and Caesar were accepted at <a href="https://2023.splashcon.org/track/splash-2023-oopsla" target="_blank" rel="noopener noreferrer">OOPSLA '23</a>: <a href="https://doi.org/10.1145/3622870" target="_blank" rel="noopener noreferrer">A Deductive Verification Infrastructure for Probabilistic Programs</a> by Schröer et al.
+The artifact received the <em>reusable</em> badge, which is the highest possible badge.</p><p>The preprint is available on arxiv: <a href="https://arxiv.org/abs/2309.07781" target="_blank" rel="noopener noreferrer">https://arxiv.org/abs/2309.07781</a>.</p><p>You can find more information on our <a href="/docs/publications">publications page</a>.</p>]]></content:encoded>
+            <category>publications</category>
+        </item>
+    </channel>
+</rss>
