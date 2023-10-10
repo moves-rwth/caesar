@@ -1,4 +1,4 @@
-//! Intrinsic annotations 
+//! Intrinsic annotations
 use std::rc::Rc;
 
 use ariadne::ReportKind;

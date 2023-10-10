@@ -137,7 +137,7 @@ impl Encoding for OmegaInvAnnotation {
         )
         .unwrap();
 
-        //Phi_x(0)
+        // Phi_x(0)
         let null_iter = encode_iter(
             annotation_span,
             inner_stmt,

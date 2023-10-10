@@ -21,8 +21,9 @@ use std::{fmt, rc::Rc};
 
 use crate::{
     ast::{
-        visit::VisitorMut, DeclKind, Direction, Expr, Files, Ident, Param, ProcSpec,
-        SourceFilePath, Span, Stmt, StmtKind,
+        visit::{walk_stmt, VisitorMut},
+        DeclKind, Direction, Expr, Files, Ident, Param, ProcSpec, SourceFilePath, Span, Stmt,
+        StmtKind,
     },
     driver::{Item, SourceUnit},
     front::{
@@ -114,6 +115,8 @@ pub struct EncCall<'tcx, 'sunit> {
     tcx: &'tcx mut TyCtx,
     source_units_buf: &'sunit mut Vec<Item<SourceUnit>>,
     direction: Option<Direction>,
+    is_one_loop: bool,
+    nesting_level: u128,
 }
 
 impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
@@ -122,6 +125,8 @@ impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
             tcx,
             source_units_buf,
             direction: Option::None,
+            is_one_loop: true,
+            nesting_level: 0,
         }
     }
 }
@@ -137,146 +142,95 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
         Ok(())
     }
 
-    fn visit_stmts(&mut self, stmts: &mut Vec<Stmt>) -> Result<(), Self::Err> {
-        // Check if the program consists of only one loop
-        let mut encoding: Option<(Rc<dyn Encoding>, Span)> = None;
+    fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
+        match &mut s.node {
+            // If the statement is a block, increase the nesting level and walk the block
+            StmtKind::If(_, _, _)
+            | StmtKind::Angelic(_, _)
+            | StmtKind::Demonic(_, _)
+            | StmtKind::Block(_) => {
+                self.nesting_level += 1;
+                // Save the context of the is_one_loop flag
+                let is_one_loop_temp = self.is_one_loop;
+                // Reset the is_one_loop flag
+                self.is_one_loop = true;
+                walk_stmt(self, s)?;
+                // Restore the context of the is_one_loop flag
+                self.is_one_loop = is_one_loop_temp;
+                self.nesting_level -= 1;
+            }
+            // If the statement is an annotation, transform it
+            StmtKind::Annotation(ident, inputs, inner_stmt) => {
+                // First visit the statement that is annotated and handle inner annotations
+                self.nesting_level += 1;
+                let is_one_loop_temp = self.is_one_loop;
+                self.is_one_loop = true;
+                self.visit_stmt(inner_stmt)?;
+                self.is_one_loop = is_one_loop_temp;
+                self.nesting_level -= 1;
 
-        let mut is_one_loop = true;
-        for s in &mut *stmts {
-            match &mut s.node {
-                StmtKind::Annotation(ident, _, _) => {
-                    if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
-                        self.tcx.get(*ident).unwrap().as_ref()
-                    {
-                        encoding = Some((anno_ref.clone(), s.span));
+                if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
+                    self.tcx.get(*ident).unwrap().as_ref()
+                {
+                    if let StmtKind::While(_, _) = inner_stmt.node {
+                    } else {
+                        return Err(AnnotationError::NotOnWhile(
+                            s.span,
+                            *ident,
+                            inner_stmt.as_ref().clone(),
+                        ));
+                    }
+
+                    // If the annotated encoding only supports one loop programs but the program is not a one loop program throw an error
+                    if anno_ref.is_one_loop() && (!self.is_one_loop || self.nesting_level > 0) {
+                        return Err(AnnotationError::OneLoopOnly(s.span, anno_ref.name()));
+                    }
+
+                    let mut enc_gen = anno_ref.transform(
+                        self.tcx,
+                        s.span,
+                        inputs,
+                        inner_stmt,
+                        self.direction
+                            .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,
+                    )?;
+
+                    let stmts = &mut enc_gen.stmts;
+                    let span = enc_gen.span;
+                    let decls_opt = &mut enc_gen.decls;
+
+                    // Visit generated statements
+                    self.visit_stmts(stmts)?;
+                    s.span = span;
+                    s.node = StmtKind::Block(stmts.to_vec());
+
+                    if let Some(ref mut decls) = decls_opt {
+                        // Visit generated declarations
+                        self.visit_decls(decls)?;
+
+                        // Wrap generated declarations in items
+                        let items: Vec<Item<SourceUnit>> = decls
+                            .iter_mut()
+                            .map(|decl| {
+                                SourceUnit::Decl(decl.to_owned())
+                                    .wrap_item(&SourceFilePath::Generated)
+                            })
+                            .collect();
+
+                        self.source_units_buf.extend(items)
                     }
                 }
-                StmtKind::Var(_) => {}
-                _ => {
-                    is_one_loop = false;
-                }
             }
-        }
-        // If the annotated encoding only supports one loop programs throw an error
-        if let Some((enc, span)) = encoding {
-            if enc.is_one_loop() && !is_one_loop {
-                return Err(AnnotationError::OneLoopOnly(span, enc.name()));
+            // Var declarations are still allowed in one loop programs
+            StmtKind::Var(_) => {
+                walk_stmt(self, s)?;
             }
-        }
-
-        for s in stmts {
-            self.visit_stmt(s)?;
-        }
-        Ok(())
-    }
-
-    fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
-        walk_stmt(self, s)?;
-        if let StmtKind::Annotation(ident, inputs, inner_stmt) = &mut s.node {
-            if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
-                self.tcx.get(*ident).unwrap().as_ref()
-            {
-                if let StmtKind::While(_, _) = inner_stmt.node {
-                } else {
-                    return Err(AnnotationError::NotOnWhile(s.span, *ident, s.clone()));
-                }
-
-                let mut enc_gen = anno_ref.transform(
-                    self.tcx,
-                    s.span,
-                    inputs,
-                    inner_stmt,
-                    self.direction
-                        .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,
-                )?;
-
-                let stmts = &mut enc_gen.stmts;
-                let span = enc_gen.span;
-                let decls_opt = &mut enc_gen.decls;
-
-                // Visit generated statements
-                self.visit_stmts(stmts)?;
-                s.span = span;
-                s.node = StmtKind::Block(stmts.to_vec());
-
-                if let Some(ref mut decls) = decls_opt {
-                    // Visit generated declarations
-                    self.visit_decls(decls)?;
-
-                    // Wrap generated declarations in items
-                    let items: Vec<Item<SourceUnit>> = decls
-                        .iter_mut()
-                        .map(|decl| {
-                            SourceUnit::Decl(decl.to_owned()).wrap_item(&SourceFilePath::Generated)
-                        })
-                        .collect();
-
-                    self.source_units_buf.extend(items)
-                }
+            // If the statement is not an annotation, it is not a one loop program anymore
+            _ => {
+                self.is_one_loop = true;
+                walk_stmt(self, s)?;
             }
         }
         Ok(())
     }
-}
-
-pub fn walk_stmt<V: VisitorMut>(visitor: &mut V, s: &mut Stmt) -> Result<(), V::Err> {
-    match &mut s.node {
-        StmtKind::Block(ref mut block) => {
-            visitor.visit_stmts(block)?;
-        }
-        StmtKind::Var(decl_ref) => {
-            visitor.visit_var_decl(decl_ref)?;
-        }
-        StmtKind::Assign(ref mut lhses, ref mut rhs) => {
-            for lhs in lhses {
-                visitor.visit_ident(lhs)?;
-            }
-            visitor.visit_expr(rhs)?;
-        }
-        StmtKind::Havoc(_dir, ref mut idents) => {
-            for ident in idents {
-                visitor.visit_ident(ident)?;
-            }
-        }
-        StmtKind::Assert(_dir, ref mut expr) => {
-            visitor.visit_expr(expr)?;
-        }
-        StmtKind::Assume(_dir, ref mut expr) => {
-            visitor.visit_expr(expr)?;
-        }
-        StmtKind::Compare(_dir, ref mut expr) => {
-            visitor.visit_expr(expr)?;
-        }
-        StmtKind::Negate(_dir) => {}
-        StmtKind::Validate(_dir) => {}
-        StmtKind::Tick(ref mut expr) => {
-            visitor.visit_expr(expr)?;
-        }
-        StmtKind::Demonic(ref mut block1, ref mut block2) => {
-            visitor.visit_stmts(block1)?;
-            visitor.visit_stmts(block2)?;
-        }
-        StmtKind::Angelic(ref mut block1, ref mut block2) => {
-            visitor.visit_stmts(block1)?;
-            visitor.visit_stmts(block2)?;
-        }
-        StmtKind::If(ref mut cond, ref mut block1, ref mut block2) => {
-            visitor.visit_expr(cond)?;
-            visitor.visit_stmts(block1)?;
-            visitor.visit_stmts(block2)?;
-        }
-        StmtKind::While(ref mut cond, ref mut block) => {
-            visitor.visit_expr(cond)?;
-            visitor.visit_stmts(block)?;
-        }
-        StmtKind::Annotation(ref mut ident, ref mut args, ref mut stmt) => {
-            visitor.visit_ident(ident)?;
-            visitor.visit_exprs(args)?;
-            visitor.visit_stmt(stmt)?;
-        }
-        StmtKind::Label(ref mut ident) => {
-            visitor.visit_ident(ident)?;
-        }
-    }
-    Ok(())
 }
