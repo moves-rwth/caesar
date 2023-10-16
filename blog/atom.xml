@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-    <id>https://caesarverifier.org/blog</id>
+    <id>https://www.caesarverifier.org/blog</id>
     <title>Caesar Blog</title>
     <updated>2023-09-28T00:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
-    <link rel="alternate" href="https://caesarverifier.org/blog"/>
+    <link rel="alternate" href="https://www.caesarverifier.org/blog"/>
     <subtitle>Caesar Blog</subtitle>
-    <icon>https://caesarverifier.org/img/laurel.svg</icon>
+    <icon>https://www.caesarverifier.org/img/laurel.svg</icon>
     <entry>
         <title type="html"><![CDATA[Paper Accepted at OOPSLA '23]]></title>
-        <id>https://caesarverifier.org/blog/oopsla23</id>
-        <link href="https://caesarverifier.org/blog/oopsla23"/>
+        <id>https://www.caesarverifier.org/blog/oopsla23</id>
+        <link href="https://www.caesarverifier.org/blog/oopsla23"/>
         <updated>2023-09-28T00:00:00.000Z</updated>
         <summary type="html"><![CDATA[HeyVL and Caesar were accepted at OOPSLA '23: A Deductive Verification Infrastructure for Probabilistic Programs by Schröer et al.]]></summary>
         <content type="html"><![CDATA[<p>HeyVL and Caesar were accepted at <a href="https://2023.splashcon.org/track/splash-2023-oopsla" target="_blank" rel="noopener noreferrer">OOPSLA '23</a>: <a href="https://doi.org/10.1145/3622870" target="_blank" rel="noopener noreferrer">A Deductive Verification Infrastructure for Probabilistic Programs</a> by Schröer et al.
