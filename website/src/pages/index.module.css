@@ -10,14 +10,14 @@
   overflow: hidden;
 }
 
-@media screen and (max-width: 996px) {
-  .heroBanner {
-    padding: 2rem;
-  }
-}
-
 .heroBannerRow {
   align-items: center;
+  grid-row-gap: 2em;
+}
+
+.heroTitle {
+  display: flex;
+  justify-content: center;
 }
 
 .heroLogo {
@@ -27,12 +27,29 @@
   vertical-align: middle;
 }
 
-.buttons {
+.quickButtons {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: wrap;
+  gap: 1em;
 } 
 
-.heroImage {
-  max-width: 500px;
+@media only screen and (min-width: 600px) {
+  .quickButtons * {
+    --ifm-button-size-multiplier: 1.32;
+  }
+}
+
+.heroImageWrapper {
+  display: grid;
+}
+
+.heroImageWrapper a {
+  justify-self: center;
+  align-self: center;
+  border-radius: 5px;
+  padding: 0.5em;
+  width: 100%;
+  max-width: 450px;
 }
