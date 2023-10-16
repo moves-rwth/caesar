@@ -7,7 +7,7 @@ import CodeBlock from '@theme/CodeBlock';
 const FeatureList = [
   {
     title: 'Expectation-Based Reasoning',
-    Svg: require('@site/static/img/expected-value.svg').default,
+    image: '/img/expected-value.svg',
     alt: 'E(X)',
     description: (
       <>
@@ -19,7 +19,7 @@ const FeatureList = [
   },
   {
     title: 'A Quantitative Intermediate Verification Language',
-    Svg: require('@site/static/img/heyvl.svg').default,
+    image: '/img/heyvl.svg',
     alt: 'HeyVL Logo',
     description: (
       <>
@@ -30,8 +30,8 @@ const FeatureList = [
     invertDark: true,
   },
   {
-  title: 'A Collaborative Effort',
-    Svg: require('@site/static/img/logos.svg').default,
+    title: 'A Collaborative Effort',
+    image: '/img/logos.svg',
     alt: 'i2 Logo',
     description: (
       <>
@@ -42,12 +42,19 @@ const FeatureList = [
   },
 ];
 
-function FeatureSvg({ title, Svg, alt, description, invertDark }) {
+function FeatureSvg({ title, image, alt, description, invertDark }) {
   const svgClassName = invertDark ? `${styles.featureSvg} ${styles.invertDark}` : styles.featureSvg;
+
+  // unfortunately, we can't embed an SVG image directly here using the Svg
+  // class because that breaks the CSS filter that we use in dark mode to invert
+  // the images in some browsers [1]. so we just use an img with a url.
+  //
+  // [1]: https://bugs.webkit.org/show_bug.cgi?id=104169
+
   return (
     <div className={clsx('col col--4')}>
       <div className="text--center">
-        <Svg className={svgClassName} role="img" alt={alt} />
+        <img src={image} className={svgClassName} alt={alt} />
       </div>
       <div className="text--center padding-horiz--md">
         <h3>{title}</h3>
@@ -107,9 +114,9 @@ export default function HomepageFeatures() {
             <p>
               Let's focus on the <i>quantitative specification</i> of <code>lossy_list</code>:
             </p>
-              <CodeBlock language='heyvl'>{`pre [len(init_l) == 1] * 0.5
+            <CodeBlock language='heyvl'>{`pre [len(init_l) == 1] * 0.5
 post [true]` }
-              </CodeBlock>
+            </CodeBlock>
             <p>
               The <code>post</code> says that we are looking at the expected value of <code>[true]</code> (i.e. 1) in the final states of the program. In other words, we are interested in the probability of running without an error.
             </p>
