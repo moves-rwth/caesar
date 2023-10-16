@@ -35,7 +35,7 @@ const FeatureList = [
     alt: 'i2 Logo',
     description: (
       <>
-        Caesar is an open-source project from the <Link to="https://moves.rwth-aachen.de/">MOVES group</Link> at <Link to="https://rwth-aachen.de">RWTH Aachen University</Link>, the <Link to="https://quave.cs.uni-saarland.de/">QUAVE group</Link> at <Link to="https://www.uni-saarland.de/">University of Saarland</Link> and the <Link to="https://www.compute.dtu.dk/english/research/research-sections/software-systems-engineering">SSE section</Link> at <Link to="https://www.dtu.dk/english/">Denmark Technical University</Link> (DTU).
+        Caesar is an open-source project from <Link to="https://moves.rwth-aachen.de/">RWTH Aachen University (MOVES group)</Link>, <Link to="https://quave.cs.uni-saarland.de/">Saarland University (QUAVE group)</Link>, <Link to="https://www.compute.dtu.dk/english/research/research-sections/software-systems-engineering">Denmark Technical University (SSE section)</Link>, and <Link to="http://pplv.cs.ucl.ac.uk/welcome/">University College London (PPLV group)</Link>.
       </>
     ),
     invertDark: false,
