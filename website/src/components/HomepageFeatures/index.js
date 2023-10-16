@@ -71,7 +71,7 @@ export default function HomepageFeatures() {
 
         <div className="row">
           <div className="col col--12">
-            <h2>Quick Start: Lossy List Traversal</h2>
+            <h2>Features of HeyVL &mdash; Lossy List Traversal Example</h2>
             <p>Let's look at a program that traverses a list but has a chance of crashing during the traversal. We'll verify that the crash probability is at least 50% if the list has length 1.</p>
             <p>
               We explain more of the details <Link to="/docs/getting-started/verifying-heyvl">as part of our getting started guide</Link>.
@@ -101,6 +101,30 @@ export default function HomepageFeatures() {
 `}
             </CodeBlock>
           </div>
+
+          <div className="col col--6">
+            <h3>📐 Reading The Spec</h3>
+            <p>
+              Let's focus on the <i>quantitative specification</i> of <code>lossy_list</code>:
+            </p>
+              <CodeBlock language='heyvl'>{`pre [len(init_l) == 1] * 0.5
+post [true]` }
+              </CodeBlock>
+            <p>
+              The <code>post</code> says that we are looking at the expected value of <code>[true]</code> (i.e. 1) in the final states of the program. In other words, we are interested in the probability of running without an error.
+            </p>
+            <p>
+              The <code>pre</code> specifies a lower bound to the probability of a run without crashing (expected value of the post <code>[true]</code>).
+              It says that if the length of the list is 1, then the lower bound is <code>0.5</code> and otherwise <code>0</code>.
+            </p>
+            <p>To verify the spec, the <code>while</code> loop has an <code>@invariant</code> annotation with a <Link to="/docs/proof-rules/induction">probabilistic invariant</Link>.</p>
+
+          </div>
+
+        </div>
+
+        <div className="row">
+
           <div className="col col--6">
             <h3>🌍 Axiomatizing Exponentials and Lists</h3>
             <p>Here is a strength of deductive verification: users can axomatize additional functions and data types that can be used for verification! We simply declare the <Link to="/docs/heyvl/domains">uninterpreted sort and functions</Link> with just the necessary axioms in HeyVL.</p>
@@ -122,27 +146,7 @@ domain List {
 }`}
             </CodeBlock>
           </div>
-        </div>
 
-        <div className="row">
-          <div className="col col--6">
-            <h3>📐 Reading The Spec</h3>
-            <p>
-              Let's focus on the <i>quantitative specification</i> of <code>lossy_list</code>:
-            </p>
-              <CodeBlock language='heyvl'>{`pre [len(init_l) == 1] * 0.5
-post [true]` }
-              </CodeBlock>
-            <p>
-              The <code>post</code> says that we are looking at the expected value of <code>[true]</code> (i.e. 1) in the final states of the program. In other words, we are interested in the probability of running without an error.
-            </p>
-            <p>
-              The <code>pre</code> specifies a lower bound to the probability of a run without crashing (expected value of the post <code>[true]</code>).
-              It says that if the length of the list is 1, then the lower bound is <code>0.5</code> and otherwise <code>0</code>.
-            </p>
-            <p>To verify the spec, the <code>while</code> loop has an <code>@invariant</code> annotation with a <Link to="/docs/proof-rules/induction">probabilistic invariant</Link>.</p>
-
-          </div>
           <div className="col col--6">
             <h3>🏃 Running Caesar</h3>
             After <Link to="https://www.rust-lang.org/tools/install">installing Rust</Link>, install the <code>caesar</code> binary (<Link to="/docs/getting-started">c.f. <i>Getting Started</i></Link>):
