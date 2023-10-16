@@ -7,7 +7,7 @@ const darkCodeTheme = require('prism-react-renderer/themes/nightOwl');
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'Caesar',
-  tagline: 'A Deductive Verifier for Probabilistic Programs',
+  tagline: 'Verify probabilistic programs with Caesar, a deductive verifier built on the HeyVL intermediate verification language.',
   favicon: 'img/laurel.svg',
 
   // Set the production url of your site here
@@ -67,7 +67,7 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       // Replace with your project's social card
-      image: 'img/architecture-oopsla23.svg',
+      image: 'img/social-card.png',
       navbar: {
         title: 'Caesar',
         logo: {

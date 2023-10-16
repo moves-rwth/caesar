@@ -38,7 +38,7 @@ function HomepageHeader() {
           </div>
           <div className={`col col--5 ${styles.heroImageWrapper}`}>
             <Link to="/docs/" className={`margin--md shadow--md`} >
-              <img src="img/architecture-oopsla23.svg" />
+              <img src="img/architecture-oopsla23.svg" alt="Architecture diagram for Caesar" />
             </Link>
           </div>
         </div>
