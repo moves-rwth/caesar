@@ -6,9 +6,8 @@ sidebar_position: 4
 
 The "standard library" consists of all built-in types, functions, and procedures of Caesar.
 
-Contents:
+```mdx-code-block
+import DocCardList from '@theme/DocCardList';
 
- * [Booleans](./booleans.md),
- * [Number types](./numbers.md),
- * [Lists](./lists.md),
- * [Distribution expressions](./distributions.md).
+<DocCardList />
+```

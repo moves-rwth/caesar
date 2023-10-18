@@ -42,7 +42,7 @@ const FeatureList = [
   },
 ];
 
-function FeatureSvg({ title, image, alt, description, invertDark }) {
+function FeatureBox({ title, image, alt, description, invertDark }) {
   const svgClassName = invertDark ? `${styles.featureSvg} ${styles.invertDark}` : styles.featureSvg;
 
   // unfortunately, we can't embed an SVG image directly here using the Svg
@@ -52,7 +52,7 @@ function FeatureSvg({ title, image, alt, description, invertDark }) {
   // [1]: https://bugs.webkit.org/show_bug.cgi?id=104169
 
   return (
-    <div className={clsx('col col--4')}>
+    <div className={clsx('col col--4', styles.featureBox)}>
       <div className="text--center">
         <img src={image} className={svgClassName} alt={alt} />
       </div>
@@ -70,7 +70,7 @@ export default function HomepageFeatures() {
       <div className="container">
         <div className="row">
           {FeatureList.map((props, idx) => (
-            <FeatureSvg key={idx} {...props} />
+            <FeatureBox key={idx} {...props} />
           ))}
         </div>
 
@@ -156,14 +156,18 @@ domain List {
 
           <div className="col col--6">
             <h3>🏃 Running Caesar</h3>
-            After <Link to="https://www.rust-lang.org/tools/install">installing Rust</Link>, install the <code>caesar</code> binary (<Link to="/docs/getting-started">c.f. <i>Getting Started</i></Link>):
+            <p>
+              After <Link to="https://www.rust-lang.org/tools/install">installing Rust</Link>, install the <code>caesar</code> binary (<Link to="/docs/getting-started">c.f. <i>Getting Started</i></Link>):
+            </p>
             <CodeBlock language='bash'>{`git clone git@github.com:moves-rwth/caesar.git
 cd caesar
 cargo install --path . caesar
 caesar tests/domains/lossy_list.heyvl` }
             </CodeBlock>
-            This will run Caesar on the example above (it is included in the Git repository).
-            Caesar will print: <code>tests/domains/lossy_list.heyvl: Verified.</code>
+            <p>
+              This will run Caesar on the example above (it is included in the Git repository).
+              Caesar will print: <code>tests/domains/lossy_list.heyvl: Verified.</code>
+            </p>
           </div>
         </div>
 

@@ -39,3 +39,16 @@
   --ifm-color-primary-lightest: #4fddbf;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
+
+/* Link decorations */
+p a, .markdown ul a {
+  --ifm-link-decoration: underline;
+}
+
+p a:hover, .markdown ul a:hover {
+  text-decoration: none;
+}
+
+a.button {
+  text-decoration: none;
+}
