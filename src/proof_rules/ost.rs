@@ -193,16 +193,14 @@ impl Encoding for OSTAnnotation {
         };
         let cond1_proc = generate_proc(annotation_span, cond1_proc_info, tcx);
 
+        let mut cond2_next_iter = vec![Spanned::new(
+            annotation_span,
+            StmtKind::Tick(builder.cast(TyKind::EUReal, builder.uint(1))),
+        )];
+        cond2_next_iter.extend(hey_const(annotation_span, past_inv, tcx));
         // Condition 2 : \Phi_{0}(past_I) <= past_I, so ert[P](0) <= past_I
         let mut cond2_body = init_assigns.clone();
-        cond2_body.push(
-            encode_iter(
-                annotation_span,
-                inner_stmt,
-                hey_const(annotation_span, past_inv, tcx),
-            )
-            .unwrap(),
-        );
+        cond2_body.push(encode_iter(annotation_span, inner_stmt, cond2_next_iter).unwrap());
 
         let cond2_proc_info = ProcInfo {
             name: "past".to_string(),
@@ -357,7 +355,11 @@ impl Encoding for OSTAnnotation {
         })
     }
 
-    fn is_one_loop(&self) -> bool {
-        false
+    fn is_terminator(&self) -> bool {
+        true
+    }
+
+    fn no_nesting(&self) -> bool {
+        true
     }
 }

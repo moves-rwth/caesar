@@ -76,8 +76,12 @@ impl Encoding for ASTAnnotation {
         self.0.name
     }
 
-    fn is_one_loop(&self) -> bool {
-        true
+    fn is_terminator(&self) -> bool {
+        false
+    }
+
+    fn no_nesting(&self) -> bool {
+        false
     }
 
     fn resolve(

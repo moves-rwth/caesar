@@ -76,7 +76,9 @@ pub trait Encoding: fmt::Debug {
         direction: Direction,
     ) -> Result<EncodingGenerated, AnnotationError>;
 
-    fn is_one_loop(&self) -> bool;
+    fn is_terminator(&self) -> bool;
+
+    fn no_nesting(&self) -> bool;
 }
 
 /// Initialize all intrinsic annotations by declaring them
@@ -115,8 +117,8 @@ pub struct EncCall<'tcx, 'sunit> {
     tcx: &'tcx mut TyCtx,
     source_units_buf: &'sunit mut Vec<Item<SourceUnit>>,
     direction: Option<Direction>,
-    is_one_loop: bool,
-    nesting_level: u128,
+    terminator_annotation: Option<Ident>,
+    nesting_level: usize,
 }
 
 impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
@@ -125,7 +127,7 @@ impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
             tcx,
             source_units_buf,
             direction: Option::None,
-            is_one_loop: true,
+            terminator_annotation: None,
             nesting_level: 0,
         }
     }
@@ -144,29 +146,11 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
 
     fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
         match &mut s.node {
-            // If the statement is a block, increase the nesting level and walk the block
-            StmtKind::If(_, _, _)
-            | StmtKind::Angelic(_, _)
-            | StmtKind::Demonic(_, _)
-            | StmtKind::Block(_) => {
-                self.nesting_level += 1;
-                // Save the context of the is_one_loop flag
-                let is_one_loop_temp = self.is_one_loop;
-                // Reset the is_one_loop flag
-                self.is_one_loop = true;
-                walk_stmt(self, s)?;
-                // Restore the context of the is_one_loop flag
-                self.is_one_loop = is_one_loop_temp;
-                self.nesting_level -= 1;
-            }
             // If the statement is an annotation, transform it
             StmtKind::Annotation(ident, inputs, inner_stmt) => {
                 // First visit the statement that is annotated and handle inner annotations
                 self.nesting_level += 1;
-                let is_one_loop_temp = self.is_one_loop;
-                self.is_one_loop = true;
                 self.visit_stmt(inner_stmt)?;
-                self.is_one_loop = is_one_loop_temp;
                 self.nesting_level -= 1;
 
                 if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
@@ -181,11 +165,11 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                         ));
                     }
 
-                    // If the annotated encoding only supports one loop programs but the program is not a one loop program throw an error
-                    if anno_ref.is_one_loop() && (!self.is_one_loop || self.nesting_level > 0) {
-                        return Err(AnnotationError::OneLoopOnly(s.span, anno_ref.name()));
+                    if anno_ref.no_nesting() && self.nesting_level > 0 {
+                        return Err(AnnotationError::NoNesting(s.span, anno_ref.name()));
                     }
 
+                    // Generate new statements (and declarations) from the annotated loop
                     let mut enc_gen = anno_ref.transform(
                         self.tcx,
                         s.span,
@@ -201,9 +185,12 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
 
                     // Visit generated statements
                     self.visit_stmts(stmts)?;
+
+                    // Replace the annotated loop with the generated statements
                     s.span = span;
                     s.node = StmtKind::Block(stmts.to_vec());
 
+                    // Add the generated declarations to the list of source units of the compilation unit
                     if let Some(ref mut decls) = decls_opt {
                         // Visit generated declarations
                         self.visit_decls(decls)?;
@@ -219,16 +206,33 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
 
                         self.source_units_buf.extend(items)
                     }
+
+                    // Check if the annotation is a terminator annotation and set the flag
+                    if anno_ref.is_terminator() {
+                        self.terminator_annotation = Some(anno_ref.name());
+                    }
                 }
             }
-            // Var declarations are still allowed in one loop programs
-            StmtKind::Var(_) => {
-                walk_stmt(self, s)?;
+            // If the statement is a block, increase the nesting level and walk the block
+            StmtKind::If(_, _, _)
+            | StmtKind::Angelic(_, _)
+            | StmtKind::Demonic(_, _)
+            | StmtKind::Block(_) => {
+                if let Some(anno_name) = self.terminator_annotation {
+                    return Err(AnnotationError::NotTerminator(s.span, anno_name));
+                } else {
+                    self.nesting_level += 1;
+                    walk_stmt(self, s)?;
+                    self.nesting_level -= 1;
+                }
             }
-            // If the statement is not an annotation, it is not a one loop program anymore
             _ => {
-                self.is_one_loop = true;
-                walk_stmt(self, s)?;
+                // If there was a terminator annotation before, don't allow further statements
+                if let Some(anno_name) = self.terminator_annotation {
+                    return Err(AnnotationError::NotTerminator(s.span, anno_name));
+                } else {
+                    walk_stmt(self, s)?
+                }
             }
         }
         Ok(())

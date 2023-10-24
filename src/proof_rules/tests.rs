@@ -141,7 +141,7 @@ fn test_ost_transform() {
             proc lt_infinity(a: Bool) -> () {
                 assert ?(((cast(EUReal, 2) * [a]) < ∞))
             }
-            proc past(init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt) -> (
+            coproc past(init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt) -> (
                 prob_choice: Bool, a: Bool, b: UInt, k: UInt
             )
                 pre ((cast(EUReal, 2) * [a]))[a -> init_a]
@@ -155,13 +155,14 @@ fn test_ost_transform() {
                     prob_choice = flip(((cast(UReal, 1) / cast(UReal, 2))))
                     if prob_choice { a = false } else { b = (b + 1) }
                     k = (k + 1)
+                    tick cast(EUReal, 1)
                     assert (cast(EUReal, 2) * [a])
                     assume cast(EUReal, 0)
                 } else {
             
                 }
             }
-            proc conditional_difference_bounded(
+            coproc conditional_difference_bounded(
                 init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt
             ) -> (prob_choice: Bool, a: Bool, b: UInt, k: UInt)
                 pre cast(EUReal, cast(UReal, 1))
@@ -194,7 +195,7 @@ fn test_ost_transform() {
             proc harmonize_I_f(a: Bool, b: UInt) -> () {
                 assert ?((! (a) → ((cast(EUReal, b) + [a]) == cast(EUReal, b))))
             }
-            proc loopiter_lt_infty(
+            coproc loopiter_lt_infty(
                 init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt
             ) -> (prob_choice: Bool, a: Bool, b: UInt, k: UInt)
                 pre cast(EUReal, 0)
@@ -291,7 +292,7 @@ fn test_past_transform() {
                     )
                 )
             }
-            proc past(init_x: UInt) -> (x: UInt)
+            coproc past(init_x: UInt) -> (x: UInt)
                 pre ([(1 <= x)] * ((cast(EUReal, (x + 1)))[x -> init_x] - 5/10))
                 post cast(EUReal, 0)
             {
@@ -354,7 +355,7 @@ fn test_ast_transform() {
         proc termination_condition(x: UInt) -> () {
             assert ?((! ((1 <= x)) == (cast(EUReal, x) == cast(EUReal, 0))))
         }
-        proc V_wp_superinvariant(init_x: UInt) -> (x: UInt)
+        coproc V_wp_superinvariant(init_x: UInt) -> (x: UInt)
             pre (cast(EUReal, x))[x -> init_x]
             post cast(EUReal, x)
         {

@@ -247,20 +247,23 @@ impl ProcDecl {
 
 impl SimplePretty for ProcDecl {
     fn pretty(&self) -> Doc {
-        let mut res = Doc::text("proc")
-            .append(Doc::space())
-            .append(Doc::as_string(self.name.name))
-            .append(parens_group(Doc::intersperse(
-                self.inputs.node.iter().map(|param| param.pretty()),
-                Doc::text(", "),
-            )))
-            .append(Doc::space())
-            .append(Doc::text("->"))
-            .append(Doc::space())
-            .append(parens_group(Doc::intersperse(
-                self.outputs.node.iter().map(|param| param.pretty()),
-                Doc::text(", "),
-            )));
+        let mut res = Doc::text(match self.direction {
+            Direction::Down => "proc",
+            Direction::Up => "coproc",
+        })
+        .append(Doc::space())
+        .append(Doc::as_string(self.name.name))
+        .append(parens_group(Doc::intersperse(
+            self.inputs.node.iter().map(|param| param.pretty()),
+            Doc::text(", "),
+        )))
+        .append(Doc::space())
+        .append(Doc::text("->"))
+        .append(Doc::space())
+        .append(parens_group(Doc::intersperse(
+            self.outputs.node.iter().map(|param| param.pretty()),
+            Doc::text(", "),
+        )));
         if !self.spec.is_empty() {
             res = res
                 .append(
