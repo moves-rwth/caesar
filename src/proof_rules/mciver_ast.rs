@@ -120,6 +120,7 @@ impl Encoding for ASTAnnotation {
         &self,
         tcx: &TyCtx,
         annotation_span: Span,
+        base_proc_ident: Ident,
         args: &[Expr],
         inner_stmt: &Stmt,
         _direction: Direction,
@@ -248,7 +249,7 @@ impl Encoding for ASTAnnotation {
             direction: Direction::Down,
         };
 
-        let cond1_proc = generate_proc(annotation_span, cond1_proc_info, tcx);
+        let cond1_proc = generate_proc(annotation_span, cond1_proc_info, base_proc_ident, tcx);
 
         let cond2_proc_info = ProcInfo {
             name: "decrease_antitone".to_string(),
@@ -263,7 +264,7 @@ impl Encoding for ASTAnnotation {
         };
 
         // decrease antitone
-        let cond2_proc = generate_proc(annotation_span, cond2_proc_info, tcx);
+        let cond2_proc = generate_proc(annotation_span, cond2_proc_info, base_proc_ident, tcx);
 
         let cond3_expr = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), invariant.clone());
 
@@ -296,7 +297,7 @@ impl Encoding for ASTAnnotation {
             direction: Direction::Down,
         };
 
-        let cond3_proc = generate_proc(annotation_span, cond3_proc_info, tcx);
+        let cond3_proc = generate_proc(annotation_span, cond3_proc_info, base_proc_ident, tcx);
 
         // ?((~loop_guard) == (variant = 0))
         let cond4_expr = builder.unary(
@@ -328,7 +329,7 @@ impl Encoding for ASTAnnotation {
             )],
             direction: Direction::Down,
         };
-        let cond4_proc = generate_proc(annotation_span, cond4_proc_info, tcx);
+        let cond4_proc = generate_proc(annotation_span, cond4_proc_info, base_proc_ident, tcx);
         let mut cond5_body = init_assigns.clone();
         cond5_body.push(
             encode_iter(
@@ -353,7 +354,7 @@ impl Encoding for ASTAnnotation {
             direction: Direction::Up,
         };
 
-        let cond5_proc = generate_proc(annotation_span, cond5_proc_info, tcx);
+        let cond5_proc = generate_proc(annotation_span, cond5_proc_info, base_proc_ident, tcx);
 
         let cond6_pre = builder.binary(
             BinOpKind::Mul,
@@ -412,7 +413,7 @@ impl Encoding for ASTAnnotation {
             direction: Direction::Down,
         };
 
-        let cond6_proc = generate_proc(annotation_span, cond6_proc_info, tcx);
+        let cond6_proc = generate_proc(annotation_span, cond6_proc_info, base_proc_ident, tcx);
 
         Ok(EncodingGenerated {
             span: annotation_span,

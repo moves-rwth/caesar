@@ -89,6 +89,7 @@ impl Encoding for PASTAnnotation {
         &self,
         tcx: &TyCtx,
         annotation_span: Span,
+        base_proc_ident: Ident,
         args: &[Expr],
         inner_stmt: &Stmt,
         _direction: Direction,
@@ -184,7 +185,7 @@ impl Encoding for PASTAnnotation {
             )],
             direction: Direction::Down,
         };
-        let cond1_proc = generate_proc(annotation_span, cond1_proc_info, tcx);
+        let cond1_proc = generate_proc(annotation_span, cond1_proc_info, base_proc_ident, tcx);
 
         // [guard] * k <= (([guard] * invariant) + [!guard])
         let cond2_expr = builder.binary(
@@ -235,7 +236,7 @@ impl Encoding for PASTAnnotation {
             )],
             direction: Direction::Down,
         };
-        let cond2_proc = generate_proc(annotation_span, cond2_proc_info, tcx);
+        let cond2_proc = generate_proc(annotation_span, cond2_proc_info, base_proc_ident, tcx);
 
         // Condition 3: \Phi_0(I) <= [G] * (I - eps)
         let mut cond3_body = init_assigns;
@@ -267,7 +268,7 @@ impl Encoding for PASTAnnotation {
             direction: Direction::Up,
         };
 
-        let cond3_proc = generate_proc(annotation_span, cond3_proc_info, tcx);
+        let cond3_proc = generate_proc(annotation_span, cond3_proc_info, base_proc_ident, tcx);
 
         Ok(EncodingGenerated {
             span: annotation_span,

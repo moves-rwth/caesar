@@ -71,6 +71,7 @@ pub trait Encoding: fmt::Debug {
         &self,
         tyctx: &TyCtx,
         annotation_span: Span,
+        base_proc_ident: Ident,
         args: &[Expr],
         inner_stmt: &Stmt,
         direction: Direction,
@@ -117,6 +118,7 @@ pub struct EncCall<'tcx, 'sunit> {
     direction: Option<Direction>,
     terminator_annotation: Option<Ident>,
     nesting_level: usize,
+    current_proc_ident: Option<Ident>,
 }
 
 impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
@@ -127,6 +129,7 @@ impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
             direction: Option::None,
             terminator_annotation: None,
             nesting_level: 0,
+            current_proc_ident: None,
         }
     }
 }
@@ -137,6 +140,7 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
     fn visit_decl(&mut self, decl: &mut DeclKind) -> Result<(), Self::Err> {
         if let DeclKind::ProcDecl(decl_ref) = decl {
             self.direction = Some(decl_ref.borrow().direction);
+            self.current_proc_ident = Some(decl_ref.borrow().name);
             self.visit_proc(decl_ref)?;
         }
         Ok(())
@@ -172,6 +176,8 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                     let mut enc_gen = anno_ref.transform(
                         self.tcx,
                         s.span,
+                        self.current_proc_ident
+                            .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,
                         inputs,
                         inner_stmt,
                         self.direction
@@ -192,7 +198,9 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                     // Add the generated declarations to the list of source units of the compilation unit
                     if let Some(ref mut decls) = decls_opt {
                         // Visit generated declarations
+                        let temp = self.current_proc_ident;
                         self.visit_decls(decls)?;
+                        self.current_proc_ident = temp;
 
                         // Wrap generated declarations in items
                         let items: Vec<Item<SourceUnit>> = decls

@@ -68,8 +68,10 @@ impl TyCtx {
         self.globals.insert(ident);
     }
 
-    pub fn fresh_var(&self, ident: Ident, span_variant: SpanVariant) -> Ident {
-        let new_ident = loop {
+    /// Generate a fresh identifier based on the given one.
+    /// Example: Given `x` as input [`Ident`], if `x` already exists than `x_1` is returned as long as `x_1` doesn't exist
+    pub fn fresh_ident(&self, ident: Ident, span_variant: SpanVariant) -> Ident {
+        loop {
             let mut fresh = self.fresh.borrow_mut();
             let index = fresh.entry(ident).and_modify(|e| *e += 1).or_insert(0);
             let new_name = format!("{}_{}", ident.name.to_owned(), index);
@@ -78,9 +80,13 @@ impl TyCtx {
                 span: ident.span.variant(span_variant),
             };
             if !self.declarations.borrow().contains_key(&new_ident) {
-                break new_ident;
+                return new_ident;
             }
-        };
+        }
+    }
+
+    pub fn fresh_var(&self, ident: Ident, span_variant: SpanVariant) -> Ident {
+        let new_ident = self.fresh_ident(ident, span_variant);
 
         // now take the old declaration and create a new one with the new name.
         // this is somewhat involved due to the [`DeclRef`]s everywhere.

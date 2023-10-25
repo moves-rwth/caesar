@@ -97,6 +97,7 @@ impl Encoding for OmegaInvAnnotation {
         &self,
         tcx: &TyCtx,
         annotation_span: Span,
+        _base_proc_ident: Ident,
         args: &[Expr],
         inner_stmt: &Stmt,
         direction: Direction,

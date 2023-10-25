@@ -196,11 +196,23 @@ pub fn to_init_expr(tcx: &TyCtx, span: Span, expr: &Expr, variables: &[Ident]) -
 }
 
 /// Construct and declare a [`DeclKind::ProcDecl`] instance with the given arguments
-pub fn generate_proc(span: Span, proc_info: ProcInfo, tcx: &TyCtx) -> DeclKind {
+pub fn generate_proc(
+    span: Span,
+    proc_info: ProcInfo,
+    base_proc_ident: Ident,
+    tcx: &TyCtx,
+) -> DeclKind {
+    // construct the name of the new procedure by appending the proc name to the base proc name
+    let ident = Ident::with_dummy_span(Symbol::intern(
+        format!("{}_{}", base_proc_ident.name, proc_info.name).as_str(),
+    ));
+    // get a fresh ident to avoid name conflicts
+    let name = tcx.fresh_ident(ident, SpanVariant::Encoding);
+
     let decl = DeclKind::ProcDecl(DeclRef::new(ProcDecl {
         direction: proc_info.direction,
         // TODO: replace the dummy span with a proper span
-        name: Ident::with_dummy_span(Symbol::intern(proc_info.name.as_str())),
+        name,
         inputs: Spanned::new(span, proc_info.inputs),
         outputs: Spanned::new(span, proc_info.outputs),
         spec: proc_info.spec,
