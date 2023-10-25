@@ -1,4 +1,4 @@
-//! Intrinsic annotations 
+//! Intrinsic annotations
 use std::rc::Rc;
 
 use ariadne::ReportKind;
@@ -24,7 +24,7 @@ pub enum AnnotationError {
     NotInProcedure(Span, Ident),
     NotOnWhile(Span, Ident, Stmt),
     WrongArgument(Span, Expr, String),
-    OneLoopOnly(Span, Ident),
+    NotTerminator(Span, Ident),
 }
 
 impl AnnotationError {
@@ -55,12 +55,16 @@ impl AnnotationError {
                     .with_message(format!("The argument {} is invalid.", arg))
                     .with_label(Label::new(arg.span).with_message(message))
             }
-            AnnotationError::OneLoopOnly(span,encoding_name) => Diagnostic::new(ReportKind::Error, span)
-                .with_message(format!(
-                    "The '{}' encoding is only supported for programs that consists of only one loop and no other statements, other than variable declarations.",
-                    encoding_name.name
-                ))
-                .with_label(Label::new(span).with_message("There shouldn't be any statements, other than variable declarations, before or after this annotated loop.")),
+            AnnotationError::NotTerminator(span, encoding_name) => {
+                Diagnostic::new(ReportKind::Error, span)
+                    .with_message(format!(
+                        "The '{}' annotation must annotate the last statement of the program.",
+                        encoding_name.name
+                    ))
+                    .with_label(Label::new(span).with_message(
+                        "There must not be any statements after this annotated statement (and the annotated statement must not be nested in a block).",
+                    ))
+            }
         }
     }
 }

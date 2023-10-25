@@ -127,7 +127,7 @@ impl Encoding for InvariantAnnotation {
         })
     }
 
-    fn is_one_loop(&self) -> bool {
+    fn is_terminator(&self) -> bool {
         false
     }
 }
@@ -237,7 +237,7 @@ impl Encoding for KIndAnnotation {
         })
     }
 
-    fn is_one_loop(&self) -> bool {
+    fn is_terminator(&self) -> bool {
         false
     }
 }

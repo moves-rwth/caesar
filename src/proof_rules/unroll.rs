@@ -125,7 +125,7 @@ impl Encoding for UnrollAnnotation {
         })
     }
 
-    fn is_one_loop(&self) -> bool {
+    fn is_terminator(&self) -> bool {
         false
     }
 }

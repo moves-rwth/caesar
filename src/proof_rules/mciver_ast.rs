@@ -76,8 +76,8 @@ impl Encoding for ASTAnnotation {
         self.0.name
     }
 
-    fn is_one_loop(&self) -> bool {
-        true
+    fn is_terminator(&self) -> bool {
+        false
     }
 
     fn resolve(
@@ -158,7 +158,6 @@ impl Encoding for ASTAnnotation {
         let modified_or_used: IndexSet<Ident> = visitor
             .modified_variables
             .union(&visitor.used_variables)
-            .into_iter()
             .cloned()
             .collect();
 
@@ -170,7 +169,6 @@ impl Encoding for ASTAnnotation {
             - &visitor
                 .declared_variables
                 .union(&visitor.modified_variables)
-                .into_iter()
                 .cloned()
                 .collect::<IndexSet<Ident>>())
             .into_iter()
