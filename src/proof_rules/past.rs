@@ -279,8 +279,4 @@ impl Encoding for PASTAnnotation {
     fn is_terminator(&self) -> bool {
         false
     }
-
-    fn no_nesting(&self) -> bool {
-        false
-    }
 }

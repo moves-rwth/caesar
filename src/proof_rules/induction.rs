@@ -130,10 +130,6 @@ impl Encoding for InvariantAnnotation {
     fn is_terminator(&self) -> bool {
         false
     }
-
-    fn no_nesting(&self) -> bool {
-        false
-    }
 }
 
 pub struct KIndAnnotation(AnnotationInfo);
@@ -242,10 +238,6 @@ impl Encoding for KIndAnnotation {
     }
 
     fn is_terminator(&self) -> bool {
-        false
-    }
-
-    fn no_nesting(&self) -> bool {
         false
     }
 }

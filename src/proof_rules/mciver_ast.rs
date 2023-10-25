@@ -80,10 +80,6 @@ impl Encoding for ASTAnnotation {
         false
     }
 
-    fn no_nesting(&self) -> bool {
-        false
-    }
-
     fn resolve(
         &self,
         resolve: &mut Resolve<'_>,

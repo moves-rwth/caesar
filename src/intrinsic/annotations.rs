@@ -25,7 +25,6 @@ pub enum AnnotationError {
     NotOnWhile(Span, Ident, Stmt),
     WrongArgument(Span, Expr, String),
     NotTerminator(Span, Ident),
-    NoNesting(Span, Ident),
 }
 
 impl AnnotationError {
@@ -59,23 +58,12 @@ impl AnnotationError {
             AnnotationError::NotTerminator(span, encoding_name) => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "The '{}' encoding must be the last statement of the program.",
+                        "The '{}' annotation must annotate the last statement of the program.",
                         encoding_name.name
                     ))
                     .with_label(Label::new(span).with_message(
-                        "There shouldn't be any statements after this annotated loop.",
+                        "There must not be any statements after this annotated statement (and the annotated statement must not be nested in a block).",
                     ))
-            }
-            AnnotationError::NoNesting(span, encoding_name) => {
-                Diagnostic::new(ReportKind::Error, span)
-                    .with_message(format!(
-                        "The '{}' encoding is not supported inside blocks.",
-                        encoding_name.name
-                    ))
-                    .with_label(
-                        Label::new(span)
-                            .with_message("This annotated statement must not be in a block"),
-                    )
             }
         }
     }

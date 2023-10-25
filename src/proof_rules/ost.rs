@@ -358,8 +358,4 @@ impl Encoding for OSTAnnotation {
     fn is_terminator(&self) -> bool {
         true
     }
-
-    fn no_nesting(&self) -> bool {
-        true
-    }
 }

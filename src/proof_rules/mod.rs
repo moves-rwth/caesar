@@ -77,8 +77,6 @@ pub trait Encoding: fmt::Debug {
     ) -> Result<EncodingGenerated, AnnotationError>;
 
     fn is_terminator(&self) -> bool;
-
-    fn no_nesting(&self) -> bool;
 }
 
 /// Initialize all intrinsic annotations by declaring them
@@ -165,8 +163,9 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                         ));
                     }
 
-                    if anno_ref.no_nesting() && self.nesting_level > 0 {
-                        return Err(AnnotationError::NoNesting(s.span, anno_ref.name()));
+                    // A terminator annotation can't be nested in a block
+                    if anno_ref.is_terminator() && self.nesting_level > 0 {
+                        return Err(AnnotationError::NotTerminator(s.span, anno_ref.name()));
                     }
 
                     // Generate new statements (and declarations) from the annotated loop
