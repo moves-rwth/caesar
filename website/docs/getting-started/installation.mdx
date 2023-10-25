@@ -89,5 +89,5 @@ docker build -t caesar -f docker/Dockerfile .
 With the Docker image `caesar` built, you can enter the Docker container and work in there.
 The following command also mounts the `./caesar/` directory as `/root/caesar/results/` inside the container.
 ```bash
-docker run -it caesar -v $PWD/results:/root/caesar/results/ /bin/bash
+docker run -it -v $PWD/results:/root/caesar/results/ caesar /bin/bash
 ```
