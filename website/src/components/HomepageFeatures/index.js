@@ -7,7 +7,7 @@ import CodeBlock from '@theme/CodeBlock';
 const FeatureList = [
   {
     title: 'Expectation-Based Reasoning',
-    Svg: require('@site/static/img/expected-value.svg').default,
+    image: '/img/expected-value.svg',
     alt: 'E(X)',
     description: (
       <>
@@ -19,7 +19,7 @@ const FeatureList = [
   },
   {
     title: 'A Quantitative Intermediate Verification Language',
-    Svg: require('@site/static/img/heyvl.svg').default,
+    image: '/img/heyvl.svg',
     alt: 'HeyVL Logo',
     description: (
       <>
@@ -30,24 +30,31 @@ const FeatureList = [
     invertDark: true,
   },
   {
-  title: 'A Collaborative Effort',
-    Svg: require('@site/static/img/logos.svg').default,
+    title: 'A Collaborative Effort',
+    image: '/img/logos.svg',
     alt: 'i2 Logo',
     description: (
       <>
-        Caesar is an open-source project from the <Link to="https://moves.rwth-aachen.de/">MOVES group</Link> at <Link to="https://rwth-aachen.de">RWTH Aachen University</Link>, the <Link to="https://quave.cs.uni-saarland.de/">QUAVE group</Link> at <Link to="https://www.uni-saarland.de/">University of Saarland</Link> and the <Link to="https://www.compute.dtu.dk/english/research/research-sections/software-systems-engineering">SSE section</Link> at <Link to="https://www.dtu.dk/english/">Denmark Technical University</Link> (DTU).
+        Caesar is an open-source project from <Link to="https://moves.rwth-aachen.de/">RWTH Aachen University (MOVES group)</Link>, <Link to="https://quave.cs.uni-saarland.de/">Saarland University (QUAVE group)</Link>, <Link to="https://www.compute.dtu.dk/english/research/research-sections/software-systems-engineering">Denmark Technical University (SSE section)</Link>, and <Link to="http://pplv.cs.ucl.ac.uk/welcome/">University College London (PPLV group)</Link>.
       </>
     ),
     invertDark: false,
   },
 ];
 
-function FeatureSvg({ title, Svg, alt, description, invertDark }) {
+function FeatureBox({ title, image, alt, description, invertDark }) {
   const svgClassName = invertDark ? `${styles.featureSvg} ${styles.invertDark}` : styles.featureSvg;
+
+  // unfortunately, we can't embed an SVG image directly here using the Svg
+  // class because that breaks the CSS filter that we use in dark mode to invert
+  // the images in some browsers [1]. so we just use an img with a url.
+  //
+  // [1]: https://bugs.webkit.org/show_bug.cgi?id=104169
+
   return (
-    <div className={clsx('col col--4')}>
+    <div className={clsx('col col--4', styles.featureBox)}>
       <div className="text--center">
-        <Svg className={svgClassName} role="img" alt={alt} />
+        <img src={image} className={svgClassName} alt={alt} />
       </div>
       <div className="text--center padding-horiz--md">
         <h3>{title}</h3>
@@ -63,7 +70,7 @@ export default function HomepageFeatures() {
       <div className="container">
         <div className="row">
           {FeatureList.map((props, idx) => (
-            <FeatureSvg key={idx} {...props} />
+            <FeatureBox key={idx} {...props} />
           ))}
         </div>
 
@@ -71,7 +78,7 @@ export default function HomepageFeatures() {
 
         <div className="row">
           <div className="col col--12">
-            <h2>Quick Start: Lossy List Traversal</h2>
+            <h2>Features of HeyVL &mdash; Lossy List Traversal Example</h2>
             <p>Let's look at a program that traverses a list but has a chance of crashing during the traversal. We'll verify that the crash probability is at least 50% if the list has length 1.</p>
             <p>
               We explain more of the details <Link to="/docs/getting-started/verifying-heyvl">as part of our getting started guide</Link>.
@@ -101,6 +108,30 @@ export default function HomepageFeatures() {
 `}
             </CodeBlock>
           </div>
+
+          <div className="col col--6">
+            <h3>📐 Reading The Spec</h3>
+            <p>
+              Let's focus on the <i>quantitative specification</i> of <code>lossy_list</code>:
+            </p>
+            <CodeBlock language='heyvl'>{`pre [len(init_l) == 1] * 0.5
+post [true]` }
+            </CodeBlock>
+            <p>
+              The <code>post</code> says that we are looking at the expected value of <code>[true]</code> (i.e. 1) in the final states of the program. In other words, we are interested in the probability of running without an error.
+            </p>
+            <p>
+              The <code>pre</code> specifies a lower bound to the probability of a run without crashing (expected value of the post <code>[true]</code>).
+              It says that if the length of the list is 1, then the lower bound is <code>0.5</code> and otherwise <code>0</code>.
+            </p>
+            <p>To verify the spec, the <code>while</code> loop has an <code>@invariant</code> annotation with a <Link to="/docs/proof-rules/induction">probabilistic invariant</Link>.</p>
+
+          </div>
+
+        </div>
+
+        <div className="row">
+
           <div className="col col--6">
             <h3>🌍 Axiomatizing Exponentials and Lists</h3>
             <p>Here is a strength of deductive verification: users can axomatize additional functions and data types that can be used for verification! We simply declare the <Link to="/docs/heyvl/domains">uninterpreted sort and functions</Link> with just the necessary axioms in HeyVL.</p>
@@ -122,37 +153,21 @@ domain List {
 }`}
             </CodeBlock>
           </div>
-        </div>
 
-        <div className="row">
-          <div className="col col--6">
-            <h3>📐 Reading The Spec</h3>
-            <p>
-              Let's focus on the <i>quantitative specification</i> of <code>lossy_list</code>:
-            </p>
-              <CodeBlock language='heyvl'>{`pre [len(init_l) == 1] * 0.5
-post [true]` }
-              </CodeBlock>
-            <p>
-              The <code>post</code> says that we are looking at the expected value of <code>[true]</code> (i.e. 1) in the final states of the program. In other words, we are interested in the probability of running without an error.
-            </p>
-            <p>
-              The <code>pre</code> specifies a lower bound to the probability of a run without crashing (expected value of the post <code>[true]</code>).
-              It says that if the length of the list is 1, then the lower bound is <code>0.5</code> and otherwise <code>0</code>.
-            </p>
-            <p>To verify the spec, the <code>while</code> loop has an <code>@invariant</code> annotation with a <Link to="/docs/proof-rules/induction">probabilistic invariant</Link>.</p>
-
-          </div>
           <div className="col col--6">
             <h3>🏃 Running Caesar</h3>
-            After <Link to="https://www.rust-lang.org/tools/install">installing Rust</Link>, install the <code>caesar</code> binary (<Link to="/docs/getting-started">c.f. <i>Getting Started</i></Link>):
+            <p>
+              After <Link to="https://www.rust-lang.org/tools/install">installing Rust</Link>, install the <code>caesar</code> binary (<Link to="/docs/getting-started">c.f. <i>Getting Started</i></Link>):
+            </p>
             <CodeBlock language='bash'>{`git clone git@github.com:moves-rwth/caesar.git
 cd caesar
 cargo install --path . caesar
 caesar tests/domains/lossy_list.heyvl` }
             </CodeBlock>
-            This will run Caesar on the example above (it is included in the Git repository).
-            Caesar will print: <code>tests/domains/lossy_list.heyvl: Verified.</code>
+            <p>
+              This will run Caesar on the example above (it is included in the Git repository).
+              Caesar will print: <code>tests/domains/lossy_list.heyvl: Verified.</code>
+            </p>
           </div>
         </div>
 

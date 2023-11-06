@@ -5,7 +5,8 @@ sidebar_position: 9
 
 # Academic Publications
 
-Caesar is a project from a collaboration of the [Chair for Software Modeling and Verification (MOVES)](https://moves.rwth-aachen.de/) at RWTH Aachen University, the [QUAVE group](https://quave.cs.uni-saarland.de/) at Saarland University and the [SSE section](https://www.compute.dtu.dk/english/research/research-sections/software-systems-engineering) at Denmark Technical University.
+Caesar is a project from a collaboration of the [Chair for Software Modeling and Verification (MOVES)](https://moves.rwth-aachen.de/) at RWTH Aachen University, the [QUAVE group](https://quave.cs.uni-saarland.de/) at Saarland University, the [PPLV group](http://pplv.cs.ucl.ac.uk/welcome/) at University College London and the [SSE section](https://www.compute.dtu.dk/english/research/research-sections/software-systems-engineering) at Denmark Technical University.
+
 If you are interested in collaborations or simply have some questions, please reach out to [Philipp Schroer](https://moves.rwth-aachen.de/people/philipp-schroer/) ([phisch@cs.rwth-aachen.de](mailto:phisch@cs.rwth-aachen.de)).
 
 ## OOPSLA '23: A Deductive Verification Infrastructure for Probabilistic Programs {#oopsla-23}

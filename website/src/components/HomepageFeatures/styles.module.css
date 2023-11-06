@@ -5,6 +5,15 @@
   width: 100%;
 }
 
+/* do not underline university links by default, those are distracting */
+.featureBox:nth-of-type(3) a:not(:hover) {
+  text-decoration: none;
+}
+
+.featureBox:nth-of-type(3) a:hover {
+  text-decoration: underline;
+}
+
 .featureSvg {
   height: 100px;
   width: 200px;

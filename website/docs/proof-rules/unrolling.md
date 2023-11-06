@@ -37,13 +37,13 @@ This means we know that if verification of an upper bound *fails*, then it canno
 On the other hand, if verification succeeds, then we know nothing!
 
 ```heyvl
-coproc geo1_bmc(init_c: UInt) -> (c: UInt)
+coproc geo1_unroll(init_c: UInt) -> (c: UInt)
     pre init_c + 0.99
     post c
 {
     c = init_c
     var cont: Bool = true
-    @bmc(12, 0) // k = 12, terminator = 0
+    @unroll(12, 0) // k = 12, terminator = 0
     while cont {
         var prob_choice: Bool = flip(0.5)
         if prob_choice { cont = false } else { c = c + 1 }
@@ -64,7 +64,7 @@ if cont {
 }
 ```
 
-Trying to verify `geo1_bmc` will yield a counter-example to verification.
+Trying to verify `geo1_unroll` will yield a counter-example to verification.
 Because this is loop unrolling, it is a *true counter-example* to `init_c + 0.99` being an upper bound.
 On the other hand, if you change `k = 11`, then the program verifies.
 But this tells you nothing about the actual program semantics.
