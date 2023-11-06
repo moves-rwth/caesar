@@ -22,7 +22,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingGenerated};
+use super::{Encoding, EncodingEnvironment, EncodingGenerated};
 
 use super::util::*;
 
@@ -96,12 +96,14 @@ impl Encoding for OmegaInvAnnotation {
     fn transform(
         &self,
         tcx: &TyCtx,
-        annotation_span: Span,
-        _base_proc_ident: Ident,
         args: &[Expr],
         inner_stmt: &Stmt,
-        direction: Direction,
+        enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
+        // Unpack values from struct
+        let annotation_span = enc_env.annotation_span;
+        let direction = enc_env.direction;
+
         let [free_var, omega_inv] = two_args(args);
 
         let omega_var = if let ExprKind::Var(var_ref) = &free_var.kind {

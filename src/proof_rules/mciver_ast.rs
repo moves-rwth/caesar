@@ -26,7 +26,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingGenerated, ProcInfo};
+use super::{Encoding, EncodingEnvironment, EncodingGenerated, ProcInfo};
 
 use super::util::*;
 
@@ -119,12 +119,14 @@ impl Encoding for ASTAnnotation {
     fn transform(
         &self,
         tcx: &TyCtx,
-        annotation_span: Span,
-        base_proc_ident: Ident,
         args: &[Expr],
         inner_stmt: &Stmt,
-        _direction: Direction,
+        enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
+        // Unpack values from struct
+        let annotation_span = enc_env.annotation_span;
+        let base_proc_ident = enc_env.base_proc_ident;
+
         let [invariant, variant, free_var, prob, decrease] = five_args(args);
         let builder = ExprBuilder::new(annotation_span);
 

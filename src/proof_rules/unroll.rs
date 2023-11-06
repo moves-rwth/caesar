@@ -20,7 +20,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingGenerated};
+use super::{Encoding, EncodingEnvironment, EncodingGenerated};
 
 use super::util::*;
 
@@ -83,12 +83,14 @@ impl Encoding for UnrollAnnotation {
     fn transform(
         &self,
         tcx: &TyCtx,
-        annotation_span: Span,
-        _base_proc_ident: Ident,
         args: &[Expr],
         inner_stmt: &Stmt,
-        direction: Direction,
+        enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
+        // Unpack values from struct
+        let annotation_span = enc_env.annotation_span;
+        let direction = enc_env.direction;
+
         let [k, terminator] = two_args(args);
 
         let k: u128 = lit_u128(k);

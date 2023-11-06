@@ -10,8 +10,8 @@ use std::fmt;
 
 use crate::{
     ast::{
-        util::ModifiedVariableCollector, visit::VisitorMut, Direction, Expr, Files, Ident,
-        SourceFilePath, Span, Spanned, Stmt, Symbol, TyKind,
+        util::ModifiedVariableCollector, visit::VisitorMut, Expr, Files, Ident, SourceFilePath,
+        Span, Spanned, Stmt, Symbol, TyKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -21,7 +21,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingGenerated};
+use super::{Encoding, EncodingEnvironment, EncodingGenerated};
 
 use super::util::*;
 
@@ -84,12 +84,14 @@ impl Encoding for InvariantAnnotation {
     fn transform(
         &self,
         tcx: &TyCtx,
-        annotation_span: Span,
-        _base_proc_ident: Ident,
         args: &[Expr],
         inner_stmt: &Stmt,
-        direction: Direction,
+        enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
+        // Unpack values from struct
+        let annotation_span = enc_env.annotation_span;
+        let direction = enc_env.direction;
+
         let mut visitor = ModifiedVariableCollector::new();
         visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
         let havoc_vars = visitor.modified_variables.into_iter().collect();
@@ -193,12 +195,13 @@ impl Encoding for KIndAnnotation {
     fn transform(
         &self,
         tcx: &TyCtx,
-        annotation_span: Span,
-        _base_proc_ident: Ident,
         args: &[Expr],
         inner_stmt: &Stmt,
-        direction: Direction,
+        enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
+        let annotation_span = enc_env.annotation_span;
+        let direction = enc_env.direction;
+
         let mut visitor = ModifiedVariableCollector::new();
         visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
         let havoc_vars = visitor.modified_variables.into_iter().collect();
