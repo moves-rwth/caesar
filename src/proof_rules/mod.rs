@@ -56,6 +56,7 @@ pub struct EncodingEnvironment {
     annotation_span: Span,
     direction: Direction,
 }
+
 /// The trait that all encoding annotations must implement
 pub trait Encoding: fmt::Debug {
     fn name(&self) -> Ident;

@@ -69,7 +69,8 @@ impl TyCtx {
     }
 
     /// Generate a fresh [`Ident`] based on the given [`Ident`].
-    /// Example: Given `x` as input [`Ident`], if `x` already exists than `x_1` is returned as long as `x_1` doesn't exist
+    ///
+    /// Example: Given `x` as input [`Ident`], if `x` already exists than `x_1` is returned as long as `x_1` doesn't exist.
     pub fn fresh_ident(&self, ident: Ident, span_variant: SpanVariant) -> Ident {
         loop {
             let mut fresh = self.fresh.borrow_mut();
@@ -84,8 +85,8 @@ impl TyCtx {
             }
         }
     }
-    /// Generate a fresh variable declaration from an existing variable declaration
-    /// Uses fresh_ident to generate a new name for the variable
+    /// Generate a fresh variable declaration from an existing variable declaration.
+    /// Uses [`fresh_ident`](fn@fresh_ident) to generate a new name for the variable.
     pub fn fresh_var(&self, ident: Ident, span_variant: SpanVariant) -> Ident {
         let new_ident = self.fresh_ident(ident, span_variant);
 
