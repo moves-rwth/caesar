@@ -24,7 +24,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingGenerated, ProcInfo};
+use super::{Encoding, EncodingEnvironment, EncodingGenerated, ProcInfo};
 
 use super::util::*;
 
@@ -93,11 +93,14 @@ impl Encoding for OSTAnnotation {
     fn transform(
         &self,
         tcx: &TyCtx,
-        annotation_span: Span,
         args: &[Expr],
         inner_stmt: &Stmt,
-        _direction: Direction,
+        enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
+        // Unpack values from struct
+        let annotation_span = enc_env.annotation_span;
+        let base_proc_ident = enc_env.base_proc_ident;
+
         let [inv, past_inv, c, post] = four_args(args);
 
         let builder = ExprBuilder::new(annotation_span);
@@ -191,7 +194,7 @@ impl Encoding for OSTAnnotation {
             )],
             direction: Direction::Down,
         };
-        let cond1_proc = generate_proc(annotation_span, cond1_proc_info, tcx);
+        let cond1_proc = generate_proc(annotation_span, cond1_proc_info, base_proc_ident, tcx);
 
         let mut cond2_next_iter = vec![Spanned::new(
             annotation_span,
@@ -213,7 +216,7 @@ impl Encoding for OSTAnnotation {
             body: cond2_body,
             direction: Direction::Up,
         };
-        let cond2_proc = generate_proc(annotation_span, cond2_proc_info, tcx);
+        let cond2_proc = generate_proc(annotation_span, cond2_proc_info, base_proc_ident, tcx);
 
         // Init assigns followed by the loop body
         let mut cond3_body = init_assigns.clone();
@@ -254,7 +257,7 @@ impl Encoding for OSTAnnotation {
             direction: Direction::Up,
         };
 
-        let cond3_proc = generate_proc(annotation_span, cond3_proc_info, tcx);
+        let cond3_proc = generate_proc(annotation_span, cond3_proc_info, base_proc_ident, tcx);
 
         // Condition 4: !guard ==> (I = f)
         let cond4_proc_info = ProcInfo {
@@ -269,7 +272,7 @@ impl Encoding for OSTAnnotation {
             direction: Direction::Down,
         };
 
-        let cond4_proc = generate_proc(annotation_span, cond4_proc_info, tcx);
+        let cond4_proc = generate_proc(annotation_span, cond4_proc_info, base_proc_ident, tcx);
 
         // Condition 5: \Phi_f(I) < ∞
         // The following block should be inserted before the iter encoding to check Phi < ∞
@@ -305,7 +308,7 @@ impl Encoding for OSTAnnotation {
             body: cond5_body,
             direction: Direction::Up,
         };
-        let cond5_proc = generate_proc(annotation_span, cond5_proc_info, tcx);
+        let cond5_proc = generate_proc(annotation_span, cond5_proc_info, base_proc_ident, tcx);
 
         // Condition 6: I <= \Phi_{post}(I)
         let mut cond6_body = init_assigns;
@@ -329,7 +332,7 @@ impl Encoding for OSTAnnotation {
             body: cond6_body,
             direction: Direction::Down,
         };
-        let cond6_proc = generate_proc(annotation_span, cond6_proc_info, tcx);
+        let cond6_proc = generate_proc(annotation_span, cond6_proc_info, base_proc_ident, tcx);
 
         // Call to the lower_bound proc from Condition 6
         let proc_call = builder.call(

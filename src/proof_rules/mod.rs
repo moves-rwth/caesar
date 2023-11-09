@@ -50,9 +50,18 @@ pub struct EncodingGenerated {
     decls: Option<Vec<DeclKind>>,
 }
 
+/// The environment information when the encoding annotation is called
+pub struct EncodingEnvironment {
+    base_proc_ident: Ident,
+    annotation_span: Span,
+    direction: Direction,
+}
+
+/// The trait that all encoding annotations must implement
 pub trait Encoding: fmt::Debug {
     fn name(&self) -> Ident;
 
+    /// Typecheck the arguments of the annotation call
     fn tycheck(
         &self,
         tycheck: &mut Tycheck<'_>,
@@ -60,6 +69,7 @@ pub trait Encoding: fmt::Debug {
         args: &mut [Expr],
     ) -> Result<(), TycheckError>;
 
+    /// Resolve the arguments of the annotation call
     fn resolve(
         &self,
         resolve: &mut Resolve<'_>,
@@ -67,15 +77,16 @@ pub trait Encoding: fmt::Debug {
         args: &mut [Expr],
     ) -> Result<(), ResolveError>;
 
+    /// Transform the annotated loop into a sequence of statements and declarations
     fn transform(
         &self,
         tyctx: &TyCtx,
-        annotation_span: Span,
         args: &[Expr],
         inner_stmt: &Stmt,
-        direction: Direction,
+        enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError>;
 
+    /// Indicates if the encoding annotation is required to be the last statement of a procedure
     fn is_terminator(&self) -> bool;
 }
 
@@ -117,6 +128,7 @@ pub struct EncCall<'tcx, 'sunit> {
     direction: Option<Direction>,
     terminator_annotation: Option<Ident>,
     nesting_level: usize,
+    current_proc_ident: Option<Ident>,
 }
 
 impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
@@ -127,6 +139,7 @@ impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
             direction: Option::None,
             terminator_annotation: None,
             nesting_level: 0,
+            current_proc_ident: None,
         }
     }
 }
@@ -137,6 +150,7 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
     fn visit_decl(&mut self, decl: &mut DeclKind) -> Result<(), Self::Err> {
         if let DeclKind::ProcDecl(decl_ref) = decl {
             self.direction = Some(decl_ref.borrow().direction);
+            self.current_proc_ident = Some(decl_ref.borrow().name);
             self.visit_proc(decl_ref)?;
         }
         Ok(())
@@ -167,18 +181,19 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                     if anno_ref.is_terminator() && self.nesting_level > 0 {
                         return Err(AnnotationError::NotTerminator(s.span, anno_ref.name()));
                     }
-
-                    // Generate new statements (and declarations) from the annotated loop
-                    let mut enc_gen = anno_ref.transform(
-                        self.tcx,
-                        s.span,
-                        inputs,
-                        inner_stmt,
-                        self.direction
+                    let enc_env = EncodingEnvironment {
+                        base_proc_ident: self
+                            .current_proc_ident
                             .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,
-                    )?;
+                        annotation_span: s.span,
+                        direction: self
+                            .direction
+                            .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,
+                    };
+                    // Generate new statements (and declarations) from the annotated loop
+                    let mut enc_gen = anno_ref.transform(self.tcx, inputs, inner_stmt, enc_env)?;
 
-                    let stmts = &mut enc_gen.stmts;
+                    let stmts: &mut Vec<Stmt> = &mut enc_gen.stmts;
                     let span = enc_gen.span;
                     let decls_opt = &mut enc_gen.decls;
 
@@ -192,7 +207,9 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                     // Add the generated declarations to the list of source units of the compilation unit
                     if let Some(ref mut decls) = decls_opt {
                         // Visit generated declarations
+                        let temp = self.current_proc_ident;
                         self.visit_decls(decls)?;
+                        self.current_proc_ident = temp;
 
                         // Wrap generated declarations in items
                         let items: Vec<Item<SourceUnit>> = decls

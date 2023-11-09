@@ -25,7 +25,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingGenerated, ProcInfo};
+use super::{Encoding, EncodingEnvironment, EncodingGenerated, ProcInfo};
 
 use super::util::*;
 
@@ -88,11 +88,14 @@ impl Encoding for PASTAnnotation {
     fn transform(
         &self,
         tcx: &TyCtx,
-        annotation_span: Span,
         args: &[Expr],
         inner_stmt: &Stmt,
-        _direction: Direction,
+        enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
+        // Unpack values from struct
+        let annotation_span = enc_env.annotation_span;
+        let base_proc_ident = enc_env.base_proc_ident;
+
         let [inv, eps, k] = three_args(args);
         let builder = ExprBuilder::new(annotation_span);
 
@@ -184,7 +187,7 @@ impl Encoding for PASTAnnotation {
             )],
             direction: Direction::Down,
         };
-        let cond1_proc = generate_proc(annotation_span, cond1_proc_info, tcx);
+        let cond1_proc = generate_proc(annotation_span, cond1_proc_info, base_proc_ident, tcx);
 
         // [guard] * k <= (([guard] * invariant) + [!guard])
         let cond2_expr = builder.binary(
@@ -235,7 +238,7 @@ impl Encoding for PASTAnnotation {
             )],
             direction: Direction::Down,
         };
-        let cond2_proc = generate_proc(annotation_span, cond2_proc_info, tcx);
+        let cond2_proc = generate_proc(annotation_span, cond2_proc_info, base_proc_ident, tcx);
 
         // Condition 3: \Phi_0(I) <= [G] * (I - eps)
         let mut cond3_body = init_assigns;
@@ -267,7 +270,7 @@ impl Encoding for PASTAnnotation {
             direction: Direction::Up,
         };
 
-        let cond3_proc = generate_proc(annotation_span, cond3_proc_info, tcx);
+        let cond3_proc = generate_proc(annotation_span, cond3_proc_info, base_proc_ident, tcx);
 
         Ok(EncodingGenerated {
             span: annotation_span,

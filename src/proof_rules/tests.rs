@@ -138,10 +138,10 @@ fn test_omega_transform() {
 fn test_ost_transform() {
     let mut test_string = String::from(
         r#"
-            proc lt_infinity(a: Bool) -> () {
+            proc optional_stopping_lt_infinity_0(a: Bool) -> () {
                 assert ?(((cast(EUReal, 2) * [a]) < ∞))
             }
-            coproc past(init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt) -> (
+            coproc optional_stopping_past_0(init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt) -> (
                 prob_choice: Bool, a: Bool, b: UInt, k: UInt
             )
                 pre ((cast(EUReal, 2) * [a]))[a -> init_a]
@@ -162,7 +162,7 @@ fn test_ost_transform() {
             
                 }
             }
-            coproc conditional_difference_bounded(
+            coproc optional_stopping_conditional_difference_bounded_0(
                 init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt
             ) -> (prob_choice: Bool, a: Bool, b: UInt, k: UInt)
                 pre cast(EUReal, cast(UReal, 1))
@@ -192,10 +192,10 @@ fn test_ost_transform() {
                 if prob_choice { a = false } else { b = (b + 1) }
                 k = (k + 1)
             }
-            proc harmonize_I_f(a: Bool, b: UInt) -> () {
+            proc optional_stopping_harmonize_I_f_0(a: Bool, b: UInt) -> () {
                 assert ?((! (a) → ((cast(EUReal, b) + [a]) == cast(EUReal, b))))
             }
-            coproc loopiter_lt_infty(
+            coproc optional_stopping_loopiter_lt_infty_0(
                 init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt
             ) -> (prob_choice: Bool, a: Bool, b: UInt, k: UInt)
                 pre cast(EUReal, 0)
@@ -217,7 +217,7 @@ fn test_ost_transform() {
             
                 }
             }
-            proc lower_bound(
+            proc optional_stopping_lower_bound_0(
                 init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt
             ) -> (prob_choice: Bool, a: Bool, b: UInt, k: UInt)
                 pre (((cast(EUReal, b) + [a]))[b -> init_b])[a -> init_a]
@@ -245,7 +245,7 @@ fn test_ost_transform() {
                 var k: UInt
                 b = init_b
                 a = init_a
-                { prob_choice, a, b, k = lower_bound(prob_choice, a, b, k) }
+                { prob_choice, a, b, k = optional_stopping_lower_bound_0(prob_choice, a, b, k) }
             }
         "#,
     );
@@ -282,17 +282,17 @@ fn test_ost_transform() {
 fn test_past_transform() {
     let mut test_string = String::from(
         r#"
-            proc condition_1(x: UInt) -> () {
+            proc main_condition_1_0(x: UInt) -> () {
                 assert ?((([! ((1 <= x))] * cast(EUReal, (x + 1))) <= 10/10))
             }
-            proc condition_2(x: UInt) -> () {
+            proc main_condition_2_0(x: UInt) -> () {
                 assert (
                     ([(1 <= x)] * 10/10) <= (
                         ([(1 <= x)] * cast(EUReal, (x + 1))) + [! ((1 <= x))]
                     )
                 )
             }
-            coproc past(init_x: UInt) -> (x: UInt)
+            coproc main_past_0(init_x: UInt) -> (x: UInt)
                 pre ([(1 <= x)] * ((cast(EUReal, (x + 1)))[x -> init_x] - 5/10))
                 post cast(EUReal, 0)
             {
@@ -333,36 +333,36 @@ fn test_past_transform() {
 fn test_ast_transform() {
     let mut test_string = String::from(
         r#"
-        proc prob_antitone(a: UReal, b: UReal) -> ()
+        proc main_prob_antitone_0(a: UReal, b: UReal) -> ()
             pre ?((a <= b))
             post ?(((5/10)[v -> a] >= (5/10)[v -> b]))
         {
             
         }
-        proc decrease_antitone(a: UReal, b: UReal) -> ()
+        proc main_decrease_antitone_0(a: UReal, b: UReal) -> ()
             pre ?((a <= b))
             post ?(((cast(UReal, v))[v -> a] >= (cast(UReal, v))[v -> b]))
         {
             
         }
-        proc I_wp_subinvariant(init_x: UInt) -> (x: UInt)
+        proc main_I_wp_subinvariant_0(init_x: UInt) -> (x: UInt)
             pre ([true])[x -> init_x]
             post [true]
         {
             x = init_x
             if (1 <= x) { x = (x - 1) } else {  }
         }
-        proc termination_condition(x: UInt) -> () {
+        proc main_termination_condition_0(x: UInt) -> () {
             assert ?((! ((1 <= x)) == (cast(EUReal, x) == cast(EUReal, 0))))
         }
-        coproc V_wp_superinvariant(init_x: UInt) -> (x: UInt)
+        coproc main_V_wp_superinvariant_0(init_x: UInt) -> (x: UInt)
             pre (cast(EUReal, x))[x -> init_x]
             post cast(EUReal, x)
         {
             x = init_x
             if (1 <= x) { x = (x - 1) } else {  }
         }
-        proc progress_condition(init_x: UInt) -> (x: UInt)
+        proc main_progress_condition_0(init_x: UInt) -> (x: UInt)
             pre (([true] * ([(1 <= x)] * (5/10)[v -> cast(EUReal, x)])))[x -> init_x]
             post [(
                 cast(EUReal, x) <= (
@@ -399,6 +399,50 @@ fn test_ast_transform() {
     assert_eq!(test_string, res);
 }
 
+/// Test if the fresh identifier generation works correctly
+/// when there are multiple instances of the annotation type on the same procedure
+#[test]
+fn test_double_annotation() {
+    let source = r#"
+    proc main() -> ()
+    {
+        var x: UInt
+        @ast(true, (3 * [!(x % 2 == 0)]) + ite(x >= 10, x - 10, 10 - x), v, 0.5, 2)
+        while x != 10 {
+            if x % 2 == 0{
+                var prob_choice: Bool
+                prob_choice = flip(1/2)
+                if prob_choice {
+                    x = x - 2
+                } else {
+                    x = x + 2
+                }
+            } else {
+                x = x + 1 
+            }
+        }
+    
+        @ast(true, (3 * [!(x % 2 == 0)]) + ite(x >= 10, x - 10, 10 - x), t, 0.5, 2)
+        while x != 10 {
+            if x % 2 == 0{
+                var prob_choice: Bool
+                prob_choice = flip(1/2)
+                if prob_choice {
+                    x = x - 2
+                } else {
+                    x = x + 2
+                }
+            } else {
+                x = x + 1 
+            }
+        }
+    
+    }
+        "#;
+
+    let res = verify_test(&source).0.unwrap();
+    assert_eq!(res, true)
+}
 #[test]
 fn test_k_induction_nested_transform() {
     let source = r#"
