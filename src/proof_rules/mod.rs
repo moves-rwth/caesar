@@ -193,7 +193,7 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                     // Generate new statements (and declarations) from the annotated loop
                     let mut enc_gen = anno_ref.transform(self.tcx, inputs, inner_stmt, enc_env)?;
 
-                    let stmts: &mut Vec<crate::ast::Spanned<StmtKind>> = &mut enc_gen.stmts;
+                    let stmts: &mut Vec<Stmt> = &mut enc_gen.stmts;
                     let span = enc_gen.span;
                     let decls_opt = &mut enc_gen.decls;
 
