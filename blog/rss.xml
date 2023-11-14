@@ -4,10 +4,20 @@
         <title>Caesar Blog</title>
         <link>https://www.caesarverifier.org/blog</link>
         <description>Caesar Blog</description>
-        <lastBuildDate>Thu, 28 Sep 2023 00:00:00 GMT</lastBuildDate>
+        <lastBuildDate>Fri, 27 Oct 2023 00:00:00 GMT</lastBuildDate>
         <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
         <generator>https://github.com/jpmonette/feed</generator>
         <language>en</language>
+        <item>
+            <title><![CDATA[Distinguished Artifact at OOPSLA '23]]></title>
+            <link>https://www.caesarverifier.org/blog/oopsla23-distinguished-artifact</link>
+            <guid>https://www.caesarverifier.org/blog/oopsla23-distinguished-artifact</guid>
+            <pubDate>Fri, 27 Oct 2023 00:00:00 GMT</pubDate>
+            <description><![CDATA[The artifact associated with our OOPSLA '23 publication A Deductive Verification Infrastructure for Probabilistic Programs has received the Distinguished Artifact award, praising exceptionally high quality.]]></description>
+            <content:encoded><![CDATA[<p>The artifact associated with our <a href="https://2023.splashcon.org/track/splash-2023-oopsla" target="_blank" rel="noopener noreferrer">OOPSLA '23</a> publication <a href="https://doi.org/10.1145/3622870" target="_blank" rel="noopener noreferrer">A Deductive Verification Infrastructure for Probabilistic Programs</a> has <a href="https://2023.splashcon.org/track/splash-2023-Artifacts#distinguished-artifacts" target="_blank" rel="noopener noreferrer">received the <em>Distinguished Artifact</em> award</a>, praising exceptionally high quality.
+The artifact consists the tool Caesar together with benchmark examples.</p><p>The artifact has a <a href="https://dl.acm.org/do/10.5281/zenodo.8146987/full/" target="_blank" rel="noopener noreferrer">page in the ACM Digital Library</a> and can be <a href="https://zenodo.org/records/8146987" target="_blank" rel="noopener noreferrer">downloaded from Zenodo</a>.</p>]]></content:encoded>
+            <category>publications</category>
+        </item>
         <item>
             <title><![CDATA[Paper Accepted at OOPSLA '23]]></title>
             <link>https://www.caesarverifier.org/blog/oopsla23</link>
@@ -17,6 +27,14 @@
             <content:encoded><![CDATA[<p>HeyVL and Caesar were accepted at <a href="https://2023.splashcon.org/track/splash-2023-oopsla" target="_blank" rel="noopener noreferrer">OOPSLA '23</a>: <a href="https://doi.org/10.1145/3622870" target="_blank" rel="noopener noreferrer">A Deductive Verification Infrastructure for Probabilistic Programs</a> by Schröer et al.
 The artifact received the <em>reusable</em> badge, which is the highest possible badge.</p><p>The preprint is available on arxiv: <a href="https://arxiv.org/abs/2309.07781" target="_blank" rel="noopener noreferrer">https://arxiv.org/abs/2309.07781</a>.</p><p>You can find more information on our <a href="/docs/publications">publications page</a>.</p>]]></content:encoded>
             <category>publications</category>
+        </item>
+        <item>
+            <title><![CDATA[Winner of the 2022 WhatsApp Privacy Aware Program Analysis Request for Proposals]]></title>
+            <link>https://www.caesarverifier.org/blog/whatsapp-privacy-aware-program-analysis</link>
+            <guid>https://www.caesarverifier.org/blog/whatsapp-privacy-aware-program-analysis</guid>
+            <pubDate>Mon, 10 Oct 2022 00:00:00 GMT</pubDate>
+            <description><![CDATA[Philipp Schroer and Joost-Pieter Katoen receive a Research Award from WhatsApp, through its parent company, Meta Platforms, Inc. for their research proposal “A Deductive Verification Infrastructure for Probabilistic Programs”. Out of 62 research proposals that were submitted to WhatsApp Privacy Aware Program Analysis, 6 projects have been awarded. For more information, see here.]]></description>
+            <content:encoded><![CDATA[<p>Philipp Schroer and Joost-Pieter Katoen receive a Research Award from WhatsApp, through its parent company, Meta Platforms, Inc. for their research proposal “A Deductive Verification Infrastructure for Probabilistic Programs”. Out of 62 research proposals that were submitted to WhatsApp Privacy Aware Program Analysis, 6 projects have been awarded. For more information, <a href="https://research.facebook.com/blog/2022/10/-announcing-the-winners-of-the-2022-whatsapp-privacy-aware-program-analysis-request-for-proposals/" target="_blank" rel="noopener noreferrer">see here</a>.</p>]]></content:encoded>
         </item>
     </channel>
 </rss>
