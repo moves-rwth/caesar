@@ -4,6 +4,7 @@
 
 use std::{
     cell::{Ref, RefCell, RefMut},
+    fmt::{Display, Formatter},
     hash::{Hash, Hasher},
     rc::Rc,
 };
@@ -46,6 +47,11 @@ impl DeclKind {
             DeclKind::AnnotationDecl(anno_intrin) => anno_intrin.name(),
         }
     }
+
+    /// Convert into [`DeclKindName`].
+    pub fn kind_name(&self) -> DeclKindName {
+        DeclKindName::from(self)
+    }
 }
 
 impl SimplePretty for DeclKind {
@@ -75,6 +81,87 @@ impl SimplePretty for DeclKind {
                 .append(Doc::space())
                 .append(Doc::as_string(anno_intrin.name().name)),
         }
+    }
+}
+
+/// Just the name of the [`DeclKind`] to classify different declaration kinds
+/// and print the name of the kind of declaration to the user.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeclKindName {
+    Var,
+    Proc,
+    Domain,
+    Func,
+    Axiom,
+    ProcIntrin,
+    FuncIntrin,
+    Label,
+    Annotation,
+}
+
+impl From<&DeclKind> for DeclKindName {
+    fn from(decl: &DeclKind) -> Self {
+        match decl {
+            DeclKind::VarDecl(_) => DeclKindName::Var,
+            DeclKind::ProcDecl(_) => DeclKindName::Proc,
+            DeclKind::DomainDecl(_) => DeclKindName::Domain,
+            DeclKind::FuncDecl(_) => DeclKindName::Func,
+            DeclKind::AxiomDecl(_) => DeclKindName::Axiom,
+            DeclKind::ProcIntrin(_) => DeclKindName::ProcIntrin,
+            DeclKind::FuncIntrin(_) => DeclKindName::FuncIntrin,
+            DeclKind::LabelDecl(_) => DeclKindName::Label,
+            DeclKind::AnnotationDecl(_) => DeclKindName::Annotation,
+        }
+    }
+}
+
+impl DeclKindName {
+    /// Return `self`, but all intrinsic kinds are mapped to their non-intrinsic
+    /// counterparts. Useful to print declaration kind names to the user who
+    /// does not care about whether something is intrinsic or not.
+    pub fn lose_intrin(self) -> Self {
+        match self {
+            DeclKindName::ProcIntrin => DeclKindName::Proc,
+            DeclKindName::FuncIntrin => DeclKindName::Func,
+            other => other,
+        }
+    }
+
+    /// Is this declaration callable?
+    pub fn is_callable(self) -> bool {
+        matches!(
+            self,
+            DeclKindName::Proc
+                | DeclKindName::Func
+                | DeclKindName::ProcIntrin
+                | DeclKindName::FuncIntrin
+        )
+    }
+
+    /// Is this a proc (possibly intrinsic)?
+    pub fn is_proc(self) -> bool {
+        matches!(self, DeclKindName::Proc | DeclKindName::ProcIntrin)
+    }
+
+    /// Print the user-displayable name.
+    pub fn to_str(self) -> &'static str {
+        match self {
+            DeclKindName::Var => "variable",
+            DeclKindName::Proc => "proc",
+            DeclKindName::Domain => "domain",
+            DeclKindName::Func => "func",
+            DeclKindName::Axiom => "axiom",
+            DeclKindName::ProcIntrin => "intrinsic proc",
+            DeclKindName::FuncIntrin => "intrinsic func",
+            DeclKindName::Label => "label",
+            DeclKindName::Annotation => "annotation",
+        }
+    }
+}
+
+impl Display for DeclKindName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.to_str())
     }
 }
 
