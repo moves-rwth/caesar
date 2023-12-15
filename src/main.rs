@@ -589,11 +589,16 @@ fn print_diagnostic(mut files: &Files, diagnostic: Diagnostic) -> io::Result<()>
 fn load_file(files: &mut Files, path: &PathBuf) -> FileId {
     let source = match std::fs::read_to_string(path) {
         Ok(source) => source,
-        Err(err) => panic!(
-            "Error while loading file '{}': {}",
-            path.to_string_lossy(),
-            err
-        ),
+        Err(err) => match err.kind() {
+            io::ErrorKind::NotFound => {
+                panic!("Error: Could not find file '{}'", path.to_string_lossy())
+            }
+            _ => panic!(
+                "Error while loading file '{}': {}",
+                path.to_string_lossy(),
+                err
+            ),
+        },
     };
     let source_file_path = SourceFilePath::Path(path.clone());
     let file = files.add(source_file_path, source);
