@@ -218,6 +218,7 @@ pub fn generate_proc(
         spec: proc_info.spec,
         body: RefCell::new(Some(proc_info.body)),
         span,
+        calculus: None,
     }));
 
     tcx.declare(decl.clone());

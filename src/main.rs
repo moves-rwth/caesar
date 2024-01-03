@@ -26,6 +26,7 @@ use crate::{
     version::write_detailed_version_info,
 };
 use ast::{Diagnostic, Expr, FileId, Files, SourceFilePath};
+use calculi::init_calculi;
 use driver::{Item, SourceUnit, SourceUnitName, VerifyUnit};
 use intrinsic::{distributions::init_distributions, list::init_lists};
 use opt::{boolify::Boolify, RemoveParens};
@@ -49,6 +50,7 @@ use z3rro::{
 };
 
 pub mod ast;
+mod calculi;
 mod driver;
 pub mod front;
 pub mod intrinsic;
@@ -303,6 +305,7 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
 
     // 2. Resolving (and declaring) idents
     let mut tcx = TyCtx::new(TyKind::EUReal);
+    init_calculi(&mut files, &mut tcx);
     init_encodings(&mut files, &mut tcx);
     init_distributions(&mut files, &mut tcx);
     init_lists(&mut files, &mut tcx);
@@ -382,6 +385,7 @@ fn verify_files_main(
 
     // 2. Resolving (and declaring) idents
     let mut tcx = TyCtx::new(TyKind::EUReal);
+    init_calculi(&mut files, &mut tcx);
     init_encodings(&mut files, &mut tcx);
     init_distributions(&mut files, &mut tcx);
     init_lists(&mut files, &mut tcx);
@@ -421,6 +425,15 @@ fn verify_files_main(
         }
     }
 
+    // Check compliance between calculus annotations and encoding annotations before desugaring
+    for source_unit in &mut source_units {
+        let mut entered = source_unit.enter();
+        entered
+            .check_calculus(&mut tcx)
+            .map_err(|ann_err| ann_err.diagnostic())?;
+    }
+
+    // Desugar encodings from source units
     let mut source_units_buf = vec![];
 
     for source_unit in &mut source_units {
