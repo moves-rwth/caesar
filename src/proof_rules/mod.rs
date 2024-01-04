@@ -1,7 +1,7 @@
 //! This module provides annotations that encode proof rules and their desugaring transformations.
 
 mod induction;
-use induction::*;
+pub use induction::*;
 mod unroll;
 use unroll::*;
 mod mciver_ast;
@@ -17,7 +17,7 @@ mod util;
 #[cfg(test)]
 mod tests;
 
-use std::{fmt, rc::Rc};
+use std::fmt;
 
 use crate::{
     ast::{
@@ -90,33 +90,125 @@ pub trait Encoding: fmt::Debug {
     fn is_terminator(&self) -> bool;
 }
 
+#[derive(Debug, Clone)]
+pub enum EncodingKind {
+    Invariant(InvariantAnnotation),
+    KInduction(KIndAnnotation),
+    Unroll(UnrollAnnotation),
+    Omega(OmegaInvAnnotation),
+    Ost(OSTAnnotation),
+    Past(PASTAnnotation),
+    Ast(ASTAnnotation),
+}
+
+impl EncodingKind {
+    pub fn name(&self) -> Ident {
+        match self {
+            EncodingKind::Invariant(anno) => anno.name(),
+            EncodingKind::KInduction(anno) => anno.name(),
+            EncodingKind::Unroll(anno) => anno.name(),
+            EncodingKind::Omega(anno) => anno.name(),
+            EncodingKind::Ost(anno) => anno.name(),
+            EncodingKind::Past(anno) => anno.name(),
+            EncodingKind::Ast(anno) => anno.name(),
+        }
+    }
+
+    pub fn tycheck(
+        &self,
+        tycheck: &mut Tycheck<'_>,
+        call_span: Span,
+        args: &mut [Expr],
+    ) -> Result<(), TycheckError> {
+        match self {
+            EncodingKind::Invariant(anno) => anno.tycheck(tycheck, call_span, args),
+            EncodingKind::KInduction(anno) => anno.tycheck(tycheck, call_span, args),
+            EncodingKind::Unroll(anno) => anno.tycheck(tycheck, call_span, args),
+            EncodingKind::Omega(anno) => anno.tycheck(tycheck, call_span, args),
+            EncodingKind::Ost(anno) => anno.tycheck(tycheck, call_span, args),
+            EncodingKind::Past(anno) => anno.tycheck(tycheck, call_span, args),
+            EncodingKind::Ast(anno) => anno.tycheck(tycheck, call_span, args),
+        }
+    }
+
+    pub fn resolve(
+        &self,
+        resolve: &mut Resolve<'_>,
+        call_span: Span,
+        args: &mut [Expr],
+    ) -> Result<(), ResolveError> {
+        match self {
+            EncodingKind::Invariant(anno) => anno.resolve(resolve, call_span, args),
+            EncodingKind::KInduction(anno) => anno.resolve(resolve, call_span, args),
+            EncodingKind::Unroll(anno) => anno.resolve(resolve, call_span, args),
+            EncodingKind::Omega(anno) => anno.resolve(resolve, call_span, args),
+            EncodingKind::Ost(anno) => anno.resolve(resolve, call_span, args),
+            EncodingKind::Past(anno) => anno.resolve(resolve, call_span, args),
+            EncodingKind::Ast(anno) => anno.resolve(resolve, call_span, args),
+        }
+    }
+
+    pub fn transform(
+        &self,
+        tyctx: &TyCtx,
+        args: &[Expr],
+        inner_stmt: &Stmt,
+        enc_env: EncodingEnvironment,
+    ) -> Result<EncodingGenerated, AnnotationError> {
+        match self {
+            EncodingKind::Invariant(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
+            EncodingKind::KInduction(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
+            EncodingKind::Unroll(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
+            EncodingKind::Omega(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
+            EncodingKind::Ost(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
+            EncodingKind::Past(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
+            EncodingKind::Ast(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
+        }
+    }
+
+    pub fn is_terminator(&self) -> bool {
+        match self {
+            EncodingKind::Invariant(anno) => anno.is_terminator(),
+            EncodingKind::KInduction(anno) => anno.is_terminator(),
+            EncodingKind::Unroll(anno) => anno.is_terminator(),
+            EncodingKind::Omega(anno) => anno.is_terminator(),
+            EncodingKind::Ost(anno) => anno.is_terminator(),
+            EncodingKind::Past(anno) => anno.is_terminator(),
+            EncodingKind::Ast(anno) => anno.is_terminator(),
+        }
+    }
+}
+
 /// Initialize all intrinsic annotations by declaring them
 pub fn init_encodings(files: &mut Files, tcx: &mut TyCtx) {
-    let invariant = AnnotationKind::Encoding(Rc::new(InvariantAnnotation::new(tcx, files)));
+    let invariant = AnnotationKind::Encoding(EncodingKind::Invariant(InvariantAnnotation::new(
+        tcx, files,
+    )));
     tcx.add_global(invariant.name());
     tcx.declare(DeclKind::AnnotationDecl(invariant));
 
-    let k_ind = AnnotationKind::Encoding(Rc::new(KIndAnnotation::new(tcx, files)));
+    let k_ind = AnnotationKind::Encoding(EncodingKind::KInduction(KIndAnnotation::new(tcx, files)));
     tcx.add_global(k_ind.name());
     tcx.declare(DeclKind::AnnotationDecl(k_ind));
 
-    let bmc = AnnotationKind::Encoding(Rc::new(UnrollAnnotation::new(tcx, files)));
+    let bmc = AnnotationKind::Encoding(EncodingKind::Unroll(UnrollAnnotation::new(tcx, files)));
     tcx.add_global(bmc.name());
     tcx.declare(DeclKind::AnnotationDecl(bmc));
 
-    let omega_inv = AnnotationKind::Encoding(Rc::new(OmegaInvAnnotation::new(tcx, files)));
+    let omega_inv =
+        AnnotationKind::Encoding(EncodingKind::Omega(OmegaInvAnnotation::new(tcx, files)));
     tcx.add_global(omega_inv.name());
     tcx.declare(DeclKind::AnnotationDecl(omega_inv));
 
-    let ost = AnnotationKind::Encoding(Rc::new(OSTAnnotation::new(tcx, files)));
+    let ost = AnnotationKind::Encoding(EncodingKind::Ost(OSTAnnotation::new(tcx, files)));
     tcx.add_global(ost.name());
     tcx.declare(DeclKind::AnnotationDecl(ost));
 
-    let past = AnnotationKind::Encoding(Rc::new(PASTAnnotation::new(tcx, files)));
+    let past = AnnotationKind::Encoding(EncodingKind::Past(PASTAnnotation::new(tcx, files)));
     tcx.add_global(past.name());
     tcx.declare(DeclKind::AnnotationDecl(past));
 
-    let ast = AnnotationKind::Encoding(Rc::new(ASTAnnotation::new(tcx, files)));
+    let ast = AnnotationKind::Encoding(EncodingKind::Ast(ASTAnnotation::new(tcx, files)));
     tcx.add_global(ast.name());
     tcx.declare(DeclKind::AnnotationDecl(ast));
 }

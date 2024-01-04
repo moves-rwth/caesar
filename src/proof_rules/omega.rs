@@ -26,6 +26,7 @@ use super::{Encoding, EncodingEnvironment, EncodingGenerated};
 
 use super::util::*;
 
+#[derive(Clone)]
 pub struct OmegaInvAnnotation(AnnotationInfo);
 
 impl OmegaInvAnnotation {

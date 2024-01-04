@@ -23,7 +23,7 @@ use crate::{
 use super::{Encoding, EncodingEnvironment, EncodingGenerated};
 
 use super::util::*;
-
+#[derive(Clone)]
 pub struct UnrollAnnotation(AnnotationInfo);
 
 impl UnrollAnnotation {

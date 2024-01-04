@@ -130,10 +130,16 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
             for spec in &mut proc.spec {
                 walk_proc_spec(this, spec)?;
             }
+
+            if let Some(ref mut calculus) = proc.calculus {
+                this.visit_ident(calculus)?;
+            }
+
             let mut body = proc.body.borrow_mut();
             if let Some(ref mut block) = &mut *body {
                 this.visit_stmts(block)?;
             }
+
             Ok(())
         })?;
         drop(proc);

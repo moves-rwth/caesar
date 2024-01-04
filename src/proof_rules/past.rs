@@ -29,6 +29,7 @@ use super::{Encoding, EncodingEnvironment, EncodingGenerated, ProcInfo};
 
 use super::util::*;
 
+#[derive(Clone)]
 pub struct PASTAnnotation(AnnotationInfo);
 
 impl PASTAnnotation {

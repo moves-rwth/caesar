@@ -5,11 +5,12 @@ use ariadne::ReportKind;
 
 use crate::{
     ast::{Diagnostic, Expr, Ident, Label, Param, Span, Spanned, Stmt},
+    calculi::Calculus,
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    proof_rules::Encoding,
+    proof_rules::EncodingKind,
 };
 
 #[derive(Debug, Clone)]
@@ -25,6 +26,8 @@ pub enum AnnotationError {
     NotOnWhile(Span, Ident, Stmt),
     WrongArgument(Span, Expr, String),
     NotTerminator(Span, Ident),
+    CalculusEncodingMismatch(Span, Ident, Ident),
+    UnknownAnnotation(Span, Ident),
 }
 
 impl AnnotationError {
@@ -65,19 +68,41 @@ impl AnnotationError {
                         "There must not be any statements after this annotated statement (and the annotated statement must not be nested in a block).",
                     ))
             }
+            AnnotationError::CalculusEncodingMismatch(span, calculus_name, encoding_name ) => {
+                Diagnostic::new(ReportKind::Error, span)
+                    .with_message(format!(
+                        "The '{}' calculus does not support the '{}' encoding.",
+                        calculus_name.name, encoding_name.name
+                    ))
+                    .with_label(Label::new(span).with_message(
+                        "The calculus and encoding are incompatible.",
+                    ))
+            }
+            AnnotationError::UnknownAnnotation(span, anno_name ) => {
+                Diagnostic::new(ReportKind::Error, span)
+                    .with_message(format!(
+                        "The '{}' annotation is unknown.",
+                        anno_name.name
+                    ))
+                    .with_label(Label::new(span).with_message(
+                        "This annotation is not defined.",
+                    ))
+            }
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum AnnotationKind {
-    Encoding(Rc<dyn Encoding>),
+    Encoding(EncodingKind),
+    Calculus(Rc<dyn Calculus>),
 }
 
 impl AnnotationKind {
     pub fn name(&self) -> Ident {
         match self {
             AnnotationKind::Encoding(encoding) => encoding.name(),
+            AnnotationKind::Calculus(calculus) => calculus.name(),
         }
     }
 
@@ -89,6 +114,7 @@ impl AnnotationKind {
     ) -> Result<(), TycheckError> {
         match self {
             AnnotationKind::Encoding(encoding) => encoding.tycheck(tycheck, call_span, args),
+            AnnotationKind::Calculus(_) => Ok(()),
         }
     }
 
@@ -100,6 +126,7 @@ impl AnnotationKind {
     ) -> Result<(), ResolveError> {
         match self {
             AnnotationKind::Encoding(encoding) => encoding.resolve(resolve, call_span, args),
+            AnnotationKind::Calculus(_) => Ok(()),
         }
     }
 }

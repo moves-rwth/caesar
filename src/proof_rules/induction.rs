@@ -26,7 +26,8 @@ use super::{Encoding, EncodingEnvironment, EncodingGenerated};
 use super::util::*;
 
 /// Syntactic sugar encoding for K-Induction encodings of type k=1
-pub struct InvariantAnnotation(AnnotationInfo);
+#[derive(Clone)]
+pub struct InvariantAnnotation(pub AnnotationInfo);
 
 impl InvariantAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -135,6 +136,7 @@ impl Encoding for InvariantAnnotation {
     }
 }
 
+#[derive(Clone)]
 pub struct KIndAnnotation(AnnotationInfo);
 
 impl KIndAnnotation {
