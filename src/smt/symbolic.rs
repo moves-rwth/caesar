@@ -127,7 +127,7 @@ impl<'ctx> Symbolic<'ctx> {
             Symbolic::Int(v) => Dynamic::from(v),
             Symbolic::UInt(v) => Dynamic::from(v.as_int().clone()),
             Symbolic::Real(v) => Dynamic::from(v),
-            Symbolic::UReal(v) => Dynamic::from(v.as_real().clone()),
+            Symbolic::UReal(v) => Dynamic::from(v.into_real()),
             Symbolic::EUReal(v) => ctx.super_eureal().to_datatype(&v).as_dynamic(),
             Symbolic::List(v) => v.as_dynamic(),
             Symbolic::Uninterpreted(v) => v,

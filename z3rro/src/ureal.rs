@@ -37,6 +37,10 @@ impl<'ctx> UReal<'ctx> {
     pub fn as_real(&self) -> &Real<'ctx> {
         &self.0
     }
+
+    pub fn into_real(self) -> Real<'ctx> {
+        self.0
+    }
 }
 
 impl<'ctx> SmtAst<'ctx> for UReal<'ctx> {
