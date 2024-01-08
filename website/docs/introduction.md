@@ -14,7 +14,7 @@ More information on the [publications page](./publications.md).
 ---
 
 **This is research software** and we're still working on a nice user interface, documentation, and fixing bugs.
-Do not hesitate to open an issue or send an email to [phisch@cs.rwth-aachen.de](mailto:phisch@cs.rwth-aachen.de) with questions or ideas.
+Do not hesitate to [open an issue](https://github.com/moves-rwth/caesar/issues) or send an email to [phisch@cs.rwth-aachen.de](mailto:phisch@cs.rwth-aachen.de) with questions or ideas.
 I am also happy to discuss anything via Zoom as well!
 
 ---
