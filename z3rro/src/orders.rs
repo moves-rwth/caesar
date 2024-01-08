@@ -101,11 +101,11 @@ where
 impl<'ctx> SmtPartialOrd<'ctx> for Bool<'ctx> {
     fn smt_cmp(&self, other: &Self, ordering: SmtOrdering) -> Bool<'ctx> {
         match ordering {
-            SmtOrdering::Less => z3_and!(self.not(), other),
+            SmtOrdering::Less => Bool::and(self.get_ctx(), &[&self.not(), &other]),
             SmtOrdering::LessOrEqual => self.implies(other),
             SmtOrdering::Equal => self._eq(other),
             SmtOrdering::GreaterOrEqual => other.implies(self),
-            SmtOrdering::Greater => z3_and!(self, other.not()),
+            SmtOrdering::Greater => z3_and!(self, &other.not()),
         }
     }
 }

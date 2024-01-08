@@ -13,7 +13,7 @@ macro_rules! z3_and {
         {
             use z3::ast::{Ast, Bool};
             let first = $first;
-            Bool::and(first.get_ctx(),  &[&first, $(&$x,)*])
+            Bool::and(first.get_ctx(),  &[first, $($x,)*])
         }
     };
     ($( $x:expr ),*) => { z3_and!($($x,)*) }
@@ -26,7 +26,7 @@ macro_rules! z3_or {
         {
             use z3::ast::{Ast, Bool};
             let first = $first;
-            Bool::or(first.get_ctx(),  &[&first, $(&$x,)*])
+            Bool::or(first.get_ctx(),  &[first, $($x,)*])
         }
     };
     ($( $x:expr ),*) => { z3_or!($($x,)*) }

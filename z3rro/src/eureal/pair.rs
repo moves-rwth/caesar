@@ -143,7 +143,7 @@ impl<'a, 'ctx> Sub<&'a EUReal<'ctx>> for &'a EUReal<'ctx> {
     fn sub(self, rhs: &'a EUReal<'ctx>) -> Self::Output {
         EUReal {
             factory: self.factory.clone(),
-            is_infinite: z3_and!(&self.is_infinite, rhs.is_infinite.not()),
+            is_infinite: z3_and!(&self.is_infinite, &rhs.is_infinite.not()),
             number: &self.number - &rhs.number,
         }
     }
@@ -156,13 +156,13 @@ impl<'a, 'ctx> Mul<&'a EUReal<'ctx>> for &'a EUReal<'ctx> {
 
     fn mul(self, rhs: &'a EUReal<'ctx>) -> Self::Output {
         let zero = UReal::zero(&self.factory.ctx);
-        let a_nonzero = z3_or!(&self.is_infinite, self.number.smt_eq(&zero).not());
-        let b_nonzero = z3_or!(&rhs.is_infinite, rhs.number.smt_eq(&zero).not());
+        let a_nonzero = z3_or!(&self.is_infinite, &self.number.smt_eq(&zero).not());
+        let b_nonzero = z3_or!(&rhs.is_infinite, &rhs.number.smt_eq(&zero).not());
         EUReal {
             factory: self.factory.clone(),
             is_infinite: z3_or!(
-                z3_and!(&self.is_infinite, b_nonzero),
-                z3_and!(&rhs.is_infinite, a_nonzero)
+                z3_and!(&self.is_infinite, &b_nonzero),
+                z3_and!(&rhs.is_infinite, &a_nonzero)
             ),
             number: &self.number * &rhs.number,
         }
@@ -186,7 +186,7 @@ impl<'ctx> SmtPartialOrd<'ctx> for EUReal<'ctx> {
         fn eureal_le<'ctx>(a: &EUReal<'ctx>, b: &EUReal<'ctx>) -> Bool<'ctx> {
             z3_or!(
                 &b.is_infinite,
-                z3_and!(a.is_infinite.not(), a.number.smt_le(&b.number))
+                &z3_and!(&a.is_infinite.not(), &a.number.smt_le(&b.number))
             )
         }
 

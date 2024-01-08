@@ -71,7 +71,7 @@ impl<'ctx> SmtScope<'ctx> {
             ctx,
             &self.bounds_dyn(),
             patterns,
-            &z3_and!(self.all_constraints(ctx), body),
+            &Bool::and(ctx, &[&self.all_constraints(ctx), &body]),
         )
     }
 
