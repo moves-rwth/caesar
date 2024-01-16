@@ -17,20 +17,20 @@ mod util;
 #[cfg(test)]
 mod tests;
 
-use std::fmt;
+use std::{fmt, rc::Rc};
 
 use crate::{
     ast::{
         visit::{walk_stmt, VisitorMut},
-        DeclKind, Direction, Expr, Files, Ident, Param, ProcSpec, SourceFilePath, Span, Stmt,
-        StmtKind,
+        DeclKind, DeclRef, Direction, Expr, Files, Ident, Param, ProcDecl, ProcSpec,
+        SourceFilePath, Span, Stmt, StmtKind,
     },
     driver::{Item, SourceUnit},
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{AnnotationError, AnnotationKind},
+    intrinsic::annotations::{AnnotationError, AnnotationKind, Calculus},
     tyctx::TyCtx,
 };
 
@@ -86,129 +86,40 @@ pub trait Encoding: fmt::Debug {
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError>;
 
+    /// Check if the given calculus annotation is compatible with the encoding annotation
+    fn check_calculus(&self, calculus: &Calculus, direction: Direction) -> Result<(), ()>;
+
     /// Indicates if the encoding annotation is required to be the last statement of a procedure
     fn is_terminator(&self) -> bool;
 }
 
-#[derive(Debug, Clone)]
-pub enum EncodingKind {
-    Invariant(InvariantAnnotation),
-    KInduction(KIndAnnotation),
-    Unroll(UnrollAnnotation),
-    Omega(OmegaInvAnnotation),
-    Ost(OSTAnnotation),
-    Past(PASTAnnotation),
-    Ast(ASTAnnotation),
-}
-
-impl EncodingKind {
-    pub fn name(&self) -> Ident {
-        match self {
-            EncodingKind::Invariant(anno) => anno.name(),
-            EncodingKind::KInduction(anno) => anno.name(),
-            EncodingKind::Unroll(anno) => anno.name(),
-            EncodingKind::Omega(anno) => anno.name(),
-            EncodingKind::Ost(anno) => anno.name(),
-            EncodingKind::Past(anno) => anno.name(),
-            EncodingKind::Ast(anno) => anno.name(),
-        }
-    }
-
-    pub fn tycheck(
-        &self,
-        tycheck: &mut Tycheck<'_>,
-        call_span: Span,
-        args: &mut [Expr],
-    ) -> Result<(), TycheckError> {
-        match self {
-            EncodingKind::Invariant(anno) => anno.tycheck(tycheck, call_span, args),
-            EncodingKind::KInduction(anno) => anno.tycheck(tycheck, call_span, args),
-            EncodingKind::Unroll(anno) => anno.tycheck(tycheck, call_span, args),
-            EncodingKind::Omega(anno) => anno.tycheck(tycheck, call_span, args),
-            EncodingKind::Ost(anno) => anno.tycheck(tycheck, call_span, args),
-            EncodingKind::Past(anno) => anno.tycheck(tycheck, call_span, args),
-            EncodingKind::Ast(anno) => anno.tycheck(tycheck, call_span, args),
-        }
-    }
-
-    pub fn resolve(
-        &self,
-        resolve: &mut Resolve<'_>,
-        call_span: Span,
-        args: &mut [Expr],
-    ) -> Result<(), ResolveError> {
-        match self {
-            EncodingKind::Invariant(anno) => anno.resolve(resolve, call_span, args),
-            EncodingKind::KInduction(anno) => anno.resolve(resolve, call_span, args),
-            EncodingKind::Unroll(anno) => anno.resolve(resolve, call_span, args),
-            EncodingKind::Omega(anno) => anno.resolve(resolve, call_span, args),
-            EncodingKind::Ost(anno) => anno.resolve(resolve, call_span, args),
-            EncodingKind::Past(anno) => anno.resolve(resolve, call_span, args),
-            EncodingKind::Ast(anno) => anno.resolve(resolve, call_span, args),
-        }
-    }
-
-    pub fn transform(
-        &self,
-        tyctx: &TyCtx,
-        args: &[Expr],
-        inner_stmt: &Stmt,
-        enc_env: EncodingEnvironment,
-    ) -> Result<EncodingGenerated, AnnotationError> {
-        match self {
-            EncodingKind::Invariant(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
-            EncodingKind::KInduction(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
-            EncodingKind::Unroll(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
-            EncodingKind::Omega(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
-            EncodingKind::Ost(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
-            EncodingKind::Past(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
-            EncodingKind::Ast(anno) => anno.transform(tyctx, args, inner_stmt, enc_env),
-        }
-    }
-
-    pub fn is_terminator(&self) -> bool {
-        match self {
-            EncodingKind::Invariant(anno) => anno.is_terminator(),
-            EncodingKind::KInduction(anno) => anno.is_terminator(),
-            EncodingKind::Unroll(anno) => anno.is_terminator(),
-            EncodingKind::Omega(anno) => anno.is_terminator(),
-            EncodingKind::Ost(anno) => anno.is_terminator(),
-            EncodingKind::Past(anno) => anno.is_terminator(),
-            EncodingKind::Ast(anno) => anno.is_terminator(),
-        }
-    }
-}
-
 /// Initialize all intrinsic annotations by declaring them
 pub fn init_encodings(files: &mut Files, tcx: &mut TyCtx) {
-    let invariant = AnnotationKind::Encoding(EncodingKind::Invariant(InvariantAnnotation::new(
-        tcx, files,
-    )));
+    let invariant = AnnotationKind::Encoding(Rc::new(InvariantAnnotation::new(tcx, files)));
     tcx.add_global(invariant.name());
     tcx.declare(DeclKind::AnnotationDecl(invariant));
 
-    let k_ind = AnnotationKind::Encoding(EncodingKind::KInduction(KIndAnnotation::new(tcx, files)));
+    let k_ind = AnnotationKind::Encoding(Rc::new(KIndAnnotation::new(tcx, files)));
     tcx.add_global(k_ind.name());
     tcx.declare(DeclKind::AnnotationDecl(k_ind));
 
-    let bmc = AnnotationKind::Encoding(EncodingKind::Unroll(UnrollAnnotation::new(tcx, files)));
+    let bmc = AnnotationKind::Encoding(Rc::new(UnrollAnnotation::new(tcx, files)));
     tcx.add_global(bmc.name());
     tcx.declare(DeclKind::AnnotationDecl(bmc));
 
-    let omega_inv =
-        AnnotationKind::Encoding(EncodingKind::Omega(OmegaInvAnnotation::new(tcx, files)));
+    let omega_inv = AnnotationKind::Encoding(Rc::new(OmegaInvAnnotation::new(tcx, files)));
     tcx.add_global(omega_inv.name());
     tcx.declare(DeclKind::AnnotationDecl(omega_inv));
 
-    let ost = AnnotationKind::Encoding(EncodingKind::Ost(OSTAnnotation::new(tcx, files)));
+    let ost = AnnotationKind::Encoding(Rc::new(OSTAnnotation::new(tcx, files)));
     tcx.add_global(ost.name());
     tcx.declare(DeclKind::AnnotationDecl(ost));
 
-    let past = AnnotationKind::Encoding(EncodingKind::Past(PASTAnnotation::new(tcx, files)));
+    let past = AnnotationKind::Encoding(Rc::new(PASTAnnotation::new(tcx, files)));
     tcx.add_global(past.name());
     tcx.declare(DeclKind::AnnotationDecl(past));
 
-    let ast = AnnotationKind::Encoding(EncodingKind::Ast(ASTAnnotation::new(tcx, files)));
+    let ast = AnnotationKind::Encoding(Rc::new(ASTAnnotation::new(tcx, files)));
     tcx.add_global(ast.name());
     tcx.declare(DeclKind::AnnotationDecl(ast));
 }
@@ -221,6 +132,7 @@ pub struct EncCall<'tcx, 'sunit> {
     terminator_annotation: Option<Ident>,
     nesting_level: usize,
     current_proc_ident: Option<Ident>,
+    calculus: Option<Calculus>,
 }
 
 impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
@@ -232,6 +144,7 @@ impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
             terminator_annotation: None,
             nesting_level: 0,
             current_proc_ident: None,
+            calculus: None,
         }
     }
 }
@@ -243,8 +156,59 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
         if let DeclKind::ProcDecl(decl_ref) = decl {
             self.direction = Some(decl_ref.borrow().direction);
             self.current_proc_ident = Some(decl_ref.borrow().name);
+
+            // If the procedure has a calculus annotation, store it as the current calculus
+            if let Some(ident) = decl_ref.borrow().calculus.as_ref() {
+                match self.tcx.get(*ident) {
+                    Some(decl) => {
+                        if let DeclKind::AnnotationDecl(AnnotationKind::Calculus(calculus)) =
+                            decl.as_ref()
+                        {
+                            self.calculus = Some(calculus.clone());
+                        }
+                    }
+                    None => {
+                        return Err(AnnotationError::UnknownAnnotation(
+                            decl_ref.borrow().span,
+                            *ident,
+                        ))
+                    }
+                }
+            }
+
             self.visit_proc(decl_ref)?;
         }
+        Ok(())
+    }
+
+    fn visit_proc(&mut self, proc_ref: &mut DeclRef<ProcDecl>) -> Result<(), Self::Err> {
+        self.direction = Some(proc_ref.borrow().direction);
+        self.current_proc_ident = Some(proc_ref.borrow().name);
+
+        // If the procedure has a calculus annotation, store it as the current calculus
+        if let Some(ident) = proc_ref.borrow().calculus.as_ref() {
+            match self.tcx.get(*ident) {
+                Some(decl) => {
+                    if let DeclKind::AnnotationDecl(AnnotationKind::Calculus(calculus)) =
+                        decl.as_ref()
+                    {
+                        self.calculus = Some(calculus.clone());
+                    }
+                }
+                None => {
+                    return Err(AnnotationError::UnknownAnnotation(
+                        proc_ref.borrow().span,
+                        *ident,
+                    ))
+                }
+            }
+        }
+        let proc = proc_ref.borrow_mut();
+        let mut body = proc.body.borrow_mut();
+        if let Some(ref mut block) = &mut *body {
+            self.visit_stmts(block)?;
+        }
+
         Ok(())
     }
 
@@ -273,6 +237,25 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                     if anno_ref.is_terminator() && self.nesting_level > 0 {
                         return Err(AnnotationError::NotTerminator(s.span, anno_ref.name()));
                     }
+
+                    // Check if the calculus annotation is compatible with the encoding annotation
+                    if let Some(calculus) = &self.calculus {
+                        if anno_ref
+                            .check_calculus(
+                                calculus,
+                                self.direction
+                                    .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,
+                            )
+                            .is_err()
+                        {
+                            return Err(AnnotationError::CalculusEncodingMismatch(
+                                s.span,
+                                calculus.name,
+                                anno_ref.name(),
+                            ));
+                        };
+                    }
+
                     let enc_env = EncodingEnvironment {
                         base_proc_ident: self
                             .current_proc_ident

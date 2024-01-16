@@ -26,9 +26,9 @@ use crate::{
     version::write_detailed_version_info,
 };
 use ast::{Diagnostic, Expr, FileId, Files, SourceFilePath};
-use calculi::init_calculi;
+
 use driver::{Item, SourceUnit, SourceUnitName, VerifyUnit};
-use intrinsic::{distributions::init_distributions, list::init_lists};
+use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use opt::{boolify::Boolify, RemoveParens};
 use procs::add_default_specs;
 use proof_rules::init_encodings;
@@ -50,7 +50,7 @@ use z3rro::{
 };
 
 pub mod ast;
-mod calculi;
+// mod calculi;
 mod driver;
 pub mod front;
 pub mod intrinsic;
@@ -423,14 +423,6 @@ fn verify_files_main(
             let files = files_mutex.lock().unwrap();
             print_warning(options, &files, err)?;
         }
-    }
-
-    // Check compliance between calculus annotations and encoding annotations before desugaring
-    for source_unit in &mut source_units {
-        let mut entered = source_unit.enter();
-        entered
-            .check_calculus(&mut tcx)
-            .map_err(|ann_err| ann_err.diagnostic())?;
     }
 
     // Desugar encodings from source units

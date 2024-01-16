@@ -10,14 +10,16 @@ use std::fmt;
 
 use crate::{
     ast::{
-        util::ModifiedVariableCollector, visit::VisitorMut, Expr, Files, Ident, SourceFilePath,
-        Span, Spanned, Stmt, Symbol, TyKind,
+        util::ModifiedVariableCollector, visit::VisitorMut, Direction, Expr, Files, Ident,
+        SourceFilePath, Span, Spanned, Stmt, Symbol, TyKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{check_annotation_call, AnnotationError, AnnotationInfo},
+    intrinsic::annotations::{
+        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+    },
     tyctx::TyCtx,
 };
 
@@ -26,8 +28,8 @@ use super::{Encoding, EncodingEnvironment, EncodingGenerated};
 use super::util::*;
 
 /// Syntactic sugar encoding for K-Induction encodings of type k=1
-#[derive(Clone)]
-pub struct InvariantAnnotation(pub AnnotationInfo);
+
+pub struct InvariantAnnotation(pub AnnotationDecl);
 
 impl InvariantAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -39,13 +41,13 @@ impl InvariantAnnotation {
 
         let invariant_param = intrinsic_param(file, "inv", TyKind::SpecTy, false);
 
-        let anno_info = AnnotationInfo {
+        let anno_decl = AnnotationDecl {
             name,
             inputs: Spanned::with_dummy_file_span(vec![invariant_param], file),
             span: Span::dummy_file_span(file),
         };
 
-        InvariantAnnotation(anno_info)
+        InvariantAnnotation(anno_decl)
     }
 }
 
@@ -80,6 +82,19 @@ impl Encoding for InvariantAnnotation {
     ) -> Result<(), ResolveError> {
         let [invariant] = mut_one_arg(args);
         resolve.visit_expr(invariant)
+    }
+
+    fn check_calculus(&self, calculus: &Calculus, direction: Direction) -> Result<(), ()> {
+        if direction
+            != match calculus.calculus_type {
+                CalculusType::WP | CalculusType::ERT => Direction::Up,
+                CalculusType::WLP => Direction::Down,
+            }
+        {
+            return Err(());
+        }
+
+        Ok(())
     }
 
     fn transform(
@@ -136,8 +151,7 @@ impl Encoding for InvariantAnnotation {
     }
 }
 
-#[derive(Clone)]
-pub struct KIndAnnotation(AnnotationInfo);
+pub struct KIndAnnotation(AnnotationDecl);
 
 impl KIndAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -150,13 +164,13 @@ impl KIndAnnotation {
         let k_param = intrinsic_param(file, "k", TyKind::UInt, true);
         let invariant_param = intrinsic_param(file, "inv", TyKind::SpecTy, false);
 
-        let anno_info = AnnotationInfo {
+        let anno_decl = AnnotationDecl {
             name,
             inputs: Spanned::with_dummy_file_span(vec![k_param, invariant_param], file),
             span: Span::dummy_file_span(file),
         };
 
-        KIndAnnotation(anno_info)
+        KIndAnnotation(anno_decl)
     }
 }
 
@@ -194,6 +208,18 @@ impl Encoding for KIndAnnotation {
         resolve.visit_expr(invariant)
     }
 
+    fn check_calculus(&self, calculus: &Calculus, direction: Direction) -> Result<(), ()> {
+        if direction
+            != match calculus.calculus_type {
+                CalculusType::WP | CalculusType::ERT => Direction::Up,
+                CalculusType::WLP => Direction::Down,
+            }
+        {
+            return Err(());
+        }
+
+        Ok(())
+    }
     fn transform(
         &self,
         tcx: &TyCtx,

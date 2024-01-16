@@ -18,7 +18,9 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{check_annotation_call, AnnotationError, AnnotationInfo},
+    intrinsic::annotations::{
+        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+    },
     tyctx::TyCtx,
 };
 
@@ -26,8 +28,7 @@ use super::{Encoding, EncodingEnvironment, EncodingGenerated};
 
 use super::util::*;
 
-#[derive(Clone)]
-pub struct OmegaInvAnnotation(AnnotationInfo);
+pub struct OmegaInvAnnotation(AnnotationDecl);
 
 impl OmegaInvAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -40,13 +41,13 @@ impl OmegaInvAnnotation {
         let omega_inv_param = intrinsic_param(file, "omega_inv", TyKind::EUReal, false);
         let free_var_param = intrinsic_param(file, "free_variable", TyKind::UInt, false);
 
-        let anno_info = AnnotationInfo {
+        let anno_decl = AnnotationDecl {
             name,
             inputs: Spanned::with_dummy_file_span(vec![free_var_param, omega_inv_param], file),
             span: Span::dummy_file_span(file),
         };
 
-        OmegaInvAnnotation(anno_info)
+        OmegaInvAnnotation(anno_decl)
     }
 }
 
@@ -92,6 +93,19 @@ impl Encoding for OmegaInvAnnotation {
             resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;
         }
         resolve.visit_expr(omega_inv)
+    }
+
+    fn check_calculus(&self, calculus: &Calculus, direction: Direction) -> Result<(), ()> {
+        if direction
+            != match calculus.calculus_type {
+                CalculusType::WP | CalculusType::ERT => Direction::Down,
+                CalculusType::WLP => Direction::Up,
+            }
+        {
+            return Err(());
+        }
+
+        Ok(())
     }
 
     fn transform(

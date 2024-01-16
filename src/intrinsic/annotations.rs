@@ -4,17 +4,20 @@ use std::rc::Rc;
 use ariadne::ReportKind;
 
 use crate::{
-    ast::{Diagnostic, Expr, Ident, Label, Param, Span, Spanned, Stmt},
-    calculi::Calculus,
+    ast::{
+        DeclKind, Diagnostic, Expr, Files, Ident, Label, Param, SourceFilePath, Span, Spanned,
+        Stmt, Symbol,
+    },
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    proof_rules::EncodingKind,
+    proof_rules::Encoding,
+    tyctx::TyCtx,
 };
 
 #[derive(Debug, Clone)]
-pub struct AnnotationInfo {
+pub struct AnnotationDecl {
     pub name: Ident,
     pub inputs: Spanned<Vec<Param>>,
     pub span: Span,
@@ -36,17 +39,17 @@ impl AnnotationError {
             AnnotationError::NotInProcedure(span, annotation) => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "The annotation `{}` is not in a procedure",
+                        "The annotation `{}` is can only be used inside a procedure.",
                         annotation
                     ))
                     .with_label(
-                        Label::new(annotation.span).with_message("This should be in a procedure"),
+                        Label::new(annotation.span).with_message("here"),
                     )
             }
             AnnotationError::NotOnWhile(span, annotation, annotated) => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "The annotation `{}` is not on a while statement",
+                        "Proof rule `{}` must be used on a while loop.",
                         annotation
                     ))
                     .with_label(
@@ -94,15 +97,30 @@ impl AnnotationError {
 
 #[derive(Debug, Clone)]
 pub enum AnnotationKind {
-    Encoding(EncodingKind),
-    Calculus(Rc<dyn Calculus>),
+    Encoding(Rc<dyn Encoding>),
+    Calculus(Calculus),
 }
 
+#[derive(Debug, Clone)]
+pub struct Calculus {
+    pub name: Ident,
+    pub calculus_type: CalculusType,
+}
+
+#[derive(Debug, Clone)]
+
+pub enum CalculusType {
+    WP,
+    WLP,
+    ERT,
+}
+
+pub struct CalculusAnnotationError;
 impl AnnotationKind {
     pub fn name(&self) -> Ident {
         match self {
             AnnotationKind::Encoding(encoding) => encoding.name(),
-            AnnotationKind::Calculus(calculus) => calculus.name(),
+            AnnotationKind::Calculus(calculus) => calculus.name,
         }
     }
 
@@ -135,9 +153,37 @@ impl AnnotationKind {
 pub fn check_annotation_call(
     tycheck: &mut Tycheck<'_>,
     span: Span,
-    annotation: &AnnotationInfo,
+    annotation: &AnnotationDecl,
     args: &mut [Expr],
 ) -> Result<(), TycheckError> {
     tycheck.check_call(span, &annotation.inputs.node, args)?;
     Ok(())
+}
+
+/// Add all built-in calculus annotations as globals into the [`TyCtx`].
+pub fn init_calculi(files: &mut Files, tcx: &mut TyCtx) {
+    let file = files
+        .add(SourceFilePath::Builtin, "calculus".to_string())
+        .id;
+
+    let wp = AnnotationKind::Calculus(Calculus {
+        name: Ident::with_dummy_file_span(Symbol::intern("wp"), file),
+        calculus_type: CalculusType::WP,
+    });
+    tcx.add_global(wp.name());
+    tcx.declare(DeclKind::AnnotationDecl(wp));
+
+    let wlp = AnnotationKind::Calculus(Calculus {
+        name: Ident::with_dummy_file_span(Symbol::intern("wlp"), file),
+        calculus_type: CalculusType::WLP,
+    });
+    tcx.add_global(wlp.name());
+    tcx.declare(DeclKind::AnnotationDecl(wlp));
+
+    let ert = AnnotationKind::Calculus(Calculus {
+        name: Ident::with_dummy_file_span(Symbol::intern("ert"), file),
+        calculus_type: CalculusType::ERT,
+    });
+    tcx.add_global(ert.name());
+    tcx.declare(DeclKind::AnnotationDecl(ert));
 }

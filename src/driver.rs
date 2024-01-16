@@ -10,7 +10,6 @@ use crate::{
         visit::VisitorMut, Block, DeclKind, Expr, ExprData, ExprKind, LitKind, Shared,
         SourceFilePath, Span, Spanned, StoredFile, TyKind,
     },
-    calculi::CalculusVisitor,
     front::parser,
     front::resolve::{Resolve, ResolveError},
     front::{
@@ -187,17 +186,6 @@ impl SourceUnit {
         match self {
             SourceUnit::Decl(decl) => enc_call.visit_decl(decl),
             SourceUnit::Raw(block) => enc_call.visit_stmts(block),
-        }
-    }
-
-    #[instrument(skip(self, tcx))]
-    pub fn check_calculus(&mut self, tcx: &mut TyCtx) -> Result<(), AnnotationError> {
-        let mut calculus_visitor = CalculusVisitor::new(tcx);
-
-        match self {
-            SourceUnit::Decl(decl) => calculus_visitor.visit_decl(decl),
-            // Not supported for raw source units since calculus annotations are only allowed on procedures
-            SourceUnit::Raw(_) => Ok(()),
         }
     }
 

@@ -6,6 +6,7 @@ fn remove_whitespace(s: &mut String) {
 
 use crate::single_desugar_test;
 use crate::verify_test;
+use crate::VerifyError;
 
 #[test]
 fn test_k_induction_transform() {
@@ -516,7 +517,7 @@ fn test_past_not_on_while() {
     let err = verify_test(&source).0.unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Error: The annotation `past` is not on a while statement"
+        "Error: Proof rule `past` must be used on a while loop."
     );
 }
 #[test]
@@ -531,6 +532,55 @@ fn test_invariant_not_on_while() {
     let err = verify_test(&source).0.unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Error: The annotation `invariant` is not on a while statement"
+        "Error: Proof rule `invariant` must be used on a while loop."
     );
+}
+
+#[test]
+fn test_wp_with_kind_fail() {
+    let source = r#"
+    @wp
+    proc main() -> () {
+        var x: UInt
+        @k_induction(1, x)
+        while 1 <= x {
+            x = x - 1
+        }
+    }
+    "#;
+    let res = matches!(verify_test(source).0, Err(VerifyError::Diagnostic(_)));
+
+    assert!(res);
+}
+
+#[test]
+fn test_wp_with_kind_ok() {
+    let source = r#"
+    @wp
+    coproc main() -> () {
+        var x: UInt
+        @k_induction(1, x)
+        while 1 <= x {
+            x = x - 1
+        }
+    }
+    "#;
+    let res = verify_test(source).0.unwrap();
+    assert_eq!(res, false)
+}
+
+#[test]
+fn test_wlp_with_kind_ok() {
+    let source = r#"
+    @wlp
+    proc main() -> () {
+        var x: UInt
+        @k_induction(1, x)
+        while 1 <= x {
+            x = x - 1
+        }
+    }
+    "#;
+    let res = verify_test(source).0.unwrap();
+    assert_eq!(res, false)
 }

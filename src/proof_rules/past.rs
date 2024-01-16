@@ -21,7 +21,9 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{check_annotation_call, AnnotationError, AnnotationInfo},
+    intrinsic::annotations::{
+        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+    },
     tyctx::TyCtx,
 };
 
@@ -29,8 +31,7 @@ use super::{Encoding, EncodingEnvironment, EncodingGenerated, ProcInfo};
 
 use super::util::*;
 
-#[derive(Clone)]
-pub struct PASTAnnotation(AnnotationInfo);
+pub struct PASTAnnotation(AnnotationDecl);
 
 impl PASTAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -42,13 +43,13 @@ impl PASTAnnotation {
         let eps_param = intrinsic_param(file, "eps", TyKind::UReal, true);
         let k_param = intrinsic_param(file, "k", TyKind::UReal, true);
 
-        let anno_info = AnnotationInfo {
+        let anno_decl = AnnotationDecl {
             name,
             inputs: Spanned::with_dummy_file_span(vec![invariant_param, eps_param, k_param], file),
             span: Span::dummy_file_span(file),
         };
 
-        PASTAnnotation(anno_info)
+        PASTAnnotation(anno_decl)
     }
 }
 
@@ -84,6 +85,16 @@ impl Encoding for PASTAnnotation {
         resolve.visit_expr(inv)?;
         resolve.visit_expr(eps)?;
         resolve.visit_expr(k)
+    }
+
+    fn check_calculus(&self, calculus: &Calculus, direction: Direction) -> Result<(), ()> {
+        if let CalculusType::ERT = calculus.calculus_type {
+            if direction == Direction::Up {
+                return Ok(());
+            }
+        }
+
+        Err(())
     }
 
     fn transform(

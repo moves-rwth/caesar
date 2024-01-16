@@ -16,15 +16,17 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{check_annotation_call, AnnotationError, AnnotationInfo},
+    intrinsic::annotations::{
+        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+    },
     tyctx::TyCtx,
 };
 
 use super::{Encoding, EncodingEnvironment, EncodingGenerated};
 
 use super::util::*;
-#[derive(Clone)]
-pub struct UnrollAnnotation(AnnotationInfo);
+
+pub struct UnrollAnnotation(AnnotationDecl);
 
 impl UnrollAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -36,13 +38,13 @@ impl UnrollAnnotation {
         let k_param = intrinsic_param(file, "k", TyKind::UInt, true);
         let invariant_param = intrinsic_param(file, "terminator", TyKind::SpecTy, false);
 
-        let anno_info = AnnotationInfo {
+        let anno_decl = AnnotationDecl {
             name,
             inputs: Spanned::with_dummy_file_span(vec![k_param, invariant_param], file),
             span: Span::dummy_file_span(file),
         };
 
-        UnrollAnnotation(anno_info)
+        UnrollAnnotation(anno_decl)
     }
 }
 
@@ -80,6 +82,18 @@ impl Encoding for UnrollAnnotation {
         resolve.visit_expr(invariant)
     }
 
+    fn check_calculus(&self, calculus: &Calculus, direction: Direction) -> Result<(), ()> {
+        if direction
+            != match calculus.calculus_type {
+                CalculusType::WP | CalculusType::ERT => Direction::Up,
+                CalculusType::WLP => Direction::Down,
+            }
+        {
+            return Err(());
+        }
+
+        Ok(())
+    }
     fn transform(
         &self,
         tcx: &TyCtx,
