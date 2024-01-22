@@ -132,7 +132,6 @@ impl Encoding for InvariantAnnotation {
             0,
             invariant,
             direction.toggle(),
-            false,
             hey_const(annotation_span, invariant, tcx),
         );
 
@@ -256,7 +255,6 @@ impl Encoding for KIndAnnotation {
             k - 1,
             invariant,
             direction.toggle(),
-            false,
             hey_const(annotation_span, invariant, tcx),
         );
 

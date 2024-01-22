@@ -39,7 +39,7 @@ impl AnnotationError {
             AnnotationError::NotInProcedure(span, annotation) => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "The annotation `{}` is can only be used inside a procedure.",
+                        "The annotation `{}` can only be used inside a procedure.",
                         annotation
                     ))
                     .with_label(
@@ -49,7 +49,7 @@ impl AnnotationError {
             AnnotationError::NotOnWhile(span, annotation, annotated) => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "Proof rule `{}` must be used on a while loop.",
+                        "The proof rule `{}` must be used on a while loop.",
                         annotation
                     ))
                     .with_label(
@@ -58,8 +58,8 @@ impl AnnotationError {
             }
             AnnotationError::WrongArgument(span, arg, message) => {
                 Diagnostic::new(ReportKind::Error, span)
-                    .with_message(format!("The argument {} is invalid.", arg))
-                    .with_label(Label::new(arg.span).with_message(message))
+                    .with_message(message)
+                    .with_label(Label::new(arg.span).with_message("here"))
             }
             AnnotationError::NotTerminator(span, encoding_name) => {
                 Diagnostic::new(ReportKind::Error, span)

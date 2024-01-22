@@ -125,13 +125,10 @@ impl Encoding for UnrollAnnotation {
         }
 
         // Extend the loop k times without asserts (unlike k-induction) because bmc flag is set
-        let buf = encode_extend(
+        let buf = encode_unroll(
             annotation_span,
             inner_stmt,
             k,
-            terminator,
-            direction,
-            true,
             hey_const(annotation_span, terminator, tcx),
         );
 

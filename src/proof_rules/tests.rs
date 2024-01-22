@@ -517,7 +517,7 @@ fn test_past_not_on_while() {
     let err = verify_test(&source).0.unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Error: Proof rule `past` must be used on a while loop."
+        "Error: The proof rule `past` must be used on a while loop."
     );
 }
 #[test]
@@ -532,7 +532,7 @@ fn test_invariant_not_on_while() {
     let err = verify_test(&source).0.unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Error: Proof rule `invariant` must be used on a while loop."
+        "Error: The proof rule `invariant` must be used on a while loop."
     );
 }
 

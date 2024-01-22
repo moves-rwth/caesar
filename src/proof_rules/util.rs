@@ -38,7 +38,6 @@ pub fn encode_spec(
 /// * `k` - How many times the loop will be extended
 /// * `invariant` - The invariant which will be used in assert statements
 /// * `direction` - The direction of the statements in the extend
-/// * `bmc` - Whether the extension is for bmc of k-induction
 /// * `next_iter` - Parameter necessary for the recursion
 pub fn encode_extend(
     span: Span,
@@ -46,29 +45,30 @@ pub fn encode_extend(
     k: u128,
     invariant: &Expr,
     direction: Direction,
-    bmc: bool,
     next_iter: Vec<Stmt>,
 ) -> Vec<Stmt> {
     if k == 0 {
         return next_iter;
     }
-    let next_iter = encode_extend(
-        span,
-        inner_stmt,
-        k - 1,
-        invariant,
-        direction,
-        bmc,
-        next_iter,
-    );
-    if bmc {
-        vec![encode_iter(span, inner_stmt, next_iter).unwrap()]
-    } else {
-        vec![
-            Spanned::new(span, StmtKind::Assert(direction, invariant.clone())),
-            encode_iter(span, inner_stmt, next_iter).unwrap(),
-        ]
+    let next_iter = encode_extend(span, inner_stmt, k - 1, invariant, direction, next_iter);
+    vec![
+        Spanned::new(span, StmtKind::Assert(direction, invariant.clone())),
+        encode_iter(span, inner_stmt, next_iter).unwrap(),
+    ]
+}
+
+/// Encode the extend step in bmc recursively for k times
+/// # Arguments
+/// * `span` - The span of the new generated statement
+/// * `inner_stmt` - A While statement to be encoded
+/// * `k` - How many times the loop will be extended
+/// * `next_iter` - Parameter necessary for the recursion
+pub fn encode_unroll(span: Span, inner_stmt: &Stmt, k: u128, next_iter: Vec<Stmt>) -> Vec<Stmt> {
+    if k == 0 {
+        return next_iter;
     }
+    let next_iter = encode_unroll(span, inner_stmt, k - 1, next_iter);
+    vec![encode_iter(span, inner_stmt, next_iter).unwrap()]
 }
 
 /// Encode one iteration of a while loop with an if then else statement
