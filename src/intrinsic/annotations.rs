@@ -96,12 +96,6 @@ impl AnnotationError {
 }
 
 #[derive(Debug, Clone)]
-pub enum AnnotationKind {
-    Encoding(Rc<dyn Encoding>),
-    Calculus(Calculus),
-}
-
-#[derive(Debug, Clone)]
 pub struct Calculus {
     pub name: Ident,
     pub calculus_type: CalculusType,
@@ -116,6 +110,13 @@ pub enum CalculusType {
 }
 
 pub struct CalculusAnnotationError;
+
+#[derive(Debug, Clone)]
+pub enum AnnotationKind {
+    Encoding(Rc<dyn Encoding>),
+    Calculus(Calculus),
+}
+
 impl AnnotationKind {
     pub fn name(&self) -> Ident {
         match self {
