@@ -258,7 +258,7 @@ impl Encoding for PASTAnnotation {
             encode_iter(
                 annotation_span,
                 inner_stmt,
-                hey_const(annotation_span, inv, tcx),
+                hey_const(annotation_span, inv, Direction::Up, tcx),
             )
             .unwrap(),
         );

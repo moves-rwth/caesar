@@ -129,7 +129,7 @@ impl Encoding for UnrollAnnotation {
             annotation_span,
             inner_stmt,
             k,
-            hey_const(annotation_span, terminator, tcx),
+            hey_const(annotation_span, terminator, direction, tcx),
         );
 
         Ok(EncodingGenerated {

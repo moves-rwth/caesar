@@ -151,7 +151,7 @@ impl Encoding for OmegaInvAnnotation {
         let iter = encode_iter(
             annotation_span,
             inner_stmt,
-            hey_const(annotation_span, omega_inv, tcx),
+            hey_const(annotation_span, omega_inv, direction, tcx),
         )
         .unwrap();
 
@@ -162,6 +162,7 @@ impl Encoding for OmegaInvAnnotation {
             hey_const(
                 annotation_span,
                 &builder.cast(tcx.spec_ty().clone(), builder.uint(0)),
+                direction,
                 tcx,
             ),
         )

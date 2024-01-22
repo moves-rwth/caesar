@@ -85,13 +85,13 @@ pub fn encode_iter(span: Span, stmt: &Stmt, next_iter: Vec<Stmt>) -> Option<Stmt
 }
 
 /// Constant program which always evaluates to the given expression
-pub fn hey_const(span: Span, expr: &Expr, tcx: &TyCtx) -> Vec<Stmt> {
+pub fn hey_const(span: Span, expr: &Expr, direction: Direction, tcx: &TyCtx) -> Vec<Stmt> {
     let builder = ExprBuilder::new(span);
     vec![
-        Spanned::new(span, StmtKind::Assert(Direction::Down, expr.clone())),
+        Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
         Spanned::new(
             span,
-            StmtKind::Assume(Direction::Down, builder.bot_lit(tcx.spec_ty())),
+            StmtKind::Assume(direction, builder.bot_lit(tcx.spec_ty())),
         ),
     ]
 }
@@ -153,6 +153,7 @@ pub fn get_init_idents(tcx: &TyCtx, span: Span, idents: &[Ident]) -> Vec<Ident> 
 
 /// Construct multiple [`StmtKind::Assign`] expressions sequentially
 pub fn multiple_assign(span: Span, lhses: Vec<Ident>, rhses: Vec<Expr>) -> Vec<Stmt> {
+    assert_eq!(lhses.len(), rhses.len());
     let mut buf: Vec<Stmt> = vec![];
     lhses.iter().zip(rhses).for_each(|(lhs, rhs)| {
         let stmt = Spanned::new(span, StmtKind::Assign(vec![*lhs], rhs));

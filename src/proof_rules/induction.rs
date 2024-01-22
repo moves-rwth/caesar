@@ -132,7 +132,7 @@ impl Encoding for InvariantAnnotation {
             0,
             invariant,
             direction.toggle(),
-            hey_const(annotation_span, invariant, tcx),
+            hey_const(annotation_span, invariant, direction, tcx),
         );
 
         // Encode the last iteration in the normal direction
@@ -255,7 +255,7 @@ impl Encoding for KIndAnnotation {
             k - 1,
             invariant,
             direction.toggle(),
-            hey_const(annotation_span, invariant, tcx),
+            hey_const(annotation_span, invariant, direction, tcx),
         );
 
         // Encode the last iteration in the normal direction
