@@ -87,12 +87,13 @@ pub fn encode_iter(span: Span, stmt: &Stmt, next_iter: Vec<Stmt>) -> Option<Stmt
 /// Constant program which always evaluates to the given expression
 pub fn hey_const(span: Span, expr: &Expr, direction: Direction, tcx: &TyCtx) -> Vec<Stmt> {
     let builder = ExprBuilder::new(span);
+    let extrem_lit = match direction {
+        Direction::Up => builder.top_lit(tcx.spec_ty()),
+        Direction::Down => builder.bot_lit(tcx.spec_ty()),
+    };
     vec![
         Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
-        Spanned::new(
-            span,
-            StmtKind::Assume(direction, builder.bot_lit(tcx.spec_ty())),
-        ),
+        Spanned::new(span, StmtKind::Assume(direction, extrem_lit)),
     ]
 }
 

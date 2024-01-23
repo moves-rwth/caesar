@@ -158,7 +158,7 @@ fn test_ost_transform() {
                     k = (k + 1)
                     tick cast(EUReal, 1)
                     coassert (cast(EUReal, 2) * [a])
-                    coassume cast(EUReal, 0)
+                    coassume ∞
                 } else {
             
                 }
@@ -213,7 +213,7 @@ fn test_ost_transform() {
                     if prob_choice { a = false } else { b = (b + 1) }
                     k = (k + 1)
                     coassert (cast(EUReal, b) + [a])
-                    coassume cast(EUReal, 0)
+                    coassume ∞
                 } else {
             
                 }
@@ -301,7 +301,7 @@ fn test_past_transform() {
                 if (1 <= x) {
                     x = (x - 1)
                     coassert cast(EUReal, (x + 1))
-                    coassume cast(EUReal, 0)
+                    coassume ∞
                 } else {
             
                 }
