@@ -4,14 +4,34 @@
         <title>Caesar Blog</title>
         <link>https://www.caesarverifier.org/blog</link>
         <description>Caesar Blog</description>
-        <lastBuildDate>Fri, 27 Oct 2023 00:00:00 GMT</lastBuildDate>
+        <lastBuildDate>Thu, 18 Jan 2024 00:00:00 GMT</lastBuildDate>
         <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
         <generator>https://github.com/jpmonette/feed</generator>
         <language>en</language>
         <item>
+            <title><![CDATA[ERC Proof of Concept Grant]]></title>
+            <link>https://www.caesarverifier.org/blog/2024/01/18/erc-poc-grant</link>
+            <guid>https://www.caesarverifier.org/blog/2024/01/18/erc-poc-grant</guid>
+            <pubDate>Thu, 18 Jan 2024 00:00:00 GMT</pubDate>
+            <description><![CDATA[We are happy to announce that RWTH's MOVES group, headed by Prof. Joost-Pieter Katoen, will receive funding from the European Research Council (ERC) for a Proof of Concept Grant to improve Caesar.]]></description>
+            <content:encoded><![CDATA[<p>We are happy to announce that RWTH's <a href="https://moves.rwth-aachen.de/" target="_blank" rel="noopener noreferrer">MOVES group</a>, headed by Prof. Joost-Pieter Katoen, will receive funding from the European Research Council (ERC) for a <a href="https://erc.europa.eu/apply-grant/proof-concept" target="_blank" rel="noopener noreferrer">Proof of Concept Grant</a> to improve Caesar.</p><p>Caesar was originally built in part through <a href="https://moves.rwth-aachen.de/research/projects/frappant/" target="_blank" rel="noopener noreferrer">FRAPPANT</a>, the 2018 ERC Advanced Grant "Formal Reasoning about Probabilistic Programs: Breaking New Ground for Automation".
+The new ERC Proof of Concept research proposal "A Deductive Verifier for Probabilistic Programs (VERIPROB)" is about applying knowledge from FRAPPANT to build Caesar into a prototype that can be made use of by industry <!-- -->—<!-- --> "to turn science into practice".</p><p>See also the <a href="https://www.rwth-aachen.de/cms/root/die-rwth/aktuell/pressemitteilungen/januar/~bfqqei/die-arbeit-mit-der-wahrscheinlichkeit/?lidx=1" target="_blank" rel="noopener noreferrer">press release by the university</a> and <a href="https://erc.europa.eu/news-events/news/Proof-of-Concept-Grants-2023" target="_blank" rel="noopener noreferrer">the ERC announcement</a>.</p>]]></content:encoded>
+            <category>grants</category>
+        </item>
+        <item>
+            <title><![CDATA[Talk at the Dafny 2024 Workshop]]></title>
+            <link>https://www.caesarverifier.org/blog/2024/01/14/dafny-2024-talk</link>
+            <guid>https://www.caesarverifier.org/blog/2024/01/14/dafny-2024-talk</guid>
+            <pubDate>Sun, 14 Jan 2024 00:00:00 GMT</pubDate>
+            <description><![CDATA[On January 14, 2024, I presented Caesar and the basics of our quantitative intermediate language HeyVL at the Dafny 2024 workshop.]]></description>
+            <content:encoded><![CDATA[<p>On January 14, 2024, I presented Caesar and the basics of our quantitative intermediate language HeyVL at the <a href="https://popl24.sigplan.org/home/dafny-2024" target="_blank" rel="noopener noreferrer">Dafny 2024 workshop</a>.
+The workshop was part of the POPL 2024 conference.</p><iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/ZLcDieBq05o?si=Cy36J26qvXpckR3q&amp;start=26188" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"></iframe><p>The talk starts at timestamp 7:16:23 and ends at timestamp 7:34:00.</p>]]></content:encoded>
+            <category>talks</category>
+        </item>
+        <item>
             <title><![CDATA[Distinguished Artifact at OOPSLA '23]]></title>
-            <link>https://www.caesarverifier.org/blog/oopsla23-distinguished-artifact</link>
-            <guid>https://www.caesarverifier.org/blog/oopsla23-distinguished-artifact</guid>
+            <link>https://www.caesarverifier.org/blog/2023/10/27/oopsla23-distinguished-artifact</link>
+            <guid>https://www.caesarverifier.org/blog/2023/10/27/oopsla23-distinguished-artifact</guid>
             <pubDate>Fri, 27 Oct 2023 00:00:00 GMT</pubDate>
             <description><![CDATA[The artifact associated with our OOPSLA '23 publication A Deductive Verification Infrastructure for Probabilistic Programs has received the Distinguished Artifact award, praising exceptionally high quality.]]></description>
             <content:encoded><![CDATA[<p>The artifact associated with our <a href="https://2023.splashcon.org/track/splash-2023-oopsla" target="_blank" rel="noopener noreferrer">OOPSLA '23</a> publication <a href="https://doi.org/10.1145/3622870" target="_blank" rel="noopener noreferrer">A Deductive Verification Infrastructure for Probabilistic Programs</a> has <a href="https://2023.splashcon.org/track/splash-2023-Artifacts#distinguished-artifacts" target="_blank" rel="noopener noreferrer">received the <em>Distinguished Artifact</em> award</a>, praising exceptionally high quality.
@@ -20,8 +40,8 @@ The artifact consists the tool Caesar together with benchmark examples.</p><p>Th
         </item>
         <item>
             <title><![CDATA[Paper Accepted at OOPSLA '23]]></title>
-            <link>https://www.caesarverifier.org/blog/oopsla23</link>
-            <guid>https://www.caesarverifier.org/blog/oopsla23</guid>
+            <link>https://www.caesarverifier.org/blog/2023/09/28/oopsla23</link>
+            <guid>https://www.caesarverifier.org/blog/2023/09/28/oopsla23</guid>
             <pubDate>Thu, 28 Sep 2023 00:00:00 GMT</pubDate>
             <description><![CDATA[HeyVL and Caesar were accepted at OOPSLA '23: A Deductive Verification Infrastructure for Probabilistic Programs by Schröer et al.]]></description>
             <content:encoded><![CDATA[<p>HeyVL and Caesar were accepted at <a href="https://2023.splashcon.org/track/splash-2023-oopsla" target="_blank" rel="noopener noreferrer">OOPSLA '23</a>: <a href="https://doi.org/10.1145/3622870" target="_blank" rel="noopener noreferrer">A Deductive Verification Infrastructure for Probabilistic Programs</a> by Schröer et al.
@@ -30,11 +50,12 @@ The artifact received the <em>reusable</em> badge, which is the highest possible
         </item>
         <item>
             <title><![CDATA[Winner of the 2022 WhatsApp Privacy Aware Program Analysis Request for Proposals]]></title>
-            <link>https://www.caesarverifier.org/blog/whatsapp-privacy-aware-program-analysis</link>
-            <guid>https://www.caesarverifier.org/blog/whatsapp-privacy-aware-program-analysis</guid>
+            <link>https://www.caesarverifier.org/blog/2022/10/10/whatsapp-privacy-aware-program-analysis</link>
+            <guid>https://www.caesarverifier.org/blog/2022/10/10/whatsapp-privacy-aware-program-analysis</guid>
             <pubDate>Mon, 10 Oct 2022 00:00:00 GMT</pubDate>
             <description><![CDATA[Philipp Schroer and Joost-Pieter Katoen receive a Research Award from WhatsApp, through its parent company, Meta Platforms, Inc. for their research proposal “A Deductive Verification Infrastructure for Probabilistic Programs”. Out of 62 research proposals that were submitted to WhatsApp Privacy Aware Program Analysis, 6 projects have been awarded. For more information, see here.]]></description>
             <content:encoded><![CDATA[<p>Philipp Schroer and Joost-Pieter Katoen receive a Research Award from WhatsApp, through its parent company, Meta Platforms, Inc. for their research proposal “A Deductive Verification Infrastructure for Probabilistic Programs”. Out of 62 research proposals that were submitted to WhatsApp Privacy Aware Program Analysis, 6 projects have been awarded. For more information, <a href="https://research.facebook.com/blog/2022/10/-announcing-the-winners-of-the-2022-whatsapp-privacy-aware-program-analysis-request-for-proposals/" target="_blank" rel="noopener noreferrer">see here</a>.</p>]]></content:encoded>
+            <category>grants</category>
         </item>
     </channel>
 </rss>
