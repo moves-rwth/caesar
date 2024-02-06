@@ -1,7 +1,7 @@
 ---
-slug: whatsapp-privacy-aware-program-analysis
 title: Winner of the 2022 WhatsApp Privacy Aware Program Analysis Request for Proposals
 authors: phisch
+tags: [grants]
 ---
 
 
