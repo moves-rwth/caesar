@@ -104,9 +104,9 @@ pub struct Calculus {
 #[derive(Debug, Clone)]
 
 pub enum CalculusType {
-    WP,
-    WLP,
-    ERT,
+    Wp,
+    Wlp,
+    Ert,
 }
 
 pub struct CalculusAnnotationError;
@@ -169,21 +169,21 @@ pub fn init_calculi(files: &mut Files, tcx: &mut TyCtx) {
 
     let wp = AnnotationKind::Calculus(Calculus {
         name: Ident::with_dummy_file_span(Symbol::intern("wp"), file),
-        calculus_type: CalculusType::WP,
+        calculus_type: CalculusType::Wp,
     });
     tcx.add_global(wp.name());
     tcx.declare(DeclKind::AnnotationDecl(wp));
 
     let wlp = AnnotationKind::Calculus(Calculus {
         name: Ident::with_dummy_file_span(Symbol::intern("wlp"), file),
-        calculus_type: CalculusType::WLP,
+        calculus_type: CalculusType::Wlp,
     });
     tcx.add_global(wlp.name());
     tcx.declare(DeclKind::AnnotationDecl(wlp));
 
     let ert = AnnotationKind::Calculus(Calculus {
         name: Ident::with_dummy_file_span(Symbol::intern("ert"), file),
-        calculus_type: CalculusType::ERT,
+        calculus_type: CalculusType::Ert,
     });
     tcx.add_global(ert.name());
     tcx.declare(DeclKind::AnnotationDecl(ert));

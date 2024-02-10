@@ -87,14 +87,8 @@ impl Encoding for PASTAnnotation {
         resolve.visit_expr(k)
     }
 
-    fn check_calculus(&self, calculus: &Calculus, direction: Direction) -> Result<(), ()> {
-        if let CalculusType::ERT = calculus.calculus_type {
-            if direction == Direction::Up {
-                return Ok(());
-            }
-        }
-
-        Err(())
+    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
+        matches!(calculus.calculus_type, CalculusType::Ert) && direction == Direction::Up
     }
 
     fn transform(

@@ -84,17 +84,12 @@ impl Encoding for InvariantAnnotation {
         resolve.visit_expr(invariant)
     }
 
-    fn check_calculus(&self, calculus: &Calculus, direction: Direction) -> Result<(), ()> {
-        if direction
-            != match calculus.calculus_type {
-                CalculusType::WP | CalculusType::ERT => Direction::Up,
-                CalculusType::WLP => Direction::Down,
-            }
-        {
-            return Err(());
-        }
-
-        Ok(())
+    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
+        matches!(
+            (&calculus.calculus_type, direction),
+            (CalculusType::Wp | CalculusType::Ert, Direction::Up)
+                | (CalculusType::Wlp, Direction::Down)
+        )
     }
 
     fn transform(
@@ -207,17 +202,17 @@ impl Encoding for KIndAnnotation {
         resolve.visit_expr(invariant)
     }
 
-    fn check_calculus(&self, calculus: &Calculus, direction: Direction) -> Result<(), ()> {
+    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
         if direction
             != match calculus.calculus_type {
-                CalculusType::WP | CalculusType::ERT => Direction::Up,
-                CalculusType::WLP => Direction::Down,
+                CalculusType::Wp | CalculusType::Ert => Direction::Up,
+                CalculusType::Wlp => Direction::Down,
             }
         {
-            return Err(());
+            return false;
         }
 
-        Ok(())
+        true
     }
     fn transform(
         &self,

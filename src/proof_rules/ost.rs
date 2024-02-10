@@ -92,14 +92,8 @@ impl Encoding for OSTAnnotation {
         resolve.visit_expr(post)
     }
 
-    fn check_calculus(&self, calculus: &Calculus, direction: Direction) -> Result<(), ()> {
-        if let CalculusType::WP = calculus.calculus_type {
-            if direction == Direction::Down {
-                return Ok(());
-            }
-        }
-
-        Err(())
+    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
+        matches!(calculus.calculus_type, CalculusType::Wp) && direction == Direction::Down
     }
 
     fn transform(

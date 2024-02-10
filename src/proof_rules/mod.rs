@@ -87,7 +87,7 @@ pub trait Encoding: fmt::Debug {
     ) -> Result<EncodingGenerated, AnnotationError>;
 
     /// Check if the given calculus annotation is compatible with the encoding annotation
-    fn check_calculus(&self, calculus: &Calculus, direction: Direction) -> Result<(), ()>;
+    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool;
 
     /// Indicates if the encoding annotation is required to be the last statement of a procedure
     fn is_terminator(&self) -> bool;
@@ -152,35 +152,6 @@ impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
 impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
     type Err = AnnotationError;
 
-    fn visit_decl(&mut self, decl: &mut DeclKind) -> Result<(), Self::Err> {
-        if let DeclKind::ProcDecl(decl_ref) = decl {
-            self.direction = Some(decl_ref.borrow().direction);
-            self.current_proc_ident = Some(decl_ref.borrow().name);
-
-            // If the procedure has a calculus annotation, store it as the current calculus
-            if let Some(ident) = decl_ref.borrow().calculus.as_ref() {
-                match self.tcx.get(*ident) {
-                    Some(decl) => {
-                        if let DeclKind::AnnotationDecl(AnnotationKind::Calculus(calculus)) =
-                            decl.as_ref()
-                        {
-                            self.calculus = Some(calculus.clone());
-                        }
-                    }
-                    None => {
-                        return Err(AnnotationError::UnknownAnnotation(
-                            decl_ref.borrow().span,
-                            *ident,
-                        ))
-                    }
-                }
-            }
-
-            self.visit_proc(decl_ref)?;
-        }
-        Ok(())
-    }
-
     fn visit_proc(&mut self, proc_ref: &mut DeclRef<ProcDecl>) -> Result<(), Self::Err> {
         self.direction = Some(proc_ref.borrow().direction);
         self.current_proc_ident = Some(proc_ref.borrow().name);
@@ -240,14 +211,12 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
 
                     // Check if the calculus annotation is compatible with the encoding annotation
                     if let Some(calculus) = &self.calculus {
-                        if anno_ref
-                            .check_calculus(
-                                calculus,
-                                self.direction
-                                    .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,
-                            )
-                            .is_err()
-                        {
+                        // If calculus is not allowed, return an error
+                        if !anno_ref.is_calculus_allowed(
+                            calculus,
+                            self.direction
+                                .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,
+                        ) {
                             return Err(AnnotationError::CalculusEncodingMismatch(
                                 s.span,
                                 calculus.name,

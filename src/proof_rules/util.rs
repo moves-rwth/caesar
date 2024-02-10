@@ -31,7 +31,8 @@ pub fn encode_spec(
     ]
 }
 
-/// Encode the extend step in k-induction and bmc recursively for k times
+/// Encode the extend step in k-induction and bmc recursively for k times:
+///
 /// # Arguments
 /// * `span` - The span of the new generated statement
 /// * `inner_stmt` - A While statement to be encoded
@@ -57,7 +58,8 @@ pub fn encode_extend(
     ]
 }
 
-/// Encode the extend step in bmc recursively for k times
+/// Encode the extend step in bmc recursively for k times:
+///
 /// # Arguments
 /// * `span` - The span of the new generated statement
 /// * `inner_stmt` - A While statement to be encoded
@@ -87,13 +89,13 @@ pub fn encode_iter(span: Span, stmt: &Stmt, next_iter: Vec<Stmt>) -> Option<Stmt
 /// Constant program which always evaluates to the given expression
 pub fn hey_const(span: Span, expr: &Expr, direction: Direction, tcx: &TyCtx) -> Vec<Stmt> {
     let builder = ExprBuilder::new(span);
-    let extrem_lit = match direction {
+    let extreme_lit = match direction {
         Direction::Up => builder.top_lit(tcx.spec_ty()),
         Direction::Down => builder.bot_lit(tcx.spec_ty()),
     };
     vec![
         Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
-        Spanned::new(span, StmtKind::Assume(direction, extrem_lit)),
+        Spanned::new(span, StmtKind::Assume(direction, extreme_lit)),
     ]
 }
 

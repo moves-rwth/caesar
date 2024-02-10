@@ -95,17 +95,12 @@ impl Encoding for OmegaInvAnnotation {
         resolve.visit_expr(omega_inv)
     }
 
-    fn check_calculus(&self, calculus: &Calculus, direction: Direction) -> Result<(), ()> {
-        if direction
-            != match calculus.calculus_type {
-                CalculusType::WP | CalculusType::ERT => Direction::Down,
-                CalculusType::WLP => Direction::Up,
-            }
-        {
-            return Err(());
-        }
-
-        Ok(())
+    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
+        matches!(
+            (&calculus.calculus_type, direction),
+            (CalculusType::Wp | CalculusType::Ert, Direction::Down)
+                | (CalculusType::Wlp, Direction::Up)
+        )
     }
 
     fn transform(
