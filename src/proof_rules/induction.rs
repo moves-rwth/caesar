@@ -203,16 +203,11 @@ impl Encoding for KIndAnnotation {
     }
 
     fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
-        if direction
-            != match calculus.calculus_type {
-                CalculusType::Wp | CalculusType::Ert => Direction::Up,
-                CalculusType::Wlp => Direction::Down,
-            }
-        {
-            return false;
-        }
-
-        true
+        matches!(
+            (&calculus.calculus_type, direction),
+            (CalculusType::Wp | CalculusType::Ert, Direction::Up)
+                | (CalculusType::Wlp, Direction::Down)
+        )
     }
     fn transform(
         &self,
