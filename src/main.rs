@@ -52,6 +52,7 @@ pub mod ast;
 mod driver;
 pub mod front;
 pub mod intrinsic;
+mod language_server;
 pub mod opt;
 pub mod pretty;
 mod procs;
@@ -361,6 +362,26 @@ fn verify_files_main(
     files_mutex: &Mutex<Files>,
     user_files: &[FileId],
 ) -> Result<bool, VerifyError> {
+    let (mut verify_units, mut tcx) =
+        get_verify_units_from_files(options, files_mutex, user_files)?;
+
+    let mut all_proven: bool = true;
+    for verify_unit in &mut verify_units {
+        let (name, mut verify_unit) = verify_unit.enter_with_name();
+
+        let result = verify_unit.verify(name, &mut tcx, options)?;
+
+        all_proven = all_proven && result;
+    }
+
+    Ok(all_proven)
+}
+
+pub fn get_verify_units_from_files(
+    options: &Options,
+    files_mutex: &Mutex<Files>,
+    user_files: &[FileId],
+) -> Result<(Vec<Item<VerifyUnit>>, TyCtx), VerifyError> {
     // 1. Parsing
     let mut source_units: Vec<Item<SourceUnit>> = Vec::new();
     let mut files = files_mutex.lock().unwrap();
@@ -448,102 +469,7 @@ fn verify_files_main(
         warn!("Z3 tracing is enabled with multiple verification units. Intermediate tracing results will be overwritten.");
     }
 
-    let mut all_proven: bool = true;
-    for verify_unit in &mut verify_units {
-        let (name, mut verify_unit) = verify_unit.enter_with_name();
-
-        // 4. Desugaring: transforming spec calls to procs
-        verify_unit.desugar(&mut tcx).unwrap();
-
-        // print HeyVL core after desugaring if requested
-        if options.print_core {
-            println!("{}: HeyVL core query:\n{}\n", name, *verify_unit);
-        }
-
-        // 5. Generating verification conditions
-        let vcgen = Vcgen::new(&tcx, options.print_label_vc);
-        let mut vc_expr = verify_unit.vcgen(&vcgen).unwrap();
-
-        // 6. Unfolding
-        unfold_expr(options, &tcx, &mut vc_expr);
-
-        // 7. Quantifier elimination
-        if !options.no_qelim {
-            apply_qelim(&mut tcx, &mut vc_expr);
-        }
-
-        // In-between, gather some stats about the vc expression
-        trace_expr_stats(&mut vc_expr);
-
-        // 8. Create the "vc[S] is valid" expression
-        let mut vc_expr_eq_infinity = expr_eq_infty(vc_expr);
-
-        if options.egraph {
-            egraph::simplify(&vc_expr_eq_infinity);
-        }
-
-        // 9. Optimizations
-        if !options.no_boolify || options.opt_rel {
-            RemoveParens.visit_expr(&mut vc_expr_eq_infinity).unwrap();
-        }
-        if !options.no_boolify {
-            apply_boolify_opt(&mut vc_expr_eq_infinity);
-        }
-        if options.opt_rel {
-            apply_relational_opt(&mut vc_expr_eq_infinity);
-        }
-
-        // print theorem to prove if requested
-        if options.print_theorem {
-            println!("{}: Theorem to prove:\n{}\n", name, &vc_expr_eq_infinity);
-        }
-
-        // 10. Translate to Z3
-        let translate_span = info_span!("translation to Z3");
-        let translate_entered = translate_span.enter();
-
-        let ctx = mk_z3_ctx(options);
-        let smt_ctx = SmtCtx::new(&ctx, &tcx);
-        let mut smt_translate = TranslateExprs::new(&smt_ctx);
-        let mut valid_query = smt_translate.t_bool(&vc_expr_eq_infinity);
-
-        drop(translate_entered);
-        drop(translate_span);
-
-        if !options.no_simplify {
-            info_span!("simplify query").in_scope(|| valid_query = valid_query.simplify());
-        }
-
-        // 11. Create Z3 solver with axioms, solve
-        let sat_span = info_span!("SAT check");
-        let sat_entered = sat_span.enter();
-
-        let mut prover = mk_valid_query_prover(&ctx, &smt_translate, &valid_query);
-        let smtlib = get_smtlib(options, &prover);
-
-        let result = prover.check_proof();
-
-        drop(sat_entered);
-        drop(sat_span);
-
-        // Now let's examine the result.
-        print_prove_result(result, name, &prover);
-
-        write_smtlib(options, smtlib, name, result).unwrap();
-
-        if options.z3_trace {
-            info!("Z3 tracing output will be written to `z3.log`.");
-        }
-
-        // If the solver was interrupted from the keyboard, exit now.
-        if prover.get_reason_unknown() == Some(ReasonUnknown::Interrupted) {
-            return Err(VerifyError::Interrupted);
-        }
-
-        all_proven = all_proven && result == ProveResult::Proof;
-    }
-
-    Ok(all_proven)
+    Ok((verify_units, tcx))
 }
 
 fn setup_tracing(options: &Options) {

@@ -9,17 +9,45 @@
   "categories": [
     "Programming Languages"
   ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
   "contributes": {
-    "languages": [{
-      "id": "heyvl",
-      "aliases": ["HeyVL", "heyvl"],
-      "extensions": [".heyvl"],
-      "configuration": "./language-configuration.json"
-    }],
-    "grammars": [{
-      "language": "heyvl",
-      "scopeName": "source.heyvl",
-      "path": "./syntaxes/heyvl.tmLanguage.json"
-    }]
+    "commands": [
+      {
+        "command": "helloworld.helloWorld",
+        "title": "Hello World"
+      }
+    ],
+    "languages": [
+      {
+        "id": "heyvl",
+        "aliases": [
+          "HeyVL",
+          "heyvl"
+        ],
+        "extensions": [
+          ".heyvl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "heyvl",
+        "scopeName": "source.heyvl",
+        "path": "./syntaxes/heyvl.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^8.10.25",
+    "@types/vscode": "^1.71.0",
+    "tslint": "^5.16.0",
+    "typescript": "^3.4.5"
   }
 }

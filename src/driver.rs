@@ -2,31 +2,50 @@
 
 use std::{
     fmt,
+    fs::{create_dir_all, File},
+    io::{self, Write},
     ops::{Deref, DerefMut},
 };
 
 use crate::{
     ast::{
-        visit::VisitorMut, Block, DeclKind, Expr, ExprData, ExprKind, LitKind, Shared,
-        SourceFilePath, Span, Spanned, StoredFile, TyKind,
+        stats::StatsVisitor, visit::VisitorMut, BinOpKind, Block, DeclKind, Expr, ExprData,
+        ExprKind, LitKind, Shared, SourceFilePath, Span, Spanned, StoredFile, TyKind,
     },
-    front::parser,
-    front::resolve::{Resolve, ResolveError},
     front::{
-        parser::ParseError,
+        parser::{self, ParseError},
+        resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
     intrinsic::annotations::AnnotationError,
+    opt::{
+        boolify::Boolify, egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder,
+        RemoveParens,
+    },
     pretty::{Doc, SimplePretty},
     procs::{
         monotonicity::{MonotonicityError, MonotonicityVisitor},
         verify_proc, SpecCall,
     },
     proof_rules::EncCall,
+    smt::{translate_exprs::TranslateExprs, SmtCtx},
     tyctx::TyCtx,
-    vc::vcgen::Vcgen,
+    vc::{subst::apply_subst, vcgen::Vcgen},
+    version::write_detailed_version_info,
+    Options, VerifyError,
 };
-use tracing::{info_span, instrument, trace};
+
+use z3::{
+    ast::{Ast, Bool},
+    Config, Context,
+};
+use z3rro::{
+    pretty::{get_pretty_solver_smtlib, get_solver_smtlib},
+    prover::{ProveResult, Prover},
+    util::{PrefixWriter, ReasonUnknown},
+};
+
+use tracing::{info, info_span, instrument, trace};
 
 /// Human-readable name for a source unit. Used for debugging and error messages.
 #[derive(Debug)]
@@ -335,6 +354,103 @@ impl VerifyUnit {
         });
         Ok(vcgen.vcgen_stmts(&self.0, infinity))
     }
+
+    pub fn verify(
+        &mut self,
+        name: &SourceUnitName,
+        mut tcx: &mut TyCtx,
+        options: &Options,
+    ) -> Result<bool, VerifyError> {
+        // 4. Desugaring: transforming spec calls to procs
+        self.desugar(&mut tcx).unwrap();
+
+        // print HeyVL core after desugaring if requested
+        if options.print_core {
+            println!("{}: HeyVL core query:\n{}\n", name, *self);
+        }
+
+        // 5. Generating verification conditions
+        let vcgen = Vcgen::new(&tcx, options.print_label_vc);
+        let mut vc_expr = self.vcgen(&vcgen).unwrap();
+
+        // 6. Unfolding
+        unfold_expr(options, &tcx, &mut vc_expr);
+
+        // 7. Quantifier elimination
+        if !options.no_qelim {
+            apply_qelim(&mut tcx, &mut vc_expr);
+        }
+
+        // In-between, gather some stats about the vc expression
+        trace_expr_stats(&mut vc_expr);
+
+        // 8. Create the "vc[S] is valid" expression
+        let mut vc_expr_eq_infinity = expr_eq_infty(vc_expr);
+
+        if options.egraph {
+            egraph::simplify(&vc_expr_eq_infinity);
+        }
+
+        // 9. Optimizations
+        if !options.no_boolify || options.opt_rel {
+            RemoveParens.visit_expr(&mut vc_expr_eq_infinity).unwrap();
+        }
+        if !options.no_boolify {
+            apply_boolify_opt(&mut vc_expr_eq_infinity);
+        }
+        if options.opt_rel {
+            apply_relational_opt(&mut vc_expr_eq_infinity);
+        }
+
+        // print theorem to prove if requested
+        if options.print_theorem {
+            println!("{}: Theorem to prove:\n{}\n", name, &vc_expr_eq_infinity);
+        }
+
+        // 10. Translate to Z3
+        let translate_span = info_span!("translation to Z3");
+        let translate_entered = translate_span.enter();
+
+        let ctx = mk_z3_ctx(options);
+        let smt_ctx = SmtCtx::new(&ctx, &tcx);
+        let mut smt_translate = TranslateExprs::new(&smt_ctx);
+        let mut valid_query = smt_translate.t_bool(&vc_expr_eq_infinity);
+
+        drop(translate_entered);
+        drop(translate_span);
+
+        if !options.no_simplify {
+            info_span!("simplify query").in_scope(|| valid_query = valid_query.simplify());
+        }
+
+        // 11. Create Z3 solver with axioms, solve
+        let sat_span = info_span!("SAT check");
+        let sat_entered = sat_span.enter();
+
+        let mut prover = mk_valid_query_prover(&ctx, &smt_translate, &valid_query);
+        let smtlib = get_smtlib(options, &prover);
+
+        let result = prover.check_proof();
+
+        drop(sat_entered);
+        drop(sat_span);
+
+        // Now let's examine the result.
+        print_prove_result(result, name, &prover);
+
+        write_smtlib(options, smtlib, name, result).unwrap();
+
+        if options.z3_trace {
+            info!("Z3 tracing output will be written to `z3.log`.");
+        }
+
+        // If the solver was interrupted from the keyboard, exit now.
+        if prover.get_reason_unknown() == Some(ReasonUnknown::Interrupted) {
+            return Err(VerifyError::Interrupted);
+        }
+
+        Ok(result == ProveResult::Proof)
+    }
 }
 
 impl SimplePretty for VerifyUnit {
@@ -347,4 +463,158 @@ impl fmt::Display for VerifyUnit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.pretty().render_fmt(80, f)
     }
+}
+
+fn apply_qelim(tcx: &mut TyCtx, vc_expr: &mut Expr) {
+    let mut qelim = Qelim::new(tcx);
+    qelim.qelim_inf(vc_expr);
+    // Apply/eliminate substitutions again
+    apply_subst(tcx, vc_expr);
+}
+
+fn apply_relational_opt(vc_expr_eq_infinity: &mut Expr) {
+    let span = info_span!("relationalize");
+    let _entered = span.enter();
+    (Relational {}).visit_expr(vc_expr_eq_infinity).unwrap();
+}
+
+fn apply_boolify_opt(vc_expr_eq_infinity: &mut Expr) {
+    let span = info_span!("boolify");
+    let _entered = span.enter();
+    (Boolify {}).visit_expr(vc_expr_eq_infinity).unwrap();
+}
+
+fn unfold_expr(options: &Options, tcx: &TyCtx, vc_expr: &mut Expr) {
+    let span = info_span!("unfolding");
+    let _entered = span.enter();
+    if !options.strict {
+        let ctx = Context::new(&Config::default());
+        let smt_ctx = SmtCtx::new(&ctx, tcx);
+        let mut unfolder = Unfolder::new(&smt_ctx);
+        unfolder.visit_expr(vc_expr).unwrap();
+    } else {
+        apply_subst(tcx, vc_expr);
+    }
+}
+
+fn mk_z3_ctx(options: &Options) -> Context {
+    let mut config = Config::default();
+    if options.z3_trace {
+        config.set_bool_param_value("trace", true);
+        config.set_bool_param_value("proof", true);
+    }
+    Context::new(&config)
+}
+
+fn mk_valid_query_prover<'smt, 'ctx>(
+    ctx: &'ctx Context,
+    smt_translate: &TranslateExprs<'smt, 'ctx>,
+    valid_query: &Bool<'ctx>,
+) -> Prover<'ctx> {
+    // create the prover and set the params
+    let mut prover = Prover::new(ctx);
+    // add assumptions (from axioms and locals) to the prover
+    smt_translate
+        .ctx
+        .uninterpreteds()
+        .add_axioms_to_prover(&mut prover);
+    smt_translate
+        .local_scope()
+        .add_assumptions_to_prover(&mut prover);
+    // add the provable: is this Boolean true?
+    prover.add_provable(valid_query);
+    prover
+}
+
+fn trace_expr_stats(vc_expr: &mut Expr) {
+    let mut stats = StatsVisitor::default();
+    stats.visit_expr(vc_expr).unwrap();
+    let stats = stats.stats;
+    tracing::info!(
+        num_exprs = stats.num_exprs,
+        num_quants = stats.num_quants,
+        depths = %stats.depths_summary(),
+        "Verification condition stats"
+    );
+    if stats.num_quants > 0 {
+        tracing::warn!(
+            num_quants=stats.num_quants, "Quantifiers are present in the generated verification conditions. It is possible that quantifier elimination failed. If Z3 can't decide the problem, this may be the reason."
+        );
+    }
+}
+
+fn expr_eq_infty(vc_expr: Expr) -> Expr {
+    let infinity = Shared::new(ExprData {
+        kind: ExprKind::Lit(Spanned::with_dummy_span(LitKind::Infinity)),
+        ty: Some(TyKind::EUReal),
+        span: Span::dummy_span(),
+    });
+    Shared::new(ExprData {
+        kind: ExprKind::Binary(Spanned::with_dummy_span(BinOpKind::Eq), infinity, vc_expr),
+        ty: Some(TyKind::Bool),
+        span: Span::dummy_span(),
+    })
+}
+
+fn print_prove_result(result: ProveResult, name: &SourceUnitName, prover: &Prover) {
+    match result {
+        ProveResult::Proof => println!("{}: Verified.", name),
+        ProveResult::Counterexample => {
+            println!("{}: Counter-example to verification found!", name);
+            if let Some(model) = prover.get_model() {
+                println!("{:?}", model);
+            };
+        }
+        ProveResult::Unknown => {
+            if let Some(reason) = prover.get_reason_unknown() {
+                println!("{}: Unknown result! (reason: {})", name, reason)
+            } else {
+                println!("{}: Unknown result!", name)
+            }
+        }
+    }
+}
+
+fn get_smtlib(options: &Options, prover: &Prover) -> Option<String> {
+    if options.print_smt || options.smt_dir.is_some() {
+        let smtlib = if !options.no_pretty_smtlib {
+            get_pretty_solver_smtlib(prover.solver())
+        } else {
+            get_solver_smtlib(prover.solver())
+        };
+        Some(smtlib)
+    } else {
+        None
+    }
+}
+
+fn write_smtlib(
+    options: &Options,
+    smtlib: Option<String>,
+    name: &SourceUnitName,
+    result: ProveResult,
+) -> io::Result<()> {
+    if options.print_smt || options.smt_dir.is_some() {
+        let mut smtlib = smtlib.unwrap();
+        if result == ProveResult::Counterexample {
+            smtlib.push_str("\n(get-model)\n");
+        } else if result == ProveResult::Unknown {
+            smtlib.push_str("\n(get-info :reason-unknown)\n");
+        }
+        if options.print_smt {
+            println!("\n; --- Solver SMT-LIB ---\n{}\n", smtlib);
+        }
+        if let Some(smt_dir) = &options.smt_dir {
+            let file_path = smt_dir.join(format!("{}.smt2", name));
+            create_dir_all(file_path.parent().unwrap())?;
+            let mut file = File::create(&file_path)?;
+            let mut comment_writer = PrefixWriter::new("; ".as_bytes(), &mut file);
+            write_detailed_version_info(&mut comment_writer)?;
+            writeln!(comment_writer, "Source unit: {}", name)?;
+            writeln!(comment_writer, "Prove result: {:?}", result)?;
+            file.write_all(smtlib.as_bytes())?;
+            info!(?file_path, "SMT-LIB query written to file");
+        }
+    }
+    Ok(())
 }
