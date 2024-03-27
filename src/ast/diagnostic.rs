@@ -198,6 +198,43 @@ impl Span {
             variant,
         }
     }
+
+    pub fn to_lsp_range(self, files: &Files) -> Option<lsp_types::Range> {
+        let file = files.get(file_id).unwrap();
+        let char_span = file.char_span(self);
+
+        let mut start_line = 0;
+        let mut start_offset = 0;
+        let mut end_line = 0;
+        let mut end_offset = 0;
+
+        for (i, c) in file.source.chars().enumerate() {
+            if i == char_span.end {
+                break;
+            }
+            if i == char_span.start {
+                (start_line, start_offset) = (end_line, end_offset);
+            }
+
+            if c == '\n' {
+                end_line += 1;
+                end_offset = 0;
+            } else {
+                end_offset += 1;
+            }
+        }
+
+        Some(lsp_types::Range {
+            start: lsp_types::Position {
+                line: start_line,
+                character: start_offset,
+            },
+            end: lsp_types::Position {
+                line: end_line,
+                character: end_offset,
+            },
+        })
+    }
 }
 
 // TODO: this debug impl isn't great
@@ -365,6 +402,35 @@ impl Diagnostic {
             builder = builder.with_label(label.into_ariadne(files));
         }
         builder
+    }
+
+    pub fn into_lsp_diagnostic(self, files: &Files) -> lsp_types::Diagnostic {
+        let span = self.0.location;
+        let range = span.to_lsp_range(files).unwrap();
+        let severity = match self.0.kind {
+            ReportKind::Error => lsp_types::DiagnosticSeverity::ERROR,
+            ReportKind::Warning => lsp_types::DiagnosticSeverity::WARNING,
+            ReportKind::Advice => lsp_types::DiagnosticSeverity::HINT,
+            _ => lsp_types::DiagnosticSeverity::ERROR,
+        };
+        let code = self
+            .0
+            .code
+            .map(|code| lsp_types::NumberOrString::Number(code as i32));
+        let code_description = None;
+        let source = None;
+        let message = self.0.msg.unwrap_or_else(|| "(no message)".to_string());
+        lsp_types::Diagnostic {
+            range,
+            severity: Some(severity),
+            code,
+            code_description,
+            source,
+            message,
+            related_information: None,
+            tags: None,
+            data: None,
+        }
     }
 
     /// Write the diagnostic to a simple [`String`] without ANSI colors.

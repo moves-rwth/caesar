@@ -853,6 +853,6 @@ mod test {
                 test()
             }
         "#;
-        parse_decls_and_tycheck(&source).unwrap();
+        parse_decls_and_tycheck(source).unwrap();
     }
 }

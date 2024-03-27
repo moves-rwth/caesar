@@ -1,22 +1,23 @@
-use lsp_server::{Connection, Message, Request, RequestId, Response};
+use lsp_server::{Connection, Message, Request, Response};
 use lsp_types::{
-    lsp_notification, Diagnostic, DiagnosticSeverity, DidSaveTextDocumentParams, TextDocumentItem,
-    Url,
+    DidChangeTextDocumentParams, DidChangeWorkspaceFoldersParams, DidCloseTextDocumentParams,
+    DidOpenTextDocumentParams, ServerCapabilities, TextDocumentSyncCapability,
+    TextDocumentSyncKind, WorkspaceFolder,
 };
-use lsp_types::{
-    notification::Notification, DidChangeTextDocumentParams, DidChangeWorkspaceFoldersParams,
-    DidCloseTextDocumentParams, DidOpenTextDocumentParams, ServerCapabilities,
-    TextDocumentSyncCapability, TextDocumentSyncKind, WorkspaceFolder,
-};
-use serde_json::json;
+use lsp_types::{DidSaveTextDocumentParams, TextDocumentItem, Url};
+
+use std::collections::HashMap;
 use std::error::Error;
-use std::io::{self, BufRead, BufReader, Write};
-use std::process::{Command, Stdio};
+
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crate::procs::verify_proc;
-use crate::{get_verify_units_from_files, VerifyError};
+use crate::ast::decl::DeclKind;
+use crate::ast::{Files, Span, StoredFile};
+use crate::driver::{SourceUnit, SourceUnitName};
+use crate::{
+    get_source_units_from_files, load_file, transform_source_to_verify, Options, VerifyError,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -31,7 +32,7 @@ impl lsp_types::request::Request for VerificationStatusParams {
 }
 
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let (connection, io_threads) = Connection::stdio();
+    let (connection, _) = Connection::stdio();
     let server_capabilities = ServerCapabilities {
         text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::NONE)),
         ..ServerCapabilities::default()
@@ -41,15 +42,27 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let mut documents = Arc::new(Mutex::new(Vec::new()));
     let mut workspace_folders = Arc::new(Mutex::new(Vec::new()));
-    // let mut verify_units = Vec::new();
+    let mut proc_status_map: HashMap<Url, Vec<(lsp_types::Range, bool)>> = HashMap::new();
 
     for msg in &connection.receiver {
         match msg {
             Message::Request(req) => {
-                handle_request(req, &connection, &mut documents, &mut workspace_folders)?;
+                handle_request(
+                    req,
+                    &connection,
+                    &mut documents,
+                    &mut workspace_folders,
+                    &mut proc_status_map,
+                )?;
             }
             Message::Notification(not) => {
-                handle_notification(not, &connection, &mut documents, &mut workspace_folders)?;
+                handle_notification(
+                    not,
+                    &connection,
+                    &mut documents,
+                    &mut workspace_folders,
+                    &mut proc_status_map,
+                )?;
             }
             _ => (),
         }
@@ -61,23 +74,27 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 fn handle_request(
     req: Request,
     connection: &Connection,
-    documents: &mut Arc<Mutex<Vec<(String, String)>>>,
-    workspace_folders: &mut Arc<Mutex<Vec<WorkspaceFolder>>>,
+    _documents: &mut Arc<Mutex<Vec<(String, String)>>>,
+    _workspace_folders: &mut Arc<Mutex<Vec<WorkspaceFolder>>>,
+    proc_status_map: &mut HashMap<Url, Vec<(lsp_types::Range, bool)>>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    match req.method.as_str() {
-        // "custom/procStatus" => {
-        //     let params = serde_json::from_value(req.params)?;
-        //     let text = params.text_document.text;
-        // }
-        _ => {
-            let response = Response::new_err(
-                req.id,
-                lsp_server::ErrorCode::MethodNotFound as i32,
-                "Method not found".to_string(),
-            );
-            connection.sender.send(Message::Response(response))?;
+    let response: Response = match req.method.as_str() {
+        "custom/procStatus" => {
+            let params: VerificationStatusParams = serde_json::from_value(req.params)?;
+            let uri = params.text_document.uri;
+
+            let status_vec = proc_status_map.get(&uri).unwrap();
+
+            let proc_status_json = serde_json::to_value(status_vec)?;
+            Response::new_ok(req.id, proc_status_json)
         }
-    }
+        _ => Response::new_err(
+            req.id,
+            lsp_server::ErrorCode::MethodNotFound as i32,
+            "Method not found".to_string(),
+        ),
+    };
+    connection.sender.send(Message::Response(response))?;
     Ok(())
 }
 
@@ -86,44 +103,16 @@ fn handle_notification(
     connection: &Connection,
     documents: &mut Arc<Mutex<Vec<(String, String)>>>,
     workspace_folders: &mut Arc<Mutex<Vec<WorkspaceFolder>>>,
+    proc_status_map: &mut HashMap<Url, Vec<(lsp_types::Range, bool)>>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     match not.method.as_str() {
         "textDocument/didOpen" => {
-            // let params: DidOpenTextDocumentParams = serde_json::from_value(not.params.clone())?;
-            // let uri = params.text_document.uri;
-            // let text = params.text_document.text;
-            // documents.lock().unwrap().push((uri.to_string(), text));
+            let params: DidOpenTextDocumentParams = serde_json::from_value(not.params.clone())?;
+            let uri = params.text_document.uri;
+            let text = params.text_document.text;
+            documents.lock().unwrap().push((uri.to_string(), text));
 
-            // let handle_error = |result: Result<_, VerifyError>| match result {
-            //     Ok(value) => Ok(value),
-            //     Err(e) => {
-            //         // Handle VerifyError
-            //         // ...
-            //         Err(e)
-            //     }
-            // };
-
-            // let (mut verify_units, mut tcx) =
-            //     get_verify_units_from_files(options, files_mutex, user_files);
-
-            // let mut all_proven: bool = true;
-            // for verify_unit in &mut verify_units {
-            //     let (name, mut verify_unit) = verify_unit.enter_with_name();
-
-            //     let result = verify_unit.verify(name, &mut tcx, options)?;
-
-            //     all_proven = all_proven && result;
-            // }
-
-            // match get_verify_units_from_files(options, files_mutex, user_files) {
-            //     Ok((verify_units, tcx)) => {}
-            //     Err(e) => match e {
-            //         VerifyError::Diagnostic(diagnostic) => {}
-            //         VerifyError::IoError(err) => {}
-            //         VerifyError::LimitError(_) => {}
-            //         VerifyError::Panic(_) => {}
-            //     },
-            // }
+            verify_and_cache(uri, connection, proc_status_map)
         }
         "textDocument/didSave" => {
             let params: DidSaveTextDocumentParams = serde_json::from_value(not.params.clone())?;
@@ -134,8 +123,10 @@ fn handle_notification(
         "textDocument/didChange" => {
             let params: DidChangeTextDocumentParams = serde_json::from_value(not.params.clone())?;
             let uri = params.text_document.uri;
-            let content_changes = params.content_changes;
-            let mut documents = documents.lock().unwrap();
+            // let _content_changes = params.content_changes;
+            // let mut _documents = documents.lock().unwrap();
+
+            verify_and_cache(uri, connection, proc_status_map);
         }
         "textDocument/didClose" => {
             let params: DidCloseTextDocumentParams = serde_json::from_value(not.params.clone())?;
@@ -144,6 +135,8 @@ fn handle_notification(
                 .lock()
                 .unwrap()
                 .retain(|(doc_uri, _)| !matches!(doc_uri.clone(), uri));
+
+            proc_status_map.remove(&uri);
         }
         "workspace/didChangeWorkspaceFolders" => {
             let params: DidChangeWorkspaceFoldersParams =
@@ -158,4 +151,88 @@ fn handle_notification(
     Ok(())
 }
 
-fn verify_and_store() {}
+fn push_diagnostics(
+    connection: &Connection,
+    uri: Url,
+    diagnostics: Vec<lsp_types::Diagnostic>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let params = lsp_types::PublishDiagnosticsParams {
+        uri,
+        diagnostics,
+        version: None,
+    };
+    let not = lsp_server::Notification::new("textDocument/publishDiagnostics".to_string(), params);
+    connection
+        .sender
+        .send(lsp_server::Message::Notification(not))?;
+    Ok(())
+}
+
+fn verify_and_cache(
+    uri: Url,
+    connection: &Connection,
+    proc_status_map: &mut HashMap<Url, Vec<(lsp_types::Range, bool)>>,
+) {
+    let proc_status = proc_status_map.entry(uri.clone()).or_default();
+
+    let path = uri
+        .to_file_path()
+        .expect("Failed to convert URI to file path");
+
+    let mut files = Files::new();
+    let file_id = load_file(&mut files, &path);
+
+    let files_mutex = Mutex::new(files);
+    let options = Options::default();
+
+    // This is a closure that handles the error and sends diagnostics to the client using the connection
+    let handle_error = |result: Result<_, VerifyError>| match result {
+        Ok(res) => res,
+        Err(e) => {
+            if let VerifyError::Diagnostic(diagnostic) = e {
+                let diag = diagnostic.into_lsp_diagnostic();
+                let _ =
+                    push_diagnostics(connection, Url::from_file_path(path).unwrap(), vec![diag]);
+            }
+        }
+    };
+
+    let mut proc_span_map: HashMap<SourceUnitName, Span> = HashMap::new();
+
+    // We use a block to obtain a try-catch structure to catch the VerifyErrors that might be produced by 2 different function calls.
+    // The closure is needed to specify the return type of the block so that we can use the '?' operator.
+    handle_error((|| -> Result<_, VerifyError> {
+        let (mut source_units, mut tcx) =
+            get_source_units_from_files(&options, &files_mutex, &[file_id])?;
+
+        let files = files_mutex.lock().unwrap();
+        let file = files.get(file_id).unwrap();
+
+        source_units.iter_mut().for_each(|item| {
+            let (name, source_unit) = item.enter_with_name();
+            if let SourceUnit::Decl(DeclKind::ProcDecl(ref proc_ref)) = *source_unit {
+                proc_span_map.insert(name.clone(), proc_ref.borrow().span);
+            }
+        });
+
+        let mut verify_units = transform_source_to_verify(&options, source_units);
+        let mut local_proc_status: Vec<(lsp_types::Range, bool)> = Vec::new();
+        let mut all_proven: bool = true;
+        for verify_unit in &mut verify_units {
+            let (name, mut verify_unit) = verify_unit.enter_with_name();
+
+            let result = verify_unit.verify(name, &mut tcx, &options)?;
+
+            if let Some(span) = proc_span_map.get(name) {
+                // let char_span = files.char_span(*span);
+                let range = *span.to_lsp_range(*files).unwrap();
+                local_proc_status.push((range, result));
+            }
+
+            all_proven = all_proven && result;
+        }
+        proc_status.clear();
+        proc_status.extend(local_proc_status);
+        Ok(())
+    })());
+}

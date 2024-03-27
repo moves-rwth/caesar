@@ -48,7 +48,7 @@ use z3rro::{
 use tracing::{info, info_span, instrument, trace};
 
 /// Human-readable name for a source unit. Used for debugging and error messages.
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct SourceUnitName(String);
 
 impl SourceUnitName {
@@ -358,11 +358,11 @@ impl VerifyUnit {
     pub fn verify(
         &mut self,
         name: &SourceUnitName,
-        mut tcx: &mut TyCtx,
+        tcx: &mut TyCtx,
         options: &Options,
     ) -> Result<bool, VerifyError> {
         // 4. Desugaring: transforming spec calls to procs
-        self.desugar(&mut tcx).unwrap();
+        self.desugar(tcx).unwrap();
 
         // print HeyVL core after desugaring if requested
         if options.print_core {
@@ -370,15 +370,15 @@ impl VerifyUnit {
         }
 
         // 5. Generating verification conditions
-        let vcgen = Vcgen::new(&tcx, options.print_label_vc);
+        let vcgen = Vcgen::new(tcx, options.print_label_vc);
         let mut vc_expr = self.vcgen(&vcgen).unwrap();
 
         // 6. Unfolding
-        unfold_expr(options, &tcx, &mut vc_expr);
+        unfold_expr(options, tcx, &mut vc_expr);
 
         // 7. Quantifier elimination
         if !options.no_qelim {
-            apply_qelim(&mut tcx, &mut vc_expr);
+            apply_qelim(tcx, &mut vc_expr);
         }
 
         // In-between, gather some stats about the vc expression
@@ -412,7 +412,7 @@ impl VerifyUnit {
         let translate_entered = translate_span.enter();
 
         let ctx = mk_z3_ctx(options);
-        let smt_ctx = SmtCtx::new(&ctx, &tcx);
+        let smt_ctx = SmtCtx::new(&ctx, tcx);
         let mut smt_translate = TranslateExprs::new(&smt_ctx);
         let mut valid_query = smt_translate.t_bool(&vc_expr_eq_infinity);
 

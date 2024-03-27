@@ -5,48 +5,31 @@
 
 use std::{
     collections::HashMap,
-    fs::{create_dir_all, File},
-    io::{self, Write},
+    io,
     path::PathBuf,
     process::ExitCode,
     sync::{Arc, Mutex},
 };
 
 use crate::{
-    ast::{
-        stats::StatsVisitor, visit::VisitorMut, BinOpKind, ExprData, ExprKind, LitKind, Shared,
-        Span, Spanned, TyKind,
-    },
+    ast::TyKind,
     front::{resolve::Resolve, tycheck::Tycheck},
-    opt::{egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder},
-    smt::{translate_exprs::TranslateExprs, SmtCtx},
     timing::TimingLayer,
     tyctx::TyCtx,
-    vc::{subst::apply_subst, vcgen::Vcgen},
-    version::write_detailed_version_info,
 };
-use ast::{Diagnostic, Expr, FileId, Files, SourceFilePath};
-use driver::{Item, SourceUnit, SourceUnitName, VerifyUnit};
+use ast::{Diagnostic, FileId, Files, SourceFilePath};
+use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{distributions::init_distributions, list::init_lists};
-use opt::{boolify::Boolify, RemoveParens};
+
 use procs::add_default_specs;
 use proof_rules::init_encodings;
 use resource_limits::{await_with_resource_limits, LimitError};
 use thiserror::Error;
 use timing::DispatchBuilder;
 use tokio::task::JoinError;
-use tracing::{info, info_span, warn};
-use z3::{
-    ast::{Ast, Bool},
-    Config, Context,
-};
+use tracing::warn;
 
 use structopt::StructOpt;
-use z3rro::{
-    pretty::{get_pretty_solver_smtlib, get_solver_smtlib},
-    prover::{ProveResult, Prover},
-    util::{PrefixWriter, ReasonUnknown},
-};
 
 pub mod ast;
 mod driver;
@@ -362,8 +345,9 @@ fn verify_files_main(
     files_mutex: &Mutex<Files>,
     user_files: &[FileId],
 ) -> Result<bool, VerifyError> {
-    let (mut verify_units, mut tcx) =
-        get_verify_units_from_files(options, files_mutex, user_files)?;
+    let (source_units, mut tcx) = get_source_units_from_files(options, files_mutex, user_files)?;
+
+    let mut verify_units = transform_source_to_verify(options, source_units);
 
     let mut all_proven: bool = true;
     for verify_unit in &mut verify_units {
@@ -377,11 +361,11 @@ fn verify_files_main(
     Ok(all_proven)
 }
 
-pub fn get_verify_units_from_files(
+pub fn get_source_units_from_files(
     options: &Options,
     files_mutex: &Mutex<Files>,
     user_files: &[FileId],
-) -> Result<(Vec<Item<VerifyUnit>>, TyCtx), VerifyError> {
+) -> Result<(Vec<Item<SourceUnit>>, TyCtx), VerifyError> {
     // 1. Parsing
     let mut source_units: Vec<Item<SourceUnit>> = Vec::new();
     let mut files = files_mutex.lock().unwrap();
@@ -460,7 +444,14 @@ pub fn get_verify_units_from_files(
         }
     }
 
-    let mut verify_units: Vec<Item<VerifyUnit>> = source_units
+    Ok((source_units, tcx))
+}
+
+fn transform_source_to_verify(
+    options: &Options,
+    source_units: Vec<Item<SourceUnit>>,
+) -> Vec<Item<VerifyUnit>> {
+    let verify_units: Vec<Item<VerifyUnit>> = source_units
         .into_iter()
         .flat_map(|item| item.flat_map(SourceUnit::into_verify_unit))
         .collect();
@@ -469,9 +460,8 @@ pub fn get_verify_units_from_files(
         warn!("Z3 tracing is enabled with multiple verification units. Intermediate tracing results will be overwritten.");
     }
 
-    Ok((verify_units, tcx))
+    verify_units
 }
-
 fn setup_tracing(options: &Options) {
     timing::init_tracing(
         DispatchBuilder::default()
@@ -529,158 +519,4 @@ fn load_file(files: &mut Files, path: &PathBuf) -> FileId {
     let source_file_path = SourceFilePath::Path(path.clone());
     let file = files.add(source_file_path, source);
     file.id
-}
-
-fn apply_qelim(tcx: &mut TyCtx, vc_expr: &mut Expr) {
-    let mut qelim = Qelim::new(tcx);
-    qelim.qelim_inf(vc_expr);
-    // Apply/eliminate substitutions again
-    apply_subst(tcx, vc_expr);
-}
-
-fn apply_relational_opt(vc_expr_eq_infinity: &mut Expr) {
-    let span = info_span!("relationalize");
-    let _entered = span.enter();
-    (Relational {}).visit_expr(vc_expr_eq_infinity).unwrap();
-}
-
-fn apply_boolify_opt(vc_expr_eq_infinity: &mut Expr) {
-    let span = info_span!("boolify");
-    let _entered = span.enter();
-    (Boolify {}).visit_expr(vc_expr_eq_infinity).unwrap();
-}
-
-fn unfold_expr(options: &Options, tcx: &TyCtx, vc_expr: &mut Expr) {
-    let span = info_span!("unfolding");
-    let _entered = span.enter();
-    if !options.strict {
-        let ctx = Context::new(&Config::default());
-        let smt_ctx = SmtCtx::new(&ctx, tcx);
-        let mut unfolder = Unfolder::new(&smt_ctx);
-        unfolder.visit_expr(vc_expr).unwrap();
-    } else {
-        apply_subst(tcx, vc_expr);
-    }
-}
-
-fn mk_z3_ctx(options: &Options) -> Context {
-    let mut config = Config::default();
-    if options.z3_trace {
-        config.set_bool_param_value("trace", true);
-        config.set_bool_param_value("proof", true);
-    }
-    Context::new(&config)
-}
-
-fn mk_valid_query_prover<'smt, 'ctx>(
-    ctx: &'ctx Context,
-    smt_translate: &TranslateExprs<'smt, 'ctx>,
-    valid_query: &Bool<'ctx>,
-) -> Prover<'ctx> {
-    // create the prover and set the params
-    let mut prover = Prover::new(ctx);
-    // add assumptions (from axioms and locals) to the prover
-    smt_translate
-        .ctx
-        .uninterpreteds()
-        .add_axioms_to_prover(&mut prover);
-    smt_translate
-        .local_scope()
-        .add_assumptions_to_prover(&mut prover);
-    // add the provable: is this Boolean true?
-    prover.add_provable(valid_query);
-    prover
-}
-
-fn trace_expr_stats(vc_expr: &mut Expr) {
-    let mut stats = StatsVisitor::default();
-    stats.visit_expr(vc_expr).unwrap();
-    let stats = stats.stats;
-    tracing::info!(
-        num_exprs = stats.num_exprs,
-        num_quants = stats.num_quants,
-        depths = %stats.depths_summary(),
-        "Verification condition stats"
-    );
-    if stats.num_quants > 0 {
-        tracing::warn!(
-            num_quants=stats.num_quants, "Quantifiers are present in the generated verification conditions. It is possible that quantifier elimination failed. If Z3 can't decide the problem, this may be the reason."
-        );
-    }
-}
-
-fn expr_eq_infty(vc_expr: Expr) -> Expr {
-    let infinity = Shared::new(ExprData {
-        kind: ExprKind::Lit(Spanned::with_dummy_span(LitKind::Infinity)),
-        ty: Some(TyKind::EUReal),
-        span: Span::dummy_span(),
-    });
-    Shared::new(ExprData {
-        kind: ExprKind::Binary(Spanned::with_dummy_span(BinOpKind::Eq), infinity, vc_expr),
-        ty: Some(TyKind::Bool),
-        span: Span::dummy_span(),
-    })
-}
-
-fn print_prove_result(result: ProveResult, name: &SourceUnitName, prover: &Prover) {
-    match result {
-        ProveResult::Proof => println!("{}: Verified.", name),
-        ProveResult::Counterexample => {
-            println!("{}: Counter-example to verification found!", name);
-            if let Some(model) = prover.get_model() {
-                println!("{:?}", model);
-            };
-        }
-        ProveResult::Unknown => {
-            if let Some(reason) = prover.get_reason_unknown() {
-                println!("{}: Unknown result! (reason: {})", name, reason)
-            } else {
-                println!("{}: Unknown result!", name)
-            }
-        }
-    }
-}
-
-fn get_smtlib(options: &Options, prover: &Prover) -> Option<String> {
-    if options.print_smt || options.smt_dir.is_some() {
-        let smtlib = if !options.no_pretty_smtlib {
-            get_pretty_solver_smtlib(prover.solver())
-        } else {
-            get_solver_smtlib(prover.solver())
-        };
-        Some(smtlib)
-    } else {
-        None
-    }
-}
-
-fn write_smtlib(
-    options: &Options,
-    smtlib: Option<String>,
-    name: &SourceUnitName,
-    result: ProveResult,
-) -> io::Result<()> {
-    if options.print_smt || options.smt_dir.is_some() {
-        let mut smtlib = smtlib.unwrap();
-        if result == ProveResult::Counterexample {
-            smtlib.push_str("\n(get-model)\n");
-        } else if result == ProveResult::Unknown {
-            smtlib.push_str("\n(get-info :reason-unknown)\n");
-        }
-        if options.print_smt {
-            println!("\n; --- Solver SMT-LIB ---\n{}\n", smtlib);
-        }
-        if let Some(smt_dir) = &options.smt_dir {
-            let file_path = smt_dir.join(format!("{}.smt2", name));
-            create_dir_all(file_path.parent().unwrap())?;
-            let mut file = File::create(&file_path)?;
-            let mut comment_writer = PrefixWriter::new("; ".as_bytes(), &mut file);
-            write_detailed_version_info(&mut comment_writer)?;
-            writeln!(comment_writer, "Source unit: {}", name)?;
-            writeln!(comment_writer, "Prove result: {:?}", result)?;
-            file.write_all(smtlib.as_bytes())?;
-            info!(?file_path, "SMT-LIB query written to file");
-        }
-    }
-    Ok(())
 }
