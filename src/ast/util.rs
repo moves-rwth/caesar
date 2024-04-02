@@ -134,9 +134,10 @@ mod test {
         tcx.declare(crate::ast::DeclKind::VarDecl(DeclRef::new(VarDecl {
             name: ident,
             ty: TyKind::Bool,
-            kind: VarKind::Const,
+            kind: VarKind::Input,
             init: None,
             span: Span::dummy_span(),
+            created_from: None,
         })));
         let mut expr = builder.binary(
             BinOpKind::And,

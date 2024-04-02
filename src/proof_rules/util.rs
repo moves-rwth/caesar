@@ -110,6 +110,7 @@ pub fn new_ident_with_name(tcx: &TyCtx, ty: &TyKind, span: Span, name: &str) -> 
             kind: VarKind::Input,
             init: None,
             span,
+            created_from: None,
         };
         let decl = DeclRef::new(var_decl);
         tcx.declare(DeclKind::VarDecl(decl));
@@ -142,6 +143,7 @@ pub fn get_init_idents(tcx: &TyCtx, span: Span, idents: &[Ident]) -> Vec<Ident> 
                 kind: VarKind::Input,
                 init: None,
                 span,
+                created_from: Some(*ident),
             };
             let decl = DeclRef::new(var_decl);
             tcx.declare(DeclKind::VarDecl(decl.clone()));
@@ -207,7 +209,7 @@ pub fn generate_proc(
         format!("{}_{}", base_proc_ident.name, proc_info.name).as_str(),
     ));
     // get a fresh ident to avoid name conflicts
-    let name = tcx.fresh_ident(ident, SpanVariant::Encoding);
+    let name = tcx.fresh_ident(ident, ident.span.variant(SpanVariant::Encoding));
 
     let decl = DeclKind::ProcDecl(DeclRef::new(ProcDecl {
         direction: proc_info.direction,

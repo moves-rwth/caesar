@@ -30,7 +30,8 @@ use z3rro::prover::Prover;
 use crate::{
     ast::{
         visit::{walk_expr, VisitorMut},
-        BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Shared, Span, Spanned, TyKind, UnOpKind,
+        BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Shared, Span, SpanVariant, Spanned,
+        TyKind, UnOpKind,
     },
     smt::SmtCtx,
     vc::subst::Subst,
@@ -113,6 +114,7 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
     type Err = ();
 
     fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
+        let span = e.span;
         let ty = e.ty.clone().unwrap();
         match &mut e.deref_mut().kind {
             ExprKind::Var(ident) => {
@@ -166,7 +168,11 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                 _ => walk_expr(self, e),
             },
             ExprKind::Quant(_, quant_vars, _, expr) => {
-                self.subst.push_quant(quant_vars, self.translate.ctx.tcx());
+                self.subst.push_quant(
+                    span.variant(SpanVariant::Qelim),
+                    quant_vars,
+                    self.translate.ctx.tcx(),
+                );
                 let scope = self.translate.push();
 
                 self.prover.push();

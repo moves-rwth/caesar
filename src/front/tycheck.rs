@@ -332,15 +332,12 @@ impl TycheckError {
             TycheckError::CannotAssign { span, lhs_decl } => {
                 let lhs_decl = lhs_decl.borrow();
                 let lhs = lhs_decl.name;
+                if lhs_decl.kind.is_mutable() {
+                    unreachable!();
+                }
                 Diagnostic::new(ReportKind::Error, *span)
                     .with_message(format!("Cannot assign to variable `{}`", lhs))
-                    .with_label(Label::new(lhs_decl.span).with_message(match lhs_decl.kind {
-                        VarKind::Mut | VarKind::Output => unreachable!(),
-                        VarKind::Const => format!("`{}` is declared as a constant...", lhs),
-                        VarKind::Input => {
-                            format!("`{}` is declared as an input parameter...", lhs)
-                        }
-                    }))
+                    .with_label(Label::new(lhs_decl.span).with_message(format!("`{}` is declared as {}...", lhs, lhs_decl.kind)))
                     .with_label(
                         Label::new(*span).with_message("... so this assignment is not allowed"),
                     )
@@ -539,7 +536,7 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
                     });
                 };
             }
-            StmtKind::Havoc(_, _) => {}
+            StmtKind::Havoc(_, _) => {} // TODO: make input vars readable here or throw an error?
             StmtKind::Assert(_, ref mut expr) => self.try_cast(s.span, self.tcx.spec_ty(), expr)?,
             StmtKind::Assume(_, ref mut expr) => self.try_cast(s.span, self.tcx.spec_ty(), expr)?,
             StmtKind::Compare(_, ref mut expr) => {

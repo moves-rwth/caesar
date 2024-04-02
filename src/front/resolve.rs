@@ -258,9 +258,10 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
                 let decl = DeclKind::VarDecl(DeclRef::new(VarDecl {
                     name: *ident,
                     ty: TyKind::None,
-                    kind: VarKind::Const,
+                    kind: VarKind::Subst,
                     init: Some(val.clone()),
                     span,
+                    created_from: None,
                 }));
                 self.with_subscope(|this| {
                     this.declare(decl)?;

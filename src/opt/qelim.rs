@@ -5,7 +5,7 @@ use tracing::debug;
 use crate::{
     ast::{
         util::FreeVariableCollector, visit::VisitorMut, BinOpKind, Expr, ExprBuilder, ExprData,
-        ExprKind, Ident, QuantOpKind, QuantVar, Span, SpanVariant, TyKind, UnOpKind,
+        ExprKind, Ident, QuantOpKind, QuantVar, Span, SpanVariant, TyKind, UnOpKind, VarKind,
     },
     tyctx::TyCtx,
 };
@@ -113,6 +113,7 @@ impl<'tcx> Qelim<'tcx> {
 
     fn elim_quant(&mut self, span: Span, quant_vars: &[QuantVar], operand: Expr) -> Expr {
         debug!(span=?span, quant_vars=?quant_vars, "eliminating quantifier");
+        let span = span.variant(SpanVariant::Qelim);
         let idents: Vec<Ident> = quant_vars
             .iter()
             .flat_map(|quant_var| match quant_var {
@@ -122,7 +123,8 @@ impl<'tcx> Qelim<'tcx> {
             .collect();
         let builder = ExprBuilder::new(span);
         builder.subst_by(operand, &idents, |ident| {
-            let fresh_ident = self.tcx.fresh_var(ident, SpanVariant::Qelim);
+            let clone_var = self.tcx.clone_var(ident, span, VarKind::Quant);
+            let fresh_ident = clone_var;
             builder.var(fresh_ident, self.tcx)
         })
     }

@@ -6,7 +6,8 @@ use std::ops::{Add, Mul, Sub};
 
 use z3::{ast::Bool, Context};
 
-use crate::{forward_binary_op, scope::SmtAlloc, Factory, SmtAst, SmtEq, SmtInvariant, UReal};
+use crate::model::{InstrumentedModel, SmtEval, SmtEvalError};
+use crate::{forward_binary_op, scope::SmtAlloc, Factory, SmtEq, SmtFactory, SmtInvariant, UReal};
 
 use crate::{
     orders::{
@@ -16,6 +17,8 @@ use crate::{
     uint::UInt,
     SmtBranch,
 };
+
+use super::ConcreteEUReal;
 
 #[derive(Debug, Clone)]
 pub struct EURealFactory<'ctx> {
@@ -79,7 +82,7 @@ impl<'ctx> EUReal<'ctx> {
     }
 }
 
-impl<'ctx> SmtAst<'ctx> for EUReal<'ctx> {
+impl<'ctx> SmtFactory<'ctx> for EUReal<'ctx> {
     type FactoryType = EURealFactory<'ctx>;
 
     fn factory(&self) -> Factory<'ctx, Self> {
@@ -119,6 +122,23 @@ impl<'ctx> SmtBranch<'ctx> for EUReal<'ctx> {
             factory: a.factory.clone(),
             is_infinite: Bool::ite(cond, &a.is_infinite, &b.is_infinite),
             number: SmtBranch::branch(cond, &a.number, &b.number),
+        }
+    }
+}
+
+impl<'ctx> SmtEval<'ctx> for EUReal<'ctx> {
+    type Value = ConcreteEUReal;
+
+    fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
+        let is_infinite = self.is_infinite.eval(model)?;
+        // we evaluate the number even if the value is infinite. this is so the
+        // instrumented model tracks the access and we don't have a (logically
+        // falsely) unaccessed value left over in the model.
+        let real = self.number.eval(model)?;
+        if is_infinite {
+            Ok(ConcreteEUReal::Infinity)
+        } else {
+            Ok(ConcreteEUReal::Real(real))
         }
     }
 }

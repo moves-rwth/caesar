@@ -3,7 +3,7 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use z3::{ast::Bool, Context, Sort};
-use z3rro::{eureal::EURealSuperFactory, EUReal, Factory, ListFactory};
+use z3rro::{eureal::EURealSuperFactory, EUReal, Factory, ListFactory, SmtInvariant};
 
 use crate::{
     ast::{
@@ -15,6 +15,8 @@ use crate::{
 
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
 
+mod pretty_model;
+pub use pretty_model::pretty_model;
 pub mod symbolic;
 mod symbols;
 pub mod translate_exprs;

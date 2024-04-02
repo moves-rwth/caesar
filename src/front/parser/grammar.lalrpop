@@ -86,7 +86,7 @@ QuantOp: QuantOp = {
 
 QuantVar: QuantVar = {
     <l: @L> <name: Ident> ":" <ty: Ty> <r: @R> 
-        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty: ty, kind: VarKind::Const, init: None, span: span(file, l, r) }))
+        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty: ty, kind: VarKind::Quant, init: None, span: span(file, l, r), created_from: None }))
 }
 
 QuantAnn: QuantAnn = {
@@ -187,9 +187,9 @@ pub Stmts: Vec<Stmt> = {
 StmtKind: StmtKind = {
     <block: Block> => StmtKind::Block(block),
     <l: @L> "var" <ident: Ident> ":" <ty: Ty> "=" <rhs: Expr> <r: @R> 
-        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: Some(rhs), span: span(file, l, r) })),
+        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: Some(rhs), span: span(file, l, r), created_from: None })),
     <l: @L> "var" <ident: Ident> ":" <ty: Ty> <r: @R> 
-        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: None, span: span(file, l, r) })),
+        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: None, span: span(file, l, r), created_from: None })),
     <lhs: CommaPlus<Ident>> "=" <rhs: Expr> => StmtKind::Assign(lhs, rhs),
     <call: ExprTier<ExprCall>> => StmtKind::Assign(vec![], call),
     "havoc" <vars: CommaPlus<Ident>> => StmtKind::Havoc(Direction::Down, vars),
@@ -210,12 +210,16 @@ StmtKind: StmtKind = {
     "if" SymCup <block1: Block> "else" <block2: Block> => StmtKind::Angelic(block1, block2),
     "if" <cond: Expr> <block1: Block> "else" <block2: Block> => StmtKind::If(cond, block1, block2),
     "while" <cond: Expr> <block1: Block> => StmtKind::While(cond, block1),
-    "@" <ident: Ident> "(" <inputs: Comma<Expr>> ")" <stmt: Stmt> => StmtKind::Annotation(ident, inputs, Box::new(stmt)),
+    "@" <ident: Ident> <inputs: AnnotationInputs?> <stmt: Stmt> => StmtKind::Annotation(ident, inputs.unwrap_or_default(), Box::new(stmt)),
     "label" <ident: Ident> => StmtKind::Label(ident),
 }
 
 Block: Block = {
     "{" <stmts: Stmts> "}" => stmts,
+}
+
+AnnotationInputs: Vec<Expr> = {
+    "(" <inputs: Comma<Expr>> ")" => inputs,
 }
 
 // ---------------------------------------

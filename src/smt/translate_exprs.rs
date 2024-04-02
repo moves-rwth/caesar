@@ -78,6 +78,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         scope
     }
 
+    pub fn local_idents<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
+        self.locals.local_iter().map(|(ident, _)| *ident)
+    }
+
     pub fn fresh(&mut self, ident: Ident) {
         self.locals.remove(ident);
     }

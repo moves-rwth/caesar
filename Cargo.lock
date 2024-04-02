@@ -212,6 +212,7 @@ dependencies = [
  "hdrhistogram",
  "im-rc",
  "indexmap 1.9.3",
+ "itertools 0.12.0",
  "lalrpop",
  "lalrpop-util",
  "lit",
@@ -833,6 +834,15 @@ name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25db6b064527c5d482d0423354fcd07a89a2dfe07b67892e62411946db7f07b0"
 dependencies = [
  "either",
 ]

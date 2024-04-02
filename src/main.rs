@@ -19,7 +19,7 @@ use crate::{
     },
     front::{resolve::Resolve, tycheck::Tycheck},
     opt::{egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder},
-    smt::{translate_exprs::TranslateExprs, SmtCtx},
+    smt::{pretty_model, translate_exprs::TranslateExprs, SmtCtx},
     timing::TimingLayer,
     tyctx::TyCtx,
     vc::{subst::apply_subst, vcgen::Vcgen},
@@ -527,7 +527,7 @@ fn verify_files_main(
         drop(sat_span);
 
         // Now let's examine the result.
-        print_prove_result(result, name, &prover);
+        print_prove_result(files_mutex, &mut smt_translate, result, name, &prover);
 
         write_smtlib(options, smtlib, name, result).unwrap();
 
@@ -696,13 +696,17 @@ fn expr_eq_infty(vc_expr: Expr) -> Expr {
     })
 }
 
-fn print_prove_result(result: ProveResult, name: &SourceUnitName, prover: &Prover) {
+fn print_prove_result<'smt, 'ctx>(files_mutex: &Mutex<Files>, smt_translate: &mut TranslateExprs<'smt, 'ctx>, result: ProveResult, name: &SourceUnitName, prover: &Prover<'ctx>) {
     match result {
         ProveResult::Proof => println!("{}: Verified.", name),
         ProveResult::Counterexample => {
             println!("{}: Counter-example to verification found!", name);
             if let Some(model) = prover.get_model() {
-                println!("{:?}", model);
+                let mut w = Vec::new();
+                let files = files_mutex.lock().unwrap();
+                let doc = pretty_model(&files, smt_translate, model);
+                doc.nest(4).render(120, &mut w).unwrap();
+                println!("    {}", String::from_utf8(w).unwrap());
             };
         }
         ProveResult::Unknown => {

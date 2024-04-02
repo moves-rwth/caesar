@@ -60,9 +60,10 @@ impl ExprGen {
                 tcx.declare(DeclKind::VarDecl(DeclRef::new(VarDecl {
                     name: *name,
                     ty,
-                    kind: VarKind::Const,
+                    kind: VarKind::Input,
                     init: None,
                     span: Span::dummy_span(),
+                    created_from: None,
                 })))
             });
     }
