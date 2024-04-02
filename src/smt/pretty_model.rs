@@ -68,24 +68,21 @@ fn pretty_globals<'smt, 'ctx>(
         let mut lines: Vec<Doc> = vec![Doc::text(format!("{}s:", kind_name))];
 
         for decl_kind in decls {
-            match &*decl_kind {
-                DeclKind::VarDecl(decl_ref) => {
-                    let var_decl = decl_ref.borrow();
-                    let ident = var_decl.name;
+            if let DeclKind::VarDecl(decl_ref) = &*decl_kind {
+                let var_decl = decl_ref.borrow();
+                let ident = var_decl.name;
 
-                    // pretty print the value of this variable
-                    let value = pretty_var(translate, ident, model);
+                // pretty print the value of this variable
+                let value = pretty_var(translate, ident, model);
 
-                    // pretty print the span of this variable declaration
-                    let span = pretty_span(files, ident);
+                // pretty print the span of this variable declaration
+                let span = pretty_span(files, ident);
 
-                    lines.push(
-                        Doc::text(format!("{}: ", var_decl.original_name()))
-                            .append(value)
-                            .append(span),
-                    );
-                }
-                _ => {}
+                lines.push(
+                    Doc::text(format!("{}: ", var_decl.original_name()))
+                        .append(value)
+                        .append(span),
+                );
             }
         }
 

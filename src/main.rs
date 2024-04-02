@@ -696,7 +696,13 @@ fn expr_eq_infty(vc_expr: Expr) -> Expr {
     })
 }
 
-fn print_prove_result<'smt, 'ctx>(files_mutex: &Mutex<Files>, smt_translate: &mut TranslateExprs<'smt, 'ctx>, result: ProveResult, name: &SourceUnitName, prover: &Prover<'ctx>) {
+fn print_prove_result<'smt, 'ctx>(
+    files_mutex: &Mutex<Files>,
+    smt_translate: &mut TranslateExprs<'smt, 'ctx>,
+    result: ProveResult,
+    name: &SourceUnitName,
+    prover: &Prover<'ctx>,
+) {
     match result {
         ProveResult::Proof => println!("{}: Verified.", name),
         ProveResult::Counterexample => {
