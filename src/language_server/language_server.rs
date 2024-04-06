@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::ast::decl::DeclKind;
-use crate::ast::{Files, Span, StoredFile};
+use crate::ast::{Files, Span};
 use crate::driver::{SourceUnit, SourceUnitName};
 use crate::{
     get_source_units_from_files, load_file, transform_source_to_verify, Options, VerifyError,
@@ -31,10 +31,11 @@ impl lsp_types::request::Request for VerificationStatusParams {
     const METHOD: &'static str = "custom/verifyStatus";
 }
 
-fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+pub fn run_server(options: &Options) -> Result<(), Box<dyn Error + Send + Sync>> {
     let (connection, _) = Connection::stdio();
     let server_capabilities = ServerCapabilities {
         text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::NONE)),
+
         ..ServerCapabilities::default()
     };
 
@@ -50,6 +51,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 handle_request(
                     req,
                     &connection,
+                    options,
                     &mut documents,
                     &mut workspace_folders,
                     &mut proc_status_map,
@@ -59,6 +61,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 handle_notification(
                     not,
                     &connection,
+                    options,
                     &mut documents,
                     &mut workspace_folders,
                     &mut proc_status_map,
@@ -74,16 +77,35 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 fn handle_request(
     req: Request,
     connection: &Connection,
+    options: &Options,
     _documents: &mut Arc<Mutex<Vec<(String, String)>>>,
     _workspace_folders: &mut Arc<Mutex<Vec<WorkspaceFolder>>>,
-    proc_status_map: &mut HashMap<Url, Vec<(lsp_types::Range, bool)>>,
+    _proc_status_map: &mut HashMap<Url, Vec<(lsp_types::Range, bool)>>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let response: Response = match req.method.as_str() {
-        "custom/procStatus" => {
+        "custom/verifyStatus" => {
             let params: VerificationStatusParams = serde_json::from_value(req.params)?;
+
             let uri = params.text_document.uri;
 
-            let status_vec = proc_status_map.get(&uri).unwrap();
+            // TODO: Implement proper caching later.
+            let status_vec = match verify(options, uri.clone(), connection) {
+                Ok(vec) => {
+                    let _ = clear_diagnostics(connection, uri.clone());
+                    vec
+                }
+                Err(_) => Vec::new(),
+            };
+
+            //  let status_vec = match proc_status_map.get(&uri) {
+            //     Some(vec) => vec,
+            //     None => {
+            //         verify_and_cache(options,uri.clone(), connection, proc_status_map);
+            //         proc_status_map.get(&uri).unwrap()
+            //     }
+            // };
+
+            eprintln!("Procs: {:?}", status_vec);
 
             let proc_status_json = serde_json::to_value(status_vec)?;
             Response::new_ok(req.id, proc_status_json)
@@ -100,7 +122,8 @@ fn handle_request(
 
 fn handle_notification(
     not: lsp_server::Notification,
-    connection: &Connection,
+    _connection: &Connection,
+    _options: &Options,
     documents: &mut Arc<Mutex<Vec<(String, String)>>>,
     workspace_folders: &mut Arc<Mutex<Vec<WorkspaceFolder>>>,
     proc_status_map: &mut HashMap<Url, Vec<(lsp_types::Range, bool)>>,
@@ -112,21 +135,21 @@ fn handle_notification(
             let text = params.text_document.text;
             documents.lock().unwrap().push((uri.to_string(), text));
 
-            verify_and_cache(uri, connection, proc_status_map)
+            // verify_and_cache(options, uri, connection, proc_status_map);
         }
         "textDocument/didSave" => {
             let params: DidSaveTextDocumentParams = serde_json::from_value(not.params.clone())?;
             let uri = params.text_document.uri;
             let text = params.text.unwrap();
             documents.lock().unwrap().push((uri.to_string(), text));
+
+            // verify_and_cache(uri, connection, proc_status_map);
         }
         "textDocument/didChange" => {
             let params: DidChangeTextDocumentParams = serde_json::from_value(not.params.clone())?;
-            let uri = params.text_document.uri;
+            let _uri = params.text_document.uri;
             // let _content_changes = params.content_changes;
             // let mut _documents = documents.lock().unwrap();
-
-            verify_and_cache(uri, connection, proc_status_map);
         }
         "textDocument/didClose" => {
             let params: DidCloseTextDocumentParams = serde_json::from_value(not.params.clone())?;
@@ -134,7 +157,7 @@ fn handle_notification(
             documents
                 .lock()
                 .unwrap()
-                .retain(|(doc_uri, _)| !matches!(doc_uri.clone(), uri));
+                .retain(|(doc_uri, _)| !matches!(doc_uri.clone(), _uri));
 
             proc_status_map.remove(&uri);
         }
@@ -151,7 +174,7 @@ fn handle_notification(
     Ok(())
 }
 
-fn push_diagnostics(
+fn report_diagnostics(
     connection: &Connection,
     uri: Url,
     diagnostics: Vec<lsp_types::Diagnostic>,
@@ -161,20 +184,49 @@ fn push_diagnostics(
         diagnostics,
         version: None,
     };
-    let not = lsp_server::Notification::new("textDocument/publishDiagnostics".to_string(), params);
+    let notification =
+        lsp_server::Notification::new("textDocument/publishDiagnostics".to_string(), params);
     connection
         .sender
-        .send(lsp_server::Message::Notification(not))?;
+        .send(lsp_server::Message::Notification(notification))?;
     Ok(())
 }
 
-fn verify_and_cache(
+fn clear_diagnostics(
+    connection: &Connection,
+    uri: Url,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let diagnostics = Vec::new();
+    let params = lsp_types::PublishDiagnosticsParams {
+        uri,
+        diagnostics,
+        version: None,
+    };
+    let notification =
+        lsp_server::Notification::new("textDocument/publishDiagnostics".to_string(), params);
+    connection
+        .sender
+        .send(lsp_server::Message::Notification(notification))?;
+    Ok(())
+}
+
+// fn verify_and_cache(
+//     options: &Options,
+//     uri: Url,
+//     connection: &Connection,
+//     proc_status_map: &mut HashMap<Url, Vec<(lsp_types::Range, bool)>>,
+// ) {
+//     let proc_status = proc_status_map.entry(uri.clone()).or_default();
+//     let local_proc_status = verify(options, uri, connection).unwrap();
+//     proc_status.clear();
+//     proc_status.extend(local_proc_status);
+// }
+
+fn verify(
+    options: &Options,
     uri: Url,
     connection: &Connection,
-    proc_status_map: &mut HashMap<Url, Vec<(lsp_types::Range, bool)>>,
-) {
-    let proc_status = proc_status_map.entry(uri.clone()).or_default();
-
+) -> Result<Vec<(lsp_types::Range, bool)>, ()> {
     let path = uri
         .to_file_path()
         .expect("Failed to convert URI to file path");
@@ -183,30 +235,17 @@ fn verify_and_cache(
     let file_id = load_file(&mut files, &path);
 
     let files_mutex = Mutex::new(files);
-    let options = Options::default();
-
-    // This is a closure that handles the error and sends diagnostics to the client using the connection
-    let handle_error = |result: Result<_, VerifyError>| match result {
-        Ok(res) => res,
-        Err(e) => {
-            if let VerifyError::Diagnostic(diagnostic) = e {
-                let diag = diagnostic.into_lsp_diagnostic();
-                let _ =
-                    push_diagnostics(connection, Url::from_file_path(path).unwrap(), vec![diag]);
-            }
-        }
-    };
 
     let mut proc_span_map: HashMap<SourceUnitName, Span> = HashMap::new();
+    let mut local_proc_status: Vec<(lsp_types::Range, bool)> = Vec::new();
 
     // We use a block to obtain a try-catch structure to catch the VerifyErrors that might be produced by 2 different function calls.
     // The closure is needed to specify the return type of the block so that we can use the '?' operator.
-    handle_error((|| -> Result<_, VerifyError> {
+    let result = (|| -> Result<_, VerifyError> {
         let (mut source_units, mut tcx) =
-            get_source_units_from_files(&options, &files_mutex, &[file_id])?;
+            get_source_units_from_files(options, &files_mutex, &[file_id])?;
 
         let files = files_mutex.lock().unwrap();
-        let file = files.get(file_id).unwrap();
 
         source_units.iter_mut().for_each(|item| {
             let (name, source_unit) = item.enter_with_name();
@@ -215,24 +254,44 @@ fn verify_and_cache(
             }
         });
 
-        let mut verify_units = transform_source_to_verify(&options, source_units);
-        let mut local_proc_status: Vec<(lsp_types::Range, bool)> = Vec::new();
+        eprintln!("Extracted source_unit spans");
+
+        let mut verify_units = transform_source_to_verify(options, source_units);
+
+        eprintln!("Transformed into verify units");
         let mut all_proven: bool = true;
         for verify_unit in &mut verify_units {
             let (name, mut verify_unit) = verify_unit.enter_with_name();
 
-            let result = verify_unit.verify(name, &mut tcx, &options)?;
+            eprintln!("Verifying: {:?}", name);
+            let result = verify_unit.verify(name, &mut tcx, options)?;
+
+            eprintln!("Verify Result: {}", result);
 
             if let Some(span) = proc_span_map.get(name) {
                 // let char_span = files.char_span(*span);
-                let range = *span.to_lsp_range(*files).unwrap();
+                let range = (*span).to_lsp_range(&files).unwrap();
                 local_proc_status.push((range, result));
             }
+            eprintln!("One verified");
 
             all_proven = all_proven && result;
         }
-        proc_status.clear();
-        proc_status.extend(local_proc_status);
         Ok(())
-    })());
+    })();
+
+    match result {
+        Ok(res) => res,
+        Err(e) => {
+            if let VerifyError::Diagnostic(diagnostic) = e {
+                let files = files_mutex.lock().unwrap();
+                let diag = diagnostic.into_lsp_diagnostic(&files);
+                let _ =
+                    report_diagnostics(connection, Url::from_file_path(path).unwrap(), vec![diag]);
+                return Err(());
+            }
+        }
+    }
+
+    Ok(local_proc_status)
 }

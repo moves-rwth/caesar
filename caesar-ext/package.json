@@ -9,13 +9,26 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:heyvl"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "caesar.helloWorld",
         "title": "Hello World"
+      }
+    ],
+    "languages": [
+      {
+        "id": "heyvl",
+        "extensions": [
+          ".heyvl"
+        ],
+        "aliases": [
+          "HeyVL"
+        ]
       }
     ]
   },
@@ -37,5 +50,8 @@
     "typescript": "^5.3.3",
     "@vscode/test-cli": "^0.0.6",
     "@vscode/test-electron": "^2.3.9"
+  },
+  "dependencies": {
+    "vscode-languageclient": "9.0.1"
   }
 }

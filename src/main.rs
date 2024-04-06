@@ -21,6 +21,7 @@ use ast::{Diagnostic, FileId, Files, SourceFilePath};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{distributions::init_distributions, list::init_lists};
 
+use language_server::language_server::run_server;
 use procs::add_default_specs;
 use proof_rules::init_encodings;
 use resource_limits::{await_with_resource_limits, LimitError};
@@ -153,6 +154,10 @@ pub struct Options {
     /// standard output.
     #[structopt(long)]
     pub print_label_vc: bool,
+
+    /// Run the language server.
+    #[structopt(long)]
+    pub language_server: bool,
 }
 
 #[tokio::main]
@@ -167,11 +172,21 @@ async fn main() -> ExitCode {
         let mut stdout = io::stdout().lock();
         version::write_detailed_version_info(&mut stdout).unwrap();
     }
-
     // install global collector configured based on RUST_LOG env var.
     setup_tracing(&options);
 
     let (timeout, mem_limit) = (options.timeout, options.mem_limit);
+
+    // Run the language server and exit after it's done.
+    if options.language_server {
+        let result = run_server(&options);
+        if result.is_err() {
+            eprintln!("Error: {}", result.err().unwrap());
+            return ExitCode::from(1);
+        }
+        return ExitCode::from(0);
+    }
+
     if options.files.is_empty() {
         eprintln!("Error: list of files must not be empty.\n");
         return ExitCode::from(1);
@@ -186,6 +201,7 @@ async fn main() -> ExitCode {
 
     let options = Arc::new(options);
     let files = Arc::new(Mutex::new(files));
+
     let verify_result = verify_files(&options, &files, user_files).await;
 
     if options.timing {

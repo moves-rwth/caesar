@@ -1,1 +1,1 @@
-pub mod language_server_main;
+pub mod language_server;

@@ -200,7 +200,7 @@ impl Span {
     }
 
     pub fn to_lsp_range(self, files: &Files) -> Option<lsp_types::Range> {
-        let file = files.get(file_id).unwrap();
+        let file = files.get(self.file).unwrap();
         let char_span = file.char_span(self);
 
         let mut start_line = 0;
@@ -420,6 +420,27 @@ impl Diagnostic {
         let code_description = None;
         let source = None;
         let message = self.0.msg.unwrap_or_else(|| "(no message)".to_string());
+        let related_information = self
+            .0
+            .labels
+            .iter()
+            .flat_map(|label| {
+                Some(lsp_types::DiagnosticRelatedInformation {
+                    location: lsp_types::Location {
+                        uri: lsp_types::Url::parse(
+                            format!(
+                                "file://{}",
+                                files.get(label.span.file).unwrap().path.to_string_lossy()
+                            )
+                            .as_str(),
+                        )
+                        .unwrap(),
+                        range: label.span.to_lsp_range(files).unwrap(),
+                    },
+                    message: label.msg.clone()?,
+                })
+            })
+            .collect::<Vec<_>>();
         lsp_types::Diagnostic {
             range,
             severity: Some(severity),
@@ -427,7 +448,7 @@ impl Diagnostic {
             code_description,
             source,
             message,
-            related_information: None,
+            related_information: Some(related_information),
             tags: None,
             data: None,
         }
