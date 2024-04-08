@@ -1,0 +1,29 @@
+name: Nightly release (on change to main branch)
+on:
+  push:
+    branches:
+    - main
+
+env:
+  # Name of the tag to mark current nightly build
+  NIGHTLY_TAG: nightly
+
+jobs:
+  prepare-release:
+    name: prepare-release
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Ensure tag exists
+      run: |
+        git tag ${{ env.NIGHTLY_TAG }} -f
+        git push origin ${{ env.NIGHTLY_TAG }} -f
+    outputs:
+      tag: ${{ env.NIGHTLY_TAG }}
+  create-release:
+    needs: prepare-release
+    uses: ./.github/workflows/create_release.yml
+    with:
+      git_ref: ${{ needs.prepare-release.outputs.tag }}
+      is_prerelease: true
