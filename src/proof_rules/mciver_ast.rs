@@ -39,8 +39,8 @@ impl ASTAnnotation {
         let name = Ident::with_dummy_file_span(Symbol::intern("ast"), file);
 
         let invariant_param = intrinsic_param(file, "invariant", TyKind::Bool, false);
-        let variant_param = intrinsic_param(file, "variant", TyKind::SpecTy, false);
-        let free_var_param = intrinsic_param(file, "free_variable", TyKind::UInt, false);
+        let variant_param = intrinsic_param(file, "variant", TyKind::UReal, false);
+        let free_var_param = intrinsic_param(file, "free_variable", TyKind::UReal, false);
         let prob_param = intrinsic_param(file, "prob", TyKind::UReal, false);
         let decr_param = intrinsic_param(file, "decrease", TyKind::UReal, false);
 
@@ -93,7 +93,7 @@ impl Encoding for ASTAnnotation {
         if let ExprKind::Var(var_ref) = &free_var.kind {
             let var_decl = VarDecl {
                 name: *var_ref,
-                ty: TyKind::UInt,
+                ty: TyKind::UReal,
                 kind: VarKind::Mut,
                 init: None,
                 span: call_span,
@@ -101,11 +101,17 @@ impl Encoding for ASTAnnotation {
             };
             // Declare the free variable to be used in the omega invariant
             resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;
+        } else {
+            todo!() // TODO: print an error message otherwise!
         }
 
         resolve.visit_expr(prob)?;
         resolve.visit_expr(decrease)
     }
+
+    // TODO: handle nondeterminism!
+    //  - only allow demonic nondet
+    //  - transform to angelic nondet for upper bounds reasoning
 
     fn tycheck(
         &self,
@@ -113,6 +119,8 @@ impl Encoding for ASTAnnotation {
         call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), TycheckError> {
+        // TODO: does not check that the proc lower bounds!
+
         check_annotation_call(tycheck, call_span, &self.0, args)?;
         Ok(())
     }
@@ -302,30 +310,34 @@ impl Encoding for ASTAnnotation {
 
         let cond3_proc = generate_proc(annotation_span, cond3_proc_info, base_proc_ident, tcx);
 
-        // ?((~loop_guard) == (variant = 0))
+        // ?(loop_guard ==> (variant > 0))
         let cond4_expr = builder.unary(
             UnOpKind::Embed,
             Some(TyKind::EUReal),
             builder.binary(
-                BinOpKind::Eq,
+                BinOpKind::Impl,
                 Some(TyKind::Bool),
-                builder.unary(UnOpKind::Not, Some(TyKind::Bool), loop_guard.clone()),
+                loop_guard.clone(),
                 builder.binary(
-                    BinOpKind::Eq,
+                    BinOpKind::Gt,
                     Some(TyKind::Bool),
                     variant.clone(),
-                    builder.cast(TyKind::EUReal, builder.uint(0)),
+                    builder.cast(TyKind::UReal, builder.uint(0)),
                 ),
             ),
         );
 
-        // !G iff V = 0
+        // if G then V > 0
         let cond4_proc_info = ProcInfo {
             // create the ProcInfo according to the generate_proc function below
             name: "termination_condition".to_string(),
             inputs: params_from_idents(input_vars, tcx),
             outputs: vec![],
-            spec: vec![],
+            spec: vec![ProcSpec::Requires(builder.unary(
+                UnOpKind::Embed,
+                Some(TyKind::EUReal),
+                invariant.to_owned(),
+            ))],
             body: vec![Spanned::new(
                 annotation_span,
                 StmtKind::Assert(Direction::Down, cond4_expr),
@@ -333,25 +345,39 @@ impl Encoding for ASTAnnotation {
             direction: Direction::Down,
         };
         let cond4_proc = generate_proc(annotation_span, cond4_proc_info, base_proc_ident, tcx);
+
+        // Phi_{V}(V) <= V
         let mut cond5_body = init_assigns.clone();
+        cond5_body.push(Spanned::new(
+            annotation_span,
+            StmtKind::Assume(
+                Direction::Up,
+                builder.unary(
+                    UnOpKind::Embed,
+                    Some(TyKind::EUReal),
+                    builder.unary(UnOpKind::Not, Some(TyKind::Bool), invariant.to_owned()),
+                ),
+            ),
+        ));
         cond5_body.push(
             encode_iter(
                 annotation_span,
                 inner_stmt,
-                // hey_const(annotation_span, &variant, tcx),
                 vec![],
             )
             .unwrap(),
         );
 
-        // Phi_{V}(V) <= V
         let cond5_proc_info = ProcInfo {
             name: "V_wp_superinvariant".to_string(),
             inputs: params_from_idents(input_init_vars.clone(), tcx),
             outputs: params_from_idents(modified_vars.clone(), tcx),
             spec: vec![
-                ProcSpec::Requires(to_init_expr(tcx, annotation_span, variant, &modified_vars)),
-                ProcSpec::Ensures(variant.clone()),
+                ProcSpec::Requires(builder.cast(
+                    TyKind::EUReal,
+                    to_init_expr(tcx, annotation_span, variant, &modified_vars),
+                )),
+                ProcSpec::Ensures(builder.cast(TyKind::EUReal, variant.clone())),
             ],
             body: cond5_body,
             direction: Direction::Up,
@@ -375,7 +401,10 @@ impl Encoding for ASTAnnotation {
                     Some(TyKind::EUReal),
                     loop_guard.to_owned(),
                 ),
-                builder.subst(prob.clone(), [(free_var, variant.clone())]),
+                builder.cast(
+                    TyKind::EUReal,
+                    builder.subst(prob.clone(), [(free_var, variant.clone())]),
+                ),
             ),
         );
 
@@ -388,7 +417,7 @@ impl Encoding for ASTAnnotation {
                 variant.clone(),
                 builder.binary(
                     BinOpKind::Sub,
-                    Some(TyKind::EUReal),
+                    Some(TyKind::UReal),
                     init_variant.clone(),
                     builder.subst(decrease.clone(), [(free_var, init_variant)]),
                 ),
@@ -398,7 +427,7 @@ impl Encoding for ASTAnnotation {
         let mut cond6_body = init_assigns;
         cond6_body.extend(loop_body.clone());
 
-        //[I] * [G] * (p o V) <= \\s. wp[P]([V < V(s) - d(V(s))])(s)
+        // [I] * [G] * (p o V) <= \\s. wp[P]([V <= V(s) - d(V(s))])(s)
         let cond6_proc_info = ProcInfo {
             name: "progress_condition".to_string(),
             inputs: params_from_idents(input_init_vars, tcx),
@@ -420,7 +449,7 @@ impl Encoding for ASTAnnotation {
 
         Ok(EncodingGenerated {
             span: annotation_span,
-            stmts: vec![],
+            stmts: vec![], // TODO: the body is missing, call the police
             decls: Some(vec![
                 cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,
             ]),
