@@ -176,7 +176,7 @@ jobs:
       shell: bash
       if: matrix.os == 'windows-latest'
       run: |
-        7z a "$ARCHIVE.zip" "$ARCHIVE"
+        7z a "$ARCHIVE.zip" "$ARCHIVE/*"
         echo "ASSET=$ARCHIVE.zip" >> $GITHUB_ENV
       
     - name: Build archive (Unix)
