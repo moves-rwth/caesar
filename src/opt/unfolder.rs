@@ -72,13 +72,13 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
 
     /// Check whether `expr` is currently satisfiable. If `expr` is
     /// unsatisfiable, return `None`. If it is satisfiable, then call `callback`
-    /// assuming `expr` is true. 
+    /// assuming `expr` is true.
     fn with_sat<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
         let expr_z3 = self.translate.t_bool(expr);
-        
+
         // first add potential new assumptions obtained from `expr`'s
         // translation to the solver.
-        
+
         // TODO: the local scope is unnecessarily repeatedly added to the
         // solver.
         self.translate
