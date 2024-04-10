@@ -13,10 +13,7 @@ use std::{
 };
 
 use crate::{
-    ast::{
-        stats::StatsVisitor, visit::VisitorMut, BinOpKind, ExprData, ExprKind, LitKind, Shared,
-        Span, Spanned, TyKind,
-    },
+    ast::{stats::StatsVisitor, visit::VisitorMut, TyKind},
     front::{resolve::Resolve, tycheck::Tycheck},
     opt::{egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder},
     smt::{pretty_model, translate_exprs::TranslateExprs, SmtCtx},
@@ -26,7 +23,7 @@ use crate::{
     version::write_detailed_version_info,
 };
 use ast::{Diagnostic, Expr, FileId, Files, SourceFilePath};
-use driver::{Item, SourceUnit, SourceUnitName, VerifyUnit};
+use driver::{Item, SourceUnit, SourceUnitName, VcUnit, VerifyUnit};
 use intrinsic::{distributions::init_distributions, list::init_lists};
 use opt::{boolify::Boolify, RemoveParens};
 use procs::add_default_specs;
@@ -473,29 +470,29 @@ fn verify_files_main(
         }
 
         // In-between, gather some stats about the vc expression
-        trace_expr_stats(&mut vc_expr);
+        trace_expr_stats(&mut vc_expr.expr);
 
         // 8. Create the "vc[S] is valid" expression
-        let mut vc_expr_eq_infinity = expr_eq_infty(vc_expr);
+        let mut vc_is_valid = vc_expr.to_boolean();
 
         if options.egraph {
-            egraph::simplify(&vc_expr_eq_infinity);
+            egraph::simplify(&vc_is_valid);
         }
 
         // 9. Optimizations
         if !options.no_boolify || options.opt_rel {
-            RemoveParens.visit_expr(&mut vc_expr_eq_infinity).unwrap();
+            RemoveParens.visit_expr(&mut vc_is_valid).unwrap();
         }
         if !options.no_boolify {
-            apply_boolify_opt(&mut vc_expr_eq_infinity);
+            apply_boolify_opt(&mut vc_is_valid);
         }
         if options.opt_rel {
-            apply_relational_opt(&mut vc_expr_eq_infinity);
+            apply_relational_opt(&mut vc_is_valid);
         }
 
         // print theorem to prove if requested
         if options.print_theorem {
-            println!("{}: Theorem to prove:\n{}\n", name, &vc_expr_eq_infinity);
+            println!("{}: Theorem to prove:\n{}\n", name, &vc_is_valid);
         }
 
         // 10. Translate to Z3
@@ -505,7 +502,7 @@ fn verify_files_main(
         let ctx = mk_z3_ctx(options);
         let smt_ctx = SmtCtx::new(&ctx, &tcx);
         let mut smt_translate = TranslateExprs::new(&smt_ctx);
-        let mut valid_query = smt_translate.t_bool(&vc_expr_eq_infinity);
+        let mut valid_query = smt_translate.t_bool(&vc_is_valid);
 
         drop(translate_entered);
         drop(translate_span);
@@ -527,7 +524,14 @@ fn verify_files_main(
         drop(sat_span);
 
         // Now let's examine the result.
-        print_prove_result(files_mutex, &mut smt_translate, result, name, &prover);
+        print_prove_result(
+            files_mutex,
+            &vc_expr,
+            &mut smt_translate,
+            result,
+            name,
+            &prover,
+        );
 
         write_smtlib(options, smtlib, name, result).unwrap();
 
@@ -605,11 +609,11 @@ fn load_file(files: &mut Files, path: &PathBuf) -> FileId {
     file.id
 }
 
-fn apply_qelim(tcx: &mut TyCtx, vc_expr: &mut Expr) {
+fn apply_qelim(tcx: &mut TyCtx, vc_expr: &mut VcUnit) {
     let mut qelim = Qelim::new(tcx);
-    qelim.qelim_inf(vc_expr);
+    qelim.qelim(vc_expr);
     // Apply/eliminate substitutions again
-    apply_subst(tcx, vc_expr);
+    apply_subst(tcx, &mut vc_expr.expr);
 }
 
 fn apply_relational_opt(vc_expr_eq_infinity: &mut Expr) {
@@ -624,16 +628,16 @@ fn apply_boolify_opt(vc_expr_eq_infinity: &mut Expr) {
     (Boolify {}).visit_expr(vc_expr_eq_infinity).unwrap();
 }
 
-fn unfold_expr(options: &Options, tcx: &TyCtx, vc_expr: &mut Expr) {
+fn unfold_expr(options: &Options, tcx: &TyCtx, vc_expr: &mut VcUnit) {
     let span = info_span!("unfolding");
     let _entered = span.enter();
     if !options.strict {
         let ctx = Context::new(&Config::default());
         let smt_ctx = SmtCtx::new(&ctx, tcx);
         let mut unfolder = Unfolder::new(&smt_ctx);
-        unfolder.visit_expr(vc_expr).unwrap();
+        unfolder.visit_expr(&mut vc_expr.expr).unwrap();
     } else {
-        apply_subst(tcx, vc_expr);
+        apply_subst(tcx, &mut vc_expr.expr);
     }
 }
 
@@ -683,21 +687,9 @@ fn trace_expr_stats(vc_expr: &mut Expr) {
     }
 }
 
-fn expr_eq_infty(vc_expr: Expr) -> Expr {
-    let infinity = Shared::new(ExprData {
-        kind: ExprKind::Lit(Spanned::with_dummy_span(LitKind::Infinity)),
-        ty: Some(TyKind::EUReal),
-        span: Span::dummy_span(),
-    });
-    Shared::new(ExprData {
-        kind: ExprKind::Binary(Spanned::with_dummy_span(BinOpKind::Eq), infinity, vc_expr),
-        ty: Some(TyKind::Bool),
-        span: Span::dummy_span(),
-    })
-}
-
 fn print_prove_result<'smt, 'ctx>(
     files_mutex: &Mutex<Files>,
+    vc_expr: &VcUnit,
     smt_translate: &mut TranslateExprs<'smt, 'ctx>,
     result: ProveResult,
     name: &SourceUnitName,
@@ -710,7 +702,7 @@ fn print_prove_result<'smt, 'ctx>(
             if let Some(model) = prover.get_model() {
                 let mut w = Vec::new();
                 let files = files_mutex.lock().unwrap();
-                let doc = pretty_model(&files, smt_translate, model);
+                let doc = pretty_model(&files, vc_expr, smt_translate, model);
                 doc.nest(4).render(120, &mut w).unwrap();
                 println!("    {}", String::from_utf8(w).unwrap());
             };

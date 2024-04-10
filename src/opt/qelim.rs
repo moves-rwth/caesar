@@ -4,9 +4,11 @@ use tracing::debug;
 
 use crate::{
     ast::{
-        util::FreeVariableCollector, visit::VisitorMut, BinOpKind, Expr, ExprBuilder, ExprData,
-        ExprKind, Ident, QuantOpKind, QuantVar, Span, SpanVariant, TyKind, UnOpKind, VarKind,
+        util::FreeVariableCollector, visit::VisitorMut, BinOpKind, Direction, Expr, ExprBuilder,
+        ExprData, ExprKind, Ident, QuantOpKind, QuantVar, Span, SpanVariant, TyKind, UnOpKind,
+        VarKind,
     },
+    driver::VcUnit,
     tyctx::TyCtx,
 };
 
@@ -19,7 +21,14 @@ impl<'tcx> Qelim<'tcx> {
         Qelim { tcx }
     }
 
-    pub fn qelim_inf(&mut self, expr: &mut Expr) {
+    pub fn qelim(&mut self, vc_expr: &mut VcUnit) {
+        match vc_expr.direction {
+            Direction::Down => self.qelim_inf(&mut vc_expr.expr),
+            Direction::Up => self.qelim_sup(&mut vc_expr.expr),
+        }
+    }
+
+    fn qelim_inf(&mut self, expr: &mut Expr) {
         if !matches!(expr.ty.as_ref().unwrap(), TyKind::Bool | TyKind::EUReal) {
             return;
         }
@@ -65,7 +74,7 @@ impl<'tcx> Qelim<'tcx> {
         }
     }
 
-    pub fn qelim_sup(&mut self, expr: &mut Expr) {
+    fn qelim_sup(&mut self, expr: &mut Expr) {
         if !matches!(expr.ty.as_ref().unwrap(), TyKind::Bool | TyKind::EUReal) {
             return;
         }

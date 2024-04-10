@@ -1,16 +1,17 @@
 //! Pretty-printing an SMT model.
 
-use std::{collections::BTreeMap, rc::Rc};
+use std::{collections::BTreeMap, fmt::Display, rc::Rc};
 
 use itertools::Itertools;
 use z3::Model;
-use z3rro::model::InstrumentedModel;
+use z3rro::model::{InstrumentedModel, SmtEvalError};
 
 use crate::{
     ast::{
         decl::{DeclKind, DeclKindName},
         ExprBuilder, Files, Ident, Span,
     },
+    driver::VcUnit,
     pretty::Doc,
     smt::translate_exprs::TranslateExprs,
 };
@@ -18,6 +19,7 @@ use crate::{
 /// Pretty-print a model.
 pub fn pretty_model<'smt, 'ctx>(
     files: &Files,
+    vc_expr: &VcUnit,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     model: Model<'ctx>,
 ) -> Doc {
@@ -25,17 +27,30 @@ pub fn pretty_model<'smt, 'ctx>(
 
     let mut model = InstrumentedModel::new(model);
 
-    // objects accessed during vc evaluation do not contribute towards the
-    // unaccessed list.
-    model.reset_accessed();
-
     // Print the values of the global variables in the model.
     pretty_globals(translate, &model, files, &mut res);
 
     // Print the unaccessed definitions.
-    res.push(pretty_unaccessed(model));
+    res.push(pretty_unaccessed(&mut model));
 
-    Doc::intersperse(res, Doc::hardline().append(Doc::hardline()))
+    res.push(print_vc_value(vc_expr, translate, &model));
+
+    // objects accessed during vc evaluation do not contribute towards the
+    // unaccessed list
+    model.reset_accessed();
+
+    Doc::intersperse(res, Doc::hardline().append(Doc::hardline())).append(Doc::line_())
+}
+
+fn print_vc_value<'smt, 'ctx>(
+    vc_expr: &VcUnit,
+    translate: &mut TranslateExprs<'smt, 'ctx>,
+    model: &InstrumentedModel<'ctx>,
+) -> Doc {
+    let ast = translate.t_symbolic(&vc_expr.expr);
+    let value = ast.eval(&model);
+    let res = pretty_eval_result(value);
+    Doc::text("the pre-quantity evaluated to:").append(Doc::hardline().append(res).nest(4))
 }
 
 fn pretty_globals<'smt, 'ctx>(
@@ -97,11 +112,17 @@ fn pretty_var<'smt, 'ctx>(
 ) -> Doc {
     let builder = ExprBuilder::new(Span::dummy_span());
     let symbolic = translate.t_symbolic(&builder.var(ident, translate.ctx.tcx));
-    let value = match symbolic.eval(model) {
+    pretty_eval_result(symbolic.eval(model))
+}
+
+fn pretty_eval_result<T>(res: Result<T, SmtEvalError>) -> Doc
+where
+    T: Display,
+{
+    match res {
         Ok(value) => Doc::text(format!("{}", value)),
         Err(err) => Doc::text(format!("({})", err)),
-    };
-    value
+    }
 }
 
 fn pretty_span(files: &Files, ident: Ident) -> Doc {
@@ -125,7 +146,7 @@ fn pretty_span(files: &Files, ident: Ident) -> Doc {
     }
 }
 
-fn pretty_unaccessed(model: InstrumentedModel<'_>) -> Doc {
+fn pretty_unaccessed(model: &mut InstrumentedModel<'_>) -> Doc {
     let unaccessed: Vec<_> = model.iter_unaccessed().collect();
     if unaccessed.is_empty() {
         return Doc::nil();
