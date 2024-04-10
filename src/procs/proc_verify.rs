@@ -20,7 +20,7 @@
 //!
 //! If the direction is `up`, corresponding negations are generated as well.
 
-use crate::ast::{Block, Direction, ProcDecl, Spanned, StmtKind};
+use crate::ast::{Block, Direction, ProcDecl, SpanVariant, Spanned, StmtKind};
 
 /// Returns `None` if the proc has no body does not need verification.
 pub fn verify_proc(proc: &ProcDecl) -> Option<Block> {
@@ -36,19 +36,15 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<Block> {
 
     // 1. push the assume statement for each requires
     for expr in proc.requires() {
-        stmts.push(Spanned::with_dummy_span(StmtKind::Assume(
-            dir,
-            expr.clone(),
-        )));
+        let span = expr.span.variant(SpanVariant::ProcVerify);
+        stmts.push(Spanned::new(span, StmtKind::Assume(dir, expr.clone())));
     }
     // 2. append the procedure body's statements
     stmts.extend(body.iter().cloned());
     // 3. push the assert statements for each ensures
     for expr in proc.ensures() {
-        stmts.push(Spanned::with_dummy_span(StmtKind::Assert(
-            dir,
-            expr.clone(),
-        )));
+        let span = expr.span.variant(SpanVariant::ProcVerify);
+        stmts.push(Spanned::new(span, StmtKind::Assert(dir, expr.clone())));
     }
     // 4. wrap with negations if direction is up
     if dir == Direction::Up {
