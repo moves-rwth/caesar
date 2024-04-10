@@ -62,6 +62,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
         }
     }
 
+    /// Call `f` surrounded by `push()` and `pop()` calls to the prover.
     fn with_prover_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
         self.prover.push();
         let res = f(self);
@@ -69,13 +70,21 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
         res
     }
 
-    fn with_sat<T>(&mut self, expr: &Expr, sat: impl FnOnce(&mut Self) -> T) -> Option<T> {
+    /// Check whether `expr` is currently satisfiable. If `expr` is
+    /// unsatisfiable, return `None`. If it is satisfiable, then call `callback`
+    /// assuming `expr` is true. 
+    fn with_sat<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
         let expr_z3 = self.translate.t_bool(expr);
-        // TODO: the local scope is repeatedly added to the solver,
-        // that's useless
+        
+        // first add potential new assumptions obtained from `expr`'s
+        // translation to the solver.
+        
+        // TODO: the local scope is unnecessarily repeatedly added to the
+        // solver.
         self.translate
             .local_scope()
             .add_assumptions_to_prover(&mut self.prover);
+
         self.with_prover_scope(|this| {
             this.prover.add_assumption(&expr_z3);
             tracing::trace!(expr_z3=%expr_z3, "added expr to unfolder solver");
@@ -86,16 +95,21 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
                 tracing::trace!(solver=%this.prover.solver(), "eliminated zero expr");
                 None
             } else {
-                Some(sat(this))
+                Some(callback(this))
             }
         })
     }
 
-    fn with_nonzero<T>(&mut self, expr: &Expr, nonzero: impl FnOnce(&mut Self) -> T) -> Option<T> {
+    /// With the knowledge that `expr` is not bottom, evaluate `callback`.
+    /// However, if `expr` can not be bottom, then return `None` and don't
+    /// evaluate the `callback`.
+    fn with_nonbot<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
         match &expr.kind {
             ExprKind::Unary(un_op, operand) => match un_op.node {
                 UnOpKind::Embed | UnOpKind::Iverson => {
-                    return self.with_sat(operand, nonzero);
+                    // If an embed or Iverson expression are nonzero, we know
+                    // the Boolean expression must be true.
+                    return self.with_sat(operand, callback);
                 }
                 _ => {}
             },
@@ -106,7 +120,30 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
             },
             _ => {}
         }
-        Some(nonzero(self))
+        Some(callback(self))
+    }
+
+    /// With the knowledge that `expr` is not top, evaluate `callback`. However,
+    /// if `expr` can not be top, then return `None` and don't evaluate the
+    /// `callback`.
+    fn with_nontop<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
+        match &expr.kind {
+            ExprKind::Unary(un_op, operand) => match un_op.node {
+                UnOpKind::Embed => {
+                    // If an embed expression is not top, then its Boolean
+                    // condition must be false.
+                    return self.with_sat(&negate_expr(operand.clone()), callback);
+                }
+                _ => {}
+            },
+            ExprKind::Lit(lit) if lit.node.is_top() => return None,
+            ExprKind::Cast(inner) => match &inner.kind {
+                ExprKind::Lit(lit) if lit.node.is_top() => return None,
+                _ => {}
+            },
+            _ => {}
+        }
+        Some(callback(self))
     }
 }
 
@@ -150,18 +187,49 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                 }
             }
             ExprKind::Binary(bin_op, lhs, rhs) => match bin_op.node {
-                BinOpKind::Impl | BinOpKind::Compare | BinOpKind::Mul => {
+                BinOpKind::Mul if matches!(ty, TyKind::Bool | TyKind::UReal | TyKind::EUReal) => {
+                    // visit lhs normally first
                     self.visit_expr(lhs)?;
-                    let nonzero_res = self.with_nonzero(lhs, |this| this.visit_expr(rhs));
+                    // visit the rhs with the knowledge that lhs will be nonzero
+                    let nonzero_res = self.with_nonbot(lhs, |this| this.visit_expr(rhs));
+                    // evaluate the res or set to constant bottom
                     if let Some(res) = nonzero_res {
                         res
                     } else {
                         let builder = ExprBuilder::new(Span::dummy_span());
-                        *e = if matches!(bin_op.node, BinOpKind::Mul) {
-                            builder.bot_lit(&ty)
-                        } else {
-                            builder.top_lit(&ty)
-                        };
+                        *e = builder.bot_lit(&ty);
+                        Ok(())
+                    }
+                }
+                BinOpKind::Impl | BinOpKind::Compare
+                    if matches!(ty, TyKind::Bool | TyKind::EUReal) =>
+                {
+                    // visit lhs normally first
+                    self.visit_expr(lhs)?;
+                    // visit the rhs with the knowledge that lhs will be not bottom
+                    let nonbot_res = self.with_nonbot(lhs, |this| this.visit_expr(rhs));
+                    // evaluate the res or set to constant top
+                    if let Some(res) = nonbot_res {
+                        res
+                    } else {
+                        let builder = ExprBuilder::new(Span::dummy_span());
+                        *e = builder.top_lit(&ty);
+                        Ok(())
+                    }
+                }
+                BinOpKind::CoImpl | BinOpKind::CoCompare
+                    if matches!(ty, TyKind::Bool | TyKind::EUReal) =>
+                {
+                    // visit lhs normally first
+                    self.visit_expr(lhs)?;
+                    // visit the rhs with the knowledge that lhs will be not top
+                    let nontop_res = self.with_nontop(lhs, |this| this.visit_expr(rhs));
+                    // evaluate the res or set to constant bot
+                    if let Some(res) = nontop_res {
+                        res
+                    } else {
+                        let builder = ExprBuilder::new(Span::dummy_span());
+                        *e = builder.bot_lit(&ty);
                         Ok(())
                     }
                 }
