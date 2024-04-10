@@ -12,6 +12,7 @@ cfg-if = "1.0"
 tracing = "0.1"
 tempfile = "3.3"
 thiserror = "1.0"
+im-rc = "15"
 
 [features]
 datatype-eureal = []

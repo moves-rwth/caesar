@@ -17,7 +17,7 @@ datatype-eureal = ["z3rro/datatype-eureal"]
 datatype-eureal-funcs = ["z3rro/datatype-eureal-funcs"]
 static-link-z3 = ["z3/static-link-z3"]
 # Emit log messages to stderr without timing information. This is useful to diff logs.
-log-print-timeless = [] 
+log-print-timeless = []
 
 [dependencies]
 string-interner = "0.12"
@@ -45,7 +45,7 @@ indexmap = "1.9"
 pretty = "0.11"
 z3rro = { path = "./z3rro" }
 dashmap = "5.4"
-im-rc = "15.1.0"
+im-rc = "15"
 cfg-if = "1.0.0"
 itertools = "0.12.0"
 

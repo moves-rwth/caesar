@@ -2,7 +2,6 @@
 
 use std::{
     cell::RefCell,
-    collections::HashSet,
     fmt::{self, Display},
 };
 
@@ -22,8 +21,8 @@ use z3::{
 pub struct InstrumentedModel<'ctx> {
     model: Model<'ctx>,
     // TODO: turn this into a HashSet of FuncDecls when the type implements Hash
-    accessed_decls: RefCell<HashSet<String>>,
-    accessed_exprs: RefCell<HashSet<Dynamic<'ctx>>>,
+    accessed_decls: RefCell<im_rc::HashSet<String>>,
+    accessed_exprs: RefCell<im_rc::HashSet<Dynamic<'ctx>>>,
 }
 
 impl<'ctx> InstrumentedModel<'ctx> {
@@ -33,6 +32,23 @@ impl<'ctx> InstrumentedModel<'ctx> {
             accessed_decls: Default::default(),
             accessed_exprs: Default::default(),
         }
+    }
+
+    /// Execute this function "atomically" on this model, rolling back any
+    /// changes to the list of visited decls/exprs if the function fails with an
+    /// error.
+    pub fn atomically<T>(
+        &self,
+        f: impl FnOnce() -> Result<T, SmtEvalError>,
+    ) -> Result<T, SmtEvalError> {
+        let accessed_decls = self.accessed_decls.borrow().clone();
+        let accessed_exprs = self.accessed_exprs.borrow().clone();
+        let res = f();
+        if res.is_err() {
+            *self.accessed_decls.borrow_mut() = accessed_decls;
+            *self.accessed_exprs.borrow_mut() = accessed_exprs;
+        }
+        res
     }
 
     /// Evaluate the given ast node in this model. `model_completion` indicates
@@ -60,8 +76,8 @@ impl<'ctx> InstrumentedModel<'ctx> {
                 // contain big expressions repeatedly. so the following check is
                 // necessary to avoid walking through these expressions for a
                 // very long time.
-                let is_new = self.accessed_exprs.borrow_mut().insert(child.clone());
-                if !is_new {
+                let prev = self.accessed_exprs.borrow_mut().insert(child.clone());
+                if prev.is_some() {
                     continue;
                 }
                 self.add_children_accessed(child);

@@ -112,7 +112,13 @@ fn pretty_var<'smt, 'ctx>(
 ) -> Doc {
     let builder = ExprBuilder::new(Span::dummy_span());
     let symbolic = translate.t_symbolic(&builder.var(ident, translate.ctx.tcx));
-    pretty_eval_result(symbolic.eval(model))
+
+    // atomically evaluate the value in the model, so that if an error occurs
+    // the accessed variables will still show up in the "unaccessed" block later
+    // on.
+    let res = model.atomically(|| symbolic.eval(model));
+
+    pretty_eval_result(res)
 }
 
 fn pretty_eval_result<T>(res: Result<T, SmtEvalError>) -> Doc
