@@ -435,8 +435,10 @@ impl VerifyUnit {
         drop(sat_entered);
         drop(sat_span);
 
-        // Now let's examine the result.
-        print_prove_result(result, name, &prover);
+        if !options.language_server {
+            // Now let's examine the result.
+            print_prove_result(result, name, &prover);
+        }
 
         write_smtlib(options, smtlib, name, result).unwrap();
 
