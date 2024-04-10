@@ -97,7 +97,7 @@ impl ExprGen {
                         BinOpKind::Gt,
                         BinOpKind::Eq,
                     ],
-                    TyKind::EUReal,
+                    TyKind::Bool,
                     eureal_element.clone()
                 )
             ];
