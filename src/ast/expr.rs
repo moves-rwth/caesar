@@ -533,6 +533,12 @@ impl ExprBuilder {
     pub fn bot_lit(&self, ty: &TyKind) -> Expr {
         match ty {
             TyKind::Bool => self.bool_lit(false),
+            TyKind::UInt => self.uint(0),
+            TyKind::UReal => Expr::new(ExprData {
+                kind: ExprKind::Cast(self.uint(0)),
+                ty: Some(TyKind::UReal),
+                span: self.span,
+            }),
             TyKind::EUReal => Expr::new(ExprData {
                 kind: ExprKind::Cast(self.uint(0)),
                 ty: Some(TyKind::EUReal),
