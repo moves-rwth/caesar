@@ -28,7 +28,7 @@ use intrinsic::{distributions::init_distributions, list::init_lists};
 use opt::{boolify::Boolify, RemoveParens};
 use procs::add_default_specs;
 use proof_rules::init_encodings;
-use resource_limits::{await_with_resource_limits, LimitError};
+use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
 use thiserror::Error;
 use timing::DispatchBuilder;
 use tokio::task::JoinError;
@@ -262,12 +262,14 @@ pub async fn verify_files(
     files: &Arc<Mutex<Files>>,
     user_files: Vec<FileId>,
 ) -> Result<bool, VerifyError> {
-    let handle = {
+    let handle = |limits_ref: LimitsRef| {
         let options = options.clone();
         let files = files.clone();
-        tokio::task::spawn_blocking(move || verify_files_main(&options, &files, &user_files))
+        tokio::task::spawn_blocking(move || {
+            verify_files_main(&options, limits_ref, &files, &user_files)
+        })
     };
-    // Unpacking lots of results with `.await??` :-)
+    // Unpacking lots of Results with `.await??` :-)
     await_with_resource_limits(options.timeout, options.mem_limit, handle).await??
 }
 
@@ -275,12 +277,19 @@ pub async fn verify_files(
 /// `--werr` option is enabled by default.
 #[cfg(test)]
 pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, Files) {
+    use std::time::{Duration, Instant};
+
     let mut files = Files::new();
     let file_id = files.add(SourceFilePath::Builtin, source.to_owned()).id;
     let files_mutex = Mutex::new(files);
     let mut options = Options::default();
     options.werr = true;
-    let res = verify_files_main(&options, &files_mutex, &[file_id]);
+    let limits_ref = LimitsRef::new(
+        options
+            .timeout
+            .map(|seconds| Instant::now() + Duration::from_secs(seconds)),
+    );
+    let res = verify_files_main(&options, limits_ref, &files_mutex, &[file_id]);
     (res, files_mutex.into_inner().unwrap())
 }
 
@@ -355,6 +364,7 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
 /// Synchronously verify the given files.
 fn verify_files_main(
     options: &Options,
+    limits_ref: LimitsRef,
     files_mutex: &Mutex<Files>,
     user_files: &[FileId],
 ) -> Result<bool, VerifyError> {
@@ -462,7 +472,7 @@ fn verify_files_main(
         let mut vc_expr = verify_unit.vcgen(&vcgen).unwrap();
 
         // 6. Unfolding
-        unfold_expr(options, &tcx, &mut vc_expr);
+        unfold_expr(options, &limits_ref, &tcx, &mut vc_expr)?;
 
         // 7. Quantifier elimination
         if !options.no_qelim {
@@ -515,7 +525,7 @@ fn verify_files_main(
         let sat_span = info_span!("SAT check");
         let sat_entered = sat_span.enter();
 
-        let mut prover = mk_valid_query_prover(&ctx, &smt_translate, &valid_query);
+        let mut prover = mk_valid_query_prover(&limits_ref, &ctx, &smt_translate, &valid_query);
         let smtlib = get_smtlib(options, &prover);
 
         let result = prover.check_proof();
@@ -539,9 +549,11 @@ fn verify_files_main(
             info!("Z3 tracing output will be written to `z3.log`.");
         }
 
-        // If the solver was interrupted from the keyboard, exit now.
-        if prover.get_reason_unknown() == Some(ReasonUnknown::Interrupted) {
-            return Err(VerifyError::Interrupted);
+        // Handle reasons to stop the verifier.
+        match prover.get_reason_unknown() {
+            Some(ReasonUnknown::Interrupted) => return Err(VerifyError::Interrupted),
+            Some(ReasonUnknown::Timeout) => return Err(LimitError::Timeout.into()),
+            _ => {}
         }
 
         all_proven = all_proven && result == ProveResult::Proof;
@@ -628,16 +640,22 @@ fn apply_boolify_opt(vc_expr_eq_infinity: &mut Expr) {
     (Boolify {}).visit_expr(vc_expr_eq_infinity).unwrap();
 }
 
-fn unfold_expr(options: &Options, tcx: &TyCtx, vc_expr: &mut VcUnit) {
+fn unfold_expr(
+    options: &Options,
+    limits_ref: &LimitsRef,
+    tcx: &TyCtx,
+    vc_expr: &mut VcUnit,
+) -> Result<(), LimitError> {
     let span = info_span!("unfolding");
     let _entered = span.enter();
     if !options.strict {
         let ctx = Context::new(&Config::default());
         let smt_ctx = SmtCtx::new(&ctx, tcx);
-        let mut unfolder = Unfolder::new(&smt_ctx);
-        unfolder.visit_expr(&mut vc_expr.expr).unwrap();
+        let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
+        unfolder.visit_expr(&mut vc_expr.expr)
     } else {
         apply_subst(tcx, &mut vc_expr.expr);
+        Ok(())
     }
 }
 
@@ -651,12 +669,17 @@ fn mk_z3_ctx(options: &Options) -> Context {
 }
 
 fn mk_valid_query_prover<'smt, 'ctx>(
+    limits_ref: &LimitsRef,
     ctx: &'ctx Context,
     smt_translate: &TranslateExprs<'smt, 'ctx>,
     valid_query: &Bool<'ctx>,
 ) -> Prover<'ctx> {
     // create the prover and set the params
     let mut prover = Prover::new(ctx);
+    if let Some(remaining) = limits_ref.time_left() {
+        prover.set_timeout(remaining);
+    }
+
     // add assumptions (from axioms and locals) to the prover
     smt_translate
         .ctx

@@ -33,6 +33,7 @@ use crate::{
         BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Shared, Span, SpanVariant, Spanned,
         TyKind, UnOpKind,
     },
+    resource_limits::{LimitError, LimitsRef},
     smt::SmtCtx,
     vc::subst::Subst,
 };
@@ -40,6 +41,8 @@ use crate::{
 use crate::smt::translate_exprs::TranslateExprs;
 
 pub struct Unfolder<'smt, 'ctx> {
+    limits_ref: LimitsRef,
+
     /// The expressions may contain substitutions. We keep track of those.
     subst: Subst<'smt>,
 
@@ -54,8 +57,9 @@ pub struct Unfolder<'smt, 'ctx> {
 }
 
 impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
-    pub fn new(ctx: &'smt SmtCtx<'ctx>) -> Self {
+    pub fn new(limits_ref: LimitsRef, ctx: &'smt SmtCtx<'ctx>) -> Self {
         Unfolder {
+            limits_ref,
             subst: Subst::new(ctx.tcx()),
             translate: TranslateExprs::new(ctx),
             prover: Prover::new(ctx.ctx()),
@@ -147,9 +151,11 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
 }
 
 impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
-    type Err = ();
+    type Err = LimitError;
 
     fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
+        self.limits_ref.check_limits()?;
+
         let span = e.span;
         let ty = e.ty.clone().unwrap();
         match &mut e.deref_mut().kind {
@@ -276,7 +282,10 @@ fn negate_expr(expr: Expr) -> Expr {
 #[cfg(test)]
 mod test {
     use super::Unfolder;
-    use crate::{ast::visit::VisitorMut, fuzz_expr_opt_test, opt::fuzz_test, smt::SmtCtx};
+    use crate::{
+        ast::visit::VisitorMut, fuzz_expr_opt_test, opt::fuzz_test, resource_limits::LimitsRef,
+        smt::SmtCtx,
+    };
 
     #[test]
     fn fuzz_unfolder() {
@@ -284,7 +293,8 @@ mod test {
             let tcx = fuzz_test::mk_tcx();
             let z3_ctx = z3::Context::new(&z3::Config::default());
             let smt_ctx = SmtCtx::new(&z3_ctx, &tcx);
-            let mut unfolder = Unfolder::new(&smt_ctx);
+            let limits_ref = LimitsRef::new(None);
+            let mut unfolder = Unfolder::new(limits_ref, &smt_ctx);
             unfolder.visit_expr(&mut expr).unwrap();
             expr
         })

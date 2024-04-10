@@ -1,8 +1,10 @@
 //! Not a SAT solver, but a prover. There's a difference.
 
+use std::time::Duration;
+
 use z3::{ast::Bool, Context, Model, Params, SatResult, Solver};
 
-use crate::util::ReasonUnknown;
+use crate::util::{set_solver_timeout, ReasonUnknown};
 
 /// The result of a prove query.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,6 +48,11 @@ impl<'ctx> Prover<'ctx> {
     /// Set solver parameters.
     pub fn set_params(&mut self, params: &Params<'ctx>) {
         self.solver.set_params(params);
+    }
+
+    /// Set a timeout using [`set_solver_timeout`].
+    pub fn set_timeout(&mut self, duration: Duration) {
+        set_solver_timeout(&self.solver, duration);
     }
 
     /// Add an assumption to this prover.
