@@ -80,12 +80,12 @@ pub struct Options {
     pub no_qelim: bool,
 
     /// Time limit in seconds.
-    #[structopt(long)]
-    pub timeout: Option<u64>,
+    #[structopt(long, default_value = "300")]
+    pub timeout: u64,
 
     /// Memory usage limit in megabytes.
-    #[structopt(long = "mem")]
-    pub mem_limit: Option<u64>,
+    #[structopt(long = "mem", default_value = "8192")]
+    pub mem_limit: u64,
 
     /// Emit tracing events as json instead of (ANSI) text.
     #[structopt(long)]
@@ -218,14 +218,11 @@ async fn main() -> ExitCode {
             ExitCode::from(1)
         }
         Err(VerifyError::LimitError(LimitError::Timeout)) => {
-            tracing::error!("Timed out after {} seconds, exiting.", timeout.unwrap());
+            tracing::error!("Timed out after {} seconds, exiting.", timeout);
             std::process::exit(2); // exit ASAP
         }
         Err(VerifyError::LimitError(LimitError::Oom)) => {
-            tracing::error!(
-                "Exhausted {} megabytes of memory, exiting.",
-                mem_limit.unwrap()
-            );
+            tracing::error!("Exhausted {} megabytes of memory, exiting.", mem_limit);
             std::process::exit(3); // exit ASAP
         }
         Err(VerifyError::Panic(join_error)) => panic!("{}", join_error),
@@ -270,7 +267,7 @@ pub async fn verify_files(
         })
     };
     // Unpacking lots of Results with `.await??` :-)
-    await_with_resource_limits(options.timeout, options.mem_limit, handle).await??
+    await_with_resource_limits(Some(options.timeout), Some(options.mem_limit), handle).await??
 }
 
 /// Synchronously verify the given source code. This is used for tests. The
@@ -285,9 +282,7 @@ pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, Files) {
     let mut options = Options::default();
     options.werr = true;
     let limits_ref = LimitsRef::new(
-        options
-            .timeout
-            .map(|seconds| Instant::now() + Duration::from_secs(seconds)),
+        Some(options.timeout).map(|seconds| Instant::now() + Duration::from_secs(seconds)),
     );
     let res = verify_files_main(&options, limits_ref, &files_mutex, &[file_id]);
     (res, files_mutex.into_inner().unwrap())
