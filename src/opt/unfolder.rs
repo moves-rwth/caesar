@@ -128,14 +128,13 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
     /// `callback`.
     fn with_nontop<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
         match &expr.kind {
-            ExprKind::Unary(un_op, operand) => match un_op.node {
-                UnOpKind::Embed => {
+            ExprKind::Unary(un_op, operand) => {
+                if let UnOpKind::Embed = un_op.node {
                     // If an embed expression is not top, then its Boolean
                     // condition must be false.
                     return self.with_sat(&negate_expr(operand.clone()), callback);
                 }
-                _ => {}
-            },
+            }
             ExprKind::Lit(lit) if lit.node.is_top() => return None,
             ExprKind::Cast(inner) => match &inner.kind {
                 ExprKind::Lit(lit) if lit.node.is_top() => return None,

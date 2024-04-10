@@ -48,7 +48,7 @@ fn print_vc_value<'smt, 'ctx>(
     model: &InstrumentedModel<'ctx>,
 ) -> Doc {
     let ast = translate.t_symbolic(&vc_expr.expr);
-    let value = ast.eval(&model);
+    let value = ast.eval(model);
     let res = pretty_eval_result(value);
     Doc::text("the pre-quantity evaluated to:").append(Doc::hardline().append(res).nest(4))
 }

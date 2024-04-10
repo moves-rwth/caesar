@@ -18,7 +18,10 @@
 //! assert e4;
 //! ```
 
-use crate::{ast::{Direction, ProcDecl, SpanVariant, Spanned, StmtKind}, driver::VerifyUnit};
+use crate::{
+    ast::{Direction, ProcDecl, SpanVariant, Spanned, StmtKind},
+    driver::VerifyUnit,
+};
 
 /// Returns `None` if the proc has no body does not need verification.
 pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
@@ -35,14 +38,20 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
     // 1. push the assume statement for each requires
     for expr in proc.requires() {
         let span = expr.span.variant(SpanVariant::ProcVerify);
-        stmts.push(Spanned::new(span, StmtKind::Assume(direction, expr.clone())));
+        stmts.push(Spanned::new(
+            span,
+            StmtKind::Assume(direction, expr.clone()),
+        ));
     }
     // 2. append the procedure body's statements
     stmts.extend(body.iter().cloned());
     // 3. push the assert statements for each ensures
     for expr in proc.ensures() {
         let span = expr.span.variant(SpanVariant::ProcVerify);
-        stmts.push(Spanned::new(span, StmtKind::Assert(direction, expr.clone())));
+        stmts.push(Spanned::new(
+            span,
+            StmtKind::Assert(direction, expr.clone()),
+        ));
     }
 
     Some(VerifyUnit {
@@ -53,7 +62,7 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
 
 /// Turn the direction of this verification unit to lower bounds by adding
 /// negations if the direction was up.
-/// 
+///
 /// This is currently not used in the code anymore as we want to track the
 /// direction explicitly to have better error messages, but exists for the sake
 /// of completeness.
@@ -63,7 +72,9 @@ pub fn to_direction_lower_bounds(mut verify_unit: VerifyUnit) -> VerifyUnit {
             0,
             Spanned::with_dummy_span(StmtKind::Negate(Direction::Down)),
         );
-        verify_unit.block.push(Spanned::with_dummy_span(StmtKind::Negate(Direction::Up)));
+        verify_unit
+            .block
+            .push(Spanned::with_dummy_span(StmtKind::Negate(Direction::Up)));
     }
     verify_unit
 }
