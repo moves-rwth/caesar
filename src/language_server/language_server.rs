@@ -45,6 +45,11 @@ pub fn run_server(options: &Options) -> Result<(), Box<dyn Error + Send + Sync>>
     let mut workspace_folders = Arc::new(Mutex::new(Vec::new()));
     let mut proc_status_map: HashMap<Url, Vec<(lsp_types::Range, bool)>> = HashMap::new();
 
+    let start_notification = lsp_server::Notification::new("custom/serverReady".to_string(), {});
+    let _ = connection
+        .sender
+        .send(Message::Notification(start_notification));
+
     for msg in &connection.receiver {
         match msg {
             Message::Request(req) => {
@@ -96,16 +101,6 @@ fn handle_request(
                 }
                 Err(_) => Vec::new(),
             };
-
-            //  let status_vec = match proc_status_map.get(&uri) {
-            //     Some(vec) => vec,
-            //     None => {
-            //         verify_and_cache(options,uri.clone(), connection, proc_status_map);
-            //         proc_status_map.get(&uri).unwrap()
-            //     }
-            // };
-
-            eprintln!("Procs: {:?}", status_vec);
 
             let proc_status_json = serde_json::to_value(status_vec)?;
             Response::new_ok(req.id, proc_status_json)
@@ -210,18 +205,6 @@ fn clear_diagnostics(
     Ok(())
 }
 
-// fn verify_and_cache(
-//     options: &Options,
-//     uri: Url,
-//     connection: &Connection,
-//     proc_status_map: &mut HashMap<Url, Vec<(lsp_types::Range, bool)>>,
-// ) {
-//     let proc_status = proc_status_map.entry(uri.clone()).or_default();
-//     let local_proc_status = verify(options, uri, connection).unwrap();
-//     proc_status.clear();
-//     proc_status.extend(local_proc_status);
-// }
-
 fn verify(
     options: &Options,
     uri: Url,
@@ -254,26 +237,17 @@ fn verify(
             }
         });
 
-        eprintln!("Extracted source_unit spans");
-
         let mut verify_units = transform_source_to_verify(options, source_units);
-
-        eprintln!("Transformed into verify units");
         let mut all_proven: bool = true;
         for verify_unit in &mut verify_units {
             let (name, mut verify_unit) = verify_unit.enter_with_name();
-
-            eprintln!("Verifying: {:?}", name);
             let result = verify_unit.verify(name, &mut tcx, options)?;
-
-            eprintln!("Verify Result: {}", result);
 
             if let Some(span) = proc_span_map.get(name) {
                 // let char_span = files.char_span(*span);
                 let range = (*span).to_lsp_range(&files).unwrap();
                 local_proc_status.push((range, result));
             }
-            eprintln!("One verified");
 
             all_proven = all_proven && result;
         }

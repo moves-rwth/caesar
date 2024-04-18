@@ -4,6 +4,10 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
 import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind } from 'vscode-languageclient/node';
+import { VerificationManager } from './VerificationManager';
+import { GutterInformationView } from './GutterInformationView';
+import { StatusBarView } from './StatusBarView';
+import { State, StateManager } from './StateManager';
 
 
 let client: LanguageClient;
@@ -48,85 +52,43 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 
-	let decorationType = vscode.window.createTextEditorDecorationType({
-		after: {
-			color: new vscode.ThemeColor('editor.foreground'),
-			backgroundColor: new vscode.ThemeColor('editor.background'),
-		},
+	// Initialize Managers
+	let verificationManager = new VerificationManager(client);
+	let stateManager = new StateManager(client);
 
-	});
+	// Initialize UI Views
+	let gutterInfo = new GutterInformationView(verificationManager, context);
+	let statusBar = new StatusBarView(stateManager);
+
 
 	vscode.workspace.onDidSaveTextDocument(event => {
+		if (stateManager.getState() === State.Starting) {
+			return
+		}
 		const openEditor = vscode.window.visibleTextEditors.filter(
 			editor => editor.document.uri === event.uri
 		)[0]
-		getProcStatus(openEditor, decorationType, openEditor.document);
-	})
+		stateManager.setState(State.Verifying);
+		console.log("Verification Started")
+		verificationManager.verify(openEditor, openEditor.document).then((_) => {
+			stateManager.setState(State.Finished)
+		}
+		)
 
 
+	});
 
-	// // Start the client. This will also launch the server
+	// Start the client. This will also launch the server
 	client.start();
 
-	// let editor = vscode.window.activeTextEditor;
-	// if (editor) {
-	// 	getProcStatus(editor, decorationType, editor.document);
-	// }
+	console.log('Caesar is now active!');
 
-	// // // Use the console to output diagnostic information (console.log) and errors (console.error)
-	// // // This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "caesar" is now active!');
-
-	// // The command has been defined in the package.json file
-	// // Now provide the implementation of the command with registerCommand
-	// // The commandId parameter must match the command field in package.json
-	// let disposable = vscode.commands.registerCommand('caesar.helloWorld', () => {
-	// 	// The code you place here will be executed every time your command is executed
-	// 	// Display a message box to the user
-	// 	vscode.window.showInformationMessage('Hello World from caesar!!!!');
-	// });
-
-	// context.subscriptions.push(disposable);
-
-
+	context.subscriptions.push(statusBar);
+	context.subscriptions.push(gutterInfo);
+	context.subscriptions.push(client);
 
 }
 
-// This method is called when your extension is deactivated
+// This method is called when the extension is deactivated
 export function deactivate() { }
 
-function updateDecorations(editor: vscode.TextEditor, decorationType: vscode.TextEditorDecorationType, procStatus: Array<[vscode.Range, boolean]> = []) {
-	const decorations: vscode.DecorationOptions[] = [];
-	// const procStaus = getProcStatus(editor.document);
-	// Assuming `procedures` is an array of procedure positions
-	for (const proc of procStatus) {
-		const position = proc[0].start;
-		const verified = proc[1];
-		// Put the checkmark before the proc.
-		const range = new vscode.Range(position, position);
-		const decoration = {
-			range,
-			renderOptions: {
-				after: {
-					contentText: verified ? '✔️' : '❌',
-					color: new vscode.ThemeColor('editor.foreground'),
-				},
-			},
-		};
-		decorations.push(decoration);
-	}
-	editor.setDecorations(decorationType, decorations);
-}
-
-
-async function getProcStatus(editor: vscode.TextEditor, decorationType: vscode.TextEditorDecorationType, document: vscode.TextDocument) {
-
-	let documentItem = {
-		uri: document.uri.toString(),
-		languageId: document.languageId,
-		version: document.version,
-		text: document.getText()
-	}
-	let response: Array<[vscode.Range, boolean]> = await client.sendRequest('custom/verifyStatus', { text_document: documentItem });
-	updateDecorations(editor, decorationType, response);
-}
