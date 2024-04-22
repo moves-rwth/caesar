@@ -27,3 +27,10 @@ jobs:
     with:
       git_ref: ${{ needs.prepare-release.outputs.tag }}
       is_prerelease: true
+  create-docker-image:
+    needs: [prepare-release]
+    uses: ./.github/workflows/create_docker_image.yml
+    with:
+      git_ref: ${{ needs.prepare-release.outputs.tag }}
+      image_tags: |
+        type=raw,value=${{ needs.prepare-release.outputs.tag }}

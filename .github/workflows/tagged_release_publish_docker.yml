@@ -1,0 +1,15 @@
+name: Push Docker Image when tagged version is released
+
+# Only do the release on proper releases (with semantic versioning tags).
+on:
+  release:
+    types: [released]
+
+jobs:
+  create-docker-image:
+    uses: ./.github/workflows/create_docker_image.yml
+    with:
+      git_ref: ${{ github.ref_name }}
+      # semver tag also causes creation of 'latest' tag
+      image_tags: |
+        type=semver,pattern={{version}}
