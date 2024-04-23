@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # Installing Caesar
 
-You can install Caesar locally or build a Docker image.
+You can download a pre-built Caesar binary or Docker image, or manually build Caesar locally.
 
 ```mdx-code-block
 import CodeBlock from '@theme/CodeBlock';
@@ -20,42 +20,97 @@ import TOCInline from '@theme/TOCInline';
 <TOCInline toc={toc} />
 ```
 
-## Option A: Compiling Locally (Recommended)
+## Option A: Download Pre-Built Releases (Recommended)
 
-### Installing Dependencies
+### a) Pre-Built Binary
+
+1. Go to the [latest release on GitHub](https://github.com/moves-rwth/caesar/releases/latest) and download the release for your operating system.
+
+2. Extract the `caesar` binary from the downloaded archive.
+
+:::info Additional Steps
+
+<Tabs groupId="operating-systems">
+  <TabItem value="mac" label="macOS">
+
+  You may have to [release the binary from quarantine](https://support.apple.com/guide/mac-help/mh40616/mac) to allow execution:
+  ```bash
+  # Execute in the extracted folder
+  xattr -d com.apple.quarantine ./caesar
+  ```
+
+  </TabItem>
+  <TabItem value="debian" label="Debian/Linux">
+    No additional steps necessary.
+  </TabItem>
+  <TabItem value="win" label="Windows">
+    No additional steps necessary.
+  </TabItem>
+</Tabs>
+:::
+
+### b) Docker Image
+
+We also provide a Docker image.
+
+```bash
+docker pull ghcr.io/moves-rwth/caesar:latest
+```
+
+You can use this Docker image just like the `caesar` binary.
+To access files from your system you need to mount them as volumes.
+For example, if you want to verify a program in `./programs/example.heyvl`, the following command mounts the `./programs/` directory as `/root/caesar/programs/` inside the container and uses `caesar` to verify `example.heyvl`.
+
+```bash
+docker run -it -v $PWD/programs:/root/caesar/programs/ ghcr.io/moves-rwth/caesar:latest /root/caesar/programs/example.heyvl
+```
+
+## Option B: Compiling Locally
+
+### a) Build Binary
+
+#### Installing Dependencies
 
 You will need to install some dependencies manually:
 
 **Rust:** To install [Rust](https://www.rust-lang.org/), we recommend [installation via rustup](https://rustup.rs/).
 You might need to restart your terminal after installing Rust.
 
-**Fish Shell**: We write some scripts written in [fish](https://fishshell.com/).
+**Build Tools:** Caesar builds [Z3](https://github.com/Z3Prover/z3) itself, so we need [Python](https://www.python.org) and [cmake](https://cmake.org/).
 
-**Build Tools:** Caesar builds [Z3](https://github.com/Z3Prover/z3) itself, so we need Python and [cmake](https://cmake.org/).
-
-```mdx-code-block
 <Tabs groupId="operating-systems">
   <TabItem value="mac" label="macOS">
-    <CodeBlock language="bash">{`# Install Rust via rustup
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-# Install CMake and fish
-brew install cmake fish`}
-    </CodeBlock>
+
+  ```bash
+  # Install Rust via rustup
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  # Install Python and CMake
+  brew install python cmake
+  ```
+
   </TabItem>
   <TabItem value="debian" label="Debian/Linux">
-    <CodeBlock language="bash">{`# Install Rust via rustup
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-# Install CMake, LLVM, clang, and fish
-apt-get install cmake llvm-dev libclang-dev clang fish`}
-    </CodeBlock>
+
+  ```bash
+  # Install Rust via rustup
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  # Install Python, CMake, LLVM and clang
+  apt-get install python3 cmake llvm-dev libclang-dev clang
+  ```
+
   </TabItem>
   <TabItem value="win" label="Windows">
-    We do not have build instructions for Windows at the moment. We recommend that you use <Link to="https://learn.microsoft.com/en-us/windows/wsl/install">WSL</Link> and refer to the Debian/Linux instructions.
-  </TabItem>
-</Tabs>
-```
 
-### Compiling Caesar
+  1. [Follow the instructions](https://rustup.rs/) to install Rust via rustup.
+  2. Install Python, CMake and LLVM
+  ```bash
+  choco install python cmake llvm
+  ```
+
+</TabItem>
+</Tabs>
+
+#### Compiling Caesar
 
 Simply run the following, and `caesar` will be available on the command-line.
 Because this will compile a large number of dependencies, this might take a couple of minutes (especially Z3 takes some time).
@@ -76,7 +131,7 @@ tests/zeroconf.heyvl::arp: Verified.
 tests/zeroconf.heyvl::zeroconf: Verified.
 ```
 
-## Option B: Docker
+### b) Docker Image
 
 We also support building a Docker image.
 This does not require installing dependencies and will package everything in a Docker image named `caesar`.
@@ -87,8 +142,10 @@ cd caesar
 docker build -t caesar -f docker/Dockerfile .
 ```
 
-With the Docker image `caesar` built, you can enter the Docker container and work in there.
-The following command also mounts the `./caesar/` directory as `/root/caesar/results/` inside the container.
+With the Docker image `caesar` built, you can use it just like the `caesar` binary.
+To access files from your system you need to mount them as volumes.
+For example, if you want to verify a program in `./programs/example.heyvl`, the following command mounts the `./programs/` directory as `/root/caesar/programs/` inside the container and uses `caesar` to verify `example.heyvl`.
+
 ```bash
-docker run -it -v $PWD/results:/root/caesar/results/ caesar /bin/bash
+docker run -it -v $PWD/programs:/root/caesar/programs/ caesar /root/caesar/programs/example.heyvl
 ```
