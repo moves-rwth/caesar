@@ -68,6 +68,7 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
 /// of completeness.
 pub fn to_direction_lower_bounds(mut verify_unit: VerifyUnit) -> VerifyUnit {
     if verify_unit.direction == Direction::Up {
+        verify_unit.direction = Direction::Down;
         verify_unit.block.insert(
             0,
             Spanned::with_dummy_span(StmtKind::Negate(Direction::Down)),
