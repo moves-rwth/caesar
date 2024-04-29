@@ -53,7 +53,7 @@ Verification with `caesar` requires the `--raw` command-line flag since these fi
 
 Instructions on how to (re-)generate these examples are located in [`pgcl/examples-heyvl/README.md`](https://github.com/moves-rwth/caesar/blob/master/pgcl/examples-heyvl/README.md).
 
-To execute `caesar` with the generated HeyVL files, refer to the [benchmarks section of Caesar's documentation](./caesar.md#benchmarks).
+To execute `caesar` with the generated HeyVL files, refer to the [benchmarks section of Caesar's documentation](./caesar/benchmarks.md).
 
 ## pGCL Syntax
 
