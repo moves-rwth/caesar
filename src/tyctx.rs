@@ -148,7 +148,7 @@ impl TyCtx {
 
     pub fn lit_ty(&self, lit: &LitKind) -> TyKind {
         match lit {
-            LitKind::Str(_) => todo!(),
+            LitKind::Str(_) => TyKind::String,
             LitKind::UInt(_) => TyKind::UInt,
             LitKind::Frac(_) => TyKind::UReal,
             LitKind::Infinity => TyKind::EUReal,

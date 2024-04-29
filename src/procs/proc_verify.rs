@@ -21,6 +21,7 @@
 use crate::{
     ast::{Direction, ProcDecl, SpanVariant, Spanned, StmtKind},
     driver::VerifyUnit,
+    slicing::{wrap_with_error_message, wrap_with_success_message},
 };
 
 /// Returns `None` if the proc has no body does not need verification.
@@ -33,24 +34,31 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
         None => return None,
     };
 
+    let proc_kind = match direction {
+        Direction::Down => "proc",
+        Direction::Up => "coproc",
+    };
+
     let mut stmts = Vec::new();
 
     // 1. push the assume statement for each requires
-    for expr in proc.requires() {
+    for (i, expr) in proc.requires().enumerate() {
         let span = expr.span.variant(SpanVariant::ProcVerify);
-        stmts.push(Spanned::new(
-            span,
-            StmtKind::Assume(direction, expr.clone()),
+        stmts.push(wrap_with_success_message(
+            Spanned::new(span, StmtKind::Assume(direction, expr.clone())),
+            &format!("{} pre #{} is not necessary", proc_kind, i),
         ));
     }
+
     // 2. append the procedure body's statements
     stmts.extend(body.iter().cloned());
+
     // 3. push the assert statements for each ensures
-    for expr in proc.ensures() {
+    for (i, expr) in proc.ensures().enumerate() {
         let span = expr.span.variant(SpanVariant::ProcVerify);
-        stmts.push(Spanned::new(
-            span,
-            StmtKind::Assert(direction, expr.clone()),
+        stmts.push(wrap_with_error_message(
+            Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
+            &format!("{} post #{} is part of the error", proc_kind, i),
         ));
     }
 

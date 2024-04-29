@@ -16,7 +16,7 @@ use crate::{
     ast::{stats::StatsVisitor, visit::VisitorMut, TyKind},
     front::{resolve::Resolve, tycheck::Tycheck},
     opt::{egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder},
-    smt::{pretty_model, translate_exprs::TranslateExprs, SmtCtx},
+    smt::{pretty_model, pretty_slice, translate_exprs::TranslateExprs, SmtCtx},
     timing::TimingLayer,
     tyctx::TyCtx,
     vc::{subst::apply_subst, vcgen::Vcgen},
@@ -29,17 +29,22 @@ use opt::{boolify::Boolify, RemoveParens};
 use procs::add_default_specs;
 use proof_rules::init_encodings;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
+use slicing::{
+    init_slicing, selection::SliceSelection, solver::SliceSolver, transform::SliceStmts,
+};
+use smt::PrettySliceMode;
 use thiserror::Error;
 use timing::DispatchBuilder;
 use tokio::task::JoinError;
 use tracing::{info, info_span, warn};
 use z3::{
     ast::{Ast, Bool},
-    Config, Context,
+    Config, Context, Params,
 };
 
 use structopt::StructOpt;
 use z3rro::{
+    model::InstrumentedModel,
     pretty::{get_pretty_solver_smtlib, get_solver_smtlib},
     prover::{ProveResult, Prover},
     util::{PrefixWriter, ReasonUnknown},
@@ -55,6 +60,7 @@ mod procs;
 mod proof_rules;
 mod resource_limits;
 mod scope_map;
+mod slicing;
 mod smt;
 mod timing;
 pub mod tyctx;
@@ -166,6 +172,16 @@ pub struct Options {
     /// standard output.
     #[structopt(long)]
     pub print_label_vc: bool,
+
+    /// Do not try to slice after an error occurs. Just return the first
+    /// counterexample.
+    #[structopt(long)]
+    pub no_slice_error: bool,
+
+    /// Slice if the program verifies to return a smaller, verifying program.
+    /// This is not enabled by default.
+    #[structopt(long)]
+    pub slice_verify: bool,
 }
 
 #[tokio::main]
@@ -307,6 +323,7 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
     init_encodings(&mut files, &mut tcx);
     init_distributions(&mut files, &mut tcx);
     init_lists(&mut files, &mut tcx);
+    init_slicing(&mut tcx);
     drop(files);
 
     let mut resolve = Resolve::new(&mut tcx);
@@ -387,6 +404,7 @@ fn verify_files_main(
     init_encodings(&mut files, &mut tcx);
     init_distributions(&mut files, &mut tcx);
     init_lists(&mut files, &mut tcx);
+    init_slicing(&mut tcx);
     drop(files);
 
     let mut resolve = Resolve::new(&mut tcx);
@@ -424,14 +442,12 @@ fn verify_files_main(
     }
 
     let mut source_units_buf = vec![];
-
     for source_unit in &mut source_units {
         source_unit
             .enter()
             .desugar(&mut tcx, &mut source_units_buf)
             .map_err(|ann_err| ann_err.diagnostic())?;
     }
-
     source_units.extend(source_units_buf);
 
     if options.print_core_procs {
@@ -457,19 +473,22 @@ fn verify_files_main(
         // 4. Desugaring: transforming spec calls to procs
         verify_unit.desugar(&mut tcx).unwrap();
 
+        // 5. Prepare slicing
+        let slice_vars = verify_unit.prepare_slicing(options, &mut tcx);
+
         // print HeyVL core after desugaring if requested
         if options.print_core {
             println!("{}: HeyVL core query:\n{}\n", name, *verify_unit);
         }
 
-        // 5. Generating verification conditions
+        // 6. Generating verification conditions
         let vcgen = Vcgen::new(&tcx, options.print_label_vc);
         let mut vc_expr = verify_unit.vcgen(&vcgen).unwrap();
 
-        // 6. Unfolding
+        // 7. Unfolding
         unfold_expr(options, &limits_ref, &tcx, &mut vc_expr)?;
 
-        // 7. Quantifier elimination
+        // 8. Quantifier elimination
         if !options.no_qelim {
             apply_qelim(&mut tcx, &mut vc_expr);
         }
@@ -477,14 +496,14 @@ fn verify_files_main(
         // In-between, gather some stats about the vc expression
         trace_expr_stats(&mut vc_expr.expr);
 
-        // 8. Create the "vc[S] is valid" expression
+        // 9. Create the "vc[S] is valid" expression
         let mut vc_is_valid = vc_expr.to_boolean();
 
         if options.egraph {
             egraph::simplify(&vc_is_valid);
         }
 
-        // 9. Optimizations
+        // 10. Optimizations
         if !options.no_boolify || options.opt_rel {
             RemoveParens.visit_expr(&mut vc_is_valid).unwrap();
         }
@@ -500,7 +519,7 @@ fn verify_files_main(
             println!("{}: Theorem to prove:\n{}\n", name, &vc_is_valid);
         }
 
-        // 10. Translate to Z3
+        // 11. Translate to Z3
         let translate_span = info_span!("translation to Z3");
         let translate_entered = translate_span.enter();
 
@@ -516,14 +535,32 @@ fn verify_files_main(
             info_span!("simplify query").in_scope(|| valid_query = valid_query.simplify());
         }
 
-        // 11. Create Z3 solver with axioms, solve
+        // 12. Create Z3 solver with axioms, solve
         let sat_span = info_span!("SAT check");
         let sat_entered = sat_span.enter();
 
-        let mut prover = mk_valid_query_prover(&limits_ref, &ctx, &smt_translate, &valid_query);
+        let prover = mk_valid_query_prover(&limits_ref, &ctx, &smt_translate, &valid_query);
         let smtlib = get_smtlib(options, &prover);
 
-        let result = prover.check_proof();
+        let mut slice_solver = SliceSolver::new(slice_vars.clone(), &mut smt_translate, prover);
+        let mut result = slice_solver.slice_while_failing(&limits_ref)?;
+        if matches!(result, ProveResult::Proof) && options.slice_verify {
+            let model = slice_solver.slice_while_verified(&limits_ref)?;
+            let mut w = Vec::new();
+            let files = files_mutex.lock().unwrap();
+            let doc = pretty_slice(
+                &files,
+                &mut smt_translate,
+                &slice_vars,
+                SliceSelection::VERIFIED_SELECTION,
+                &InstrumentedModel::new(model),
+                PrettySliceMode::Verify,
+            );
+            if let Some(doc) = doc {
+                doc.nest(4).render(120, &mut w).unwrap();
+                println!("    {}", String::from_utf8(w).unwrap());
+            }
+        }
 
         drop(sat_entered);
         drop(sat_span);
@@ -531,27 +568,30 @@ fn verify_files_main(
         // Now let's examine the result.
         print_prove_result(
             files_mutex,
+            &slice_vars,
+            SliceSelection::FAILURE_SELECTION,
             &vc_expr,
             &mut smt_translate,
-            result,
+            &mut result,
             name,
-            &prover,
         );
 
-        write_smtlib(options, smtlib, name, result).unwrap();
+        write_smtlib(options, smtlib, name, &result).unwrap();
 
         if options.z3_trace {
             info!("Z3 tracing output will be written to `z3.log`.");
         }
 
         // Handle reasons to stop the verifier.
-        match prover.get_reason_unknown() {
-            Some(ReasonUnknown::Interrupted) => return Err(VerifyError::Interrupted),
-            Some(ReasonUnknown::Timeout) => return Err(LimitError::Timeout.into()),
+        match result {
+            ProveResult::Unknown(ReasonUnknown::Interrupted) => {
+                return Err(VerifyError::Interrupted)
+            }
+            ProveResult::Unknown(ReasonUnknown::Timeout) => return Err(LimitError::Timeout.into()),
             _ => {}
         }
 
-        all_proven = all_proven && result == ProveResult::Proof;
+        all_proven = all_proven && matches!(result, ProveResult::Proof);
     }
 
     Ok(all_proven)
@@ -707,30 +747,32 @@ fn trace_expr_stats(vc_expr: &mut Expr) {
 
 fn print_prove_result<'smt, 'ctx>(
     files_mutex: &Mutex<Files>,
+    slice_stmts: &SliceStmts,
+    selection: SliceSelection,
     vc_expr: &VcUnit,
     smt_translate: &mut TranslateExprs<'smt, 'ctx>,
-    result: ProveResult,
+    result: &mut ProveResult<'ctx>,
     name: &SourceUnitName,
-    prover: &Prover<'ctx>,
 ) {
     match result {
         ProveResult::Proof => println!("{}: Verified.", name),
-        ProveResult::Counterexample => {
+        ProveResult::Counterexample(model) => {
             println!("{}: Counter-example to verification found!", name);
-            if let Some(model) = prover.get_model() {
-                let mut w = Vec::new();
-                let files = files_mutex.lock().unwrap();
-                let doc = pretty_model(&files, vc_expr, smt_translate, model);
-                doc.nest(4).render(120, &mut w).unwrap();
-                println!("    {}", String::from_utf8(w).unwrap());
-            };
+            let mut w = Vec::new();
+            let files = files_mutex.lock().unwrap();
+            let doc = pretty_model(
+                &files,
+                slice_stmts,
+                selection,
+                vc_expr,
+                smt_translate,
+                model,
+            );
+            doc.nest(4).render(120, &mut w).unwrap();
+            println!("    {}", String::from_utf8(w).unwrap());
         }
-        ProveResult::Unknown => {
-            if let Some(reason) = prover.get_reason_unknown() {
-                println!("{}: Unknown result! (reason: {})", name, reason)
-            } else {
-                println!("{}: Unknown result!", name)
-            }
+        ProveResult::Unknown(reason) => {
+            println!("{}: Unknown result! (reason: {})", name, reason)
         }
     }
 }
@@ -752,14 +794,14 @@ fn write_smtlib(
     options: &Options,
     smtlib: Option<String>,
     name: &SourceUnitName,
-    result: ProveResult,
+    result: &ProveResult,
 ) -> io::Result<()> {
     if options.print_smt || options.smt_dir.is_some() {
         let mut smtlib = smtlib.unwrap();
-        if result == ProveResult::Counterexample {
-            smtlib.push_str("\n(get-model)\n");
-        } else if result == ProveResult::Unknown {
-            smtlib.push_str("\n(get-info :reason-unknown)\n");
+        match result {
+            ProveResult::Proof => {}
+            ProveResult::Counterexample(_) => smtlib.push_str("\n(get-model)\n"),
+            ProveResult::Unknown(_) => smtlib.push_str("\n(get-info :reason-unknown)\n"),
         }
         if options.print_smt {
             println!("\n; --- Solver SMT-LIB ---\n{}\n", smtlib);

@@ -10,14 +10,15 @@ use std::fmt;
 
 use crate::{
     ast::{
-        util::ModifiedVariableCollector, visit::VisitorMut, Expr, Files, Ident, SourceFilePath,
-        Span, Spanned, Stmt, Symbol, TyKind,
+        util::ModifiedVariableCollector, visit::VisitorMut, Direction, Expr, ExprBuilder, Files,
+        Ident, SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol, TyKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
     intrinsic::annotations::{check_annotation_call, AnnotationError, AnnotationInfo},
+    slicing::{wrap_with_error_message, wrap_with_success_message},
     tyctx::TyCtx,
 };
 
@@ -101,7 +102,7 @@ impl Encoding for InvariantAnnotation {
         let mut buf = vec![];
 
         // Construct the specification of the k-induction encoding
-        buf.extend(encode_spec(
+        buf.extend(encode_loop_spec(
             annotation_span,
             invariant,
             invariant,
@@ -117,7 +118,7 @@ impl Encoding for InvariantAnnotation {
             invariant,
             direction.toggle(),
             false,
-            hey_const(annotation_span, invariant, tcx),
+            iteration_terminator(annotation_span, invariant, direction, tcx),
         );
 
         // Encode the last iteration in the normal direction
@@ -213,7 +214,7 @@ impl Encoding for KIndAnnotation {
         let mut buf = vec![];
 
         // Construct the specification of the k-induction encoding
-        buf.extend(encode_spec(
+        buf.extend(encode_loop_spec(
             annotation_span,
             invariant,
             invariant,
@@ -229,7 +230,7 @@ impl Encoding for KIndAnnotation {
             invariant,
             direction.toggle(),
             false,
-            hey_const(annotation_span, invariant, tcx),
+            iteration_terminator(annotation_span, invariant, direction, tcx),
         );
 
         // Encode the last iteration in the normal direction
@@ -245,4 +246,56 @@ impl Encoding for KIndAnnotation {
     fn is_terminator(&self) -> bool {
         false
     }
+}
+
+/// Encode the loop "spec call" with respective error messages.
+fn encode_loop_spec(
+    span: Span,
+    pre: &Expr,
+    post: &Expr,
+    variables: Vec<Ident>,
+    direction: Direction,
+) -> Vec<Stmt> {
+    let error_condition = match direction {
+        Direction::Down => "pre ≰ I",
+        Direction::Up => "pre ≱ I",
+    };
+    let error_msg = format!("pre might not entail the invariant ({})", error_condition);
+    vec![
+        wrap_with_error_message(
+            Spanned::new(span, StmtKind::Assert(direction, pre.clone())),
+            &error_msg,
+        ),
+        Spanned::new(span, StmtKind::Havoc(direction, variables)),
+        Spanned::new(span, StmtKind::Validate(direction)),
+        wrap_with_success_message(
+            Spanned::new(span, StmtKind::Assume(direction, post.clone())),
+            "invariant not necessary for inductivity",
+        ),
+    ]
+}
+
+/// HeyVL statements which always evaluate to `expr`, used as terminating
+/// statements in the loop iteration.
+fn iteration_terminator(span: Span, expr: &Expr, direction: Direction, tcx: &TyCtx) -> Vec<Stmt> {
+    let error_condition = match direction {
+        Direction::Down => "I ≰ 𝚽(I)",
+        Direction::Up => "I ≱ 𝚽(I)",
+    };
+    let error_msg = format!("invariant might not be inductive ({})", error_condition);
+    let builder = ExprBuilder::new(span);
+    let extreme_lit = match direction {
+        Direction::Up => builder.top_lit(tcx.spec_ty()),
+        Direction::Down => builder.bot_lit(tcx.spec_ty()),
+    };
+    vec![
+        wrap_with_error_message(
+            Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
+            &error_msg,
+        ),
+        wrap_with_success_message(
+            Spanned::new(span, StmtKind::Assume(direction, extreme_lit)),
+            "while could be an if statement",
+        ),
+    ]
 }

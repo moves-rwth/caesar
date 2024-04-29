@@ -206,16 +206,17 @@ fn prove_equiv(expr: Expr, optimized: Expr, tcx: &TyCtx) -> TestCaseResult {
         .local_scope()
         .add_assumptions_to_prover(&mut prover);
     prover.add_provable(&eq_expr_z3);
-    match prover.check_proof() {
+    let x = match prover.check_proof() {
         ProveResult::Proof => Ok(()),
-        ProveResult::Counterexample => Err(TestCaseError::fail(format!(
+        ProveResult::Counterexample(model) => Err(TestCaseError::fail(format!(
             "rewrote {} ...into... {}, but those are not equivalent:\n{}",
-            expr,
-            optimized,
-            prover.get_model().unwrap()
+            expr, optimized, model
         ))),
-        ProveResult::Unknown => Err(TestCaseError::fail("unknown result")),
-    }
+        ProveResult::Unknown(reason) => {
+            Err(TestCaseError::fail(format!("unknown result ({})", reason)))
+        }
+    };
+    x
 }
 
 pub fn mk_tcx() -> TyCtx {

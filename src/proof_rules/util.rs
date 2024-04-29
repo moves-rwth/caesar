@@ -15,22 +15,6 @@ use crate::{
 
 use super::ProcInfo;
 
-/// Encode the given specification
-pub fn encode_spec(
-    span: Span,
-    pre: &Expr,
-    post: &Expr,
-    variables: Vec<Ident>,
-    direction: Direction,
-) -> Vec<Stmt> {
-    vec![
-        Spanned::new(span, StmtKind::Assert(direction, pre.clone())),
-        Spanned::new(span, StmtKind::Havoc(direction, variables)),
-        Spanned::new(span, StmtKind::Validate(direction)),
-        Spanned::new(span, StmtKind::Assume(direction, post.clone())),
-    ]
-}
-
 /// Encode the extend step in k-induction and bmc recursively for k times
 /// # Arguments
 /// * `span` - The span of the new generated statement
