@@ -2,10 +2,11 @@ use std::{
     fmt::{Display, Formatter},
     io::Write,
     str::FromStr,
+    time::Duration,
 };
 
 use num::BigRational;
-use z3::{ast::Real, Context};
+use z3::{ast::Real, Context, Params, Solver};
 
 /// Build a conjunction of Boolean expressions.
 macro_rules! z3_and {
@@ -13,7 +14,7 @@ macro_rules! z3_and {
         {
             use z3::ast::{Ast, Bool};
             let first = $first;
-            Bool::and(first.get_ctx(),  &[&first, $(&$x,)*])
+            Bool::and(first.get_ctx(),  &[first, $($x,)*])
         }
     };
     ($( $x:expr ),*) => { z3_and!($($x,)*) }
@@ -26,7 +27,7 @@ macro_rules! z3_or {
         {
             use z3::ast::{Ast, Bool};
             let first = $first;
-            Bool::or(first.get_ctx(),  &[&first, $(&$x,)*])
+            Bool::or(first.get_ctx(),  &[first, $($x,)*])
         }
     };
     ($( $x:expr ),*) => { z3_or!($($x,)*) }
@@ -124,6 +125,7 @@ impl<'a, W: Write> Write for PrefixWriter<'a, W> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReasonUnknown {
     Interrupted,
+    Timeout,
     Other(String),
 }
 
@@ -133,6 +135,7 @@ impl FromStr for ReasonUnknown {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "interrupted from keyboard" => Ok(ReasonUnknown::Interrupted),
+            "timeout" => Ok(ReasonUnknown::Timeout),
             other => Ok(ReasonUnknown::Other(other.to_owned())),
         }
     }
@@ -142,9 +145,19 @@ impl Display for ReasonUnknown {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ReasonUnknown::Interrupted => f.write_str("interrupted from keyboard"),
+            ReasonUnknown::Timeout => f.write_str("timeout"),
             ReasonUnknown::Other(reason) => f.write_str(reason),
         }
     }
+}
+
+/// Set a solver timeout with millisecond precision.
+///
+/// Panics if the duration is not representable as a 32-bit unsigned integer.
+pub fn set_solver_timeout(solver: &Solver, duration: Duration) {
+    let mut params = Params::new(solver.get_context());
+    params.set_u32("timeout", duration.as_millis().try_into().unwrap());
+    solver.set_params(&params);
 }
 
 #[cfg(test)]

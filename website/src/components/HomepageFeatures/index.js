@@ -81,7 +81,7 @@ export default function HomepageFeatures() {
             <h2>Features of HeyVL &mdash; Lossy List Traversal Example</h2>
             <p>Let's look at a program that traverses a list but has a chance of crashing during the traversal. We'll verify that the crash probability is at least 50% if the list has length 1.</p>
             <p>
-              We explain more of the details <Link to="/docs/getting-started/verifying-heyvl">as part of our getting started guide</Link>.
+              We explain more of the details <Link to="/docs/getting-started/">as part of our getting started guide</Link>.
             </p>
           </div>
         </div>

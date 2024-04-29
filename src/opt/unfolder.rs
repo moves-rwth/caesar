@@ -30,8 +30,10 @@ use z3rro::prover::Prover;
 use crate::{
     ast::{
         visit::{walk_expr, VisitorMut},
-        BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Shared, Span, Spanned, TyKind, UnOpKind,
+        BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Shared, Span, SpanVariant, Spanned,
+        TyKind, UnOpKind,
     },
+    resource_limits::{LimitError, LimitsRef},
     smt::SmtCtx,
     vc::subst::Subst,
 };
@@ -39,6 +41,8 @@ use crate::{
 use crate::smt::translate_exprs::TranslateExprs;
 
 pub struct Unfolder<'smt, 'ctx> {
+    limits_ref: LimitsRef,
+
     /// The expressions may contain substitutions. We keep track of those.
     subst: Subst<'smt>,
 
@@ -53,14 +57,16 @@ pub struct Unfolder<'smt, 'ctx> {
 }
 
 impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
-    pub fn new(ctx: &'smt SmtCtx<'ctx>) -> Self {
+    pub fn new(limits_ref: LimitsRef, ctx: &'smt SmtCtx<'ctx>) -> Self {
         Unfolder {
+            limits_ref,
             subst: Subst::new(ctx.tcx()),
             translate: TranslateExprs::new(ctx),
             prover: Prover::new(ctx.ctx()),
         }
     }
 
+    /// Call `f` surrounded by `push()` and `pop()` calls to the prover.
     fn with_prover_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
         self.prover.push();
         let res = f(self);
@@ -68,13 +74,21 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
         res
     }
 
-    fn with_sat<T>(&mut self, expr: &Expr, sat: impl FnOnce(&mut Self) -> T) -> Option<T> {
+    /// Check whether `expr` is currently satisfiable. If `expr` is
+    /// unsatisfiable, return `None`. If it is satisfiable, then call `callback`
+    /// assuming `expr` is true.
+    fn with_sat<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
         let expr_z3 = self.translate.t_bool(expr);
-        // TODO: the local scope is repeatedly added to the solver,
-        // that's useless
+
+        // first add potential new assumptions obtained from `expr`'s
+        // translation to the solver.
+
+        // TODO: the local scope is unnecessarily repeatedly added to the
+        // solver.
         self.translate
             .local_scope()
             .add_assumptions_to_prover(&mut self.prover);
+
         self.with_prover_scope(|this| {
             this.prover.add_assumption(&expr_z3);
             tracing::trace!(expr_z3=%expr_z3, "added expr to unfolder solver");
@@ -85,16 +99,21 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
                 tracing::trace!(solver=%this.prover.solver(), "eliminated zero expr");
                 None
             } else {
-                Some(sat(this))
+                Some(callback(this))
             }
         })
     }
 
-    fn with_nonzero<T>(&mut self, expr: &Expr, nonzero: impl FnOnce(&mut Self) -> T) -> Option<T> {
+    /// With the knowledge that `expr` is not bottom, evaluate `callback`.
+    /// However, if `expr` can not be bottom, then return `None` and don't
+    /// evaluate the `callback`.
+    fn with_nonbot<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
         match &expr.kind {
             ExprKind::Unary(un_op, operand) => match un_op.node {
                 UnOpKind::Embed | UnOpKind::Iverson => {
-                    return self.with_sat(operand, nonzero);
+                    // If an embed or Iverson expression are nonzero, we know
+                    // the Boolean expression must be true.
+                    return self.with_sat(operand, callback);
                 }
                 _ => {}
             },
@@ -105,14 +124,39 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
             },
             _ => {}
         }
-        Some(nonzero(self))
+        Some(callback(self))
+    }
+
+    /// With the knowledge that `expr` is not top, evaluate `callback`. However,
+    /// if `expr` can not be top, then return `None` and don't evaluate the
+    /// `callback`.
+    fn with_nontop<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
+        match &expr.kind {
+            ExprKind::Unary(un_op, operand) => {
+                if let UnOpKind::Embed = un_op.node {
+                    // If an embed expression is not top, then its Boolean
+                    // condition must be false.
+                    return self.with_sat(&negate_expr(operand.clone()), callback);
+                }
+            }
+            ExprKind::Lit(lit) if lit.node.is_top() => return None,
+            ExprKind::Cast(inner) => match &inner.kind {
+                ExprKind::Lit(lit) if lit.node.is_top() => return None,
+                _ => {}
+            },
+            _ => {}
+        }
+        Some(callback(self))
     }
 }
 
 impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
-    type Err = ();
+    type Err = LimitError;
 
     fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
+        self.limits_ref.check_limits()?;
+
+        let span = e.span;
         let ty = e.ty.clone().unwrap();
         match &mut e.deref_mut().kind {
             ExprKind::Var(ident) => {
@@ -148,25 +192,60 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                 }
             }
             ExprKind::Binary(bin_op, lhs, rhs) => match bin_op.node {
-                BinOpKind::Impl | BinOpKind::Compare | BinOpKind::Mul => {
+                BinOpKind::Mul if matches!(ty, TyKind::Bool | TyKind::UReal | TyKind::EUReal) => {
+                    // visit lhs normally first
                     self.visit_expr(lhs)?;
-                    let nonzero_res = self.with_nonzero(lhs, |this| this.visit_expr(rhs));
+                    // visit the rhs with the knowledge that lhs will be nonzero
+                    let nonzero_res = self.with_nonbot(lhs, |this| this.visit_expr(rhs));
+                    // evaluate the res or set to constant bottom
                     if let Some(res) = nonzero_res {
                         res
                     } else {
                         let builder = ExprBuilder::new(Span::dummy_span());
-                        *e = if matches!(bin_op.node, BinOpKind::Mul) {
-                            builder.bot_lit(&ty)
-                        } else {
-                            builder.top_lit(&ty)
-                        };
+                        *e = builder.bot_lit(&ty);
+                        Ok(())
+                    }
+                }
+                BinOpKind::Impl | BinOpKind::Compare
+                    if matches!(ty, TyKind::Bool | TyKind::EUReal) =>
+                {
+                    // visit lhs normally first
+                    self.visit_expr(lhs)?;
+                    // visit the rhs with the knowledge that lhs will be not bottom
+                    let nonbot_res = self.with_nonbot(lhs, |this| this.visit_expr(rhs));
+                    // evaluate the res or set to constant top
+                    if let Some(res) = nonbot_res {
+                        res
+                    } else {
+                        let builder = ExprBuilder::new(Span::dummy_span());
+                        *e = builder.top_lit(&ty);
+                        Ok(())
+                    }
+                }
+                BinOpKind::CoImpl | BinOpKind::CoCompare
+                    if matches!(ty, TyKind::Bool | TyKind::EUReal) =>
+                {
+                    // visit lhs normally first
+                    self.visit_expr(lhs)?;
+                    // visit the rhs with the knowledge that lhs will be not top
+                    let nontop_res = self.with_nontop(lhs, |this| this.visit_expr(rhs));
+                    // evaluate the res or set to constant bot
+                    if let Some(res) = nontop_res {
+                        res
+                    } else {
+                        let builder = ExprBuilder::new(Span::dummy_span());
+                        *e = builder.bot_lit(&ty);
                         Ok(())
                     }
                 }
                 _ => walk_expr(self, e),
             },
             ExprKind::Quant(_, quant_vars, _, expr) => {
-                self.subst.push_quant(quant_vars, self.translate.ctx.tcx());
+                self.subst.push_quant(
+                    span.variant(SpanVariant::Qelim),
+                    quant_vars,
+                    self.translate.ctx.tcx(),
+                );
                 let scope = self.translate.push();
 
                 self.prover.push();
@@ -203,7 +282,10 @@ fn negate_expr(expr: Expr) -> Expr {
 #[cfg(test)]
 mod test {
     use super::Unfolder;
-    use crate::{ast::visit::VisitorMut, fuzz_expr_opt_test, opt::fuzz_test, smt::SmtCtx};
+    use crate::{
+        ast::visit::VisitorMut, fuzz_expr_opt_test, opt::fuzz_test, resource_limits::LimitsRef,
+        smt::SmtCtx,
+    };
 
     #[test]
     fn fuzz_unfolder() {
@@ -211,7 +293,8 @@ mod test {
             let tcx = fuzz_test::mk_tcx();
             let z3_ctx = z3::Context::new(&z3::Config::default());
             let smt_ctx = SmtCtx::new(&z3_ctx, &tcx);
-            let mut unfolder = Unfolder::new(&smt_ctx);
+            let limits_ref = LimitsRef::new(None);
+            let mut unfolder = Unfolder::new(limits_ref, &smt_ctx);
             unfolder.visit_expr(&mut expr).unwrap();
             expr
         })

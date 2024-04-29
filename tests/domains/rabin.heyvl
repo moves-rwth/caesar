@@ -15,7 +15,6 @@ proc rabin(init_i: UInt, init_n: UInt, init_d: UInt) -> (i: UInt, n: UInt, d: UI
     n = init_n
     d = init_d
     var prob_choice: Bool;
-    compare ([1 == i] + ([1 < i] * (2/3)));
     assert ([1 == i] + ([1 < i] * (2/3)));
     havoc d, i, n;
     compare ([1 == i] + ([1 < i] * (2/3)));

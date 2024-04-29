@@ -139,16 +139,10 @@ struct UnclosedCommentError;
 /// can be fed into our parser, and all non-whitespace locations will be the
 /// same as in the original string.
 fn remove_comments(source: &str) -> Result<String, UnclosedCommentError> {
-    // this function is faster than `iter.find(|ch| *ch == needle)`.
-    fn fast_find_mut<'a>(iter: &mut std::slice::IterMut<'a, u8>, needle: u8) -> Option<&'a mut u8> {
-        let pos = memchr::memchr(needle, iter.as_slice())?;
-        Some(iter.nth(pos).unwrap())
-    }
-
     let mut res = source.as_bytes().to_owned();
     let mut iter = res.iter_mut();
     // iterate over all comment candidates
-    while let Some(ch1) = fast_find_mut(&mut iter, b'/') {
+    while let Some(ch1) = iter.find(|ch| **ch == b'/') {
         match iter.next() {
             // single line comments
             Some(ch2 @ b'/') => {

@@ -24,6 +24,9 @@ pub struct Tycheck<'tcx> {
     /// whether we are currently type-checking a `pre`, where the user is not
     /// allowed to use output variables.
     checking_pre: bool,
+    /// whether we are in the topmost expression of the right-hand side of an
+    /// assignment and thus are allowed to use side-effectful calls.
+    allow_impure_calls: bool,
 }
 
 impl<'tcx> Tycheck<'tcx> {
@@ -31,6 +34,7 @@ impl<'tcx> Tycheck<'tcx> {
         Tycheck {
             tcx,
             checking_pre: false,
+            allow_impure_calls: false,
         }
     }
 
@@ -255,6 +259,10 @@ pub enum TycheckError {
         span: Span,
         captured: IndexSet<Ident>,
     },
+    CannotCallImpure {
+        span: Span,
+        ident: Ident,
+    },
 }
 
 #[derive(Debug)]
@@ -324,15 +332,12 @@ impl TycheckError {
             TycheckError::CannotAssign { span, lhs_decl } => {
                 let lhs_decl = lhs_decl.borrow();
                 let lhs = lhs_decl.name;
+                if lhs_decl.kind.is_mutable() {
+                    unreachable!();
+                }
                 Diagnostic::new(ReportKind::Error, *span)
                     .with_message(format!("Cannot assign to variable `{}`", lhs))
-                    .with_label(Label::new(lhs_decl.span).with_message(match lhs_decl.kind {
-                        VarKind::Mut | VarKind::Output => unreachable!(),
-                        VarKind::Const => format!("`{}` is declared as a constant...", lhs),
-                        VarKind::Input => {
-                            format!("`{}` is declared as an input parameter...", lhs)
-                        }
-                    }))
+                    .with_label(Label::new(lhs_decl.span).with_message(format!("`{}` is declared as {}...", lhs, lhs_decl.kind)))
                     .with_label(
                         Label::new(*span).with_message("... so this assignment is not allowed"),
                     )
@@ -369,6 +374,15 @@ impl TycheckError {
             .with_note(
                 "Triggers on quantifiers must capture all variables bound by the quantifier.",
             ),
+            TycheckError::CannotCallImpure { span, ident } => Diagnostic::new(
+                ReportKind::Error,
+                *span,
+            )
+            .with_message(format!("Cannot call proc `{}` nested inside of an expression", ident))
+            .with_label(Label::new(*span).with_message("here"))
+            .with_note(
+                "Procedures must only be called on as the immediate right-hand side expression in an assignment. This makes execution order of assignments with side-effects explicit."
+            ),
         }
     }
 }
@@ -402,7 +416,10 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
         let mut var_decl = var_ref.borrow_mut();
         let var_decl = var_decl.deref_mut();
         if let Some(init) = &mut var_decl.init {
+            self.allow_impure_calls = true;
             self.visit_expr(init)?;
+            self.allow_impure_calls = false;
+
             // try to unpack a tuple first
             let init_ty = init.ty.as_ref().unwrap();
             if let TyKind::Tuple(tys) = init_ty {
@@ -463,7 +480,10 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
     }
 
     fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
+        self.allow_impure_calls = true;
         walk_stmt(self, s)?;
+        self.allow_impure_calls = false;
+
         match &mut s.node {
             StmtKind::Block(_) => {}
             StmtKind::Var(var_decl) => {
@@ -516,7 +536,7 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
                     });
                 };
             }
-            StmtKind::Havoc(_, _) => {}
+            StmtKind::Havoc(_, _) => {} // TODO: make input vars readable here or throw an error?
             StmtKind::Assert(_, ref mut expr) => self.try_cast(s.span, self.tcx.spec_ty(), expr)?,
             StmtKind::Assume(_, ref mut expr) => self.try_cast(s.span, self.tcx.spec_ty(), expr)?,
             StmtKind::Compare(_, ref mut expr) => {
@@ -545,6 +565,10 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
     }
 
     fn visit_expr(&mut self, expr: &mut Expr) -> Result<(), Self::Err> {
+        // disallow proc calls inside nested expressions
+        let allow_impure_calls_before = self.allow_impure_calls;
+        self.allow_impure_calls = false;
+
         match &mut expr.kind {
             ExprKind::Subst(ident, val, expr) => {
                 self.visit_ident(ident)?;
@@ -561,6 +585,7 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
             }
             _ => walk_expr(self, expr)?,
         }
+        self.allow_impure_calls = allow_impure_calls_before;
 
         let expr_data: &mut ExprData = &mut *expr;
         let expr_span = expr_data.span;
@@ -578,6 +603,14 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
             }
             ExprKind::Call(ident, args) => {
                 let decl = self.get_decl(expr_span, *ident)?;
+
+                if !self.allow_impure_calls && decl.kind_name().is_proc() {
+                    return Err(TycheckError::CannotCallImpure {
+                        span: expr_span,
+                        ident: *ident,
+                    });
+                }
+
                 match decl.as_ref() {
                     DeclKind::ProcDecl(proc_ref) => {
                         let proc = proc_ref.borrow();

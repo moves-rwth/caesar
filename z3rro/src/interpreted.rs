@@ -33,7 +33,7 @@ impl<'ctx> FuncDef<'ctx> {
             let domain: Vec<_> = self.args.iter().map(|arg| arg.get_sort()).collect();
             let domain: Vec<_> = domain.iter().collect();
             let decl = RecFuncDecl::new(ctx, self.name.clone(), &domain, &self.body.get_sort());
-            let args: Vec<_> = self.args.iter().collect();
+            let args: Vec<_> = self.args.iter().map(|ast| ast as &dyn Ast).collect();
             decl.add_def(&args, &self.body);
             decl
         })
@@ -44,7 +44,8 @@ impl<'ctx> FuncDef<'ctx> {
     /// A call to this function will initialize the Z3 declaration if needed.
     pub fn apply_call(&self, args: &[&Dynamic<'ctx>]) -> Dynamic<'ctx> {
         let decl = self.get_decl();
-        decl.apply(args)
+        let args: Vec<&dyn Ast> = args.iter().map(|ast| *ast as &dyn Ast).collect();
+        decl.apply(&args)
     }
 
     /// Apply the function by inlining its body and substituting the arguments.

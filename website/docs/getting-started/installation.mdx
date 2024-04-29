@@ -27,6 +27,7 @@ import TOCInline from '@theme/TOCInline';
 You will need to install some dependencies manually:
 
 **Rust:** To install [Rust](https://www.rust-lang.org/), we recommend [installation via rustup](https://rustup.rs/).
+You might need to restart your terminal after installing Rust.
 
 **Fish Shell**: We write some scripts written in [fish](https://fishshell.com/).
 
@@ -45,7 +46,7 @@ brew install cmake fish`}
     <CodeBlock language="bash">{`# Install Rust via rustup
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 # Install CMake, LLVM, clang, and fish
-apt-get install cmake llvm libclang clang fish`}
+apt-get install cmake llvm-dev libclang-dev clang fish`}
     </CodeBlock>
   </TabItem>
   <TabItem value="win" label="Windows">
@@ -60,7 +61,7 @@ Simply run the following, and `caesar` will be available on the command-line.
 Because this will compile a large number of dependencies, this might take a couple of minutes (especially Z3 takes some time).
 
 ```bash
-git clone git@github.com:moves-rwth/caesar.git
+git clone https://github.com/moves-rwth/caesar.git
 cd caesar
 cargo install --path . caesar
 ```

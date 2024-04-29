@@ -116,12 +116,37 @@ impl Files {
     }
 
     pub fn get(&self, file_id: FileId) -> Option<&StoredFile> {
-        assert_ne!(file_id.0, 0);
+        assert_ne!(file_id, FileId::DUMMY);
         self.files.get((file_id.0 - 1) as usize)
     }
 
     pub fn char_span(&self, span: Span) -> CharSpan {
         self.get(span.file).unwrap().char_span(span)
+    }
+
+    /// Formats the start of the span as a human-readable string. The format is
+    /// `FILE:LINE:COL`, where `LINE` and `COL` are 1-indexed character offsets
+    /// into the file.
+    ///
+    /// This is the format accepted by e.g. VSCode's terminal to click and jump
+    /// directly to the location in the file.
+    ///
+    /// Returns `None` if the span's file id is [`FileId::DUMMY`].
+    pub fn format_span_start(&self, span: Span) -> Option<String> {
+        if span.file == FileId::DUMMY {
+            None
+        } else {
+            let file = self.get(span.file).unwrap();
+            let char_span = file.char_span(span);
+            let (_line, line_number, col_number) =
+                file.lines.get_offset_line(char_span.start).unwrap();
+            Some(format!(
+                "{}:{}:{}",
+                file.path,
+                line_number + 1,
+                col_number + 1
+            ))
+        }
     }
 }
 
@@ -143,11 +168,13 @@ pub enum SpanVariant {
     Parser,
     VC,
     ImplicitCast,
+    ProcVerify,
     SpecCall,
     Encoding,
     Qelim,
     Boolify,
     Subst,
+    Slicing,
 }
 
 /// A region of source code in some file.
@@ -207,11 +234,13 @@ impl fmt::Debug for Span {
             SpanVariant::Parser => "",
             SpanVariant::VC => "vc/",
             SpanVariant::ImplicitCast => "cast/",
+            SpanVariant::ProcVerify => "verify/",
             SpanVariant::SpecCall => "spec-call/",
             SpanVariant::Encoding => "encoding/",
             SpanVariant::Qelim => "qelim/",
             SpanVariant::Boolify => "boolify/",
             SpanVariant::Subst => "subst/",
+            SpanVariant::Slicing => "slicing/",
         };
         f.write_fmt(format_args!("{}{}-{}", prefix, self.start, self.end))
     }

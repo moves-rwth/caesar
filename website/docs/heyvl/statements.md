@@ -139,6 +139,7 @@ We have a `negate` and an `conegate` statement, whose semantics correspond to He
 
 The `validate` statement corresponds to `conegate; conegate` and `covalidate` corresponds to `negate; negate`.
 
+It is recommended that you avoid negations for the reasons detailed in the warning below.
 
 :::danger
 

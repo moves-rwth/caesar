@@ -13,26 +13,22 @@ use std::{
 };
 
 use crate::{
-    ast::{
-        stats::StatsVisitor, visit::VisitorMut, BinOpKind, ExprData, ExprKind, LitKind, Shared,
-        Span, Spanned, TyKind,
-    },
+    ast::{stats::StatsVisitor, visit::VisitorMut, TyKind},
     front::{resolve::Resolve, tycheck::Tycheck},
     opt::{egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder},
-    smt::{translate_exprs::TranslateExprs, SmtCtx},
+    smt::{pretty_model, translate_exprs::TranslateExprs, SmtCtx},
     timing::TimingLayer,
     tyctx::TyCtx,
     vc::{subst::apply_subst, vcgen::Vcgen},
     version::write_detailed_version_info,
 };
 use ast::{Diagnostic, Expr, FileId, Files, SourceFilePath};
-
-use driver::{Item, SourceUnit, SourceUnitName, VerifyUnit};
+use driver::{Item, SourceUnit, SourceUnitName, VcUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use opt::{boolify::Boolify, RemoveParens};
 use procs::add_default_specs;
 use proof_rules::init_encodings;
-use resource_limits::{await_with_resource_limits, LimitError};
+use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
 use thiserror::Error;
 use timing::DispatchBuilder;
 use tokio::task::JoinError;
@@ -85,12 +81,12 @@ pub struct Options {
     pub no_qelim: bool,
 
     /// Time limit in seconds.
-    #[structopt(long)]
-    pub timeout: Option<u64>,
+    #[structopt(long, default_value = "300")]
+    pub timeout: u64,
 
     /// Memory usage limit in megabytes.
-    #[structopt(long = "mem")]
-    pub mem_limit: Option<u64>,
+    #[structopt(long = "mem", default_value = "8192")]
+    pub mem_limit: u64,
 
     /// Emit tracing events as json instead of (ANSI) text.
     #[structopt(long)]
@@ -223,14 +219,11 @@ async fn main() -> ExitCode {
             ExitCode::from(1)
         }
         Err(VerifyError::LimitError(LimitError::Timeout)) => {
-            tracing::error!("Timed out after {} seconds, exiting.", timeout.unwrap());
+            tracing::error!("Timed out after {} seconds, exiting.", timeout);
             std::process::exit(2); // exit ASAP
         }
         Err(VerifyError::LimitError(LimitError::Oom)) => {
-            tracing::error!(
-                "Exhausted {} megabytes of memory, exiting.",
-                mem_limit.unwrap()
-            );
+            tracing::error!("Exhausted {} megabytes of memory, exiting.", mem_limit);
             std::process::exit(3); // exit ASAP
         }
         Err(VerifyError::Panic(join_error)) => panic!("{}", join_error),
@@ -267,25 +260,32 @@ pub async fn verify_files(
     files: &Arc<Mutex<Files>>,
     user_files: Vec<FileId>,
 ) -> Result<bool, VerifyError> {
-    let handle = {
+    let handle = |limits_ref: LimitsRef| {
         let options = options.clone();
         let files = files.clone();
-        tokio::task::spawn_blocking(move || verify_files_main(&options, &files, &user_files))
+        tokio::task::spawn_blocking(move || {
+            verify_files_main(&options, limits_ref, &files, &user_files)
+        })
     };
-    // Unpacking lots of results with `.await??` :-)
-    await_with_resource_limits(options.timeout, options.mem_limit, handle).await??
+    // Unpacking lots of Results with `.await??` :-)
+    await_with_resource_limits(Some(options.timeout), Some(options.mem_limit), handle).await??
 }
 
 /// Synchronously verify the given source code. This is used for tests. The
 /// `--werr` option is enabled by default.
 #[cfg(test)]
 pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, Files) {
+    use std::time::{Duration, Instant};
+
     let mut files = Files::new();
     let file_id = files.add(SourceFilePath::Builtin, source.to_owned()).id;
     let files_mutex = Mutex::new(files);
     let mut options = Options::default();
     options.werr = true;
-    let res = verify_files_main(&options, &files_mutex, &[file_id]);
+    let limits_ref = LimitsRef::new(
+        Some(options.timeout).map(|seconds| Instant::now() + Duration::from_secs(seconds)),
+    );
+    let res = verify_files_main(&options, limits_ref, &files_mutex, &[file_id]);
     (res, files_mutex.into_inner().unwrap())
 }
 
@@ -361,6 +361,7 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
 /// Synchronously verify the given files.
 fn verify_files_main(
     options: &Options,
+    limits_ref: LimitsRef,
     files_mutex: &Mutex<Files>,
     user_files: &[FileId],
 ) -> Result<bool, VerifyError> {
@@ -470,7 +471,7 @@ fn verify_files_main(
         let mut vc_expr = verify_unit.vcgen(&vcgen).unwrap();
 
         // 6. Unfolding
-        unfold_expr(options, &tcx, &mut vc_expr);
+        unfold_expr(options, &limits_ref, &tcx, &mut vc_expr)?;
 
         // 7. Quantifier elimination
         if !options.no_qelim {
@@ -478,29 +479,29 @@ fn verify_files_main(
         }
 
         // In-between, gather some stats about the vc expression
-        trace_expr_stats(&mut vc_expr);
+        trace_expr_stats(&mut vc_expr.expr);
 
         // 8. Create the "vc[S] is valid" expression
-        let mut vc_expr_eq_infinity = expr_eq_infty(vc_expr);
+        let mut vc_is_valid = vc_expr.to_boolean();
 
         if options.egraph {
-            egraph::simplify(&vc_expr_eq_infinity);
+            egraph::simplify(&vc_is_valid);
         }
 
         // 9. Optimizations
         if !options.no_boolify || options.opt_rel {
-            RemoveParens.visit_expr(&mut vc_expr_eq_infinity).unwrap();
+            RemoveParens.visit_expr(&mut vc_is_valid).unwrap();
         }
         if !options.no_boolify {
-            apply_boolify_opt(&mut vc_expr_eq_infinity);
+            apply_boolify_opt(&mut vc_is_valid);
         }
         if options.opt_rel {
-            apply_relational_opt(&mut vc_expr_eq_infinity);
+            apply_relational_opt(&mut vc_is_valid);
         }
 
         // print theorem to prove if requested
         if options.print_theorem {
-            println!("{}: Theorem to prove:\n{}\n", name, &vc_expr_eq_infinity);
+            println!("{}: Theorem to prove:\n{}\n", name, &vc_is_valid);
         }
 
         // 10. Translate to Z3
@@ -510,7 +511,7 @@ fn verify_files_main(
         let ctx = mk_z3_ctx(options);
         let smt_ctx = SmtCtx::new(&ctx, &tcx);
         let mut smt_translate = TranslateExprs::new(&smt_ctx);
-        let mut valid_query = smt_translate.t_bool(&vc_expr_eq_infinity);
+        let mut valid_query = smt_translate.t_bool(&vc_is_valid);
 
         drop(translate_entered);
         drop(translate_span);
@@ -523,7 +524,7 @@ fn verify_files_main(
         let sat_span = info_span!("SAT check");
         let sat_entered = sat_span.enter();
 
-        let mut prover = mk_valid_query_prover(&ctx, &smt_translate, &valid_query);
+        let mut prover = mk_valid_query_prover(&limits_ref, &ctx, &smt_translate, &valid_query);
         let smtlib = get_smtlib(options, &prover);
 
         let result = prover.check_proof();
@@ -532,7 +533,14 @@ fn verify_files_main(
         drop(sat_span);
 
         // Now let's examine the result.
-        print_prove_result(result, name, &prover);
+        print_prove_result(
+            files_mutex,
+            &vc_expr,
+            &mut smt_translate,
+            result,
+            name,
+            &prover,
+        );
 
         write_smtlib(options, smtlib, name, result).unwrap();
 
@@ -540,9 +548,11 @@ fn verify_files_main(
             info!("Z3 tracing output will be written to `z3.log`.");
         }
 
-        // If the solver was interrupted from the keyboard, exit now.
-        if prover.get_reason_unknown() == Some(ReasonUnknown::Interrupted) {
-            return Err(VerifyError::Interrupted);
+        // Handle reasons to stop the verifier.
+        match prover.get_reason_unknown() {
+            Some(ReasonUnknown::Interrupted) => return Err(VerifyError::Interrupted),
+            Some(ReasonUnknown::Timeout) => return Err(LimitError::Timeout.into()),
+            _ => {}
         }
 
         all_proven = all_proven && result == ProveResult::Proof;
@@ -594,22 +604,27 @@ fn print_diagnostic(mut files: &Files, diagnostic: Diagnostic) -> io::Result<()>
 fn load_file(files: &mut Files, path: &PathBuf) -> FileId {
     let source = match std::fs::read_to_string(path) {
         Ok(source) => source,
-        Err(err) => panic!(
-            "Error while loading file '{}': {}",
-            path.to_string_lossy(),
-            err
-        ),
+        Err(err) => match err.kind() {
+            io::ErrorKind::NotFound => {
+                panic!("Error: Could not find file '{}'", path.to_string_lossy())
+            }
+            _ => panic!(
+                "Error while loading file '{}': {}",
+                path.to_string_lossy(),
+                err
+            ),
+        },
     };
     let source_file_path = SourceFilePath::Path(path.clone());
     let file = files.add(source_file_path, source);
     file.id
 }
 
-fn apply_qelim(tcx: &mut TyCtx, vc_expr: &mut Expr) {
+fn apply_qelim(tcx: &mut TyCtx, vc_expr: &mut VcUnit) {
     let mut qelim = Qelim::new(tcx);
-    qelim.qelim_inf(vc_expr);
+    qelim.qelim(vc_expr);
     // Apply/eliminate substitutions again
-    apply_subst(tcx, vc_expr);
+    apply_subst(tcx, &mut vc_expr.expr);
 }
 
 fn apply_relational_opt(vc_expr_eq_infinity: &mut Expr) {
@@ -624,16 +639,22 @@ fn apply_boolify_opt(vc_expr_eq_infinity: &mut Expr) {
     (Boolify {}).visit_expr(vc_expr_eq_infinity).unwrap();
 }
 
-fn unfold_expr(options: &Options, tcx: &TyCtx, vc_expr: &mut Expr) {
+fn unfold_expr(
+    options: &Options,
+    limits_ref: &LimitsRef,
+    tcx: &TyCtx,
+    vc_expr: &mut VcUnit,
+) -> Result<(), LimitError> {
     let span = info_span!("unfolding");
     let _entered = span.enter();
     if !options.strict {
         let ctx = Context::new(&Config::default());
         let smt_ctx = SmtCtx::new(&ctx, tcx);
-        let mut unfolder = Unfolder::new(&smt_ctx);
-        unfolder.visit_expr(vc_expr).unwrap();
+        let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
+        unfolder.visit_expr(&mut vc_expr.expr)
     } else {
-        apply_subst(tcx, vc_expr);
+        apply_subst(tcx, &mut vc_expr.expr);
+        Ok(())
     }
 }
 
@@ -647,12 +668,17 @@ fn mk_z3_ctx(options: &Options) -> Context {
 }
 
 fn mk_valid_query_prover<'smt, 'ctx>(
+    limits_ref: &LimitsRef,
     ctx: &'ctx Context,
     smt_translate: &TranslateExprs<'smt, 'ctx>,
     valid_query: &Bool<'ctx>,
 ) -> Prover<'ctx> {
     // create the prover and set the params
     let mut prover = Prover::new(ctx);
+    if let Some(remaining) = limits_ref.time_left() {
+        prover.set_timeout(remaining);
+    }
+
     // add assumptions (from axioms and locals) to the prover
     smt_translate
         .ctx
@@ -683,26 +709,24 @@ fn trace_expr_stats(vc_expr: &mut Expr) {
     }
 }
 
-fn expr_eq_infty(vc_expr: Expr) -> Expr {
-    let infinity = Shared::new(ExprData {
-        kind: ExprKind::Lit(Spanned::with_dummy_span(LitKind::Infinity)),
-        ty: Some(TyKind::EUReal),
-        span: Span::dummy_span(),
-    });
-    Shared::new(ExprData {
-        kind: ExprKind::Binary(Spanned::with_dummy_span(BinOpKind::Eq), infinity, vc_expr),
-        ty: Some(TyKind::Bool),
-        span: Span::dummy_span(),
-    })
-}
-
-fn print_prove_result(result: ProveResult, name: &SourceUnitName, prover: &Prover) {
+fn print_prove_result<'smt, 'ctx>(
+    files_mutex: &Mutex<Files>,
+    vc_expr: &VcUnit,
+    smt_translate: &mut TranslateExprs<'smt, 'ctx>,
+    result: ProveResult,
+    name: &SourceUnitName,
+    prover: &Prover<'ctx>,
+) {
     match result {
         ProveResult::Proof => println!("{}: Verified.", name),
         ProveResult::Counterexample => {
             println!("{}: Counter-example to verification found!", name);
             if let Some(model) = prover.get_model() {
-                println!("{:?}", model);
+                let mut w = Vec::new();
+                let files = files_mutex.lock().unwrap();
+                let doc = pretty_model(&files, vc_expr, smt_translate, model);
+                doc.nest(4).render(120, &mut w).unwrap();
+                println!("    {}", String::from_utf8(w).unwrap());
             };
         }
         ProveResult::Unknown => {

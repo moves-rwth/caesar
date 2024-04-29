@@ -8,7 +8,7 @@ use std::{
 
 use indexmap::IndexMap;
 
-use crate::ast::{DeclKind, DeclRef, DomainDecl, Ident, LitKind, SpanVariant, Symbol, TyKind};
+use crate::ast::{DeclKind, DeclRef, DomainDecl, Ident, LitKind, Span, Symbol, TyKind, VarKind};
 
 /// This is the central symbol table for the language. It keeps track of all
 /// definitions,
@@ -71,24 +71,25 @@ impl TyCtx {
     /// Generate a fresh [`Ident`] based on the given [`Ident`].
     ///
     /// Example: Given `x` as input [`Ident`], if `x` already exists than `x_1` is returned as long as `x_1` doesn't exist.
-    pub fn fresh_ident(&self, ident: Ident, span_variant: SpanVariant) -> Ident {
+    pub fn fresh_ident(&self, ident: Ident, span: Span) -> Ident {
         loop {
             let mut fresh = self.fresh.borrow_mut();
             let index = fresh.entry(ident).and_modify(|e| *e += 1).or_insert(0);
             let new_name = format!("{}_{}", ident.name.to_owned(), index);
             let new_ident = Ident {
                 name: Symbol::intern(&new_name),
-                span: ident.span.variant(span_variant),
+                span,
             };
             if !self.declarations.borrow().contains_key(&new_ident) {
                 return new_ident;
             }
         }
     }
-    /// Generate a fresh variable declaration from an existing variable declaration.
+
+    /// Generate a fresh variable declaration from an existing variable declaration with the given `var_kind`.
     /// Uses [`fresh_ident`](fn@fresh_ident) to generate a new name for the variable.
-    pub fn fresh_var(&self, ident: Ident, span_variant: SpanVariant) -> Ident {
-        let new_ident = self.fresh_ident(ident, span_variant);
+    pub fn clone_var(&self, ident: Ident, span: Span, var_kind: VarKind) -> Ident {
+        let new_ident = self.fresh_ident(ident, span);
 
         // now take the old declaration and create a new one with the new name.
         // this is somewhat involved due to the [`DeclRef`]s everywhere.
@@ -98,6 +99,8 @@ impl TyCtx {
                 // clone the underlying struct, _not_ the reference to it!
                 let mut var_decl = var_ref.borrow().clone();
                 var_decl.name = new_ident;
+                var_decl.created_from.get_or_insert(ident);
+                var_decl.kind = var_kind;
                 DeclRef::new(var_decl)
             }
             _ => panic!("identifier is not a variable"),

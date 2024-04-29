@@ -174,7 +174,7 @@ impl Boolify {
         // no match
         self.visit_expr(lhs)?;
         self.visit_expr(rhs)?;
-        Ok(builder.binary(BinOpKind::Le, lhs.ty.clone(), lhs.clone(), rhs.clone()))
+        Ok(builder.binary(BinOpKind::Le, Some(TyKind::Bool), lhs.clone(), rhs.clone()))
     }
 
     fn visit_eq_top(&mut self, span: Span, e: &mut Expr) -> Result<Expr, ()> {

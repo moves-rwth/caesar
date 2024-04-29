@@ -154,6 +154,7 @@ impl<'tcx> SpecCall<'tcx> {
             name: Symbol::intern(&format!("old_{}", param.name)),
             span,
         };
+        // Reuse an existing declaration if possible.
         if let Some(_decl) = self.tcx.get(name).as_deref() {
             let stmt = Spanned::new(span, StmtKind::Assign(vec![name], value));
             (stmt, ident_to_expr(self.tcx, span, name))
@@ -172,6 +173,7 @@ impl<'tcx> SpecCall<'tcx> {
                 kind: VarKind::Mut, // we might use the variable again in another proc call
                 init: Some(value),
                 span,
+                created_from: Some(param.name),
             };
             let decl = DeclRef::new(var_decl);
             self.tcx.declare(DeclKind::VarDecl(decl.clone()));

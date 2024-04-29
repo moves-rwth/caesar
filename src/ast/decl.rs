@@ -4,6 +4,7 @@
 
 use std::{
     cell::{Ref, RefCell, RefMut},
+    fmt::{Display, Formatter},
     hash::{Hash, Hasher},
     rc::Rc,
 };
@@ -46,12 +47,17 @@ impl DeclKind {
             DeclKind::AnnotationDecl(anno_intrin) => anno_intrin.name(),
         }
     }
+
+    /// Convert into [`DeclKindName`].
+    pub fn kind_name(&self) -> DeclKindName {
+        DeclKindName::from(self)
+    }
 }
 
 impl SimplePretty for DeclKind {
     fn pretty(&self) -> Doc {
         match self {
-            DeclKind::VarDecl(var_decl) => var_decl.pretty(),
+            DeclKind::VarDecl(var_decl) => var_decl.borrow().pretty_decl(),
             DeclKind::ProcDecl(proc_decl) => proc_decl.pretty(),
             DeclKind::DomainDecl(domain_decl) => domain_decl.pretty(),
             DeclKind::FuncDecl(func_decl) => func_decl.pretty(),
@@ -74,6 +80,82 @@ impl SimplePretty for DeclKind {
                 .append(Doc::text("annotation"))
                 .append(Doc::space())
                 .append(Doc::as_string(anno_intrin.name().name)),
+        }
+    }
+}
+
+/// Just the name of the [`DeclKind`] to classify different declaration kinds
+/// and print the name of the kind of declaration to the user.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DeclKindName {
+    Var(VarKind),
+    Proc,
+    Domain,
+    Func,
+    Axiom,
+    ProcIntrin,
+    FuncIntrin,
+    Label,
+    Annotation,
+}
+
+impl From<&DeclKind> for DeclKindName {
+    fn from(decl: &DeclKind) -> Self {
+        match decl {
+            DeclKind::VarDecl(decl_ref) => DeclKindName::Var(decl_ref.borrow().kind),
+            DeclKind::ProcDecl(_) => DeclKindName::Proc,
+            DeclKind::DomainDecl(_) => DeclKindName::Domain,
+            DeclKind::FuncDecl(_) => DeclKindName::Func,
+            DeclKind::AxiomDecl(_) => DeclKindName::Axiom,
+            DeclKind::ProcIntrin(_) => DeclKindName::ProcIntrin,
+            DeclKind::FuncIntrin(_) => DeclKindName::FuncIntrin,
+            DeclKind::LabelDecl(_) => DeclKindName::Label,
+            DeclKind::AnnotationDecl(_) => DeclKindName::Annotation,
+        }
+    }
+}
+
+impl DeclKindName {
+    /// Return `self`, but all intrinsic kinds are mapped to their non-intrinsic
+    /// counterparts. Useful to print declaration kind names to the user who
+    /// does not care about whether something is intrinsic or not.
+    pub fn lose_intrin(self) -> Self {
+        match self {
+            DeclKindName::ProcIntrin => DeclKindName::Proc,
+            DeclKindName::FuncIntrin => DeclKindName::Func,
+            other => other,
+        }
+    }
+
+    /// Is this declaration callable?
+    pub fn is_callable(self) -> bool {
+        matches!(
+            self,
+            DeclKindName::Proc
+                | DeclKindName::Func
+                | DeclKindName::ProcIntrin
+                | DeclKindName::FuncIntrin
+        )
+    }
+
+    /// Is this a proc (possibly intrinsic)?
+    pub fn is_proc(self) -> bool {
+        matches!(self, DeclKindName::Proc | DeclKindName::ProcIntrin)
+    }
+}
+
+impl Display for DeclKindName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DeclKindName::Var(kind) => f.write_fmt(format_args!("{} variable", kind)),
+            DeclKindName::Proc => f.write_str("proc"),
+            DeclKindName::Domain => f.write_str("domain"),
+            DeclKindName::Func => f.write_str("func"),
+            DeclKindName::Axiom => f.write_str("axiom"),
+            DeclKindName::ProcIntrin => f.write_str("intrinsic proc"),
+            DeclKindName::FuncIntrin => f.write_str("intrinsic func"),
+            DeclKindName::Label => f.write_str("label"),
+            DeclKindName::Annotation => f.write_str("annotation"),
         }
     }
 }
@@ -140,6 +222,9 @@ pub struct VarDecl {
     pub kind: VarKind,
     pub init: Option<Expr>,
     pub span: Span,
+    /// If this declaration was created by cloning another variable declaration,
+    /// we track the original name here.
+    pub created_from: Option<Ident>,
 }
 
 impl VarDecl {
@@ -151,40 +236,21 @@ impl VarDecl {
             kind,
             init: None,
             span: param.span,
+            created_from: None,
         };
         DeclRef::new(var_decl)
     }
-}
 
-/// What kind of variable is it?
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VarKind {
-    /// Mutable variables
-    Mut,
-    /// Constants
-    Const,
-    /// Input parameters cannot be modified
-    Input,
-    /// Output parameters cannot be accessed in the pre
-    Output,
-}
-
-impl VarKind {
-    /// Is the user allowed to write this variable?
-    pub fn is_mutable(self) -> bool {
-        self == VarKind::Mut || self == VarKind::Output
+    pub fn pretty_stmt(&self) -> Doc {
+        self.pretty_with_kind("var")
     }
-}
 
-impl SimplePretty for VarDecl {
-    fn pretty(&self) -> Doc {
-        let prefix = match self.kind {
-            VarKind::Mut => "var",
-            VarKind::Const => "const",
-            VarKind::Input => "input",
-            VarKind::Output => "output",
-        };
-        let res = Doc::text(prefix)
+    pub fn pretty_decl(&self) -> Doc {
+        self.pretty_with_kind(self.kind.to_str())
+    }
+
+    fn pretty_with_kind(&self, kind: &'static str) -> Doc {
+        let res = Doc::text(kind)
             .append(Doc::space())
             .append(Doc::text(self.name.name.to_string()))
             .append(Doc::text(":"))
@@ -195,6 +261,54 @@ impl SimplePretty for VarDecl {
         } else {
             res
         }
+    }
+
+    /// The original name of this declaration, i.e. `created_from` if it is
+    /// `Some`, else `name`. This is usually the name we want to show to the
+    /// user.
+    pub fn original_name(&self) -> Ident {
+        self.created_from.unwrap_or(self.name)
+    }
+}
+
+/// What kind of variable is it?
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum VarKind {
+    /// Input parameters (cannot be modified).
+    Input,
+    /// Output parameters (cannot be accessed in the pre).
+    Output,
+    /// Mutable variables.
+    Mut,
+    /// Variables bound by a quantifier.
+    Quant,
+    /// Variables from a substitution (cannot be modified).
+    Subst,
+    /// Variables for slicing (cannot be modified).
+    Slice,
+}
+
+impl VarKind {
+    /// Is the user allowed to write this variable?
+    pub fn is_mutable(self) -> bool {
+        matches!(self, VarKind::Mut | VarKind::Output)
+    }
+
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            VarKind::Input => "input",
+            VarKind::Output => "output",
+            VarKind::Mut => "mutable",
+            VarKind::Quant => "bound",
+            VarKind::Subst => "subst",
+            VarKind::Slice => "slice",
+        }
+    }
+}
+
+impl Display for VarKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.to_str())
     }
 }
 
