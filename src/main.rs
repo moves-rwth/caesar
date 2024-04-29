@@ -39,7 +39,7 @@ use tokio::task::JoinError;
 use tracing::{info, info_span, warn};
 use z3::{
     ast::{Ast, Bool},
-    Config, Context, Params,
+    Config, Context,
 };
 
 use structopt::StructOpt;
