@@ -20,15 +20,15 @@ import TOCInline from '@theme/TOCInline';
 <TOCInline toc={toc} />
 ```
 
-## Option A: Download Pre-Built Releases (Recommended)
+## Option 1: Download Pre-Built Releases (Recommended)
 
-### a) Pre-Built Binary
+### 1.1. Pre-Built Binary
 
 1. Go to the [latest release on GitHub](https://github.com/moves-rwth/caesar/releases/latest) and download the release for your operating system.
 
 2. Extract the `caesar` binary from the downloaded archive.
 
-:::info Additional Steps
+:::note Additional Steps
 
 <Tabs groupId="operating-systems">
   <TabItem value="mac" label="macOS">
@@ -40,18 +40,12 @@ import TOCInline from '@theme/TOCInline';
   ```
 
   </TabItem>
-  <TabItem value="debian" label="Debian/Linux">
-    No additional steps necessary.
-  </TabItem>
-  <TabItem value="win" label="Windows">
-    No additional steps necessary.
-  </TabItem>
 </Tabs>
 :::
 
-### b) Docker Image
+### 1.2. Docker Image
 
-We also provide a Docker image.
+We also provide a [Docker](https://docs.docker.com/get-docker/) image ([multi-platform](https://docs.docker.com/build/building/multi-platform/) targeting `linux/amd64` and `linux/arm64`).
 
 ```bash
 docker pull ghcr.io/moves-rwth/caesar:latest
@@ -65,9 +59,12 @@ For example, if you want to verify a program in `./programs/example.heyvl`, the 
 docker run -it -v $PWD/programs:/root/caesar/programs/ ghcr.io/moves-rwth/caesar:latest /root/caesar/programs/example.heyvl
 ```
 
-## Option B: Compiling Locally
+---
+<div style={{ marginTop: "4em" }} />
 
-### a) Build Binary
+## Option 2: Build From Source
+
+### 2.1. Compile Binary
 
 #### Installing Dependencies
 
@@ -81,45 +78,52 @@ You might need to restart your terminal after installing Rust.
 <Tabs groupId="operating-systems">
   <TabItem value="mac" label="macOS">
 
-  ```bash
-  # Install Rust via rustup
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  # Install Python and CMake
-  brew install python cmake
-  ```
+  1. Install Rust via rustup:
+    ```bash
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    ```
+  2. Install Python and CMake using the package manager [Homebrew](https://brew.sh):
+    ```bash
+    brew install python cmake
+    ```
 
-  </TabItem>
+</TabItem>
   <TabItem value="debian" label="Debian/Linux">
 
-  ```bash
-  # Install Rust via rustup
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  # Install Python, CMake, LLVM and clang
-  apt-get install python3 cmake llvm-dev libclang-dev clang
-  ```
-
-  </TabItem>
+  1. Install Rust via rustup:
+    ```bash
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    ```
+  2. Install Python, CMake, LLVM and Clang using `apt`:
+    ```bash
+    apt install python3 cmake llvm-dev libclang-dev clang
+    ```
+  
+</TabItem>
   <TabItem value="win" label="Windows">
 
   1. [Follow the instructions](https://rustup.rs/) to install Rust via rustup.
-  2. Install Python, CMake and LLVM
-  ```bash
-  choco install python cmake llvm
-  ```
+  2. Install Python, CMake and LLVM using the package manager [Chocolatey](https://chocolatey.org/install):
+    ```bash
+    choco install python cmake llvm
+    ```
 
 </TabItem>
 </Tabs>
 
 #### Compiling Caesar
 
-Simply run the following, and `caesar` will be available on the command-line.
-Because this will compile a large number of dependencies, this might take a couple of minutes (especially Z3 takes some time).
-
-```bash
-git clone https://github.com/moves-rwth/caesar.git
-cd caesar
-cargo install --path . caesar
-```
+1. Clone the [Git repository](https://github.com/moves-rwth/caesar):
+  ```bash
+  git clone https://github.com/moves-rwth/caesar.git
+  cd caesar
+  ```  
+2. Build `caesar` using [cargo](https://doc.rust-lang.org/cargo/):
+  ```bash
+  cargo install --path . caesar
+  ```
+  Because this will compile a large number of dependencies, this might take a couple of minutes (especially Z3 takes some time).
+  Using `cargo install` makes `caesar` available on the command-line.
 
 Then, you can run an example:
 ```bash
@@ -131,16 +135,29 @@ tests/zeroconf.heyvl::arp: Verified.
 tests/zeroconf.heyvl::zeroconf: Verified.
 ```
 
-### b) Docker Image
+### 2.2. Build Docker Image
 
 We also support building a Docker image.
-This does not require installing dependencies and will package everything in a Docker image named `caesar`.
+This does not require installing dependencies and will build and package the `caesar` binary in a Docker image.
 
-```bash
-git clone git@github.com:moves-rwth/caesar.git
-cd caesar
-docker build -t caesar -f docker/Dockerfile .
-```
+1. Clone the [Git repository](https://github.com/moves-rwth/caesar):
+  ```bash
+  git clone git@github.com:moves-rwth/caesar.git
+  cd caesar
+  ```
+2. Build the Docker image, named `caesar`, using [docker build](https://docs.docker.com/reference/cli/docker/image/build/):
+  ```bash
+  docker build -t caesar -f docker/Dockerfile .
+  ```
+
+  :::note Multi-platform image
+
+    You can build and load a [multi-platform image](https://docs.docker.com/build/building/multi-platform) using [docker buildx](https://docs.docker.com/reference/cli/docker/buildx/build/):
+    ```bash
+    docker buildx build --platform linux/amd64,linux/arm64 -t caesar -f docker/Dockerfile . --load
+    ```
+
+  :::
 
 With the Docker image `caesar` built, you can use it just like the `caesar` binary.
 To access files from your system you need to mount them as volumes.
