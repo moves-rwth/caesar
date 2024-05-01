@@ -89,7 +89,7 @@ impl ParseError {
 }
 
 /// Parse a source code file into a list of declarations.
-#[instrument]
+#[instrument(skip(source))]
 pub fn parse_decls(file_id: FileId, source: &str) -> Result<Vec<DeclKind>, ParseError> {
     let clean_source = remove_comments(source).unwrap();
     let parser = grammar::DeclsParser::new();

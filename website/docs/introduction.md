@@ -21,6 +21,6 @@ I am also happy to discuss anything via Zoom as well!
 
 Start with the  [quick start guide](./getting-started/README.md)!
 
-General things about the tool is documented in the [Caesar](./caesar.md) chapter.
+General things about the tool is documented in the [Caesar](./caesar) chapter.
 We have a section on the [pGCL frontend](./pgcl.md).
 There is also a chapter on the [HeyVL language](heyvl/) and the [standard library](stdlib/).

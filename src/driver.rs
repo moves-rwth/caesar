@@ -23,8 +23,13 @@ use crate::{
         SpecCall,
     },
     proof_rules::EncCall,
+    slicing::{
+        selection::SliceSelection,
+        transform::{SliceStmts, StmtSliceVisitor},
+    },
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
+    Options,
 };
 use tracing::{info_span, instrument, trace};
 
@@ -327,6 +332,21 @@ impl VerifyUnit {
         // TODO: give direction to spec_call so that it can check that only
         // valid directions are called
         spec_call.visit_stmts(&mut self.block)
+    }
+
+    /// Prepare the code for slicing.
+    #[instrument(skip(self, options, tcx))]
+    pub fn prepare_slicing(&mut self, options: &Options, tcx: &mut TyCtx) -> SliceStmts {
+        let mut selection = SliceSelection::default();
+        if !options.no_slice_error {
+            selection |= SliceSelection::FAILURE_SELECTION;
+        }
+        if options.slice_verify {
+            selection |= SliceSelection::VERIFIED_SELECTION;
+        }
+        let mut stmt_slicer = StmtSliceVisitor::new(tcx, self.direction, selection);
+        stmt_slicer.visit_stmts(&mut self.block).unwrap();
+        stmt_slicer.finish()
     }
 
     /// Generate the verification conditions with post-expectation `∞` or `0`
