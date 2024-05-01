@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "scooter",
+    "jani",
     "z3rro"
 ]
 
@@ -47,6 +48,7 @@ z3rro = { path = "./z3rro" }
 dashmap = "5.4"
 im-rc = "15"
 cfg-if = "1.0.0"
+jani = { path = "./jani" }
 itertools = "0.12.0"
 stacker = "0.1.15"
 
