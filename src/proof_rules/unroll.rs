@@ -85,8 +85,8 @@ impl Encoding for UnrollAnnotation {
     fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
         matches!(
             (&calculus.calculus_type, direction),
-            (CalculusType::Wp | CalculusType::Ert, Direction::Up)
-                | (CalculusType::Wlp, Direction::Down)
+            (CalculusType::Wp | CalculusType::Ert, Direction::Down)
+                | (CalculusType::Wlp, Direction::Up)
         )
     }
 

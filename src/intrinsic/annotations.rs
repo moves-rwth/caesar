@@ -78,7 +78,7 @@ impl AnnotationError {
                         calculus_name.name, encoding_name.name
                     ))
                     .with_label(Label::new(span).with_message(
-                        "The calculus and encoding are incompatible.",
+                        "The calculus, proof rule, and direction are incompatible.",
                     ))
             }
             AnnotationError::UnknownAnnotation(span, anno_name ) => {
