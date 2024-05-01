@@ -160,6 +160,13 @@ pub enum Direction {
 }
 
 impl Direction {
+    pub fn map<T>(&self, a: T, b: T) -> T {
+        match self {
+            Direction::Down => a,
+            Direction::Up => b,
+        }
+    }
+
     pub fn toggle(&self) -> Direction {
         match self {
             Direction::Down => Direction::Up,

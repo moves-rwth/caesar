@@ -7,6 +7,7 @@ use std::{
     collections::HashMap,
     fs::{create_dir_all, File},
     io::{self, Write},
+    ops::Deref,
     path::PathBuf,
     process::ExitCode,
     sync::{Arc, Mutex},
@@ -52,6 +53,7 @@ pub mod ast;
 mod driver;
 pub mod front;
 pub mod intrinsic;
+pub mod mc;
 pub mod opt;
 pub mod pretty;
 mod procs;
@@ -169,6 +171,12 @@ pub struct Options {
     /// standard output.
     #[structopt(long)]
     pub print_label_vc: bool,
+
+    /// Save a JANI file of the HeyVL code to the given path.
+    ///
+    /// There are some severe restrictions on the HeyVL code to be printable to JANI.
+    #[structopt(long, parse(from_os_str))]
+    pub to_jani: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -339,6 +347,7 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
             print_warning(&options, &files, err)?;
         }
     }
+
     let mut new_source_units: Vec<Item<SourceUnit>> = vec![];
     // Desugar encodings from source units
     source_unit
@@ -418,6 +427,18 @@ fn verify_files_main(
         if let Err(err) = monotonicity_res {
             let files = files_mutex.lock().unwrap();
             print_warning(options, &files, err)?;
+        }
+        if let Some(to_jani) = &options.to_jani {
+            match entered.deref() {
+                SourceUnit::Decl(decl) => match decl {
+                    ast::DeclKind::ProcDecl(decl_ref) => {
+                        let jani_model = mc::proc_to_model(&decl_ref.borrow()).unwrap();
+                        std::fs::write(to_jani, jani::to_string(&jani_model)).unwrap();
+                    }
+                    _ => {}
+                },
+                SourceUnit::Raw(_) => todo!(),
+            }
         }
     }
 
