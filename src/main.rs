@@ -37,7 +37,7 @@ use smt::PrettySliceMode;
 use thiserror::Error;
 use timing::DispatchBuilder;
 use tokio::task::JoinError;
-use tracing::{info, info_span, warn};
+use tracing::{error, info, info_span, warn};
 use z3::{
     ast::{Ast, Bool},
     Config, Context,
@@ -176,11 +176,9 @@ pub struct Options {
     #[structopt(long)]
     pub print_label_vc: bool,
 
-    /// Save a JANI file of the HeyVL code to the given path.
-    ///
-    /// There are some severe restrictions on the HeyVL code to be printable to JANI.
+    /// Export declarations to JANI files in the provided directory.
     #[structopt(long, parse(from_os_str))]
-    pub to_jani: Option<PathBuf>,
+    pub jani_dir: Option<PathBuf>,
 
     /// Do not try to slice after an error occurs. Just return the first
     /// counterexample.
@@ -455,18 +453,7 @@ fn verify_files_main(
             let files = files_mutex.lock().unwrap();
             print_warning(options, &files, err)?;
         }
-        if let Some(to_jani) = &options.to_jani {
-            match entered.deref() {
-                SourceUnit::Decl(decl) => match decl {
-                    ast::DeclKind::ProcDecl(decl_ref) => {
-                        let jani_model = mc::proc_to_model(&decl_ref.borrow()).unwrap();
-                        std::fs::write(to_jani, jani::to_string(&jani_model)).unwrap();
-                    }
-                    _ => {}
-                },
-                SourceUnit::Raw(_) => todo!(),
-            }
-        }
+        write_jani_file(&options, entered.deref())?;
     }
 
     // Desugar encodings from source units
@@ -683,6 +670,31 @@ fn load_file(files: &mut Files, path: &PathBuf) -> FileId {
     let source_file_path = SourceFilePath::Path(path.clone());
     let file = files.add(source_file_path, source);
     file.id
+}
+
+fn write_jani_file(options: &Options, source_unit: &SourceUnit) -> Result<(), VerifyError> {
+    if let Some(jani_dir) = &options.jani_dir {
+        match source_unit {
+            SourceUnit::Decl(decl) => {
+                if let ast::DeclKind::ProcDecl(decl_ref) = decl {
+                    let jani_model = mc::proc_to_model(&decl_ref.borrow());
+                    let jani_model = match jani_model {
+                        Ok(jani_model) => jani_model,
+                        Err(err) => {
+                            // TODO: proper formatting of errors
+                            error!("Error creating JANI model for {}: {:?}", decl.name(), err);
+                            return Ok(());
+                        }
+                    };
+                    let file_path = jani_dir.join(format!("{}.jani", decl.name()));
+                    create_dir_all(file_path.parent().unwrap())?;
+                    std::fs::write(file_path, jani::to_string(&jani_model))?;
+                }
+            }
+            SourceUnit::Raw(_) => panic!("raw code not supported with --jani-dir"),
+        }
+    }
+    Ok(())
 }
 
 fn apply_qelim(tcx: &mut TyCtx, vc_expr: &mut VcUnit) {

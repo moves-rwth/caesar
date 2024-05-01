@@ -69,7 +69,7 @@ pub enum UnaryOp {
     /// and SHA; not a constant expression. The operand must be a continuous
     /// global variable.
     #[serde(rename = "der")]
-    Derivative
+    Derivative,
 }
 
 /// JANI expressions with one operand.
