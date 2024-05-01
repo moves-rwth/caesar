@@ -11,7 +11,7 @@ We use GitHub's issue tracker.
 
 ## Caesar
 
-[Caesar's](./caesar.md)'s source code is begins at the root level of the Git repository.
+[Caesar's](./caesar)'s source code is begins at the root level of the Git repository.
 It is a [cargo workspace](https://doc.rust-lang.org/book/ch14-03-cargo-workspaces.html) containing the main `caesar` crate and the `z3rro` crate.
 
 We try to use [rustdoc](https://doc.rust-lang.org/rustdoc/what-is-rustdoc.html) as much as possible to document how `caesar` works.

@@ -134,7 +134,7 @@ impl FromStr for ReasonUnknown {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "interrupted from keyboard" => Ok(ReasonUnknown::Interrupted),
+            "interrupted from keyboard" | "canceled" => Ok(ReasonUnknown::Interrupted),
             "timeout" => Ok(ReasonUnknown::Timeout),
             other => Ok(ReasonUnknown::Other(other.to_owned())),
         }

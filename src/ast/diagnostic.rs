@@ -124,6 +124,18 @@ impl Files {
         self.get(span.file).unwrap().char_span(span)
     }
 
+    pub fn get_human_span(&self, span: Span) -> Option<(&StoredFile, usize, usize)> {
+        if span.file == FileId::DUMMY {
+            None
+        } else {
+            let file = self.get(span.file).unwrap();
+            let char_span = file.char_span(span);
+            let (_line, line_number, col_number) =
+                file.lines.get_offset_line(char_span.start).unwrap();
+            Some((file, line_number + 1, col_number + 1))
+        }
+    }
+
     /// Formats the start of the span as a human-readable string. The format is
     /// `FILE:LINE:COL`, where `LINE` and `COL` are 1-indexed character offsets
     /// into the file.
@@ -133,20 +145,8 @@ impl Files {
     ///
     /// Returns `None` if the span's file id is [`FileId::DUMMY`].
     pub fn format_span_start(&self, span: Span) -> Option<String> {
-        if span.file == FileId::DUMMY {
-            None
-        } else {
-            let file = self.get(span.file).unwrap();
-            let char_span = file.char_span(span);
-            let (_line, line_number, col_number) =
-                file.lines.get_offset_line(char_span.start).unwrap();
-            Some(format!(
-                "{}:{}:{}",
-                file.path,
-                line_number + 1,
-                col_number + 1
-            ))
-        }
+        let (file, line_number, col_number) = self.get_human_span(span)?;
+        Some(format!("{}:{}:{}", file.path, line_number, col_number))
     }
 }
 

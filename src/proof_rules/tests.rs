@@ -12,19 +12,23 @@ use crate::VerifyError;
 fn test_k_induction_transform() {
     let mut test_string = String::from(
         r#"
-            proc main() -> () 
+            proc main() -> ()
                 pre ∞
                 post ∞
             {
                 var x: UInt
                 {
+                    @slice_error("pre might not entail the invariant (pre ≰ I)")
                     assert cast(EUReal, x)
                     havoc x
                     validate
+                    @success_msg("invariant not necessary for inductivity")
                     assume cast(EUReal, x)
                     if (1 <= x) {
                         x = (x - 1)
+                        @slice_error("invariant might not be inductive (I ≰ 𝚽(I))")
                         assert cast(EUReal, x)
+                        @success_msg("while could be an if statement")
                         assume cast(EUReal, 0)
                     } else {
                     }
@@ -50,7 +54,7 @@ fn test_k_induction_transform() {
 fn test_unroll_transform() {
     let mut test_string = String::from(
         r#"
-            proc main() -> () 
+            proc main() -> ()
                 pre ∞
                 post ∞
             {
@@ -86,7 +90,7 @@ fn test_unroll_transform() {
 fn test_omega_transform() {
     let mut test_string = String::from(
         r#"
-            proc main() -> () 
+            proc main() -> ()
                 pre ∞
                 post ∞
             {
@@ -102,7 +106,7 @@ fn test_omega_transform() {
                             assert cast(EUReal, 0)
                             assume cast(EUReal, 0)
                         } else {
-                
+
                         }
                     } else {
                         havoc n
@@ -113,7 +117,7 @@ fn test_omega_transform() {
                             assert [(n > x)]
                             assume cast(EUReal, 0)
                         } else {
-                
+
                         }
                     }
                 }
@@ -160,7 +164,7 @@ fn test_ost_transform() {
                     coassert (cast(EUReal, 2) * [a])
                     coassume ∞
                 } else {
-            
+
                 }
             }
             coproc optional_stopping_conditional_difference_bounded_0(
@@ -215,7 +219,7 @@ fn test_ost_transform() {
                     coassert (cast(EUReal, b) + [a])
                     coassume ∞
                 } else {
-            
+
                 }
             }
             proc optional_stopping_lower_bound_0(
@@ -235,7 +239,7 @@ fn test_ost_transform() {
                     assert (cast(EUReal, b) + [a])
                     assume cast(EUReal, 0)
                 } else {
-            
+
                 }
             }
             proc optional_stopping(init_b: UInt, init_a: Bool) -> (b: UInt, a: Bool)
@@ -303,7 +307,7 @@ fn test_past_transform() {
                     coassert cast(EUReal, (x + 1))
                     coassume ∞
                 } else {
-            
+
                 }
             }
             proc main() -> ()
@@ -338,13 +342,13 @@ fn test_ast_transform() {
             pre ?((a <= b))
             post ?(((5/10)[v -> a] >= (5/10)[v -> b]))
         {
-            
+
         }
         proc main_decrease_antitone_0(a: UReal, b: UReal) -> ()
             pre ?((a <= b))
             post ?(((cast(UReal, v))[v -> a] >= (cast(UReal, v))[v -> b]))
         {
-            
+
         }
         proc main_I_wp_subinvariant_0(init_x: UInt) -> (x: UInt)
             pre ([true])[x -> init_x]
@@ -419,10 +423,10 @@ fn test_double_annotation() {
                     x = x + 2
                 }
             } else {
-                x = x + 1 
+                x = x + 1
             }
         }
-    
+
         @ast(true, (3 * [!(x % 2 == 0)]) + ite(x >= 10, x - 10, 10 - x), t, 0.5, 2)
         while x != 10 {
             if x % 2 == 0{
@@ -434,10 +438,10 @@ fn test_double_annotation() {
                     x = x + 2
                 }
             } else {
-                x = x + 1 
+                x = x + 1
             }
         }
-    
+
     }
         "#;
 
@@ -470,29 +474,37 @@ fn test_k_induction_nested_transform() {
                 var x: UInt
                 var y: UInt
                 {
+                    @slice_error("pre might not entail the invariant (pre ≰ I)")
                     assert cast(EUReal, x)
                     havoc x, y
                     validate
+                    @success_msg("invariant not necessary for inductivity")
                     assume cast(EUReal, x)
                     if (1 <= x) {
                         x = (x - 1)
                         {
+                            @slice_error("pre might not entail the invariant (pre ≰ I)")
                             assert cast(EUReal, y)
                             havoc y
                             validate
+                            @success_msg("invariant not necessary for inductivity")
                             assume cast(EUReal, y)
                             if (1 <= y) {
                                 y = (y - 1)
+                                @slice_error("invariant might not be inductive (I ≰ 𝚽(I))")
                                 assert cast(EUReal, y)
+                                @success_msg("while could be an if statement")
                                 assume cast(EUReal, 0)
                             } else {
-                                
+
                             }
                         }
+                        @slice_error("invariant might not be inductive (I ≰ 𝚽(I))")
                         assert cast(EUReal, x)
+                        @success_msg("while could be an if statement")
                         assume cast(EUReal, 0)
                     } else {
-                        
+
                     }
                 }
             }

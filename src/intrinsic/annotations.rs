@@ -13,6 +13,7 @@ use crate::{
         tycheck::{Tycheck, TycheckError},
     },
     proof_rules::Encoding,
+    slicing::selection::SliceAnnotation,
     tyctx::TyCtx,
 };
 
@@ -115,6 +116,7 @@ pub struct CalculusAnnotationError;
 pub enum AnnotationKind {
     Encoding(Rc<dyn Encoding>),
     Calculus(Calculus),
+    Slicing(Rc<SliceAnnotation>),
 }
 
 impl AnnotationKind {
@@ -122,6 +124,7 @@ impl AnnotationKind {
         match self {
             AnnotationKind::Encoding(encoding) => encoding.name(),
             AnnotationKind::Calculus(calculus) => calculus.name,
+            AnnotationKind::Slicing(annotation) => annotation.ident,
         }
     }
 
@@ -134,6 +137,7 @@ impl AnnotationKind {
         match self {
             AnnotationKind::Encoding(encoding) => encoding.tycheck(tycheck, call_span, args),
             AnnotationKind::Calculus(_) => Ok(()),
+            AnnotationKind::Slicing(annotation) => annotation.tycheck(tycheck, call_span, args),
         }
     }
 
@@ -146,6 +150,7 @@ impl AnnotationKind {
         match self {
             AnnotationKind::Encoding(encoding) => encoding.resolve(resolve, call_span, args),
             AnnotationKind::Calculus(_) => Ok(()),
+            AnnotationKind::Slicing(_) => Ok(()), // at the moment, these don't need the resolver
         }
     }
 }
