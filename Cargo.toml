@@ -67,9 +67,9 @@ path = "tests/integration.rs"
 harness = false
 
 [profile.release]
-# Debug information is nice, but it increases the binary size by about 500 megabytes.
-# So we don't enable it for release builds.
-# debug = 1
+# We do want at least minimal debugging information in case we get a crash.
+# Cargo's default is no debug information at all.
+debug = "line-tables-only"
 
 # there are tests which take more than 10x longer with z3 not optimized, so just optimize z3 as well as possible.
 # this might make some debugging a bit harder, so you might want to disable it for that.
