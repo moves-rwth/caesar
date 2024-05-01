@@ -157,16 +157,16 @@ domain List {
           <div className="col col--6">
             <h3>🏃 Running Caesar</h3>
             <p>
-              After <Link to="https://www.rust-lang.org/tools/install">installing Rust</Link>, install the <code>caesar</code> binary (<Link to="/docs/getting-started">c.f. <i>Getting Started</i></Link>):
+              <Link to="https://github.com/moves-rwth/caesar/releases/latest">Download</Link> and extract the latest <code>caesar</code> binary (or visit <Link to="/docs/getting-started"><i>Getting Started</i></Link> for alternative installation options).
             </p>
-            <CodeBlock language='bash'>{`git clone git@github.com:moves-rwth/caesar.git
-cd caesar
-cargo install --path . caesar
-caesar tests/domains/lossy_list.heyvl` }
+            <p>
+              The example from above is <Link to="https://github.com/moves-rwth/caesar/blob/main/tests/domains/lossy_list.heyvl">included in the Git repository</Link>.
+              After downloading and storing it in <code>examples/lossy_list.heyvl</code> you can try Caesar on it:
+            </p>
+            <CodeBlock language='bash'>{`caesar examples/lossy_list.heyvl` }
             </CodeBlock>
             <p>
-              This will run Caesar on the example above (it is included in the Git repository).
-              Caesar will print: <code>tests/domains/lossy_list.heyvl: Verified.</code>
+              Caesar will print: <code>examples/lossy_list.heyvl: Verified.</code>
             </p>
           </div>
         </div>
