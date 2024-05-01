@@ -20,30 +20,31 @@ import TOCInline from '@theme/TOCInline';
 <TOCInline toc={toc} />
 ```
 
-## Option 1: Download Pre-Built Releases (Recommended)
+## Download Pre-Built Releases (Recommended)
 
-### 1.1. Pre-Built Binary
+### Option 1: Pre-Built Binary
 
 1. Go to the [latest release on GitHub](https://github.com/moves-rwth/caesar/releases/latest) and download the release for your operating system.
 
 2. Extract the `caesar` binary from the downloaded archive.
 
-:::note Additional Steps
+3. <div>
+   <small>
+  <p style={{marginBottom: "0"}}>
+    On MacOS, you may have to <Link to="https://support.apple.com/guide/mac-help/mh40616/mac">release the binary from quarantine</Link> to allow execution.
+  </p>
 
-<Tabs groupId="operating-systems">
-  <TabItem value="mac" label="macOS">
-
-  You may have to [release the binary from quarantine](https://support.apple.com/guide/mac-help/mh40616/mac) to allow execution:
   ```bash
   # Execute in the extracted folder
   xattr -d com.apple.quarantine ./caesar
   ```
 
-  </TabItem>
-</Tabs>
-:::
+  </small>
+  </div>
 
-### 1.2. Docker Image
+<div style={{ paddingTop: "1em" }} />
+
+### Option 2: Docker Image
 
 We also provide a [Docker](https://docs.docker.com/get-docker/) image ([multi-platform](https://docs.docker.com/build/building/multi-platform/) targeting `linux/amd64` and `linux/arm64`).
 
@@ -59,12 +60,11 @@ For example, if you want to verify a program in `./programs/example.heyvl`, the 
 docker run -it -v $PWD/programs:/root/caesar/programs/ ghcr.io/moves-rwth/caesar:latest /root/caesar/programs/example.heyvl
 ```
 
----
-<div style={{ marginTop: "4em" }} />
+<div style={{ paddingTop: "3em" }} />
 
-## Option 2: Build From Source
+## Build From Source
 
-### 2.1. Compile Binary
+### Option 3: Compile Binary
 
 #### Installing Dependencies
 
@@ -98,7 +98,7 @@ You might need to restart your terminal after installing Rust.
     ```bash
     apt install python3 cmake llvm-dev libclang-dev clang
     ```
-  
+
 </TabItem>
   <TabItem value="win" label="Windows">
 
@@ -117,7 +117,7 @@ You might need to restart your terminal after installing Rust.
   ```bash
   git clone https://github.com/moves-rwth/caesar.git
   cd caesar
-  ```  
+  ```
 2. Build `caesar` using [cargo](https://doc.rust-lang.org/cargo/):
   ```bash
   cargo install --path . caesar
@@ -127,7 +127,7 @@ You might need to restart your terminal after installing Rust.
 
 Then, you can run an example:
 ```bash
-caesar tests/zeroconf.heyvl 
+caesar tests/zeroconf.heyvl
 ```
 And this will print:
 ```
@@ -135,7 +135,9 @@ tests/zeroconf.heyvl::arp: Verified.
 tests/zeroconf.heyvl::zeroconf: Verified.
 ```
 
-### 2.2. Build Docker Image
+<div style={{ paddingTop: "1em" }} />
+
+### Option 4: Build Docker Image
 
 We also support building a Docker image.
 This does not require installing dependencies and will build and package the `caesar` binary in a Docker image.
