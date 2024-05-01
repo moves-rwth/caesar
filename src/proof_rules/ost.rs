@@ -20,7 +20,9 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{check_annotation_call, AnnotationError, AnnotationInfo},
+    intrinsic::annotations::{
+        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+    },
     tyctx::TyCtx,
 };
 
@@ -28,7 +30,7 @@ use super::{Encoding, EncodingEnvironment, EncodingGenerated, ProcInfo};
 
 use super::util::*;
 
-pub struct OSTAnnotation(AnnotationInfo);
+pub struct OSTAnnotation(AnnotationDecl);
 
 impl OSTAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -41,7 +43,7 @@ impl OSTAnnotation {
         let c_param = intrinsic_param(file, "c", TyKind::UReal, true);
         let post_param = intrinsic_param(file, "post", TyKind::SpecTy, false);
 
-        let anno_info = AnnotationInfo {
+        let anno_decl = AnnotationDecl {
             name,
             inputs: Spanned::with_dummy_file_span(
                 vec![invariant_param, past_invariant_param, c_param, post_param],
@@ -50,7 +52,7 @@ impl OSTAnnotation {
             span: Span::dummy_file_span(file),
         };
 
-        OSTAnnotation(anno_info)
+        OSTAnnotation(anno_decl)
     }
 }
 
@@ -88,6 +90,10 @@ impl Encoding for OSTAnnotation {
         resolve.visit_expr(past_inv)?;
         resolve.visit_expr(c)?;
         resolve.visit_expr(post)
+    }
+
+    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
+        matches!(calculus.calculus_type, CalculusType::Wp) && direction == Direction::Down
     }
 
     fn transform(
@@ -200,7 +206,7 @@ impl Encoding for OSTAnnotation {
             annotation_span,
             StmtKind::Tick(builder.cast(TyKind::EUReal, builder.uint(1))),
         )];
-        cond2_next_iter.extend(hey_const(annotation_span, past_inv, tcx));
+        cond2_next_iter.extend(hey_const(annotation_span, past_inv, Direction::Up, tcx));
         // Condition 2 : \Phi_{0}(past_I) <= past_I, so ert[P](0) <= past_I
         let mut cond2_body = init_assigns.clone();
         cond2_body.push(encode_iter(annotation_span, inner_stmt, cond2_next_iter).unwrap());
@@ -292,7 +298,7 @@ impl Encoding for OSTAnnotation {
             encode_iter(
                 annotation_span,
                 inner_stmt,
-                hey_const(annotation_span, inv, tcx),
+                hey_const(annotation_span, inv, Direction::Up, tcx),
             )
             .unwrap(),
         ]);
@@ -316,7 +322,7 @@ impl Encoding for OSTAnnotation {
             encode_iter(
                 annotation_span,
                 inner_stmt,
-                hey_const(annotation_span, inv, tcx),
+                hey_const(annotation_span, inv, Direction::Down, tcx),
             )
             .unwrap(),
         );

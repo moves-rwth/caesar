@@ -7,24 +7,29 @@ use std::{
 
 use crate::{
     ast::{
-        visit::VisitorMut, Block, DeclKind, Expr, ExprData, ExprKind, LitKind, Shared,
-        SourceFilePath, Span, Spanned, StoredFile, TyKind,
+        visit::VisitorMut, BinOpKind, Block, DeclKind, Direction, Expr, ExprBuilder,
+        SourceFilePath, Span, StoredFile, TyKind, UnOpKind,
     },
-    front::parser,
-    front::resolve::{Resolve, ResolveError},
     front::{
-        parser::ParseError,
+        parser::{self, ParseError},
+        resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
     intrinsic::annotations::AnnotationError,
     pretty::{Doc, SimplePretty},
     procs::{
         monotonicity::{MonotonicityError, MonotonicityVisitor},
-        verify_proc, SpecCall,
+        proc_verify::{to_direction_lower_bounds, verify_proc},
+        SpecCall,
     },
     proof_rules::EncCall,
+    slicing::{
+        selection::SliceSelection,
+        transform::{SliceStmts, StmtSliceVisitor},
+    },
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
+    Options,
 };
 use tracing::{info_span, instrument, trace};
 
@@ -283,15 +288,16 @@ impl SourceUnit {
         match self {
             SourceUnit::Decl(decl) => {
                 match decl {
-                    DeclKind::ProcDecl(proc_decl) => {
-                        verify_proc(&proc_decl.borrow()).map(VerifyUnit)
-                    }
+                    DeclKind::ProcDecl(proc_decl) => verify_proc(&proc_decl.borrow()),
                     DeclKind::DomainDecl(_domain_decl) => None, // TODO: check that the axioms are not contradictions
                     DeclKind::FuncDecl(_func_decl) => None,
                     _ => unreachable!(), // axioms and variable declarations are not allowed on the top level
                 }
             }
-            SourceUnit::Raw(block) => Some(VerifyUnit(block)),
+            SourceUnit::Raw(block) => Some(VerifyUnit {
+                direction: Direction::Down,
+                block,
+            }),
         }
     }
 }
@@ -311,40 +317,103 @@ impl fmt::Display for SourceUnit {
     }
 }
 
-/// A series of HeyVL statements to be verified.
-#[derive(Debug)]
-
-pub struct VerifyUnit(Block);
+/// A block of HeyVL statements to be verified with a certain [`Direction`].
+#[derive(Debug, Clone)]
+pub struct VerifyUnit {
+    pub direction: Direction,
+    pub block: Block,
+}
 
 impl VerifyUnit {
     /// Desugar some statements, such as assignments with procedure calls.
     #[instrument(skip(self, tcx))]
     pub fn desugar(&mut self, tcx: &mut TyCtx) -> Result<(), ()> {
         let mut spec_call = SpecCall::new(tcx);
-        spec_call.visit_stmts(&mut self.0)
+        // TODO: give direction to spec_call so that it can check that only
+        // valid directions are called
+        spec_call.visit_stmts(&mut self.block)
     }
 
-    /// Generate the verification conditions with post-expectation `∞`.
+    /// Prepare the code for slicing.
+    #[instrument(skip(self, options, tcx))]
+    pub fn prepare_slicing(&mut self, options: &Options, tcx: &mut TyCtx) -> SliceStmts {
+        let mut selection = SliceSelection::default();
+        if !options.no_slice_error {
+            selection |= SliceSelection::FAILURE_SELECTION;
+        }
+        if options.slice_verify {
+            selection |= SliceSelection::VERIFIED_SELECTION;
+        }
+        let mut stmt_slicer = StmtSliceVisitor::new(tcx, self.direction, selection);
+        stmt_slicer.visit_stmts(&mut self.block).unwrap();
+        stmt_slicer.finish()
+    }
+
+    /// Generate the verification conditions with post-expectation `∞` or `0`
+    /// depending on the direction (down or up, respectively).
+    ///
     /// The desugaring must have already taken place.
     #[instrument(skip(self, vcgen))]
-    pub fn vcgen(&self, vcgen: &Vcgen) -> Result<Expr, ()> {
-        let infinity = Shared::new(ExprData {
-            kind: ExprKind::Lit(Spanned::with_dummy_span(LitKind::Infinity)),
-            ty: Some(TyKind::EUReal),
-            span: Span::dummy_span(),
-        });
-        Ok(vcgen.vcgen_stmts(&self.0, infinity))
+    pub fn vcgen(&self, vcgen: &Vcgen) -> Result<VcUnit, ()> {
+        let terminal = top_lit_in_lattice(self.direction, &TyKind::EUReal);
+        Ok(VcUnit {
+            direction: self.direction,
+            expr: vcgen.vcgen_stmts(&self.block, terminal),
+        })
     }
 }
 
 impl SimplePretty for VerifyUnit {
     fn pretty(&self) -> Doc {
-        self.0.pretty()
+        let lower_bounds = to_direction_lower_bounds(self.clone());
+        assert_eq!(lower_bounds.direction, Direction::Down);
+        lower_bounds.block.pretty()
     }
 }
 
 impl fmt::Display for VerifyUnit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.pretty().render_fmt(80, f)
+    }
+}
+
+/// Verification conditions to be checked.
+pub struct VcUnit {
+    pub direction: Direction,
+    pub expr: Expr,
+}
+
+impl VcUnit {
+    /// Convert his verification condition into a Boolean query of the form `top
+    /// == expr`.
+    pub fn to_boolean(&self) -> Expr {
+        let builder = ExprBuilder::new(Span::dummy_span());
+        let terminal = builder.top_lit(self.expr.ty.as_ref().unwrap());
+        let mut expr = self.expr.clone();
+
+        // Instead of comparing the negated expr to infinity, we should just
+        // compare expr to zero for upper bounds. Unfortunately this introduces
+        // regressions that I don't know how to debug right now.
+        //
+        // TODO: figure out what's happening
+        if self.direction == Direction::Up {
+            expr = builder.unary(UnOpKind::Not, Some(expr.ty.clone().unwrap()), expr);
+        }
+        builder.binary(BinOpKind::Eq, Some(TyKind::Bool), terminal, expr)
+    }
+}
+
+fn top_lit_in_lattice(dir: Direction, ty: &TyKind) -> Expr {
+    let builder = ExprBuilder::new(Span::dummy_span());
+    match dir {
+        Direction::Down => builder.top_lit(ty),
+        Direction::Up => {
+            // this should just be builder.bot_lit(ty), but unfortunately this
+            // introduces some regressions and Z3 suddenly won't terminate on
+            // some examples.
+            //
+            // TODO: change this back and debug why it couldn't be just bot.
+            builder.unary(UnOpKind::Non, Some(TyKind::EUReal), builder.top_lit(ty))
+        }
     }
 }

@@ -9,21 +9,20 @@ use std::{
 use once_cell::unsync;
 use z3::{
     ast::{Ast, Bool, Datatype, Dynamic},
-    Context, DatatypeAccessor, DatatypeBuilder, FuncDecl, RecFuncDecl, Sort,
+    Context, DatatypeAccessor, DatatypeBuilder, FuncDecl, Model, RecFuncDecl, Sort,
 };
 
 use crate::{
-    forward_binary_op, interpreted::FuncDef, scope::SmtAlloc, Factory, SmtAst, SmtEq, SmtInvariant,
-    UReal,
-};
-
-use crate::{
+    eureal::ConcreteEUReal,
+    forward_binary_op,
+    interpreted::FuncDef,
+    model::{InstrumentedModel, SmtEval, SmtEvalError},
     orders::{
         smt_max, smt_min, SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering, SmtPartialOrd,
     },
-    scope::SmtFresh,
+    scope::{SmtAlloc, SmtFresh},
     uint::UInt,
-    SmtBranch,
+    Factory, SmtBranch, SmtEq, SmtFactory, SmtInvariant, UReal,
 };
 
 /// This structure saves the necessary Z3 objects to construct and work with
@@ -174,7 +173,7 @@ impl<'ctx> EUReal<'ctx> {
     }
 }
 
-impl<'ctx> SmtAst<'ctx> for EUReal<'ctx> {
+impl<'ctx> SmtFactory<'ctx> for EUReal<'ctx> {
     type FactoryType = Rc<EURealFactory<'ctx>>;
 
     fn factory(&self) -> Factory<'ctx, Self> {
@@ -214,6 +213,20 @@ impl<'ctx> SmtBranch<'ctx> for EUReal<'ctx> {
         EUReal {
             factory: a.factory.clone(),
             value: Bool::ite(cond, &a.value, &b.value),
+        }
+    }
+}
+
+impl<'ctx> SmtEval<'ctx> for EUReal<'ctx> {
+    type Value = ConcreteEUReal;
+
+    fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
+        let is_infinite = self.is_infinity().eval(model)?;
+        if is_infinite {
+            Ok(ConcreteEUReal::Infinity)
+        } else {
+            let real = self.get_ureal().eval(model)?;
+            Ok(ConcreteEUReal::Real(real))
         }
     }
 }

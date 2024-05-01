@@ -1,6 +1,6 @@
 ---
 description: Induction and k-Induction are proof rules for while loops.
-sidebar_position: 1
+sidebar_position: 2
 ---
 
 # Induction and k-Induction
@@ -58,6 +58,7 @@ This program will not verify if `k` is set to `1` because the invariant `c + 1` 
 ## Soundness
 
 Using these proof rules is always *sound* in the following way: Both annotations will always *under-approximate greatest fixed-point* semantics when used in lower-bound contexts (`proc`) and *over-approximate  least fixed-point* loop semantics when used in upper-bound contexts (`coproc`).
+The [calculus annotations](./calculi.md) can help you make sure you are doing the right thing.
 
 If the invariants are not *inductive* in some initial state, i.e. are not maintained by the loop iteration(s), then the encodings will evaluate to `0` or `\infty` (`proc` and `coproc`, respectively) for that initial state.
 

@@ -7,7 +7,7 @@ use z3::{
     Context, Pattern,
 };
 
-use crate::{prover::Prover, Factory, SmtAst, SmtInvariant};
+use crate::{prover::Prover, Factory, SmtFactory, SmtInvariant};
 
 /// An SmtScope can be used to construct a quantifier like `forall` or `exists`.
 /// The scope has a list of bound expressions (usually just variables) and a
@@ -71,7 +71,7 @@ impl<'ctx> SmtScope<'ctx> {
             ctx,
             &self.bounds_dyn(),
             patterns,
-            &z3_and!(self.all_constraints(ctx), body),
+            &Bool::and(ctx, &[&self.all_constraints(ctx), &body]),
         )
     }
 
@@ -85,6 +85,10 @@ impl<'ctx> SmtScope<'ctx> {
             patterns,
             &self.all_constraints(ctx).implies(body),
         )
+    }
+
+    pub fn get_bounds(&self) -> impl Iterator<Item = &Dynamic<'ctx>> {
+        self.bounds.iter()
     }
 
     /// The Z3 Rust API needs the bounds as a vector of `&dyn Ast<'ctx>` and
@@ -144,7 +148,7 @@ impl<'ctx, 'a> SmtAlloc<'ctx, 'a> {
 ///
 /// Implementors of this trait should only implement [`SmtFresh::allocate`] and
 /// users should only use [`SmtFresh::fresh`].
-pub trait SmtFresh<'ctx>: Sized + SmtAst<'ctx> + SmtInvariant<'ctx> {
+pub trait SmtFresh<'ctx>: Sized + SmtFactory<'ctx> + SmtInvariant<'ctx> {
     /// Create a new instance of this type and prefix the created Z3 variable(s)
     /// with `prefix`. All created Z3 variables must be registered with the
     /// allocator so that quantification works correctly.

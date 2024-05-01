@@ -10,7 +10,7 @@ use z3::{
 use crate::{
     orders::SmtPartialOrd,
     scope::{SmtAlloc, SmtFresh, SmtScope},
-    Factory, SmtAst, SmtBranch, SmtEq, SmtInvariant, UInt,
+    Factory, SmtBranch, SmtEq, SmtFactory, SmtInvariant, UInt,
 };
 
 #[derive(Debug)]
@@ -140,7 +140,7 @@ impl<'ctx> List<'ctx> {
     }
 }
 
-impl<'ctx> SmtAst<'ctx> for List<'ctx> {
+impl<'ctx> SmtFactory<'ctx> for List<'ctx> {
     type FactoryType = Rc<ListFactory<'ctx>>;
 
     fn factory(&self) -> Factory<'ctx, Self> {

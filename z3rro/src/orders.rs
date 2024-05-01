@@ -14,7 +14,7 @@ use z3::{
     Pattern,
 };
 
-use crate::{scope::SmtAlloc, Factory, SmtAst, SmtInvariant};
+use crate::{scope::SmtAlloc, Factory, SmtFactory, SmtInvariant};
 
 use super::{
     scope::{SmtFresh, SmtScope},
@@ -101,18 +101,18 @@ where
 impl<'ctx> SmtPartialOrd<'ctx> for Bool<'ctx> {
     fn smt_cmp(&self, other: &Self, ordering: SmtOrdering) -> Bool<'ctx> {
         match ordering {
-            SmtOrdering::Less => z3_and!(self.not(), other),
+            SmtOrdering::Less => Bool::and(self.get_ctx(), &[&self.not(), &other]),
             SmtOrdering::LessOrEqual => self.implies(other),
             SmtOrdering::Equal => self._eq(other),
             SmtOrdering::GreaterOrEqual => other.implies(self),
-            SmtOrdering::Greater => z3_and!(self, other.not()),
+            SmtOrdering::Greater => z3_and!(self, &other.not()),
         }
     }
 }
 
 /// A bounded lattice with top and bottom elements and binary infimum and
 /// supremum.
-pub trait SmtLattice<'ctx>: SmtAst<'ctx> + SmtPartialOrd<'ctx> {
+pub trait SmtLattice<'ctx>: SmtFactory<'ctx> + SmtPartialOrd<'ctx> {
     fn bot(factory: &Factory<'ctx, Self>) -> Self;
 
     fn top(factory: &Factory<'ctx, Self>) -> Self;
@@ -263,7 +263,7 @@ impl<L> Opp<L> {
     }
 }
 
-impl<'ctx, L: SmtAst<'ctx>> SmtAst<'ctx> for Opp<L> {
+impl<'ctx, L: SmtFactory<'ctx>> SmtFactory<'ctx> for Opp<L> {
     type FactoryType = L::FactoryType;
 
     fn factory(&self) -> Factory<'ctx, Self> {

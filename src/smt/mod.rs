@@ -3,7 +3,7 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use z3::{ast::Bool, Context, Sort};
-use z3rro::{eureal::EURealSuperFactory, EUReal, Factory, ListFactory};
+use z3rro::{eureal::EURealSuperFactory, EUReal, Factory, ListFactory, SmtInvariant};
 
 use crate::{
     ast::{
@@ -15,6 +15,8 @@ use crate::{
 
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
 
+mod pretty_model;
+pub use pretty_model::{pretty_model, pretty_slice, PrettySliceMode};
 pub mod symbolic;
 mod symbols;
 pub mod translate_exprs;
@@ -198,7 +200,7 @@ fn ty_to_sort<'ctx>(ctx: &SmtCtx<'ctx>, ty: &TyKind) -> Sort<'ctx> {
             .unwrap()
             .clone(),
 
-        TyKind::SpecTy | TyKind::Unresolved(_) | TyKind::None => {
+        TyKind::String | TyKind::SpecTy | TyKind::Unresolved(_) | TyKind::None => {
             panic!("invalid type")
         }
     }

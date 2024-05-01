@@ -2,10 +2,9 @@
 //! This module provides these transformations.
 
 pub mod monotonicity;
-mod proc_verify;
+pub mod proc_verify;
 mod spec_call;
 
-pub use proc_verify::verify_proc;
 pub use spec_call::SpecCall;
 
 use crate::{
