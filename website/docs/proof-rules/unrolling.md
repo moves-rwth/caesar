@@ -1,6 +1,6 @@
 ---
 title: Loop Unrolling
-description: Loop unrolling, also known as bounded model checking.
+description: Loop unrolling and bounded model checking.
 sidebar_position: 3
 ---
 
