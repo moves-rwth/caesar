@@ -28,7 +28,6 @@ use z3rro::{
         SmtPartialOrd,
     },
     scope::SmtScope,
-    util::real_from_big_rational,
     List, SmtBranch, SmtEq, UInt, UReal,
 };
 
@@ -414,7 +413,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(lit) => match &lit.node {
                 LitKind::Frac(frac) => {
-                    UReal::unchecked_from_real(real_from_big_rational(self.ctx.ctx, frac))
+                    UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac))
                 }
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
@@ -502,7 +501,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 LitKind::Infinity => EUReal::infinity(self.ctx.eureal()),
                 LitKind::Frac(frac) => EUReal::from_ureal(
                     self.ctx.eureal(),
-                    &UReal::unchecked_from_real(real_from_big_rational(self.ctx.ctx, frac)),
+                    &UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac)),
                 ),
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },

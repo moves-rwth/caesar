@@ -1,12 +1,14 @@
 use std::{
-    fmt::{Display, Formatter},
-    io::Write,
+    borrow::Cow,
+    collections::HashMap,
+    fmt::{Display, Formatter, Write},
     str::FromStr,
     time::Duration,
 };
 
-use num::BigRational;
-use z3::{ast::Real, Context, Params, Solver};
+use num::{BigInt, BigRational, Integer, Signed, Zero};
+
+use z3::{Params, Solver};
 
 /// Build a conjunction of Boolean expressions.
 macro_rules! z3_and {
@@ -31,13 +33,6 @@ macro_rules! z3_or {
         }
     };
     ($( $x:expr ),*) => { z3_or!($($x,)*) }
-}
-
-// this function is present in the z3 crate, but they use an ancient version of `num`.
-pub fn real_from_big_rational<'ctx>(ctx: &'ctx Context, value: &BigRational) -> Real<'ctx> {
-    let num = value.numer();
-    let den = value.denom();
-    Real::from_real_str(ctx, &num.to_str_radix(10), &den.to_str_radix(10)).unwrap()
 }
 
 /// Create forwarding trait implementations for a binary operator that use an
@@ -104,7 +99,7 @@ impl<'a, W> PrefixWriter<'a, W> {
     }
 }
 
-impl<'a, W: Write> Write for PrefixWriter<'a, W> {
+impl<'a, W: std::io::Write> std::io::Write for PrefixWriter<'a, W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         for line in buf.split_inclusive(|c| *c == b'\n') {
             if self.line_start {
@@ -174,5 +169,50 @@ mod test {
             let parsed_fmt = format!("{}", value).parse::<ReasonUnknown>().unwrap();
             assert_eq!(value, &parsed_fmt);
         }
+    }
+}
+
+/// Pretty-printing wrapper type for [`BigRational`] values. This type's
+/// [`Display`] instance will format this value exactly as a decimal. If the
+/// rational is not a terminating fraction, the repeating fraction will be
+/// displayed alongside the original fraction.
+#[derive(Debug)]
+pub struct PrettyRational<'a>(pub Cow<'a, BigRational>);
+
+impl<'a> Display for PrettyRational<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_negative() {
+            write!(f, "-")?;
+        }
+        let abs = self.0.abs();
+        let (div, mut rem) = abs.numer().div_rem(abs.denom());
+        write!(f, "{}", div)?;
+
+        let mut frac = String::new();
+        let mut map = HashMap::new();
+        let ten = &BigInt::from(10);
+        while !rem.is_zero() && !map.contains_key(&rem) {
+            map.insert(rem.clone(), frac.len());
+            let (div, new_rem) = (rem * ten).div_rem(abs.denom());
+            write!(&mut frac, "{}", div)?;
+            rem = new_rem;
+        }
+
+        if rem.is_zero() {
+            if !frac.is_empty() {
+                write!(f, ".{}", frac)?;
+            }
+        } else {
+            write!(f, ".{}", &frac[..map[&rem]])?;
+            for ch in frac[map[&rem]..].chars() {
+                // combine with COMBINING OVERLINE unicode
+                write!(f, "{}\u{0305}", ch)?;
+            }
+
+            // write the original fraction in parentheses if we couldn't get a
+            // terminating decimal
+            write!(f, " ({})", self.0)?;
+        }
+        Ok(())
     }
 }
