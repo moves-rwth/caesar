@@ -269,8 +269,6 @@ pub enum VerifyError {
 }
 
 /// Verify a list of `user_files`. The `options.files` value is ignored here.
-/// This function should be used when Caesar is invoked from Rust and not on the
-/// command-line, such as in tests.
 pub async fn verify_files(
     options: &Arc<Options>,
     files: &Arc<Mutex<Files>>,
@@ -280,7 +278,13 @@ pub async fn verify_files(
         let options = options.clone();
         let files = files.clone();
         tokio::task::spawn_blocking(move || {
-            verify_files_main(&options, limits_ref, &files, &user_files)
+            // execute the verifier with a larger stack size of 50MB. the
+            // default stack size might be quite small and we need to do quite a
+            // lot of recursion.
+            let stack_size = 50 * 1024 * 1024;
+            stacker::maybe_grow(stack_size, stack_size, || {
+                verify_files_main(&options, limits_ref, &files, &user_files)
+            })
         })
     };
     // Unpacking lots of Results with `.await??` :-)
