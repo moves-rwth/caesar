@@ -12,18 +12,18 @@ mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-/// Return a String that describes this crate's version, including a Git commit hash.
+/// Return a String that describes the currently built version of Caesar.
 pub fn self_version_info() -> String {
-    if let Some(git_version) = built_info::GIT_VERSION {
-        let mut git_version = git_version.to_string();
-        if built_info::GIT_DIRTY.unwrap_or(false) {
-            git_version.push_str("-dirty");
-        }
-        format!("{} ({})", env!("CARGO_PKG_VERSION"), git_version)
+    let cargo_version = env!("CARGO_PKG_VERSION");
+    if let Some(git_commit) = built_info::GIT_COMMIT_HASH {
+        let dirty_suffix = if built_info::GIT_DIRTY.unwrap_or(false) {
+            ", dirty"
+        } else {
+            ""
+        };
+        format!("{} ({}{})", cargo_version, git_commit, dirty_suffix)
     } else {
-        // if git is not installed or we're in a shallow checkout (e.g. in CI),
-        // then GIT_VERSION is None. So use a fallback then.
-        env!("CARGO_PKG_VERSION").to_string()
+        format!("{} (no git info)", cargo_version)
     }
 }
 
@@ -45,12 +45,20 @@ where
     };
     writeln!(w, "Command: {}", command)?;
     writeln!(w, "Caesar version: {}", self_version_info())?;
+
+    write!(w, "Build: {}", built_info::BUILT_TIME_UTC)?;
+    if let Some(ci_platform) = built_info::CI_PLATFORM {
+        write!(w, " ({})", ci_platform)?;
+    }
+    writeln!(w)?;
+
     writeln!(
         w,
-        "Profile: {}. Features: {}. Target: {}",
+        "Profile: {}. Features: {}. Target: {}, Host: {}",
         built_info::PROFILE,
         built_info::FEATURES_STR,
-        built_info::TARGET
+        built_info::TARGET,
+        built_info::HOST
     )?;
     writeln!(w, "Z3 version: {}", z3_version_info())?;
     writeln!(w)

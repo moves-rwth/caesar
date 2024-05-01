@@ -1,6 +1,3 @@
 target
 .DS_Store
 benchmark-results.csv
-
-# .dockerignore is symlinked to the .gitignore, so this line is useful:
-.git
