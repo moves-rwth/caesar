@@ -31,14 +31,14 @@ pub fn encode_spec(
     ]
 }
 
-/// Encode the extend step in k-induction and bmc recursively for k times
+/// Encode the extend step in k-induction and bmc recursively for k times:
+///
 /// # Arguments
 /// * `span` - The span of the new generated statement
 /// * `inner_stmt` - A While statement to be encoded
 /// * `k` - How many times the loop will be extended
 /// * `invariant` - The invariant which will be used in assert statements
 /// * `direction` - The direction of the statements in the extend
-/// * `bmc` - Whether the extension is for bmc of k-induction
 /// * `next_iter` - Parameter necessary for the recursion
 pub fn encode_extend(
     span: Span,
@@ -46,29 +46,31 @@ pub fn encode_extend(
     k: u128,
     invariant: &Expr,
     direction: Direction,
-    bmc: bool,
     next_iter: Vec<Stmt>,
 ) -> Vec<Stmt> {
     if k == 0 {
         return next_iter;
     }
-    let next_iter = encode_extend(
-        span,
-        inner_stmt,
-        k - 1,
-        invariant,
-        direction,
-        bmc,
-        next_iter,
-    );
-    if bmc {
-        vec![encode_iter(span, inner_stmt, next_iter).unwrap()]
-    } else {
-        vec![
-            Spanned::new(span, StmtKind::Assert(direction, invariant.clone())),
-            encode_iter(span, inner_stmt, next_iter).unwrap(),
-        ]
+    let next_iter = encode_extend(span, inner_stmt, k - 1, invariant, direction, next_iter);
+    vec![
+        Spanned::new(span, StmtKind::Assert(direction, invariant.clone())),
+        encode_iter(span, inner_stmt, next_iter).unwrap(),
+    ]
+}
+
+/// Encode the extend step in bmc recursively for k times:
+///
+/// # Arguments
+/// * `span` - The span of the new generated statement
+/// * `inner_stmt` - A While statement to be encoded
+/// * `k` - How many times the loop will be extended
+/// * `next_iter` - Parameter necessary for the recursion
+pub fn encode_unroll(span: Span, inner_stmt: &Stmt, k: u128, next_iter: Vec<Stmt>) -> Vec<Stmt> {
+    if k == 0 {
+        return next_iter;
     }
+    let next_iter = encode_unroll(span, inner_stmt, k - 1, next_iter);
+    vec![encode_iter(span, inner_stmt, next_iter).unwrap()]
 }
 
 /// Encode one iteration of a while loop with an if then else statement
@@ -85,14 +87,15 @@ pub fn encode_iter(span: Span, stmt: &Stmt, next_iter: Vec<Stmt>) -> Option<Stmt
 }
 
 /// Constant program which always evaluates to the given expression
-pub fn hey_const(span: Span, expr: &Expr, tcx: &TyCtx) -> Vec<Stmt> {
+pub fn hey_const(span: Span, expr: &Expr, direction: Direction, tcx: &TyCtx) -> Vec<Stmt> {
     let builder = ExprBuilder::new(span);
+    let extreme_lit = match direction {
+        Direction::Up => builder.top_lit(tcx.spec_ty()),
+        Direction::Down => builder.bot_lit(tcx.spec_ty()),
+    };
     vec![
-        Spanned::new(span, StmtKind::Assert(Direction::Down, expr.clone())),
-        Spanned::new(
-            span,
-            StmtKind::Assume(Direction::Down, builder.bot_lit(tcx.spec_ty())),
-        ),
+        Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
+        Spanned::new(span, StmtKind::Assume(direction, extreme_lit)),
     ]
 }
 
@@ -155,6 +158,7 @@ pub fn get_init_idents(tcx: &TyCtx, span: Span, idents: &[Ident]) -> Vec<Ident> 
 
 /// Construct multiple [`StmtKind::Assign`] expressions sequentially
 pub fn multiple_assign(span: Span, lhses: Vec<Ident>, rhses: Vec<Expr>) -> Vec<Stmt> {
+    assert_eq!(lhses.len(), rhses.len());
     let mut buf: Vec<Stmt> = vec![];
     lhses.iter().zip(rhses).for_each(|(lhs, rhs)| {
         let stmt = Spanned::new(span, StmtKind::Assign(vec![*lhs], rhs));
@@ -220,6 +224,7 @@ pub fn generate_proc(
         spec: proc_info.spec,
         body: RefCell::new(Some(proc_info.body)),
         span,
+        calculus: None,
     }));
 
     tcx.declare(decl.clone());

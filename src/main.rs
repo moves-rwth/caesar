@@ -24,7 +24,7 @@ use crate::{
 };
 use ast::{Diagnostic, Expr, FileId, Files, SourceFilePath};
 use driver::{Item, SourceUnit, SourceUnitName, VcUnit, VerifyUnit};
-use intrinsic::{distributions::init_distributions, list::init_lists};
+use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use opt::{boolify::Boolify, RemoveParens};
 use procs::add_default_specs;
 use proof_rules::init_encodings;
@@ -46,6 +46,7 @@ use z3rro::{
 };
 
 pub mod ast;
+// mod calculi;
 mod driver;
 pub mod front;
 pub mod intrinsic;
@@ -304,6 +305,7 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
 
     // 2. Resolving (and declaring) idents
     let mut tcx = TyCtx::new(TyKind::EUReal);
+    init_calculi(&mut files, &mut tcx);
     init_encodings(&mut files, &mut tcx);
     init_distributions(&mut files, &mut tcx);
     init_lists(&mut files, &mut tcx);
@@ -384,6 +386,7 @@ fn verify_files_main(
 
     // 2. Resolving (and declaring) idents
     let mut tcx = TyCtx::new(TyKind::EUReal);
+    init_calculi(&mut files, &mut tcx);
     init_encodings(&mut files, &mut tcx);
     init_distributions(&mut files, &mut tcx);
     init_lists(&mut files, &mut tcx);
@@ -423,6 +426,7 @@ fn verify_files_main(
         }
     }
 
+    // Desugar encodings from source units
     let mut source_units_buf = vec![];
 
     for source_unit in &mut source_units {

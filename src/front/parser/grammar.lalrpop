@@ -225,16 +225,20 @@ AnnotationInputs: Vec<Expr> = {
 // ---------------------------------------
 // Declarations
 
-pub Decl: DeclKind = {
+pub Decl: DeclKind = { 
     <proc: ProcDecl> => DeclKind::ProcDecl(DeclRef::new(proc)),
     <domain: DomainDecl> => DeclKind::DomainDecl(DeclRef::new(domain)),
 }
 
 ProcDecl: ProcDecl = {
     <l: @L> "proc" <name: Ident> <inputs: ParamList> "->" <outputs: ParamList> <spec: ProcSpec*> <body: Block?> <r: @R>
-         => ProcDecl { direction: Direction::Down, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r) },
+         => ProcDecl { direction: Direction::Down, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r), calculus: None },
     <l: @L> "coproc" <name: Ident> <inputs: ParamList> "->" <outputs: ParamList> <spec: ProcSpec*> <body: Block?> <r: @R>
-         => ProcDecl { direction: Direction::Up, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r) }
+         => ProcDecl { direction: Direction::Up, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r), calculus: None },
+    <l: @L> "@" <anno: Ident> "proc" <name: Ident> <inputs: ParamList> "->" <outputs: ParamList> <spec: ProcSpec*> <body: Block?> <r: @R>
+         => ProcDecl { direction: Direction::Down, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r), calculus: Some(anno) },
+    <l: @L> "@" <anno: Ident> "coproc" <name: Ident> <inputs: ParamList> "->" <outputs: ParamList> <spec: ProcSpec*> <body: Block?> <r: @R>
+         => ProcDecl { direction: Direction::Up, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r), calculus: Some(anno) }
 }
 
 ParamList: Spanned<Vec<Param>> = {

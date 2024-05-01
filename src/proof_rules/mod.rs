@@ -1,7 +1,7 @@
 //! This module provides annotations that encode proof rules and their desugaring transformations.
 
 mod induction;
-use induction::*;
+pub use induction::*;
 mod unroll;
 use unroll::*;
 mod mciver_ast;
@@ -22,15 +22,15 @@ use std::{fmt, rc::Rc};
 use crate::{
     ast::{
         visit::{walk_stmt, VisitorMut},
-        DeclKind, Direction, Expr, Files, Ident, Param, ProcSpec, SourceFilePath, Span, Stmt,
-        StmtKind,
+        DeclKind, DeclRef, Direction, Expr, Files, Ident, Param, ProcDecl, ProcSpec,
+        SourceFilePath, Span, Stmt, StmtKind,
     },
     driver::{Item, SourceUnit},
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{AnnotationError, AnnotationKind},
+    intrinsic::annotations::{AnnotationError, AnnotationKind, Calculus},
     tyctx::TyCtx,
 };
 
@@ -86,6 +86,9 @@ pub trait Encoding: fmt::Debug {
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError>;
 
+    /// Check if the given calculus annotation is compatible with the encoding annotation
+    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool;
+
     /// Indicates if the encoding annotation is required to be the last statement of a procedure
     fn is_terminator(&self) -> bool;
 }
@@ -129,6 +132,7 @@ pub struct EncCall<'tcx, 'sunit> {
     terminator_annotation: Option<Ident>,
     nesting_level: usize,
     current_proc_ident: Option<Ident>,
+    calculus: Option<Calculus>,
 }
 
 impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
@@ -140,6 +144,7 @@ impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
             terminator_annotation: None,
             nesting_level: 0,
             current_proc_ident: None,
+            calculus: None,
         }
     }
 }
@@ -147,12 +152,34 @@ impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
 impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
     type Err = AnnotationError;
 
-    fn visit_decl(&mut self, decl: &mut DeclKind) -> Result<(), Self::Err> {
-        if let DeclKind::ProcDecl(decl_ref) = decl {
-            self.direction = Some(decl_ref.borrow().direction);
-            self.current_proc_ident = Some(decl_ref.borrow().name);
-            self.visit_proc(decl_ref)?;
+    fn visit_proc(&mut self, proc_ref: &mut DeclRef<ProcDecl>) -> Result<(), Self::Err> {
+        self.direction = Some(proc_ref.borrow().direction);
+        self.current_proc_ident = Some(proc_ref.borrow().name);
+
+        // If the procedure has a calculus annotation, store it as the current calculus
+        if let Some(ident) = proc_ref.borrow().calculus.as_ref() {
+            match self.tcx.get(*ident) {
+                Some(decl) => {
+                    if let DeclKind::AnnotationDecl(AnnotationKind::Calculus(calculus)) =
+                        decl.as_ref()
+                    {
+                        self.calculus = Some(calculus.clone());
+                    }
+                }
+                None => {
+                    return Err(AnnotationError::UnknownAnnotation(
+                        proc_ref.borrow().span,
+                        *ident,
+                    ))
+                }
+            }
         }
+        let proc = proc_ref.borrow_mut();
+        let mut body = proc.body.borrow_mut();
+        if let Some(ref mut block) = &mut *body {
+            self.visit_stmts(block)?;
+        }
+
         Ok(())
     }
 
@@ -181,6 +208,23 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                     if anno_ref.is_terminator() && self.nesting_level > 0 {
                         return Err(AnnotationError::NotTerminator(s.span, anno_ref.name()));
                     }
+
+                    // Check if the calculus annotation is compatible with the encoding annotation
+                    if let Some(calculus) = &self.calculus {
+                        // If calculus is not allowed, return an error
+                        if !anno_ref.is_calculus_allowed(
+                            calculus,
+                            self.direction
+                                .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,
+                        ) {
+                            return Err(AnnotationError::CalculusEncodingMismatch(
+                                s.span,
+                                calculus.name,
+                                anno_ref.name(),
+                            ));
+                        };
+                    }
+
                     let enc_env = EncodingEnvironment {
                         base_proc_ident: self
                             .current_proc_ident

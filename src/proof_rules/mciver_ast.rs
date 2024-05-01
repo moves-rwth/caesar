@@ -22,7 +22,9 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{check_annotation_call, AnnotationError, AnnotationInfo},
+    intrinsic::annotations::{
+        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+    },
     tyctx::TyCtx,
 };
 
@@ -30,7 +32,7 @@ use super::{Encoding, EncodingEnvironment, EncodingGenerated, ProcInfo};
 
 use super::util::*;
 
-pub struct ASTAnnotation(AnnotationInfo);
+pub struct ASTAnnotation(AnnotationDecl);
 
 impl ASTAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -44,7 +46,7 @@ impl ASTAnnotation {
         let prob_param = intrinsic_param(file, "prob", TyKind::UReal, false);
         let decr_param = intrinsic_param(file, "decrease", TyKind::UReal, false);
 
-        let anno_info = AnnotationInfo {
+        let anno_decl = AnnotationDecl {
             name,
             inputs: Spanned::with_dummy_file_span(
                 vec![
@@ -59,7 +61,7 @@ impl ASTAnnotation {
             span: Span::dummy_file_span(file),
         };
 
-        ASTAnnotation(anno_info)
+        ASTAnnotation(anno_decl)
     }
 }
 
@@ -115,6 +117,10 @@ impl Encoding for ASTAnnotation {
     ) -> Result<(), TycheckError> {
         check_annotation_call(tycheck, call_span, &self.0, args)?;
         Ok(())
+    }
+
+    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
+        matches!(calculus.calculus_type, CalculusType::Wp) && direction == Direction::Down
     }
 
     fn transform(

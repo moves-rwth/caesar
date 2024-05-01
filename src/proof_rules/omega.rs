@@ -18,7 +18,9 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{check_annotation_call, AnnotationError, AnnotationInfo},
+    intrinsic::annotations::{
+        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+    },
     tyctx::TyCtx,
 };
 
@@ -26,7 +28,7 @@ use super::{Encoding, EncodingEnvironment, EncodingGenerated};
 
 use super::util::*;
 
-pub struct OmegaInvAnnotation(AnnotationInfo);
+pub struct OmegaInvAnnotation(AnnotationDecl);
 
 impl OmegaInvAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -39,13 +41,13 @@ impl OmegaInvAnnotation {
         let omega_inv_param = intrinsic_param(file, "omega_inv", TyKind::EUReal, false);
         let free_var_param = intrinsic_param(file, "free_variable", TyKind::UInt, false);
 
-        let anno_info = AnnotationInfo {
+        let anno_decl = AnnotationDecl {
             name,
             inputs: Spanned::with_dummy_file_span(vec![free_var_param, omega_inv_param], file),
             span: Span::dummy_file_span(file),
         };
 
-        OmegaInvAnnotation(anno_info)
+        OmegaInvAnnotation(anno_decl)
     }
 }
 
@@ -94,6 +96,14 @@ impl Encoding for OmegaInvAnnotation {
         resolve.visit_expr(omega_inv)
     }
 
+    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
+        matches!(
+            (&calculus.calculus_type, direction),
+            (CalculusType::Wp | CalculusType::Ert, Direction::Down)
+                | (CalculusType::Wlp, Direction::Up)
+        )
+    }
+
     fn transform(
         &self,
         tcx: &TyCtx,
@@ -137,7 +147,7 @@ impl Encoding for OmegaInvAnnotation {
         let iter = encode_iter(
             annotation_span,
             inner_stmt,
-            hey_const(annotation_span, omega_inv, tcx),
+            hey_const(annotation_span, omega_inv, direction, tcx),
         )
         .unwrap();
 
@@ -148,6 +158,7 @@ impl Encoding for OmegaInvAnnotation {
             hey_const(
                 annotation_span,
                 &builder.cast(tcx.spec_ty().clone(), builder.uint(0)),
+                direction,
                 tcx,
             ),
         )
