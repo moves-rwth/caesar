@@ -453,7 +453,7 @@ fn verify_files_main(
             let files = files_mutex.lock().unwrap();
             print_warning(options, &files, err)?;
         }
-        write_jani_file(&options, entered.deref())?;
+        write_jani_file(options, entered.deref())?;
     }
 
     // Desugar encodings from source units
