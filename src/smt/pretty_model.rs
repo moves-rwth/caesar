@@ -12,7 +12,7 @@ use crate::{
     },
     driver::VcUnit,
     pretty::Doc,
-    slicing::solver::{SliceModel, SliceResult},
+    slicing::solver::{SliceMode, SliceModel, SliceResult},
     smt::translate_exprs::TranslateExprs,
 };
 
@@ -36,15 +36,11 @@ pub fn pretty_model<'smt, 'ctx>(
         res.push(unaccessed);
     }
 
-    res.push(print_vc_value(vc_expr, translate, model));
-
     if let Some(slice_lines) = slice_lines {
         res.push(slice_lines);
     }
 
-    // objects accessed during vc evaluation do not contribute towards the
-    // unaccessed list
-    model.reset_accessed();
+    res.push(print_vc_value(vc_expr, translate, model, slice_model));
 
     let doc = Doc::intersperse(res, Doc::line_().append(Doc::line_())).append(Doc::line_());
     doc
@@ -54,11 +50,30 @@ fn print_vc_value<'smt, 'ctx>(
     vc_expr: &VcUnit,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     model: &InstrumentedModel<'ctx>,
+    slice_model: &SliceModel,
 ) -> Doc {
+    let text = if slice_model.count_sliced_stmts() > 0 {
+        "in the sliced program, the pre-quantity evaluated to:"
+    } else {
+        "the pre-quantity evaluated to:"
+    };
+
     let ast = translate.t_symbolic(&vc_expr.expr);
     let value = ast.eval(model);
-    let res = pretty_eval_result(value);
-    Doc::text("the pre-quantity evaluated to:").append(Doc::hardline().append(res).nest(4))
+    let mut res = pretty_eval_result(value);
+
+    // add a note if the computed pre-quantity is affected by slicing. this can
+    // only happen when we slice for errors (otherwise we don't compute the
+    // pre-quantity).
+    let num_sliced_stmts = slice_model.count_sliced_stmts();
+    if slice_model.mode() == SliceMode::Error && num_sliced_stmts > 0 {
+        res = res.append(Doc::line_()).append(Doc::text(format!(
+            "(slicing removed {} statements. disable with option --no-slice-error)",
+            num_sliced_stmts
+        )));
+    }
+
+    Doc::text(text).append(Doc::hardline().append(res).nest(4))
 }
 
 fn pretty_globals<'smt, 'ctx>(

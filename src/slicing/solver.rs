@@ -378,4 +378,18 @@ impl SliceModel {
             Some((stmt.statement, res))
         })
     }
+
+    /// Return the slice mode.
+    pub fn mode(&self) -> SliceMode {
+        self.mode
+    }
+
+    /// Whether this model has sliced any statements (true) or whether we have
+    /// not sliced any statements (false).
+    pub fn count_sliced_stmts(&self) -> usize {
+        self.stmts
+            .iter()
+            .filter(|(_span, result)| matches!(result, Ok(false)))
+            .count()
+    }
 }

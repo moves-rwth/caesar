@@ -790,7 +790,7 @@ fn print_prove_result<'smt, 'ctx>(
                     println!("    {}", String::from_utf8(w).unwrap());
                 }
             }
-        },
+        }
         ProveResult::Counterexample(model) => {
             let slice_model = slice_model.as_ref().unwrap();
             println!("{}: Counter-example to verification found!", name);
