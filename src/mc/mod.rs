@@ -7,6 +7,7 @@ mod specs;
 
 use std::{convert::TryInto, mem};
 
+use ariadne::ReportKind;
 use jani::{
     exprs::{
         BinaryExpression, BinaryOp, ConstantValue, Expression, IteExpression, UnaryExpression,
@@ -22,8 +23,8 @@ use jani::{
 
 use crate::{
     ast::{
-        visit::VisitorMut, BinOpKind, DeclRef, Expr, ExprBuilder, ExprKind, Ident, LitKind,
-        ProcDecl, Span, Stmt, TyKind, UnOpKind, VarDecl,
+        visit::VisitorMut, BinOpKind, DeclRef, Diagnostic, Expr, ExprBuilder, ExprKind, Ident,
+        Label, LitKind, ProcDecl, Span, Stmt, TyKind, UnOpKind, VarDecl,
     },
     procs::proc_verify::verify_proc,
     version::self_version_info,
@@ -44,6 +45,51 @@ pub enum JaniConversionError {
     NondetSelection(Span),
     MismatchedDirection(Span),
     UnsupportedCall(Span, Ident),
+}
+
+impl JaniConversionError {
+    pub fn diagnostic(&self) -> Diagnostic {
+        match &self {
+            JaniConversionError::UnsupportedType(ty, span) => {
+                Diagnostic::new(ReportKind::Error, *span)
+                    .with_message(format!("JANI: Type {} is not supported", ty))
+                    .with_label(Label::new(*span).with_message("here"))
+            }
+            JaniConversionError::UnsupportedExpr(expr) => {
+                Diagnostic::new(ReportKind::Error, expr.span)
+                    .with_message("JANI: Expression is not supported")
+                    .with_label(Label::new(expr.span).with_message("here"))
+            }
+            JaniConversionError::UnsupportedStmt(stmt) => {
+                Diagnostic::new(ReportKind::Error, stmt.span)
+                    .with_message("JANI: Statement is not supported")
+                    .with_label(Label::new(stmt.span).with_message("here"))
+            }
+            JaniConversionError::UnsupportedAssume(expr) => {
+                Diagnostic::new(ReportKind::Error, expr.span)
+                    .with_message("JANI: Assumption must be a Boolean expression")
+                    .with_label(Label::new(expr.span).with_message("expected ?(b) here"))
+            }
+            JaniConversionError::UnsupportedAssert(expr) => {
+                Diagnostic::new(ReportKind::Error, expr.span)
+                    .with_message("JANI: Assertion must be a Boolean expression")
+                    .with_label(Label::new(expr.span).with_message("expected ?(b) here"))
+            }
+            JaniConversionError::NondetSelection(span) => Diagnostic::new(ReportKind::Error, *span)
+                .with_message("JANI: All variables must be initialized")
+                .with_label(Label::new(*span).with_message("missing initializer")),
+            JaniConversionError::MismatchedDirection(span) => {
+                Diagnostic::new(ReportKind::Error, *span)
+                    .with_message("JANI: Statement of other direction expected")
+                    .with_label(Label::new(*span).with_message("here"))
+            }
+            JaniConversionError::UnsupportedCall(span, ident) => {
+                Diagnostic::new(ReportKind::Error, *span)
+                    .with_message(format!("JANI: Cannot call '{}'", ident.name))
+                    .with_label(Label::new(*span).with_message("here"))
+            }
+        }
+    }
 }
 
 #[allow(clippy::field_reassign_with_default)]

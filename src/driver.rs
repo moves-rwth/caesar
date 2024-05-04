@@ -24,6 +24,7 @@ use crate::{
         RemoveParens,
     },
     pretty::{Doc, SimplePretty},
+    print_diagnostic,
     procs::{
         monotonicity::MonotonicityVisitor,
         proc_verify::{to_direction_lower_bounds, verify_proc},
@@ -296,7 +297,11 @@ impl SourceUnit {
     }
 
     /// Encode the source unit as a JANI file if requested.
-    pub fn write_to_jani_if_requested(&self, options: &Options) -> Result<(), VerifyError> {
+    pub fn write_to_jani_if_requested(
+        &self,
+        options: &Options,
+        files: &Mutex<Files>,
+    ) -> Result<(), VerifyError> {
         if let Some(jani_dir) = &options.jani_dir {
             match self {
                 SourceUnit::Decl(decl) => {
@@ -305,12 +310,8 @@ impl SourceUnit {
                         let jani_model = match jani_model {
                             Ok(jani_model) => jani_model,
                             Err(err) => {
-                                // TODO: proper formatting of errors
-                                tracing::error!(
-                                    "Error creating JANI model for {}: {:?}",
-                                    decl.name(),
-                                    err
-                                );
+                                let files = files.lock().unwrap();
+                                print_diagnostic(&files, err.diagnostic())?;
                                 return Ok(());
                             }
                         };
