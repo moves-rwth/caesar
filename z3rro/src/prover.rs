@@ -161,11 +161,12 @@ impl<'ctx> Prover<'ctx> {
     }
 
     /// Create an exists-forall solver. All constants provided in the iterator
-    /// will be universally quantified. The rest will be existentially quantified.
+    /// will be universally quantified. The rest will be existentially
+    /// quantified.
     ///
     /// The result is a [`Prover`] for convenience (such as using the
-    /// [`levels()`] function), but it should be used as a [`Solver`] via
-    /// [`check_sat()`].
+    /// [`Self::level()`] function), but it should be used as a [`Solver`] via
+    /// [`Self::check_sat()`].
     pub fn to_exists_forall(&self, universal: &[Dynamic<'ctx>]) -> Prover<'ctx> {
         // TODO: what about the params?
         let ctx = self.solver.get_context();

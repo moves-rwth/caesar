@@ -105,8 +105,9 @@ impl<'ctx> SliceSolver<'ctx> {
         &self.prover
     }
 
+    /*
     /// Run [`check_original_proof`] on the original query, without slicing anything.
-    /*     pub fn check_original_proof(&mut self) -> ProveResult<'ctx> {
+    pub fn check_original_proof(&mut self) -> ProveResult<'ctx> {
         self.prover.pop();
         self.prover.push();
         let active_toggle_values: Vec<_> = self

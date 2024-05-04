@@ -48,12 +48,12 @@ pub struct SliceStmt {
 }
 
 impl SliceStmt {
-    /// See [`Selection::success_message`].
+    /// See [`SliceSelection::success_message`].
     pub fn success_message(&self) -> Option<Symbol> {
         self.selection.success_message
     }
 
-    /// See [`Selection::failure_message`].
+    /// See [`SliceSelection::failure_message`].
     pub fn failure_message(&self) -> Option<Symbol> {
         self.selection.failure_message
     }

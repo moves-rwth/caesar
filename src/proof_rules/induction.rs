@@ -332,7 +332,7 @@ fn park_iteration_terminator(
 
 /// HeyVL statements which always evaluate to `expr`, used as terminating
 /// statements in the loop iteration. This is like
-/// [`park_termination_iterator`], but without the error messages. It is used
+/// [`park_iteration_terminator`], but without the error messages. It is used
 /// for k-Induction.
 fn iteration_terminator(span: Span, expr: &Expr, direction: Direction, tcx: &TyCtx) -> Vec<Stmt> {
     let builder = ExprBuilder::new(span);

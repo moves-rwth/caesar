@@ -29,7 +29,7 @@ pub type EUReal<'ctx> = datatype::EUReal<'ctx>;
 /// only the rationals.
 ///
 /// These values can be created using [`EUReal`]s implementation of the
-/// [`z3rro::eval::SmtEval`] trait.
+/// [`crate::model::SmtEval`] trait.
 #[derive(Debug)]
 pub enum ConcreteEUReal {
     Infinity,

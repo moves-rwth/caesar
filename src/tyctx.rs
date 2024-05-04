@@ -87,7 +87,7 @@ impl TyCtx {
     }
 
     /// Generate a fresh variable declaration from an existing variable declaration with the given `var_kind`.
-    /// Uses [`fresh_ident`](fn@fresh_ident) to generate a new name for the variable.
+    /// Uses [`Self::fresh_ident()`] to generate a new name for the variable.
     pub fn clone_var(&self, ident: Ident, span: Span, var_kind: VarKind) -> Ident {
         let new_ident = self.fresh_ident(ident, span);
 
