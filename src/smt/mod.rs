@@ -16,7 +16,7 @@ use crate::{
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
 
 mod pretty_model;
-pub use pretty_model::{pretty_model, pretty_slice, PrettySliceMode};
+pub use pretty_model::{pretty_model, pretty_slice};
 pub mod symbolic;
 mod symbols;
 pub mod translate_exprs;

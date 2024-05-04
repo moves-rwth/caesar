@@ -113,7 +113,7 @@ impl<'ctx> Display for InstrumentedModel<'ctx> {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum SmtEvalError {
     #[error("solver failed to evaluate a value")]
     EvalError,

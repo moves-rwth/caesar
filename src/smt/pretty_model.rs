@@ -3,7 +3,7 @@
 use std::{collections::BTreeMap, fmt::Display, rc::Rc};
 
 use itertools::Itertools;
-use z3rro::model::{InstrumentedModel, SmtEval, SmtEvalError};
+use z3rro::model::{InstrumentedModel, SmtEvalError};
 
 use crate::{
     ast::{
@@ -12,15 +12,14 @@ use crate::{
     },
     driver::VcUnit,
     pretty::Doc,
-    slicing::{selection::SliceSelection, transform::SliceStmts},
+    slicing::solver::{SliceModel, SliceResult},
     smt::translate_exprs::TranslateExprs,
 };
 
 /// Pretty-print a model.
 pub fn pretty_model<'smt, 'ctx>(
     files: &Files,
-    slice_stmts: &SliceStmts,
-    selection: SliceSelection,
+    slice_model: &SliceModel,
     vc_expr: &VcUnit,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     model: &mut InstrumentedModel<'ctx>,
@@ -30,14 +29,7 @@ pub fn pretty_model<'smt, 'ctx>(
     // Print the values of the global variables in the model.
     pretty_globals(translate, model, files, &mut res);
 
-    let slice_lines = pretty_slice(
-        files,
-        translate,
-        slice_stmts,
-        selection,
-        model,
-        PrettySliceMode::Error,
-    );
+    let slice_lines = pretty_slice(files, slice_model);
 
     // Print the unaccessed definitions.
     if let Some(unaccessed) = pretty_unaccessed(model) {
@@ -108,7 +100,7 @@ fn pretty_globals<'smt, 'ctx>(
                 let value = pretty_var(translate, ident, model);
 
                 // pretty print the span of this variable declaration
-                let span = pretty_span(files, ident);
+                let span = pretty_span(files, ident.span);
 
                 lines.push(
                     Doc::text(format!("{}: ", var_decl.original_name()))
@@ -148,8 +140,8 @@ where
     }
 }
 
-fn pretty_span(files: &Files, ident: Ident) -> Doc {
-    if let Some(text) = files.format_span_start(ident.span) {
+fn pretty_span(files: &Files, span: Span) -> Doc {
+    if let Some(text) = files.format_span_start(span) {
         let text = format!("({})", text);
         let note_len = text.chars().count();
 
@@ -169,71 +161,26 @@ fn pretty_span(files: &Files, ident: Ident) -> Doc {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum PrettySliceMode {
-    Verify,
-    Error,
-}
-
-pub fn pretty_slice<'smt, 'ctx>(
-    files: &Files,
-    translate: &mut TranslateExprs<'smt, 'ctx>,
-    slice_stmts: &SliceStmts,
-    selection: SliceSelection,
-    model: &InstrumentedModel<'ctx>,
-    mode: PrettySliceMode,
-) -> Option<Doc> {
-    let values = slice_stmts
-        .stmts
-        .iter()
-        .map(|slice_stmt| {
-            let builder = ExprBuilder::new(Span::dummy_span());
-            let symbolic = translate.t_bool(&builder.var(slice_stmt.ident, translate.ctx.tcx));
-            let status = model.atomically(|| symbolic.eval(model));
-            (slice_stmt, status)
-        })
-        // first evaluate, then filter to access all slice variables in the
-        // model. otherwise we'd get "extra definitions" for the filtered ones
-        // in the model output
-        .filter(|(stmt, _status)| selection.enables(&stmt.selection))
-        .collect_vec();
-
+pub fn pretty_slice(files: &Files, slice_model: &SliceModel) -> Option<Doc> {
     let mut lines: Vec<Doc> = vec![];
-    for (stmt, status) in values {
-        let ident = stmt.ident;
-        if let Some((_file, line_number, _col_number)) = files.get_human_span(ident.span) {
-            let line = match status {
-                Ok(true) => {
-                    if let Some(msg) = stmt.failure_message() {
-                        Doc::text("❌ ").append(Doc::text(msg.to_string()))
-                    } else if mode == PrettySliceMode::Error
-                        && stmt.selection.in_slice_error_annotation
-                    {
-                        Doc::text("🤷 ").append(Doc::text(format!(
-                            "statement in line {} is part of the error",
-                            line_number
-                        )))
-                    } else {
-                        continue;
-                    }
+    for (stmt_span, result) in slice_model.iter_results() {
+        if let Some((_file, line_number, _col_number)) = files.get_human_span(stmt_span) {
+            let line = match result {
+                SliceResult::PartOfError(msg) => {
+                    let msg = msg.map(|msg| msg.to_string()).unwrap_or_else(|| {
+                        format!("statement in line {} is part of the error", line_number)
+                    });
+                    Doc::text("❌ ").append(Doc::text(msg))
                 }
-                Ok(false) => {
-                    if let Some(msg) = stmt.success_message() {
-                        Doc::text("🤷 ").append(Doc::text(msg.to_string()))
-                    } else if mode == PrettySliceMode::Verify
-                        && stmt.selection.in_slice_verify_annotation
-                    {
-                        Doc::text("🤷 ").append(Doc::text(format!(
-                            "statement in line {} is not necessary",
-                            line_number
-                        )))
-                    } else {
-                        continue;
-                    }
+                SliceResult::NotNecessary(msg) => {
+                    let msg = msg.map(|msg| msg.to_string()).unwrap_or_else(|| {
+                        format!("statement in line {} is not necessary", line_number)
+                    });
+                    Doc::text("🤷 ").append(Doc::text(msg))
                 }
-                Err(err) => Doc::text(format!("({}):", err)),
+                SliceResult::Error(err) => Doc::text(format!("({}):", err)),
             };
-            let line = line.append(pretty_span(files, ident));
+            let line = line.append(pretty_span(files, stmt_span));
             lines.push(line);
         }
     }

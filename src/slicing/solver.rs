@@ -1,15 +1,17 @@
+use itertools::Itertools;
 use tracing::{debug, info, info_span, instrument, warn};
 use z3::{
     ast::{Bool, Dynamic},
-    Model, SatResult,
+    SatResult,
 };
 use z3rro::{
+    model::{InstrumentedModel, SmtEval, SmtEvalError},
     prover::{ProveResult, Prover},
     util::ReasonUnknown,
 };
 
 use crate::{
-    ast::{ExprBuilder, Span},
+    ast::{ExprBuilder, Span, Symbol},
     resource_limits::LimitsRef,
     slicing::util::PartialMinimizeResult,
     smt::translate_exprs::TranslateExprs,
@@ -75,7 +77,7 @@ impl<'ctx> SliceSolver<'ctx> {
         }
     }
 
-    fn translate_selection(&self, selection: SliceSelection) -> (Bool<'ctx>, Vec<Bool<'ctx>>) {
+    fn translate_selection(&self, selection: &SliceSelection) -> (Bool<'ctx>, Vec<Bool<'ctx>>) {
         // collect Bool values for those variables we want to optimize
         let active_toggle_values: Vec<_> = self
             .slice_stmts
@@ -124,14 +126,14 @@ impl<'ctx> SliceSolver<'ctx> {
     pub fn slice_while_verified(
         &mut self,
         limits_ref: &LimitsRef,
-    ) -> Result<Option<Model<'ctx>>, VerifyError> {
+    ) -> Result<Option<SliceModel>, VerifyError> {
         assert_eq!(self.prover.level(), 2);
         self.prover.pop();
         self.prover.pop();
         self.prover.push();
 
-        let (inactive_formula, active_toggle_values) =
-            self.translate_selection(SliceSelection::VERIFIED_SELECTION);
+        let selection = SliceSelection::VERIFIED_SELECTION;
+        let (inactive_formula, active_toggle_values) = self.translate_selection(&selection);
 
         let (prover, universally_bound) = (&mut self.prover, &self.universally_bound);
 
@@ -150,7 +152,10 @@ impl<'ctx> SliceSolver<'ctx> {
             limits_ref,
         )?;
         if prover.check_sat() == SatResult::Sat {
-            Ok(exists_forall_solver.get_model())
+            let model = InstrumentedModel::new(exists_forall_solver.get_model().unwrap());
+            let slice_model =
+                SliceModel::extract_model(SliceMode::Verify, &self.slice_stmts, selection, &model);
+            Ok(Some(slice_model))
         } else {
             Ok(None)
         }
@@ -161,14 +166,14 @@ impl<'ctx> SliceSolver<'ctx> {
     pub fn slice_while_failing(
         &mut self,
         limits_ref: &LimitsRef,
-    ) -> Result<ProveResult<'ctx>, VerifyError> {
+    ) -> Result<(ProveResult<'ctx>, Option<SliceModel>), VerifyError> {
         assert_eq!(self.prover.level(), 2);
         self.prover.pop();
         self.prover.pop();
         self.prover.push();
 
-        let (inactive_formula, active_toggle_values) =
-            self.translate_selection(SliceSelection::FAILURE_SELECTION);
+        let selection = SliceSelection::FAILURE_SELECTION;
+        let (inactive_formula, active_toggle_values) = self.translate_selection(&selection);
 
         self.prover.add_assumption(&inactive_formula);
         self.prover.push();
@@ -180,7 +185,18 @@ impl<'ctx> SliceSolver<'ctx> {
             false,
             limits_ref,
         )?;
-        Ok(self.prover.check_proof())
+        let res = self.prover.check_proof();
+        let slice_model = if let ProveResult::Counterexample(model) = &res {
+            Some(SliceModel::extract_model(
+                SliceMode::Error,
+                &self.slice_stmts,
+                selection,
+                model,
+            ))
+        } else {
+            None
+        };
+        Ok((res, slice_model))
     }
 }
 
@@ -306,4 +322,60 @@ fn slice<'ctx>(
 
     assert_eq!(prover.level(), 2);
     Ok(())
+}
+
+/// Do we have a slice that verifies or that errors?
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum SliceMode {
+    Verify,
+    Error,
+}
+
+/// Extraction of models from the slicing solver.
+#[derive(Debug)]
+pub struct SliceModel {
+    mode: SliceMode,
+    stmts: Vec<(SliceStmt, Result<bool, SmtEvalError>)>,
+}
+
+/// A decision for each statement with optional messages (from annotations).
+pub enum SliceResult {
+    PartOfError(Option<Symbol>),
+    NotNecessary(Option<Symbol>),
+    Error(SmtEvalError),
+}
+
+impl SliceModel {
+    fn extract_model<'ctx>(
+        mode: SliceMode,
+        slice_vars: &[(SliceStmt, Bool<'ctx>)],
+        selection: SliceSelection,
+        model: &InstrumentedModel<'ctx>,
+    ) -> SliceModel {
+        let stmts = slice_vars
+            .iter()
+            .map(|(slice_stmt, var)| {
+                let status = model.atomically(|| var.eval(model));
+                (slice_stmt.clone(), status)
+            })
+            // first evaluate, then filter to access all slice variables in the
+            // model. otherwise we'd get "extra definitions" for the filtered ones
+            // in the model output
+            .filter(|(stmt, _var)| selection.enables(&stmt.selection))
+            .collect_vec();
+        SliceModel { mode, stmts }
+    }
+
+    /// Iterate over the results in this slice model.
+    pub fn iter_results(&self) -> impl Iterator<Item = (Span, SliceResult)> + '_ {
+        self.stmts.iter().flat_map(move |(stmt, enabled)| {
+            let res = match (self.mode, enabled) {
+                (SliceMode::Error, Ok(true)) => SliceResult::PartOfError(stmt.failure_message()),
+                (SliceMode::Verify, Ok(false)) => SliceResult::NotNecessary(stmt.success_message()),
+                (_, Ok(_)) => return None,
+                (_, Err(err)) => SliceResult::Error(err.clone()),
+            };
+            Some((stmt.statement, res))
+        })
+    }
 }

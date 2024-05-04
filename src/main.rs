@@ -31,9 +31,9 @@ use procs::add_default_specs;
 use proof_rules::init_encodings;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
 use slicing::{
-    init_slicing, selection::SliceSelection, solver::SliceSolver, transform::SliceStmts,
+    init_slicing,
+    solver::{SliceModel, SliceSolver},
 };
-use smt::PrettySliceMode;
 use thiserror::Error;
 use timing::DispatchBuilder;
 use tokio::task::JoinError;
@@ -45,7 +45,6 @@ use z3::{
 
 use structopt::StructOpt;
 use z3rro::{
-    model::InstrumentedModel,
     pretty::{get_pretty_solver_smtlib, get_solver_smtlib},
     prover::{ProveResult, Prover},
     util::{PrefixWriter, ReasonUnknown},
@@ -559,25 +558,9 @@ fn verify_files_main(
         let smtlib = get_smtlib(options, &prover);
 
         let mut slice_solver = SliceSolver::new(slice_vars.clone(), &mut smt_translate, prover);
-        let mut result = slice_solver.slice_while_failing(&limits_ref)?;
+        let (mut result, mut slice_model) = slice_solver.slice_while_failing(&limits_ref)?;
         if matches!(result, ProveResult::Proof) && options.slice_verify {
-            let model = slice_solver.slice_while_verified(&limits_ref)?;
-            if let Some(model) = model {
-                let mut w = Vec::new();
-                let files = files_mutex.lock().unwrap();
-                let doc = pretty_slice(
-                    &files,
-                    &mut smt_translate,
-                    &slice_vars,
-                    SliceSelection::VERIFIED_SELECTION,
-                    &InstrumentedModel::new(model),
-                    PrettySliceMode::Verify,
-                );
-                if let Some(doc) = doc {
-                    doc.nest(4).render(120, &mut w).unwrap();
-                    println!("    {}", String::from_utf8(w).unwrap());
-                }
-            }
+            slice_model = slice_solver.slice_while_verified(&limits_ref)?;
         }
 
         drop(sat_entered);
@@ -586,8 +569,7 @@ fn verify_files_main(
         // Now let's examine the result.
         print_prove_result(
             files_mutex,
-            &slice_vars,
-            SliceSelection::FAILURE_SELECTION,
+            &slice_model,
             &vc_expr,
             &mut smt_translate,
             &mut result,
@@ -790,27 +772,31 @@ fn trace_expr_stats(vc_expr: &mut Expr) {
 
 fn print_prove_result<'smt, 'ctx>(
     files_mutex: &Mutex<Files>,
-    slice_stmts: &SliceStmts,
-    selection: SliceSelection,
+    slice_model: &Option<SliceModel>,
     vc_expr: &VcUnit,
     smt_translate: &mut TranslateExprs<'smt, 'ctx>,
     result: &mut ProveResult<'ctx>,
     name: &SourceUnitName,
 ) {
     match result {
-        ProveResult::Proof => println!("{}: Verified.", name),
+        ProveResult::Proof => {
+            println!("{}: Verified.", name);
+            if let Some(slice_model) = slice_model {
+                let mut w = Vec::new();
+                let files = files_mutex.lock().unwrap();
+                let doc = pretty_slice(&files, slice_model);
+                if let Some(doc) = doc {
+                    doc.nest(4).render(120, &mut w).unwrap();
+                    println!("    {}", String::from_utf8(w).unwrap());
+                }
+            }
+        },
         ProveResult::Counterexample(model) => {
+            let slice_model = slice_model.as_ref().unwrap();
             println!("{}: Counter-example to verification found!", name);
             let mut w = Vec::new();
             let files = files_mutex.lock().unwrap();
-            let doc = pretty_model(
-                &files,
-                slice_stmts,
-                selection,
-                vc_expr,
-                smt_translate,
-                model,
-            );
+            let doc = pretty_model(&files, slice_model, vc_expr, smt_translate, model);
             doc.nest(4).render(120, &mut w).unwrap();
             println!("    {}", String::from_utf8(w).unwrap());
         }
