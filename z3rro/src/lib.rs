@@ -20,8 +20,8 @@ pub mod orders;
 pub mod scope;
 
 pub mod model;
-pub mod pretty;
 pub mod prover;
+pub mod smtlib;
 mod uint;
 pub use uint::UInt;
 mod ureal;

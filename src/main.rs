@@ -5,51 +5,35 @@
 
 use std::{
     collections::HashMap,
-    fs::{create_dir_all, File},
-    io::{self, Write},
-    ops::Deref,
+    io,
     path::PathBuf,
     process::ExitCode,
     sync::{Arc, Mutex},
 };
 
 use crate::{
-    ast::{stats::StatsVisitor, visit::VisitorMut, TyKind},
+    ast::TyKind,
+    driver::mk_z3_ctx,
     front::{resolve::Resolve, tycheck::Tycheck},
-    opt::{egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder},
-    pretty::Doc,
-    smt::{pretty_model, pretty_slice, translate_exprs::TranslateExprs, SmtCtx},
+    smt::{translate_exprs::TranslateExprs, SmtCtx},
     timing::TimingLayer,
     tyctx::TyCtx,
-    vc::{subst::apply_subst, vcgen::Vcgen},
-    version::write_detailed_version_info,
+    vc::vcgen::Vcgen,
 };
-use ast::{Diagnostic, Expr, FileId, Files, SourceFilePath};
-use driver::{Item, SourceUnit, SourceUnitName, VcUnit, VerifyUnit};
+use ast::{Diagnostic, FileId, Files, SourceFilePath};
+use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
-use opt::{boolify::Boolify, RemoveParens};
 use procs::add_default_specs;
 use proof_rules::init_encodings;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
-use slicing::{
-    init_slicing,
-    solver::{SliceModel, SliceSolver},
-};
+use slicing::init_slicing;
 use thiserror::Error;
 use timing::DispatchBuilder;
 use tokio::task::JoinError;
-use tracing::{error, info, info_span, warn};
-use z3::{
-    ast::{Ast, Bool},
-    Config, Context,
-};
+use tracing::{error, info, warn};
 
 use structopt::StructOpt;
-use z3rro::{
-    pretty::{get_pretty_solver_smtlib, get_solver_smtlib},
-    prover::{ProveResult, Prover},
-    util::{PrefixWriter, ReasonUnknown},
-};
+use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
 pub mod ast;
 // mod calculi;
@@ -167,7 +151,7 @@ pub struct Options {
     pub print_core_procs: bool,
 
     /// Print the theorem that is sent to the SMT solver to prove. That is, the
-    /// result of preparing vc(S)[⊤] = ⊤. Note that axioms are not included.
+    /// result of preparing `vc(S)[⊤] = ⊤`. Note that axioms are not included.
     #[structopt(long)]
     pub print_theorem: bool,
 
@@ -340,42 +324,24 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
 
     let mut resolve = Resolve::new(&mut tcx);
     // first, do forward declarations
-    source_unit
-        .enter()
-        .forward_declare(&mut resolve)
-        .map_err(|resolve_err| resolve_err.diagnostic())?;
+    source_unit.enter().forward_declare(&mut resolve)?;
     // then, the actual resolving
-    source_unit
-        .enter()
-        .resolve(&mut resolve)
-        .map_err(|resolve_err| resolve_err.diagnostic())?;
+    source_unit.enter().resolve(&mut resolve)?;
 
     // 3. Type checking
     add_default_specs(&mut tcx);
 
     let mut tycheck = Tycheck::new(&mut tcx);
 
-    {
-        // Make a new scope to be able to drop 'entered' afterwards
-        let mut entered = source_unit.enter();
-        entered
-            .tycheck(&mut tycheck)
-            .map_err(|ty_err| ty_err.diagnostic())?;
-        let monotonicity_res = entered
-            .check_monotonicity()
-            .map_err(|ty_err| ty_err.diagnostic());
-        if let Err(err) = monotonicity_res {
-            let files = files_mutex.lock().unwrap();
-            print_warning(&options, &files, err)?;
-        }
-    }
+    let mut entered = source_unit.enter();
+    entered.tycheck(&mut tycheck)?;
+    entered.check_monotonicity()?;
+    drop(entered);
 
     let mut new_source_units: Vec<Item<SourceUnit>> = vec![];
-    // Desugar encodings from source units
     source_unit
         .enter()
-        .desugar(&mut tcx, &mut new_source_units)
-        .map_err(|ann_err| ann_err.diagnostic())?;
+        .apply_encodings(&mut tcx, &mut new_source_units)?;
 
     new_source_units.push(source_unit);
 
@@ -424,17 +390,11 @@ fn verify_files_main(
     let mut resolve = Resolve::new(&mut tcx);
     // first, do forward declarations
     for source_unit in &mut source_units {
-        source_unit
-            .enter()
-            .forward_declare(&mut resolve)
-            .map_err(|resolve_err| resolve_err.diagnostic())?;
+        source_unit.enter().forward_declare(&mut resolve)?;
     }
     // then, the actual resolving
     for source_unit in &mut source_units {
-        source_unit
-            .enter()
-            .resolve(&mut resolve)
-            .map_err(|resolve_err| resolve_err.diagnostic())?;
+        source_unit.enter().resolve(&mut resolve)?;
     }
 
     // 3. Type checking
@@ -442,27 +402,24 @@ fn verify_files_main(
 
     let mut tycheck = Tycheck::new(&mut tcx);
     for source_unit in &mut source_units {
-        let mut entered = source_unit.enter();
-        entered
-            .tycheck(&mut tycheck)
-            .map_err(|ty_err| ty_err.diagnostic())?;
-        let monotonicity_res = entered
-            .check_monotonicity()
-            .map_err(|ty_err| ty_err.diagnostic());
+        let mut source_unit = source_unit.enter();
+        source_unit.tycheck(&mut tycheck)?;
+
+        let monotonicity_res = source_unit.check_monotonicity();
         if let Err(err) = monotonicity_res {
             let files = files_mutex.lock().unwrap();
             print_warning(options, &files, err)?;
         }
-        write_jani_file(options, entered.deref())?;
+        source_unit.write_to_jani_if_requested(options)?;
     }
 
-    // Desugar encodings from source units
+    // Desugar encodings from source units. They might generate new source
+    // units (for side conditions).
     let mut source_units_buf = vec![];
     for source_unit in &mut source_units {
         source_unit
             .enter()
-            .desugar(&mut tcx, &mut source_units_buf)
-            .map_err(|ann_err| ann_err.diagnostic())?;
+            .apply_encodings(&mut tcx, &mut source_units_buf)?;
     }
     source_units.extend(source_units_buf);
 
@@ -489,7 +446,7 @@ fn verify_files_main(
         let (name, mut verify_unit) = verify_unit.enter_with_name();
 
         // 4. Desugaring: transforming spec calls to procs
-        verify_unit.desugar(&mut tcx).unwrap();
+        verify_unit.desugar_spec_calls(&mut tcx).unwrap();
 
         // 5. Prepare slicing
         let slice_vars = verify_unit.prepare_slicing(options, &mut tcx);
@@ -504,89 +461,66 @@ fn verify_files_main(
         let mut vc_expr = verify_unit.vcgen(&vcgen)?;
 
         // 7. Unfolding
-        unfold_expr(options, &limits_ref, &tcx, &mut vc_expr)?;
+        vc_expr.unfold(options, &limits_ref, &tcx)?;
 
         // 8. Quantifier elimination
         if !options.no_qelim {
-            apply_qelim(&mut tcx, &mut vc_expr);
+            vc_expr.qelim(&mut tcx);
         }
 
         // In-between, gather some stats about the vc expression
-        trace_expr_stats(&mut vc_expr.expr);
+        vc_expr.trace_expr_stats();
 
         // 9. Create the "vc[S] is valid" expression
         let mut vc_is_valid = vc_expr.to_boolean();
 
         if options.egraph {
-            egraph::simplify(&vc_is_valid);
+            vc_is_valid.egraph_simplify();
         }
 
         // 10. Optimizations
         if !options.no_boolify || options.opt_rel {
-            RemoveParens.visit_expr(&mut vc_is_valid).unwrap();
+            vc_is_valid.remove_parens();
         }
         if !options.no_boolify {
-            apply_boolify_opt(&mut vc_is_valid);
+            vc_is_valid.opt_boolify();
         }
         if options.opt_rel {
-            apply_relational_opt(&mut vc_is_valid);
+            vc_is_valid.opt_relational();
         }
 
         // print theorem to prove if requested
         if options.print_theorem {
-            println!("{}: Theorem to prove:\n{}\n", name, &vc_is_valid);
+            vc_is_valid.print_theorem(name);
         }
 
         // 11. Translate to Z3
-        let translate_span = info_span!("translation to Z3");
-        let translate_entered = translate_span.enter();
-
         let ctx = mk_z3_ctx(options);
         let smt_ctx = SmtCtx::new(&ctx, &tcx);
-        let mut smt_translate = TranslateExprs::new(&smt_ctx);
-        let mut valid_query = smt_translate.t_bool(&vc_is_valid);
+        let mut translate = TranslateExprs::new(&smt_ctx);
+        let mut vc_is_valid = vc_is_valid.to_smt(&mut translate);
 
-        drop(translate_entered);
-        drop(translate_span);
-
+        // 12. Simplify
         if !options.no_simplify {
-            info_span!("simplify query").in_scope(|| valid_query = valid_query.simplify());
+            vc_is_valid.simplify();
         }
 
-        // 12. Create Z3 solver with axioms, solve
-        let sat_span = info_span!("SAT check");
-        let sat_entered = sat_span.enter();
-
-        let prover = mk_valid_query_prover(&limits_ref, &ctx, &smt_translate, &valid_query);
-        let smtlib = get_smtlib(options, &prover);
-
-        let mut slice_solver = SliceSolver::new(slice_vars.clone(), &mut smt_translate, prover);
-        let (mut result, mut slice_model) = slice_solver.slice_while_failing(&limits_ref)?;
-        if matches!(result, ProveResult::Proof) && options.slice_verify {
-            slice_model = slice_solver.slice_while_verified(&limits_ref)?;
-        }
-
-        drop(sat_entered);
-        drop(sat_span);
+        // 13. Create Z3 solver with axioms, solve
+        let mut result =
+            vc_is_valid.run_solver(options, &limits_ref, &ctx, &mut translate, &slice_vars)?;
 
         // Now let's examine the result.
-        print_prove_result(
-            files_mutex,
-            &slice_model,
-            &vc_expr,
-            &mut smt_translate,
-            &mut result,
-            name,
-        );
+        result.print_prove_result(files_mutex, &vc_expr, &mut translate, name);
 
-        write_smtlib(options, smtlib, name, &result).unwrap();
+        // If requested, write the SMT-LIB output.
+        result.write_smtlib(options, name)?;
 
         if options.z3_trace {
             info!("Z3 tracing output will be written to `z3.log`.");
         }
 
         // Handle reasons to stop the verifier.
-        match result {
+        match result.prove_result {
             ProveResult::Unknown(ReasonUnknown::Interrupted) => {
                 return Err(VerifyError::Interrupted)
             }
@@ -594,7 +528,8 @@ fn verify_files_main(
             _ => {}
         }
 
-        match result {
+        // Increment counters
+        match result.prove_result {
             ProveResult::Proof => num_proven += 1,
             ProveResult::Counterexample(_) | ProveResult::Unknown(_) => num_failures += 1,
         }
@@ -671,199 +606,4 @@ fn load_file(files: &mut Files, path: &PathBuf) -> FileId {
     let source_file_path = SourceFilePath::Path(path.clone());
     let file = files.add(source_file_path, source);
     file.id
-}
-
-fn write_jani_file(options: &Options, source_unit: &SourceUnit) -> Result<(), VerifyError> {
-    if let Some(jani_dir) = &options.jani_dir {
-        match source_unit {
-            SourceUnit::Decl(decl) => {
-                if let ast::DeclKind::ProcDecl(decl_ref) = decl {
-                    let jani_model = mc::proc_to_model(&decl_ref.borrow());
-                    let jani_model = match jani_model {
-                        Ok(jani_model) => jani_model,
-                        Err(err) => {
-                            // TODO: proper formatting of errors
-                            error!("Error creating JANI model for {}: {:?}", decl.name(), err);
-                            return Ok(());
-                        }
-                    };
-                    let file_path = jani_dir.join(format!("{}.jani", decl.name()));
-                    create_dir_all(file_path.parent().unwrap())?;
-                    std::fs::write(file_path, jani::to_string(&jani_model))?;
-                }
-            }
-            SourceUnit::Raw(_) => panic!("raw code not supported with --jani-dir"),
-        }
-    }
-    Ok(())
-}
-
-fn apply_qelim(tcx: &mut TyCtx, vc_expr: &mut VcUnit) {
-    let mut qelim = Qelim::new(tcx);
-    qelim.qelim(vc_expr);
-    // Apply/eliminate substitutions again
-    apply_subst(tcx, &mut vc_expr.expr);
-}
-
-fn apply_relational_opt(vc_expr_eq_infinity: &mut Expr) {
-    let span = info_span!("relationalize");
-    let _entered = span.enter();
-    (Relational {}).visit_expr(vc_expr_eq_infinity).unwrap();
-}
-
-fn apply_boolify_opt(vc_expr_eq_infinity: &mut Expr) {
-    let span = info_span!("boolify");
-    let _entered = span.enter();
-    (Boolify {}).visit_expr(vc_expr_eq_infinity).unwrap();
-}
-
-fn unfold_expr(
-    options: &Options,
-    limits_ref: &LimitsRef,
-    tcx: &TyCtx,
-    vc_expr: &mut VcUnit,
-) -> Result<(), LimitError> {
-    let span = info_span!("unfolding");
-    let _entered = span.enter();
-    if !options.strict {
-        let ctx = Context::new(&Config::default());
-        let smt_ctx = SmtCtx::new(&ctx, tcx);
-        let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
-        unfolder.visit_expr(&mut vc_expr.expr)
-    } else {
-        apply_subst(tcx, &mut vc_expr.expr);
-        Ok(())
-    }
-}
-
-fn mk_z3_ctx(options: &Options) -> Context {
-    let mut config = Config::default();
-    if options.z3_trace {
-        config.set_bool_param_value("trace", true);
-        config.set_bool_param_value("proof", true);
-    }
-    Context::new(&config)
-}
-
-fn mk_valid_query_prover<'smt, 'ctx>(
-    limits_ref: &LimitsRef,
-    ctx: &'ctx Context,
-    smt_translate: &TranslateExprs<'smt, 'ctx>,
-    valid_query: &Bool<'ctx>,
-) -> Prover<'ctx> {
-    // create the prover and set the params
-    let mut prover = Prover::new(ctx);
-    if let Some(remaining) = limits_ref.time_left() {
-        prover.set_timeout(remaining);
-    }
-
-    // add assumptions (from axioms and locals) to the prover
-    smt_translate
-        .ctx
-        .uninterpreteds()
-        .add_axioms_to_prover(&mut prover);
-    smt_translate
-        .local_scope()
-        .add_assumptions_to_prover(&mut prover);
-    // add the provable: is this Boolean true?
-    prover.add_provable(valid_query);
-    prover
-}
-
-fn trace_expr_stats(vc_expr: &mut Expr) {
-    let mut stats = StatsVisitor::default();
-    stats.visit_expr(vc_expr).unwrap();
-    let stats = stats.stats;
-    tracing::info!(
-        num_exprs = stats.num_exprs,
-        num_quants = stats.num_quants,
-        depths = %stats.depths_summary(),
-        "Verification condition stats"
-    );
-    if stats.num_quants > 0 {
-        tracing::warn!(
-            num_quants=stats.num_quants, "Quantifiers are present in the generated verification conditions. It is possible that quantifier elimination failed. If Z3 can't decide the problem, this may be the reason."
-        );
-    }
-}
-
-fn print_prove_result<'smt, 'ctx>(
-    files_mutex: &Mutex<Files>,
-    slice_model: &Option<SliceModel>,
-    vc_expr: &VcUnit,
-    smt_translate: &mut TranslateExprs<'smt, 'ctx>,
-    result: &mut ProveResult<'ctx>,
-    name: &SourceUnitName,
-) {
-    match result {
-        ProveResult::Proof => {
-            println!("{}: Verified.", name);
-            if let Some(slice_model) = slice_model {
-                let mut w = Vec::new();
-                let files = files_mutex.lock().unwrap();
-                let doc = pretty_slice(&files, slice_model);
-                if let Some(doc) = doc {
-                    let doc = doc.nest(4).append(Doc::line_());
-                    doc.render(120, &mut w).unwrap();
-                    println!("    {}", String::from_utf8(w).unwrap());
-                }
-            }
-        }
-        ProveResult::Counterexample(model) => {
-            let slice_model = slice_model.as_ref().unwrap();
-            println!("{}: Counter-example to verification found!", name);
-            let mut w = Vec::new();
-            let files = files_mutex.lock().unwrap();
-            let doc = pretty_model(&files, slice_model, vc_expr, smt_translate, model);
-            doc.nest(4).render(120, &mut w).unwrap();
-            println!("    {}", String::from_utf8(w).unwrap());
-        }
-        ProveResult::Unknown(reason) => {
-            println!("{}: Unknown result! (reason: {})", name, reason)
-        }
-    }
-}
-
-fn get_smtlib(options: &Options, prover: &Prover) -> Option<String> {
-    if options.print_smt || options.smt_dir.is_some() {
-        let smtlib = if !options.no_pretty_smtlib {
-            get_pretty_solver_smtlib(prover.solver())
-        } else {
-            get_solver_smtlib(prover.solver())
-        };
-        Some(smtlib)
-    } else {
-        None
-    }
-}
-
-fn write_smtlib(
-    options: &Options,
-    smtlib: Option<String>,
-    name: &SourceUnitName,
-    result: &ProveResult,
-) -> io::Result<()> {
-    if options.print_smt || options.smt_dir.is_some() {
-        let mut smtlib = smtlib.unwrap();
-        match result {
-            ProveResult::Proof => {}
-            ProveResult::Counterexample(_) => smtlib.push_str("\n(get-model)\n"),
-            ProveResult::Unknown(_) => smtlib.push_str("\n(get-info :reason-unknown)\n"),
-        }
-        if options.print_smt {
-            println!("\n; --- Solver SMT-LIB ---\n{}\n", smtlib);
-        }
-        if let Some(smt_dir) = &options.smt_dir {
-            let file_path = smt_dir.join(format!("{}.smt2", name));
-            create_dir_all(file_path.parent().unwrap())?;
-            let mut file = File::create(&file_path)?;
-            let mut comment_writer = PrefixWriter::new("; ".as_bytes(), &mut file);
-            write_detailed_version_info(&mut comment_writer)?;
-            writeln!(comment_writer, "Source unit: {}", name)?;
-            writeln!(comment_writer, "Prove result: {:?}", result)?;
-            file.write_all(smtlib.as_bytes())?;
-            info!(?file_path, "SMT-LIB query written to file");
-        }
-    }
-    Ok(())
 }

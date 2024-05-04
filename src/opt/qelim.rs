@@ -8,7 +8,7 @@ use crate::{
         ExprData, ExprKind, Ident, QuantOpKind, QuantVar, Span, SpanVariant, TyKind, UnOpKind,
         VarKind,
     },
-    driver::VcUnit,
+    driver::QuantVcUnit,
     tyctx::TyCtx,
 };
 
@@ -21,7 +21,7 @@ impl<'tcx> Qelim<'tcx> {
         Qelim { tcx }
     }
 
-    pub fn qelim(&mut self, vc_expr: &mut VcUnit) {
+    pub fn qelim(&mut self, vc_expr: &mut QuantVcUnit) {
         match vc_expr.direction {
             Direction::Down => self.qelim_inf(&mut vc_expr.expr),
             Direction::Up => self.qelim_sup(&mut vc_expr.expr),

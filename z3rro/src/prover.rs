@@ -9,6 +9,7 @@ use z3::{
 
 use crate::{
     model::InstrumentedModel,
+    smtlib::Smtlib,
     util::{set_solver_timeout, ReasonUnknown},
 };
 
@@ -154,6 +155,7 @@ impl<'ctx> Prover<'ctx> {
         &self.solver
     }
 
+    /// Turns this prover into a regular [`Solver`].
     pub fn into_solver(self) -> Solver<'ctx> {
         self.solver
     }
@@ -174,6 +176,11 @@ impl<'ctx> Prover<'ctx> {
         let mut res = Prover::new(ctx);
         res.add_assumption(&theorem);
         res
+    }
+
+    /// Return the SMT-LIB that represents the solver state.
+    pub fn get_smtlib(&self) -> Smtlib {
+        Smtlib::from_solver(&self.solver)
     }
 }
 
