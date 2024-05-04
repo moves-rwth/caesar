@@ -152,7 +152,7 @@ impl<'ctx> SliceSolver<'ctx> {
             true,
             limits_ref,
         )?;
-        if prover.check_sat() == SatResult::Sat {
+        if exists_forall_solver.check_sat() == SatResult::Sat {
             let model = InstrumentedModel::new(exists_forall_solver.get_model().unwrap());
             let slice_model =
                 SliceModel::extract_model(SliceMode::Verify, &self.slice_stmts, selection, &model);
