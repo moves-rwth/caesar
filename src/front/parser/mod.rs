@@ -91,7 +91,7 @@ impl ParseError {
 /// Parse a source code file into a list of declarations.
 #[instrument(skip(source))]
 pub fn parse_decls(file_id: FileId, source: &str) -> Result<Vec<DeclKind>, ParseError> {
-    let clean_source = remove_comments(source).unwrap();
+    let clean_source = remove_comments(source);
     let parser = grammar::DeclsParser::new();
     parser
         .parse(file_id, &clean_source)
@@ -101,7 +101,7 @@ pub fn parse_decls(file_id: FileId, source: &str) -> Result<Vec<DeclKind>, Parse
 /// Parse a source code file into a block of HeyVL statements.
 #[instrument]
 pub fn parse_raw(file_id: FileId, source: &str) -> Result<Block, ParseError> {
-    let clean_source = remove_comments(source).unwrap();
+    let clean_source = remove_comments(source);
     let parser = grammar::StmtsParser::new();
     parser
         .parse(file_id, &clean_source)
@@ -132,13 +132,13 @@ pub(crate) fn parse_lit(source: &str) -> Result<LitKind, ()> {
     parser.parse(FileId::DUMMY, source).map_err(|_| ())
 }
 
-#[derive(Debug)]
-struct UnclosedCommentError;
-
 /// Return a string where all comments are replaced by whitespace. The result
 /// can be fed into our parser, and all non-whitespace locations will be the
 /// same as in the original string.
-fn remove_comments(source: &str) -> Result<String, UnclosedCommentError> {
+///
+/// If a block comment is not closed, then there will be no error, and instead
+/// the rest of the file will be treated as whitespace.
+fn remove_comments(source: &str) -> String {
     let mut res = source.as_bytes().to_owned();
     let mut iter = res.iter_mut();
     // iterate over all comment candidates
@@ -181,9 +181,6 @@ fn remove_comments(source: &str) -> Result<String, UnclosedCommentError> {
                         _ => {}
                     }
                 }
-                if comment_depth > 0 {
-                    return Err(UnclosedCommentError);
-                }
             }
             _ => {}
         }
@@ -191,7 +188,7 @@ fn remove_comments(source: &str) -> Result<String, UnclosedCommentError> {
 
     let res = String::from_utf8(res).unwrap();
     assert_eq!(res.len(), source.len());
-    Ok(res)
+    res
 }
 
 fn fmt_expected(expected: &[String]) -> String {
@@ -227,14 +224,11 @@ mod test {
 
     #[test]
     fn test_remove_comments() {
-        assert_eq!(remove_comments("/* /* */ */").unwrap(), "           ");
-        assert_eq!(remove_comments("// /* */ */").unwrap(), "           ");
-        assert_eq!(remove_comments("/* */ //").unwrap(), "        ");
+        assert_eq!(remove_comments("/* /* */ */"), "           ");
+        assert_eq!(remove_comments("// /* */ */"), "           ");
+        assert_eq!(remove_comments("/* */ //"), "        ");
 
-        assert_eq!(
-            remove_comments("test //   \ntest").unwrap(),
-            "test      \ntest"
-        );
+        assert_eq!(remove_comments("test //   \ntest"), "test      \ntest");
     }
 
     #[test]
