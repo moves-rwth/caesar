@@ -29,7 +29,7 @@ use crate::{
     },
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
-    Options,
+    Options, VerifyError,
 };
 use tracing::{info_span, instrument, trace};
 
@@ -354,11 +354,11 @@ impl VerifyUnit {
     ///
     /// The desugaring must have already taken place.
     #[instrument(skip(self, vcgen))]
-    pub fn vcgen(&self, vcgen: &Vcgen) -> Result<VcUnit, ()> {
+    pub fn vcgen(&self, vcgen: &Vcgen) -> Result<VcUnit, VerifyError> {
         let terminal = top_lit_in_lattice(self.direction, &TyKind::EUReal);
         Ok(VcUnit {
             direction: self.direction,
-            expr: vcgen.vcgen_stmts(&self.block, terminal),
+            expr: vcgen.vcgen_stmts(&self.block, terminal)?,
         })
     }
 }

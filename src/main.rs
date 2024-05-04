@@ -17,6 +17,7 @@ use crate::{
     ast::{stats::StatsVisitor, visit::VisitorMut, TyKind},
     front::{resolve::Resolve, tycheck::Tycheck},
     opt::{egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder},
+    pretty::Doc,
     smt::{pretty_model, pretty_slice, translate_exprs::TranslateExprs, SmtCtx},
     timing::TimingLayer,
     tyctx::TyCtx,
@@ -498,7 +499,7 @@ fn verify_files_main(
 
         // 6. Generating verification conditions
         let vcgen = Vcgen::new(&tcx, options.print_label_vc);
-        let mut vc_expr = verify_unit.vcgen(&vcgen).unwrap();
+        let mut vc_expr = verify_unit.vcgen(&vcgen)?;
 
         // 7. Unfolding
         unfold_expr(options, &limits_ref, &tcx, &mut vc_expr)?;
@@ -786,7 +787,8 @@ fn print_prove_result<'smt, 'ctx>(
                 let files = files_mutex.lock().unwrap();
                 let doc = pretty_slice(&files, slice_model);
                 if let Some(doc) = doc {
-                    doc.nest(4).render(120, &mut w).unwrap();
+                    let doc = doc.nest(4).append(Doc::line_());
+                    doc.render(120, &mut w).unwrap();
                     println!("    {}", String::from_utf8(w).unwrap());
                 }
             }
