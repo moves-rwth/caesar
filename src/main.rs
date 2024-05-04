@@ -562,19 +562,21 @@ fn verify_files_main(
         let mut result = slice_solver.slice_while_failing(&limits_ref)?;
         if matches!(result, ProveResult::Proof) && options.slice_verify {
             let model = slice_solver.slice_while_verified(&limits_ref)?;
-            let mut w = Vec::new();
-            let files = files_mutex.lock().unwrap();
-            let doc = pretty_slice(
-                &files,
-                &mut smt_translate,
-                &slice_vars,
-                SliceSelection::VERIFIED_SELECTION,
-                &InstrumentedModel::new(model),
-                PrettySliceMode::Verify,
-            );
-            if let Some(doc) = doc {
-                doc.nest(4).render(120, &mut w).unwrap();
-                println!("    {}", String::from_utf8(w).unwrap());
+            if let Some(model) = model {
+                let mut w = Vec::new();
+                let files = files_mutex.lock().unwrap();
+                let doc = pretty_slice(
+                    &files,
+                    &mut smt_translate,
+                    &slice_vars,
+                    SliceSelection::VERIFIED_SELECTION,
+                    &InstrumentedModel::new(model),
+                    PrettySliceMode::Verify,
+                );
+                if let Some(doc) = doc {
+                    doc.nest(4).render(120, &mut w).unwrap();
+                    println!("    {}", String::from_utf8(w).unwrap());
+                }
             }
         }
 

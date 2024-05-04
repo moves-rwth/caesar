@@ -144,6 +144,11 @@ impl<'ctx> Prover<'ctx> {
         }
     }
 
+    /// Retrieve the current stack level. Useful for debug assertions.
+    pub fn level(&self) -> usize {
+        self.level
+    }
+
     /// Return a reference to the underlying solver. Please do not modifiy it!
     pub fn solver(&self) -> &Solver<'ctx> {
         &self.solver
@@ -155,20 +160,20 @@ impl<'ctx> Prover<'ctx> {
 
     /// Create an exists-forall solver. All constants provided in the iterator
     /// will be universally quantified. The rest will be existentially quantified.
-    pub fn to_exists_forall(&self, universal: &[Dynamic<'ctx>]) -> Solver<'ctx> {
+    ///
+    /// The result is a [`Prover`] for convenience (such as using the
+    /// [`levels()`] function), but it should be used as a [`Solver`] via
+    /// [`check_sat()`].
+    pub fn to_exists_forall(&self, universal: &[Dynamic<'ctx>]) -> Prover<'ctx> {
         // TODO: what about the params?
-        let solver = Solver::new(self.solver.get_context());
+        let ctx = self.solver.get_context();
         let universal: Vec<&dyn Ast<'ctx>> =
             universal.iter().map(|v| v as &dyn Ast<'ctx>).collect();
         let assertions = self.solver.get_assertions();
-        let theorem = forall_const(
-            solver.get_context(),
-            &universal,
-            &[],
-            &Bool::and(solver.get_context(), &assertions).not(),
-        );
-        solver.assert(&theorem);
-        solver
+        let theorem = forall_const(ctx, &universal, &[], &Bool::and(ctx, &assertions).not());
+        let mut res = Prover::new(ctx);
+        res.add_assumption(&theorem);
+        res
     }
 }
 
