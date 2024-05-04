@@ -13,7 +13,7 @@ use crate::ast::{
 
 lalrpop_util::lalrpop_mod!(
     #[cfg_attr(rustfmt, rustfmt_skip)]
-    #[allow(clippy::all, unused_parens)]
+    #[allow(clippy::all, unused_parens, dead_code)]
     grammar,
     "/src/front/parser/grammar.rs"
 );
