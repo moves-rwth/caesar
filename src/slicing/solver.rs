@@ -269,17 +269,21 @@ fn slice<'ctx>(
         }
     }
 
+    if let Some(min_accept) = minimize.min_accept() {
+        info!(
+            enabled = min_accept,
+            removed_statements = slice_vars.len() - min_accept,
+            from_first_model = first_acceptance.map(|x| x - min_accept),
+            "slicing successful"
+        );
+    } else {
+        info!("slicing failed");
+    }
+
     let enabled = minimize
         .min_accept()
         .or(minimize.max_reject())
         .unwrap_or(minimize.total_max());
-
-    info!(
-        enabled = enabled,
-        removed_statements = slice_vars.len() - enabled,
-        from_first_model = first_acceptance.map(|x| x - enabled),
-        "slicing complete"
-    );
 
     // after we're done searching, reset the solver to the last known
     // working number of statements.
