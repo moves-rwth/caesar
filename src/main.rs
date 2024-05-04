@@ -482,7 +482,9 @@ fn verify_files_main(
         warn!("Z3 tracing is enabled with multiple verification units. Intermediate tracing results will be overwritten.");
     }
 
-    let mut all_proven: bool = true;
+    let mut num_proven: usize = 0;
+    let mut num_failures: usize = 0;
+
     for verify_unit in &mut verify_units {
         let (name, mut verify_unit) = verify_unit.enter_with_name();
 
@@ -592,10 +594,24 @@ fn verify_files_main(
             _ => {}
         }
 
-        all_proven = all_proven && matches!(result, ProveResult::Proof);
+        match result {
+            ProveResult::Proof => num_proven += 1,
+            ProveResult::Counterexample(_) | ProveResult::Unknown(_) => num_failures += 1,
+        }
     }
 
-    Ok(all_proven)
+    println!();
+    let ending = if num_failures == 0 {
+        " veni, vidi, vici!"
+    } else {
+        ""
+    };
+    println!(
+        "{} verified, {} failed.{}",
+        num_proven, num_failures, ending
+    );
+
+    Ok(num_failures == 0)
 }
 
 fn setup_tracing(options: &Options) {
