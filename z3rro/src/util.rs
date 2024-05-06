@@ -155,29 +155,16 @@ pub fn set_solver_timeout(solver: &Solver, duration: Duration) {
     solver.set_params(&params);
 }
 
-#[cfg(test)]
-mod test {
-    use super::ReasonUnknown;
-
-    #[test]
-    fn test_reason_unknown_parse_fmt() {
-        let values = [
-            ReasonUnknown::Interrupted,
-            ReasonUnknown::Other("x".to_owned()),
-        ];
-        for value in &values {
-            let parsed_fmt = format!("{}", value).parse::<ReasonUnknown>().unwrap();
-            assert_eq!(value, &parsed_fmt);
-        }
-    }
-}
-
 /// Pretty-printing wrapper type for [`BigRational`] values. This type's
 /// [`Display`] instance will format this value exactly as a decimal. If the
 /// rational is not a terminating fraction, the repeating fraction will be
 /// displayed alongside the original fraction.
 #[derive(Debug)]
 pub struct PrettyRational<'a>(pub Cow<'a, BigRational>);
+
+impl<'a> PrettyRational<'a> {
+    const DECIMAL_EXPANSION_LIMIT: usize = 5;
+}
 
 impl<'a> Display for PrettyRational<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -191,28 +178,90 @@ impl<'a> Display for PrettyRational<'a> {
         let mut frac = String::new();
         let mut map = HashMap::new();
         let ten = &BigInt::from(10);
-        while !rem.is_zero() && !map.contains_key(&rem) {
+        let mut approx = false;
+        loop {
+            if rem.is_zero() || map.contains_key(&rem) {
+                break;
+            }
+            if map.len() >= Self::DECIMAL_EXPANSION_LIMIT {
+                approx = true;
+                break;
+            }
             map.insert(rem.clone(), frac.len());
             let (div, new_rem) = (rem * ten).div_rem(abs.denom());
             write!(&mut frac, "{}", div)?;
             rem = new_rem;
         }
 
-        if rem.is_zero() {
-            if !frac.is_empty() {
-                write!(f, ".{}", frac)?;
+        if frac.is_empty() {
+            return Ok(());
+        }
+
+        if rem.is_zero() || approx {
+            // print a finite rational
+            write!(f, ".{}", frac)?;
+            if approx {
+                write!(f, "...")?;
             }
         } else {
+            // print a repeating decimal
             write!(f, ".{}", &frac[..map[&rem]])?;
             for ch in frac[map[&rem]..].chars() {
                 // combine with COMBINING OVERLINE unicode
                 write!(f, "{}\u{0305}", ch)?;
             }
+        }
 
-            // write the original fraction in parentheses if we couldn't get a
-            // terminating decimal
+        // write the original fraction in parentheses if we couldn't get a
+        // terminating decimal
+        if !rem.is_zero() || approx {
             write!(f, " ({})", self.0)?;
         }
+
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::{borrow::Cow, str::FromStr};
+
+    use num::BigRational;
+
+    use crate::util::PrettyRational;
+
+    use super::ReasonUnknown;
+
+    #[test]
+    fn test_reason_unknown_parse_fmt() {
+        let values = [
+            ReasonUnknown::Interrupted,
+            ReasonUnknown::Other("x".to_owned()),
+        ];
+        for value in &values {
+            let parsed_fmt = format!("{}", value).parse::<ReasonUnknown>().unwrap();
+            assert_eq!(value, &parsed_fmt);
+        }
+    }
+
+    #[test]
+    fn test_pretty_rational() {
+        let test_cases = [
+            // simplify integers
+            ("0/1", "0"),
+            ("2/1", "2"),
+            // simplify common fraction
+            ("1/3", "0.3\u{305} (1/3)"),
+            // this fraction has a huge decimal expansion
+            (
+                "241765600173973671370/376619014637248564543",
+                "0.64193... (241765600173973671370/376619014637248564543)",
+            ),
+        ];
+        for (rational, res) in test_cases {
+            let rational = BigRational::from_str(rational).unwrap();
+            let formatted = format!("{}", PrettyRational(Cow::Owned(rational)));
+            assert_eq!(formatted, res);
+        }
     }
 }
