@@ -2,7 +2,8 @@
 use indexmap::IndexSet;
 
 use super::{
-    visit::{walk_expr, walk_stmt, VisitorMut}, Direction, Expr, ExprKind, Ident, StmtKind
+    visit::{walk_expr, walk_stmt, VisitorMut},
+    Direction, Expr, ExprKind, Ident, StmtKind,
 };
 
 /// Helper to find all free variables in expressions.

@@ -46,6 +46,7 @@ pub enum JaniConversionError {
     UnsupportedPre(Expr),
     UnsupportedAssume(Expr),
     UnsupportedAssert(Expr),
+    UnsupportedInftyPost(Expr),
     NondetSelection(Span),
     MismatchedDirection(Span),
     UnsupportedCall(Span, Ident),
@@ -84,6 +85,11 @@ impl JaniConversionError {
                 Diagnostic::new(ReportKind::Error, expr.span)
                     .with_message("JANI: Assertion must be a Boolean expression")
                     .with_label(Label::new(expr.span).with_message("expected ?(b) here"))
+            }
+            JaniConversionError::UnsupportedInftyPost(expr) => {
+                Diagnostic::new(ReportKind::Error, expr.span)
+                    .with_message("JANI: Post that evaluates to ∞ is not supported")
+                    .with_label(Label::new(expr.span).with_message("post can evaluate to ∞"))
             }
             JaniConversionError::NondetSelection(span) => Diagnostic::new(ReportKind::Error, *span)
                 .with_message("JANI: All variables must be initialized")

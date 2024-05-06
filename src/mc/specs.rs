@@ -13,7 +13,8 @@ use jani::{
 };
 
 use crate::ast::{
-    util::is_dir_top_lit, BinOpKind, Direction, ExprBuilder, Span, Stmt, StmtKind, TyKind, UnOpKind,
+    util::{is_dir_top_lit, is_top_lit},
+    BinOpKind, Direction, ExprBuilder, Span, Stmt, StmtKind, TyKind, UnOpKind,
 };
 
 use super::{extract_embed, translate_expr, JaniConversionError};
@@ -316,10 +317,14 @@ fn extract_post(
     stmts: &mut Vec<Stmt>,
 ) -> Result<Expression, JaniConversionError> {
     let mut posts = vec![];
+    let mut first_infty_post = None;
     while let Some(last) = stmts.last() {
         if let StmtKind::Assert(direction, expr) = through_annotation(last) {
             if *direction != spec_part.direction {
                 return Err(JaniConversionError::MismatchedDirection(last.span));
+            }
+            if is_top_lit(expr) {
+                first_infty_post = Some(expr.clone());
             }
             posts.push(expr.clone());
             stmts.pop();
@@ -338,6 +343,11 @@ fn extract_post(
             Direction::Down => expr_builder.top_lit(&TyKind::EUReal),
             Direction::Up => expr_builder.bot_lit(&TyKind::EUReal),
         });
+    if is_top_lit(&sink_reward) {
+        return Err(JaniConversionError::UnsupportedInftyPost(
+            first_infty_post.unwrap_or(sink_reward),
+        ));
+    }
     translate_expr(&sink_reward)
 }
 
