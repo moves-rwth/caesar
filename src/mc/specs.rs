@@ -1,7 +1,7 @@
 //! Extraction of quantitative specifications and conversion to JANI equivalents.
 
 use jani::{
-    exprs::{BinaryExpression, BinaryOp, ConstantValue, Expression},
+    exprs::{ConstantValue, Expression},
     models::{Destination, Edge, Location, TransientValue, VariableDeclaration},
     properties::{
         ExpectedValueExpression, ExpectedValueKind, FilterExpression, FilterFun, Property,
@@ -157,41 +157,27 @@ pub fn extract_properties(
     spec_part: &SpecAutomaton,
     stmts: &mut Vec<Stmt>,
 ) -> Result<JaniPgclProperties, JaniConversionError> {
-    let spec = mk_expected_reward_property(spec_part, false, "spec");
-    let spec_liberal = mk_expected_reward_property(spec_part, true, "spec_strict");
+    let reward = mk_expected_reward_property(spec_part, "reward");
 
     let restrict_initial = extract_preconditions(spec_part, stmts)?;
     let sink_reward = extract_post(spec_part, stmts)?;
 
     Ok(JaniPgclProperties {
         restrict_initial,
-        properties: vec![spec, spec_liberal],
+        properties: vec![reward],
         sink_reward,
     })
 }
 
-fn mk_expected_reward_property(
-    spec_part: &SpecAutomaton,
-    until_sink_only: bool,
-    name: &str,
-) -> Property {
-    let reach = if until_sink_only {
-        Expression::Identifier(spec_part.var_is_sink_state())
-    } else {
-        Expression::Binary(Box::new(BinaryExpression {
-            op: BinaryOp::Or,
-            left: Expression::Identifier(spec_part.var_is_error_state()),
-            right: Expression::Identifier(spec_part.var_is_sink_state()),
-        }))
-    };
-
+fn mk_expected_reward_property(spec_part: &SpecAutomaton, name: &str) -> Property {
     let expected_value = PropertyExpression::ExpectedValue(ExpectedValueExpression {
         op: spec_part
             .direction
             .map(ExpectedValueKind::Emin, ExpectedValueKind::Emax),
         exp: Expression::Identifier(spec_part.var_reward()),
         accumulate: Some(vec![Reward::Steps, Reward::Exit]), // TODO: what the fuck does this do?
-        reach: Some(Box::new(PropertyExpression::Expression(reach))),
+        // we want total expected rewards. expected rewards until reaching a goal has very strange semantics.
+        reach: None,
         step_instant: None,
         time_instant: None,
         reward_instants: None,

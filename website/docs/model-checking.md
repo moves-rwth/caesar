@@ -52,13 +52,13 @@ Running Storm on the produced file gives us the optimal value.[^1]
 Procedure inputs to are translated to JANI's *constants*, and must be given to Storm via the flag `--constants init_c=0` (any other initial value can be chosen).
 
 ```bash
-$ storm --jani DIR/FILE.jani -jprop spec --exact --sound --constants init_c=0
+$ storm --jani DIR/FILE.jani -jprop reward --exact --sound --constants init_c=0
 ```
 
 Part of the output:
 
 ```
-Model checking property "spec": R[exp]{"reward"}min=? [F ("is_error_location" | "is_sink_state")] ...
+Model checking property "reward": R[exp]{"reward"}min=? [C] ...
 Result (for initial states): 2097151/2097152 (approx. 0.9999995232)
 ```
 
@@ -94,7 +94,8 @@ In the body, statements:
  * [Binary demonic choices](./heyvl/statements.md#nondeterministic-choices) in `proc`s,
  * [Binary angelic choices](./heyvl/statements.md#nondeterministic-choices) in `coproc`s,
  * [If-then-else statements](./heyvl/statements.md#boolean-choices),
- * While loops (always assumed to have **least fixed-point semantics** when model-checking).
+ * While loops
+    * They are always assumed to have **least fixed-point semantics** when model-checking.[^2] That means we just accumulate rewards over all terminating executions in the Markov chain, as opposed to adding `1` or `\infty` if there is a diverging path.
  * Annotations, in particular [proof rule annotations](./proof-rules/), will be ignored.
 
 ### Supported Types
@@ -124,3 +125,4 @@ In particular, the following constructs are *not* supported:
 
 
 [^1]: We use the `--exact` and `--sound` flags to ensure that Storm is forced to use exact arithmetic and only sound algorithms to produce the solution. Consult your chosen model checker's documentation to see which guarantees they give.
+[^2]: As far as we can tell, encoding greatest fixpoint/weakest *liberal* pre-expectation semantics is not possible with a single JANI property.
