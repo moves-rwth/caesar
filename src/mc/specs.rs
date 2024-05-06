@@ -13,7 +13,7 @@ use jani::{
 };
 
 use crate::ast::{
-    util::is_top_lit, BinOpKind, Direction, ExprBuilder, Span, Stmt, StmtKind, TyKind, UnOpKind,
+    util::is_dir_top_lit, BinOpKind, Direction, ExprBuilder, Span, Stmt, StmtKind, TyKind, UnOpKind,
 };
 
 use super::{extract_embed, translate_expr, JaniConversionError};
@@ -332,7 +332,7 @@ fn extract_post(
     let bin_op = spec_part.direction.map(BinOpKind::Inf, BinOpKind::Sup);
     let sink_reward = posts
         .into_iter()
-        .filter(|post| !is_top_lit(post))
+        .filter(|post| !is_dir_top_lit(spec_part.direction, post))
         .reduce(|acc, e| expr_builder.binary(bin_op, Some(TyKind::EUReal), acc, e))
         .unwrap_or_else(|| match spec_part.direction {
             Direction::Down => expr_builder.top_lit(&TyKind::EUReal),

@@ -2,8 +2,7 @@
 use indexmap::IndexSet;
 
 use super::{
-    visit::{walk_expr, walk_stmt, VisitorMut},
-    Expr, ExprKind, Ident, StmtKind,
+    visit::{walk_expr, walk_stmt, VisitorMut}, Direction, Expr, ExprKind, Ident, StmtKind
 };
 
 /// Helper to find all free variables in expressions.
@@ -109,6 +108,15 @@ impl VisitorMut for ModifiedVariableCollector {
             }
             _ => walk_expr(self, e),
         }
+    }
+}
+
+/// For [`Direction::Down`], this is [`is_top_lit`], for [`Direction::Up`] this
+/// is [`is_bot_lit`].
+pub fn is_dir_top_lit(direction: Direction, expr: &Expr) -> bool {
+    match direction {
+        Direction::Down => is_top_lit(expr),
+        Direction::Up => is_bot_lit(expr),
     }
 }
 
