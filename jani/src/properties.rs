@@ -55,16 +55,21 @@ pub struct FilterExpression {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "op", content = "exp")]
-pub enum QuantifiedExpression {
+pub enum Quantifier {
     #[serde(rename = "Pmin")]
-    Pmin(Box<PropertyExpression>),
+    Pmin,
     #[serde(rename = "Pmax")]
-    Pmax(Box<PropertyExpression>),
+    Pmax,
     #[serde(rename = "∀")]
-    Forall(Box<PropertyExpression>),
+    Forall,
     #[serde(rename = "∃")]
-    Exists(Box<PropertyExpression>),
+    Exists,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct QuantifiedExpression {
+    pub op: Quantifier,
+    pub exp: Box<PropertyExpression>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -73,6 +78,8 @@ pub enum UntilExpressionKind {
     Until,
     #[serde(rename = "W")]
     WeakUntil,
+    #[serde(rename = "R")]
+    Release,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -89,6 +96,27 @@ pub struct UntilExpression {
     pub op: UntilExpressionKind,
     pub left: Box<PropertyExpression>,
     pub right: Box<PropertyExpression>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step_bounds: Option<PropertyInterval>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_bounds: Option<PropertyInterval>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reward_bounds: Option<Vec<RewardBound>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum UnaryPathExpressionKind {
+    #[serde(rename = "F")]
+    Finally,
+    #[serde(rename = "G")]
+    Globally,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub struct UnaryPathExpression {
+    pub op: UnaryPathExpressionKind,
+    pub exp: Box<PropertyExpression>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub step_bounds: Option<PropertyInterval>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -145,6 +173,7 @@ pub enum PropertyExpression {
     ExpectedValue(ExpectedValueExpression),
     // TODO: long-run average
     Until(UntilExpression),
+    UnaryPath(UnaryPathExpression),
     Predicate(StatePredicate),
 }
 
