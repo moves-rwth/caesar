@@ -415,7 +415,12 @@ fn verify_files_main(
             let files = files_mutex.lock().unwrap();
             print_warning(options, &files, err)?;
         }
-        source_unit.write_to_jani_if_requested(options, files_mutex)?;
+    }
+
+    // write to JANI if requested
+    for source_unit in &mut source_units {
+        let source_unit = source_unit.enter();
+        source_unit.write_to_jani_if_requested(options, files_mutex, &tcx)?;
     }
 
     // Desugar encodings from source units. They might generate new source

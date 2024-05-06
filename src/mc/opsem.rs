@@ -1,15 +1,19 @@
 //! Translation of executable HeyVL programs to JANI by the operational
 //! semantics ("opsem"). This module is concerned mostly with statements.
 
+use std::{collections::HashMap, rc::Rc};
+
 use jani::{
-    exprs::{BinaryExpression, BinaryOp, ConstantValue, Expression, UnaryExpression, UnaryOp},
+    exprs::{Expression, UnaryExpression, UnaryOp},
     models::{Assignment, Automaton, Destination, Edge, Location, VariableDeclaration},
     Identifier,
 };
 
 use crate::{
-    ast::{Direction, Expr, ExprKind, Span, Stmt, StmtKind},
+    ast::{Direction, Expr, ExprBuilder, ExprKind, Ident, Span, Stmt, StmtKind},
+    intrinsic::distributions::DistributionProc,
     mc::extract_embed,
+    tyctx::TyCtx,
 };
 
 use super::{specs::SpecAutomaton, translate_expr, translate_ident, JaniConversionError};
@@ -17,6 +21,7 @@ use super::{specs::SpecAutomaton, translate_expr, translate_ident, JaniConversio
 /// Intermediate structure to build the JANI automaton for pGCL semantics with
 /// expected rewards.
 pub struct OpAutomaton {
+    distributions: HashMap<Ident, Rc<DistributionProc>>,
     pub variables: Vec<VariableDeclaration>,
     pub locations: Vec<Location>,
     pub edges: Vec<Edge>,
@@ -24,8 +29,10 @@ pub struct OpAutomaton {
 }
 
 impl OpAutomaton {
-    pub fn new(spec_part: SpecAutomaton) -> Self {
+    pub fn new(tcx: &TyCtx, spec_part: SpecAutomaton) -> Self {
+        let distributions = tcx.get_distributions();
         OpAutomaton {
+            distributions,
             variables: spec_part.get_variables(),
             locations: vec![],
             edges: vec![],
@@ -335,48 +342,42 @@ fn translate_assign(
     automaton.locations.push(location);
 
     if let ExprKind::Call(ident, args) = &rhs.kind {
-        // TODO: this name matching is terrible
-        if ident.name.to_string() == "flip" {
-            let prob = translate_expr(&args[0])?;
-            let opp_prob = Expression::Binary(Box::new(BinaryExpression {
-                op: BinaryOp::Minus,
-                left: Expression::Constant(ConstantValue::Number(1.into())),
-                right: prob.clone(),
-            }));
-            automaton.edges.push(Edge {
-                location: start.clone(),
-                action: None,
-                rate: None,
-                guard: None,
-                destinations: vec![
-                    Destination {
-                        location: next.clone(),
-                        probability: Some(prob.into()),
-                        assignments: vec![Assignment {
-                            reference: lhs.clone(),
-                            value: Expression::Constant(ConstantValue::Boolean(true)),
-                            index: None,
-                            comment: None,
-                        }],
-                        comment: None,
-                    },
-                    Destination {
-                        location: next.clone(),
-                        probability: Some(opp_prob.into()),
-                        assignments: vec![Assignment {
-                            reference: lhs,
-                            value: Expression::Constant(ConstantValue::Boolean(false)),
-                            index: None,
-                            comment: None,
-                        }],
-                        comment: None,
-                    },
-                ],
-                comment: None,
-            });
+        let decl = if let Some(decl) = automaton.distributions.get(ident) {
+            decl
         } else {
             return Err(JaniConversionError::UnsupportedCall(span, *ident));
-        }
+        };
+
+        let builder = ExprBuilder::new(rhs.span);
+        let dist = (decl.apply)(args, builder);
+
+        let destinations = dist
+            .0
+            .iter()
+            .map(|(prob, value)| {
+                let prob = translate_expr(prob)?;
+                let value = translate_expr(value)?;
+                Ok(Destination {
+                    location: next.clone(),
+                    probability: Some(prob.into()),
+                    assignments: vec![Assignment {
+                        reference: lhs.clone(),
+                        value,
+                        index: None,
+                        comment: None,
+                    }],
+                    comment: None,
+                })
+            })
+            .collect::<Result<Vec<Destination>, _>>()?;
+        automaton.edges.push(Edge {
+            location: start.clone(),
+            action: None,
+            rate: None,
+            guard: None,
+            destinations,
+            comment: None,
+        });
     } else {
         let edge = Edge {
             location: start.clone(),

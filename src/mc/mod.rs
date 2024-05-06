@@ -29,6 +29,7 @@ use crate::{
         LitKind, ProcDecl, Shared, Span, Spanned, Stmt, TyKind, UnOpKind, VarDecl,
     },
     procs::proc_verify::verify_proc,
+    tyctx::TyCtx,
     version::self_version_info,
 };
 
@@ -107,14 +108,18 @@ pub struct JaniOptions {
 }
 
 #[allow(clippy::field_reassign_with_default)]
-pub fn proc_to_model(options: &JaniOptions, proc: &ProcDecl) -> Result<Model, JaniConversionError> {
+pub fn proc_to_model(
+    options: &JaniOptions,
+    tcx: &TyCtx,
+    proc: &ProcDecl,
+) -> Result<Model, JaniConversionError> {
     // initialize the spec automaton
     let spec_part = SpecAutomaton::new(proc.direction);
     let mut verify_unit = verify_proc(proc).unwrap();
     let property = extract_properties(&spec_part, &mut verify_unit.block, options.skip_quant_pre)?;
 
     // initialize the rest of the automaton
-    let mut op_automaton = OpAutomaton::new(spec_part);
+    let mut op_automaton = OpAutomaton::new(tcx, spec_part);
 
     // translate the variables
     let (constants, variables) = translate_variables(proc)?;

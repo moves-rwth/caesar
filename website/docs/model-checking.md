@@ -87,14 +87,16 @@ In the body, statements:
  * [Blocks](./heyvl/statements.md#blocks),
  * [Variable declarations](./heyvl/statements.md#variable-declarations) with initializers,
  * Assignments with pure expressions,
- * Sampling from [Bernoulli distributions](./stdlib/distributions.md#bernoulli) with assignments,
- * [`assert` statements](./heyvl/statements.md#assert-and-assume) with Boolean condition of the form `assert ?(b)`,
+ * [Sampling from distributions](./stdlib/distributions.md),
  * [`reward` statements](./heyvl/statements.md#reward-formerly-tick),
- * [Binary demonic choices](./heyvl/statements.md#nondeterministic-choices) in `proc`s,
- * [Binary angelic choices](./heyvl/statements.md#nondeterministic-choices) in `coproc`s,
+ * In `proc`s:
+   * [`assert` statements](./heyvl/statements.md#assert-and-assume) with Boolean condition of the form `assert ?(b)`,
+   * [Binary demonic choices](./heyvl/statements.md#nondeterministic-choices),
+ * In `coproc`s:
+   * [Binary angelic choices](./heyvl/statements.md#nondeterministic-choices),
  * [If-then-else statements](./heyvl/statements.md#boolean-choices),
  * While loops
-    * They are always assumed to have **least fixed-point semantics** when model-checking.[^2] That means we just accumulate rewards over all terminating executions in the Markov chain, as opposed to adding `1` or `\infty` if there is a diverging path.
+   * They are always assumed to have **least fixed-point semantics** when model-checking.[^2] That means we just accumulate rewards over all terminating executions in the Markov chain, as opposed to adding `1` or `\infty` if there is a diverging path.
  * Annotations, in particular [proof rule annotations](./proof-rules/), will be ignored.
 
 ### Supported Types
@@ -119,7 +121,6 @@ In particular, the following constructs are *not* supported:
  * Calls to uninterpreted functions or to `proc`s/`coproc`s,
  * Uninitialized variable declarations or `havoc`/`cohavoc` statements,
  * Quantitative verification statements such as `assume`/`assert` in arbitrary locations.
- * Distributions other than Bernoulli are not yet supported.
  * [User-defined domains](./heyvl/domains.md), axioms will be ignored.
 
 

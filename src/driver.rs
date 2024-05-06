@@ -301,6 +301,7 @@ impl SourceUnit {
         &self,
         options: &Options,
         files: &Mutex<Files>,
+        tcx: &TyCtx,
     ) -> Result<(), VerifyError> {
         if let Some(jani_dir) = &options.jani_dir {
             match self {
@@ -309,7 +310,7 @@ impl SourceUnit {
                         let jani_options = JaniOptions {
                             skip_quant_pre: options.jani_skip_quant_pre,
                         };
-                        let jani_model = mc::proc_to_model(&jani_options, &decl_ref.borrow());
+                        let jani_model = mc::proc_to_model(&jani_options, tcx, &decl_ref.borrow());
                         let jani_model = match jani_model {
                             Ok(jani_model) => jani_model,
                             Err(err) => {

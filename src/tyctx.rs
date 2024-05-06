@@ -3,12 +3,17 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
+    iter::FromIterator,
+    ops::Deref,
     rc::Rc,
 };
 
 use indexmap::IndexMap;
 
-use crate::ast::{DeclKind, DeclRef, DomainDecl, Ident, LitKind, Span, Symbol, TyKind, VarKind};
+use crate::{
+    ast::{DeclKind, DeclRef, DomainDecl, Ident, LitKind, Span, Symbol, TyKind, VarKind},
+    intrinsic::distributions::DistributionProc,
+};
 
 /// This is the central symbol table for the language. It keeps track of all
 /// definitions,
@@ -154,5 +159,17 @@ impl TyCtx {
             LitKind::Infinity => TyKind::EUReal,
             LitKind::Bool(_) => TyKind::Bool,
         }
+    }
+
+    pub fn get_distributions(&self) -> HashMap<Ident, Rc<DistributionProc>> {
+        HashMap::from_iter(self.declarations.borrow().iter().flat_map(|(ident, decl)| {
+            if let DeclKind::ProcIntrin(intrin) = decl.deref() {
+                if let Ok(distribution) = intrin.clone().as_any_rc().downcast::<DistributionProc>()
+                {
+                    return Some((*ident, distribution));
+                }
+            };
+            None
+        }))
     }
 }
