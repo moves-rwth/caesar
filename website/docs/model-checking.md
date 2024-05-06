@@ -29,7 +29,6 @@ For a simple example, consider the HeyVL program below.
 ```heyvl
 @wp
 proc geo_mc(init_c: UInt) -> (c: UInt, cont: Bool)
-    pre ?(true)
     post [!cont]
 {
     c = init_c

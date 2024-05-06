@@ -164,6 +164,11 @@ pub struct Options {
     #[structopt(long, parse(from_os_str))]
     pub jani_dir: Option<PathBuf>,
 
+    /// During extraction of the pre for JANI generation, skip the quantitative
+    /// pres (instead of failing with an error).
+    #[structopt(long)]
+    pub jani_skip_quant_pre: bool,
+
     /// Do not try to slice after an error occurs. Just return the first
     /// counterexample.
     #[structopt(long)]

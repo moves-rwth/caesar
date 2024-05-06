@@ -7,7 +7,10 @@ use jani::{
     Identifier,
 };
 
-use crate::ast::{Direction, Expr, ExprKind, Span, Stmt, StmtKind, UnOpKind};
+use crate::{
+    ast::{Direction, Expr, ExprKind, Span, Stmt, StmtKind},
+    mc::extract_embed,
+};
 
 use super::{specs::SpecAutomaton, translate_expr, translate_ident, JaniConversionError};
 
@@ -91,11 +94,11 @@ fn translate_stmt(
             if *dir != Direction::Down {
                 return Err(JaniConversionError::UnsupportedStmt(Box::new(stmt.clone())));
             }
-            // TODO: handle negations idiom
             // TODO: negate if in upper bounds setting
-            let cond = match &expr.kind {
-                ExprKind::Unary(un_op, cond) if un_op.node == UnOpKind::Embed => cond.clone(),
-                _ => return Err(JaniConversionError::UnsupportedAssert(expr.clone())),
+            let cond = if let Some(cond) = extract_embed(expr) {
+                cond
+            } else {
+                return Err(JaniConversionError::UnsupportedAssert(expr.clone()));
             };
 
             let location = Location {

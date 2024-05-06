@@ -23,8 +23,10 @@ use jani::{
 
 use crate::{
     ast::{
-        visit::VisitorMut, BinOpKind, DeclRef, Diagnostic, Expr, ExprBuilder, ExprKind, Ident,
-        Label, LitKind, ProcDecl, Span, Stmt, TyKind, UnOpKind, VarDecl,
+        util::{is_bot_lit, is_top_lit},
+        visit::VisitorMut,
+        BinOpKind, DeclRef, Diagnostic, Expr, ExprBuilder, ExprData, ExprKind, Ident, Label,
+        LitKind, ProcDecl, Shared, Span, Spanned, Stmt, TyKind, UnOpKind, VarDecl,
     },
     procs::proc_verify::verify_proc,
     version::self_version_info,
@@ -40,6 +42,7 @@ pub enum JaniConversionError {
     UnsupportedType(TyKind, Span),
     UnsupportedExpr(Expr),
     UnsupportedStmt(Box<Stmt>),
+    UnsupportedPre(Expr),
     UnsupportedAssume(Expr),
     UnsupportedAssert(Expr),
     NondetSelection(Span),
@@ -64,6 +67,12 @@ impl JaniConversionError {
                 Diagnostic::new(ReportKind::Error, stmt.span)
                     .with_message("JANI: Statement is not supported")
                     .with_label(Label::new(stmt.span).with_message("here"))
+            }
+            JaniConversionError::UnsupportedPre(expr) => {
+                Diagnostic::new(ReportKind::Error, expr.span)
+                    .with_message("JANI: Pre must be a Boolean expression")
+                    .with_label(Label::new(expr.span).with_message("expected ?(b) here"))
+                    .with_note("You can ignore quantitative pre for JANI generation with the option --jani-skip-quant-pre.")
             }
             JaniConversionError::UnsupportedAssume(expr) => {
                 Diagnostic::new(ReportKind::Error, expr.span)
@@ -92,12 +101,17 @@ impl JaniConversionError {
     }
 }
 
+#[derive(Debug)]
+pub struct JaniOptions {
+    pub skip_quant_pre: bool,
+}
+
 #[allow(clippy::field_reassign_with_default)]
-pub fn proc_to_model(proc: &ProcDecl) -> Result<Model, JaniConversionError> {
+pub fn proc_to_model(options: &JaniOptions, proc: &ProcDecl) -> Result<Model, JaniConversionError> {
     // initialize the spec automaton
     let spec_part = SpecAutomaton::new(proc.direction);
     let mut verify_unit = verify_proc(proc).unwrap();
-    let property = extract_properties(&spec_part, &mut verify_unit.block)?;
+    let property = extract_properties(&spec_part, &mut verify_unit.block, options.skip_quant_pre)?;
 
     // initialize the rest of the automaton
     let mut op_automaton = OpAutomaton::new(spec_part);
@@ -349,4 +363,43 @@ fn translate_expr(expr: &Expr) -> Result<Expression, JaniConversionError> {
             }
         },
     }
+}
+
+/// Extract the Boolean expression out from an embed expression. This also
+/// handles the `!?(expr)` idiom, returning `?(!expr)`, as well as top and
+/// bottom literals.
+fn extract_embed(expr: &Expr) -> Option<Expr> {
+    if let ExprKind::Unary(op, operand) = &expr.kind {
+        match op.node {
+            UnOpKind::Embed => return Some(operand.clone()),
+            UnOpKind::Not => {
+                if let ExprKind::Unary(op, inner_operand) = &expr.kind {
+                    if op.node == UnOpKind::Embed {
+                        let builder = ExprBuilder::new(operand.span);
+                        return Some(builder.unary(
+                            UnOpKind::Not,
+                            Some(TyKind::Bool),
+                            inner_operand.clone(),
+                        ));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if is_bot_lit(expr) {
+        return Some(Shared::new(ExprData {
+            kind: ExprKind::Lit(Spanned::new(expr.span, LitKind::Bool(false))),
+            ty: Some(TyKind::Bool),
+            span: expr.span,
+        }));
+    }
+    if is_top_lit(expr) {
+        return Some(Shared::new(ExprData {
+            kind: ExprKind::Lit(Spanned::new(expr.span, LitKind::Bool(true))),
+            ty: Some(TyKind::Bool),
+            span: expr.span,
+        }));
+    }
+    None
 }

@@ -18,7 +18,7 @@ use crate::{
         resolve::Resolve,
         tycheck::Tycheck,
     },
-    mc,
+    mc::{self, JaniOptions},
     opt::{
         boolify::Boolify, egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder,
         RemoveParens,
@@ -306,7 +306,10 @@ impl SourceUnit {
             match self {
                 SourceUnit::Decl(decl) => {
                     if let DeclKind::ProcDecl(decl_ref) = decl {
-                        let jani_model = mc::proc_to_model(&decl_ref.borrow());
+                        let jani_options = JaniOptions {
+                            skip_quant_pre: options.jani_skip_quant_pre,
+                        };
+                        let jani_model = mc::proc_to_model(&jani_options, &decl_ref.borrow());
                         let jani_model = match jani_model {
                             Ok(jani_model) => jani_model,
                             Err(err) => {

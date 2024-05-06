@@ -1,21 +1,20 @@
 //! Extraction of quantitative specifications and conversion to JANI equivalents.
 
 use jani::{
-    exprs::{ConstantValue, Expression},
+    exprs::{ConstantValue, Expression, UnaryExpression, UnaryOp},
     models::{Destination, Edge, Location, TransientValue, VariableDeclaration},
     properties::{
         ExpectedValueExpression, ExpectedValueKind, FilterExpression, FilterFun, Property,
-        PropertyExpression, Reward, StatePredicate,
+        PropertyExpression, QuantifiedExpression, Quantifier, Reward, StatePredicate,
+        UnaryPathExpression, UnaryPathExpressionKind,
     },
     types::{BasicType, Type},
     Identifier,
 };
 
-use crate::ast::{
-    BinOpKind, Direction, ExprBuilder, ExprKind, Span, Stmt, StmtKind, TyKind, UnOpKind,
-};
+use crate::ast::{BinOpKind, Direction, ExprBuilder, Span, Stmt, StmtKind, TyKind, UnOpKind};
 
-use super::{translate_expr, JaniConversionError};
+use super::{extract_embed, translate_expr, JaniConversionError};
 
 /// The part of the automaton that's just for encoding the specification, such
 /// as end, error, or miracle states.
@@ -140,6 +139,21 @@ impl SpecAutomaton {
             }],
             comment: None,
         });
+
+        // edge from error to sink
+        edges.push(Edge {
+            location: self.error_location(),
+            action: None,
+            rate: None,
+            guard: None,
+            destinations: vec![Destination {
+                location: self.sink_location(),
+                probability: None,
+                assignments: vec![],
+                comment: None,
+            }],
+            comment: None,
+        });
     }
 }
 
@@ -156,15 +170,18 @@ pub struct JaniPgclProperties {
 pub fn extract_properties(
     spec_part: &SpecAutomaton,
     stmts: &mut Vec<Stmt>,
+    skip_quant_pre: bool,
 ) -> Result<JaniPgclProperties, JaniConversionError> {
     let reward = mk_expected_reward_property(spec_part, "reward");
+    let diverge_prob = mk_diverge_prob_property(spec_part, "diverge_prob");
+    let can_diverge = mk_can_diverge_property(spec_part, "can_diverge");
 
-    let restrict_initial = extract_preconditions(spec_part, stmts)?;
+    let restrict_initial = extract_preconditions(spec_part, stmts, skip_quant_pre)?;
     let sink_reward = extract_post(spec_part, stmts)?;
 
     Ok(JaniPgclProperties {
         restrict_initial,
-        properties: vec![reward],
+        properties: vec![reward, diverge_prob, can_diverge],
         sink_reward,
     })
 }
@@ -194,11 +211,65 @@ fn mk_expected_reward_property(spec_part: &SpecAutomaton, name: &str) -> Propert
     }
 }
 
+fn mk_diverge_path(spec_part: &SpecAutomaton) -> UnaryPathExpression {
+    UnaryPathExpression {
+        op: UnaryPathExpressionKind::Globally,
+        exp: Box::new(PropertyExpression::Expression(Expression::Unary(Box::new(
+            UnaryExpression {
+                op: UnaryOp::Not,
+                exp: Expression::Identifier(spec_part.var_is_sink_state()),
+            },
+        )))),
+        step_bounds: None,
+        time_bounds: None,
+        reward_bounds: None,
+    }
+}
+
+fn mk_diverge_prob_property(spec_part: &SpecAutomaton, name: &str) -> Property {
+    let quantifier = match spec_part.direction {
+        Direction::Down => Quantifier::Pmin,
+        Direction::Up => Quantifier::Pmax,
+    };
+    let diverge_prob = PropertyExpression::Quantified(QuantifiedExpression {
+        op: quantifier,
+        exp: Box::new(PropertyExpression::UnaryPath(mk_diverge_path(spec_part))),
+    });
+    let diverge_prob_from_initial = PropertyExpression::Filter(FilterExpression {
+        fun: FilterFun::Values,
+        values: Box::new(diverge_prob),
+        states: Box::new(PropertyExpression::Predicate(StatePredicate::Initial)),
+    });
+    Property {
+        name: Identifier(name.to_owned()),
+        expression: diverge_prob_from_initial,
+        comment: None,
+    }
+}
+
+fn mk_can_diverge_property(spec_part: &SpecAutomaton, name: &str) -> Property {
+    let can_diverge = PropertyExpression::Quantified(QuantifiedExpression {
+        op: Quantifier::Exists,
+        exp: Box::new(PropertyExpression::UnaryPath(mk_diverge_path(spec_part))),
+    });
+    let can_diverge_from_initial = PropertyExpression::Filter(FilterExpression {
+        fun: FilterFun::Values,
+        values: Box::new(can_diverge),
+        states: Box::new(PropertyExpression::Predicate(StatePredicate::Initial)),
+    });
+    Property {
+        name: Identifier(name.to_owned()),
+        expression: can_diverge_from_initial,
+        comment: None,
+    }
+}
+
 /// Eat Boolean assumptions from the beginning of the program and convert them
 /// to a Boolean precondition.
 fn extract_preconditions(
     spec_part: &SpecAutomaton,
     stmts: &mut Vec<Stmt>,
+    skip_quant_pre: bool,
 ) -> Result<Expression, JaniConversionError> {
     let mut restrict_initial = vec![];
     while let Some(first) = stmts.first() {
@@ -206,20 +277,18 @@ fn extract_preconditions(
             if *direction != spec_part.direction {
                 return Err(JaniConversionError::MismatchedDirection(first.span));
             }
-            if let ExprKind::Unary(un_op, operand) = &expr.kind {
-                if un_op.node != UnOpKind::Embed {
-                    return Err(JaniConversionError::UnsupportedAssume(expr.clone()));
-                }
+            if let Some(operand) = extract_embed(expr) {
                 let mut operand = operand.clone();
                 if spec_part.direction == Direction::Up {
+                    // TODO: if one used the !?(b) idiom, we'd have !!b in the end. optimize that
                     let builder = ExprBuilder::new(Span::dummy_span());
                     operand = builder.unary(UnOpKind::Not, Some(TyKind::Bool), operand);
                 }
                 restrict_initial.push(operand.clone());
-                stmts.remove(0);
-            } else {
-                return Err(JaniConversionError::UnsupportedAssume(expr.clone()));
+            } else if !skip_quant_pre {
+                return Err(JaniConversionError::UnsupportedPre(expr.clone()));
             }
+            stmts.remove(0);
         } else {
             break;
         }
