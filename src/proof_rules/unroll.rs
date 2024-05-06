@@ -9,8 +9,9 @@ use std::fmt;
 
 use crate::{
     ast::{
-        visit::VisitorMut, Direction, Expr, ExprKind, Files, Ident, SourceFilePath, Span, Spanned,
-        Stmt, Symbol, TyKind,
+        util::{is_bot_lit, is_top_lit},
+        visit::VisitorMut,
+        Direction, Expr, Files, Ident, SourceFilePath, Span, Spanned, Stmt, Symbol, TyKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -105,17 +106,15 @@ impl Encoding for UnrollAnnotation {
 
         let k: u128 = lit_u128(k);
 
-        if let ExprKind::Lit(lit) = &terminator.kind {
-            match direction {
-                Direction::Down => {
-                    if !lit.node.is_top() {
-                        tracing::warn!("Top terminator is not used with down direction!");
-                    }
+        match direction {
+            Direction::Down => {
+                if !is_top_lit(terminator) {
+                    tracing::warn!("Top terminator is not used with down direction!");
                 }
-                Direction::Up => {
-                    if !lit.node.is_bot() {
-                        tracing::warn!("Bottom terminator is not used with up direction!");
-                    }
+            }
+            Direction::Up => {
+                if !is_bot_lit(terminator) {
+                    tracing::warn!("Bottom terminator is not used with up direction!");
                 }
             }
         }

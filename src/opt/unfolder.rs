@@ -29,6 +29,7 @@ use z3rro::prover::Prover;
 
 use crate::{
     ast::{
+        util::{is_bot_lit, is_top_lit},
         visit::{walk_expr, VisitorMut},
         BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Shared, Span, SpanVariant, Spanned,
         TyKind, UnOpKind,
@@ -117,11 +118,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
                 }
                 _ => {}
             },
-            ExprKind::Lit(lit) if lit.node.is_bot() => return None,
-            ExprKind::Cast(inner) => match &inner.kind {
-                ExprKind::Lit(lit) if lit.node.is_bot() => return None,
-                _ => {}
-            },
+            _ if is_bot_lit(expr) => return None,
             _ => {}
         }
         Some(callback(self))
@@ -139,11 +136,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
                     return self.with_sat(&negate_expr(operand.clone()), callback);
                 }
             }
-            ExprKind::Lit(lit) if lit.node.is_top() => return None,
-            ExprKind::Cast(inner) => match &inner.kind {
-                ExprKind::Lit(lit) if lit.node.is_top() => return None,
-                _ => {}
-            },
+            _ if is_top_lit(expr) => return None,
             _ => {}
         }
         Some(callback(self))

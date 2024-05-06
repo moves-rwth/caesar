@@ -8,6 +8,7 @@
 //! both modules in the future.
 
 use crate::ast::{
+    util::{is_bot_lit, is_top_lit},
     visit::{walk_expr, VisitorMut},
     BinOpKind, Expr, ExprBuilder, ExprKind, Span, SpanVariant, TyKind, UnOpKind,
 };
@@ -306,21 +307,6 @@ impl Boolify {
             builder.bot_lit(e.ty.as_ref().unwrap()),
             e.clone(),
         ))
-    }
-}
-
-fn is_top_lit(expr: &Expr) -> bool {
-    match &expr.kind {
-        ExprKind::Lit(lit) => lit.node.is_top(),
-        _ => false,
-    }
-}
-
-fn is_bot_lit(expr: &Expr) -> bool {
-    match &expr.kind {
-        ExprKind::Cast(inner) => is_bot_lit(inner),
-        ExprKind::Lit(lit) => lit.node.is_bot(),
-        _ => false,
     }
 }
 

@@ -112,6 +112,27 @@ impl VisitorMut for ModifiedVariableCollector {
     }
 }
 
+/// Whether this is a [`ExprKind::Lit`] that is a top element.
+pub fn is_top_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(lit) => lit.node.is_top(),
+        _ => false,
+    }
+}
+
+/// Whether this is a [`ExprKind::Lit`] that is a bottom element. Will walk
+/// through one [`ExprKind::Cast`] expression (as generated for 0 for EUReal).
+pub fn is_bot_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(lit) => lit.node.is_bot(),
+        ExprKind::Cast(inner) => match &inner.kind {
+            ExprKind::Lit(lit) => lit.node.is_bot(),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{
