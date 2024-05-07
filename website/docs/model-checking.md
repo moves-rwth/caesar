@@ -95,9 +95,33 @@ In the body, statements:
  * In `coproc`s:
    * [Binary angelic choices](./heyvl/statements.md#nondeterministic-choices),
  * [If-then-else statements](./heyvl/statements.md#boolean-choices),
- * While loops
-   * They are always assumed to have **least fixed-point semantics** when model-checking.[^2] That means we just accumulate rewards over all terminating executions in the Markov chain, as opposed to adding `1` or `\infty` if there is a diverging path.
+ * While loops (with least-fixed point semantics &mdash; [see below for semantics details](#loop-semantics)),
  * Annotations, in particular [proof rule annotations](./proof-rules/), will be ignored.
+
+#### Loop Semantics
+
+:::warning
+
+In the JANI translation, while loops are always assumed to have **least fixed-point semantics** when model-checking.[^2]
+That means we just accumulate total expected rewards over all terminating executions in the Markov chain.
+This corresponds to [wp/ert](./proof-rules/calculi.md) semantics.
+
+:::
+
+Notice that in `proc`s, this is different from the default behavior of Caesar's [proof rules such as induction](./proof-rules/induction.md).
+They would assume greatest fixed-point (wlp) semantics in `proc`s.
+We recommend always adding the [`@wp` or `@ert` annotations](./proof-rules/calculi.md) to your `proc`/`coproc`.
+They instruct Caesar to enforce that sound proof rules for least fixed-point semantics are being used.
+
+If you want [one-bounded wlp semantics](./proof-rules/calculi.md) (greatest fixed-points), then you can use the generated property `diverge_prob` to obtain the probability of divergence.
+Then the result should be the sum of the `reward` and `diverge_prob` properties (Storm: `-jprop reward,diverge_prob`).[^3]
+
+If you want *unbounded* greatest fixed-point semantics, then you can use the generated property `can_diverge` to check whether there is a diverging path.
+Then the result is `\infty` if `can_diverge` is `true`, otherwise the result is `reward`.[^4]
+This property is currently not supported by Storm.[^5]
+
+We intentionally avoid using the *reachability reward* properties (i.e. setting the `reach` property of `ExpectedValueExpression` in JANI) as it will assign the expected reward `\infty` to any state from which goal states are not reachable with probability 1.
+If the program is not AST, then this does not correspond to either least or greatest fixpoint semantics weakest pre-expectation style semantics that we know of.
 
 ### Supported Types
 
@@ -125,4 +149,7 @@ In particular, the following constructs are *not* supported:
 
 
 [^1]: We use the `--exact` and `--sound` flags to ensure that Storm is forced to use exact arithmetic and only sound algorithms to produce the solution. Consult your chosen model checker's documentation to see which guarantees they give.
-[^2]: As far as we can tell, encoding greatest fixpoint/weakest *liberal* pre-expectation semantics is not possible with a single JANI property.
+[^2]: We always use least-fixed point semantics because encoding greatest fixpoint/weakest *liberal* pre-expectation semantics seems to be impossible with a single JANI property right now.
+[^3]: [Corollary 4.26 of Benjamin Kaminski's PhD thesis](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=115) states that (one-bounded) `wlp` can be computed via `wp` plus the probability of divergence.
+[^4]: This is similar to the qualitative wlp, which evaluates to the top element of the Boolean lattice (`true`) if the loop has a possibility of nontermination. In the quantitative setting, we have `\infty` as our top element of the [`EUReal`](./stdlib/numbers.md#eureal) lattice.
+[^5]: Storm currently does not support the qualitative analysis required for the `can_diverge` property and will throw an error. The feature is tracked in the issue [moves-rwth/storm#529](https://github.com/moves-rwth/storm/issues/529).
