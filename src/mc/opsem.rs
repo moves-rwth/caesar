@@ -5,7 +5,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use jani::{
     exprs::{Expression, UnaryExpression, UnaryOp},
-    models::{Assignment, Automaton, Destination, Edge, Location, VariableDeclaration},
+    models::{Assignment, Automaton, Destination, Edge, Location, ModelType, VariableDeclaration},
     Identifier,
 };
 
@@ -26,6 +26,7 @@ pub struct OpAutomaton {
     pub locations: Vec<Location>,
     pub edges: Vec<Edge>,
     pub spec_part: SpecAutomaton,
+    has_nondet: bool,
 }
 
 impl OpAutomaton {
@@ -37,6 +38,7 @@ impl OpAutomaton {
             locations: vec![],
             edges: vec![],
             spec_part,
+            has_nondet: false,
         }
     }
 
@@ -49,11 +51,16 @@ impl OpAutomaton {
         name: Identifier,
         initial_location: Identifier,
         expectation: Expression,
-    ) -> Automaton {
+    ) -> (ModelType, Automaton) {
         self.spec_part
             .finish(&mut self.locations, &mut self.edges, expectation);
 
-        Automaton {
+        let model_type = if self.has_nondet {
+            ModelType::Mdp
+        } else {
+            ModelType::Dtmc
+        };
+        let automaton = Automaton {
             name,
             variables: self.variables,
             restrict_initial: None,
@@ -61,7 +68,8 @@ impl OpAutomaton {
             initial_locations: vec![initial_location],
             edges: self.edges,
             comment: None,
-        }
+        };
+        (model_type, automaton)
     }
 }
 
@@ -169,6 +177,7 @@ fn translate_stmt(
             if direction != automaton.spec_part.direction {
                 return Err(JaniConversionError::MismatchedDirection(stmt.span));
             }
+            automaton.has_nondet = true;
             let location = Location {
                 name: automaton.next_stmt_location(),
                 time_progress: None,

@@ -15,7 +15,7 @@ use jani::{
     },
     models::{
         Composition, CompositionElement, ConstantDeclaration, Metadata, Model, ModelFeature,
-        ModelType, VariableDeclaration,
+        VariableDeclaration,
     },
     types::{BasicType, BoundedType, BoundedTypeBase, Type},
     Identifier,
@@ -137,10 +137,10 @@ pub fn proc_to_model(
 
     // now finish building the automaton
     let automaton_name = Identifier(proc.name.to_string());
-    let mut automaton = op_automaton.finish(automaton_name, start, property.sink_reward);
+    let (model_type, mut automaton) =
+        op_automaton.finish(automaton_name, start, property.sink_reward);
 
-    // TODO: change to MDP if there's nondeterminism
-    let mut model = Model::new(ModelType::Dtmc);
+    let mut model = Model::new(model_type);
 
     // Metadata
     let mut metadata = Metadata::default();
