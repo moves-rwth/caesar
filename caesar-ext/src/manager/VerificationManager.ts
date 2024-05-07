@@ -2,31 +2,33 @@
 import * as vscode from "vscode";
 import { LanguageClient } from "vscode-languageclient/node";
 import { Manager, Observer } from "./Manager";
+import APIRegister from "../APIRegister";
 
 
 export type VerificationStatus = Array<[vscode.Range, boolean]>;
 
-// Subject
 export class VerificationManager extends Manager {
 
     private client: LanguageClient;
 
+    // private verificationStatus: Map<vscode.TextEditor, VerificationStatus> = new Map();
     private verificationStatus: VerificationStatus = [];
-
-
 
     constructor(client: LanguageClient) {
         super();
         this.client = client;
+
     }
 
-    public getStatus(): VerificationStatus {
+    public getStatus(editor: vscode.TextEditor): VerificationStatus {
+        // return this.verificationStatus.get(editor) || [];
         return this.verificationStatus;
     }
 
-    public setStatus(newStatus: VerificationStatus): void {
+    public setStatus(editor: vscode.TextEditor, newStatus: VerificationStatus): void {
+        // this.verificationStatus.set(editor, newStatus);
         this.verificationStatus = newStatus;
-        this.notify(newStatus);
+        this.notify(this.verificationStatus);
     }
 
 
@@ -38,7 +40,7 @@ export class VerificationManager extends Manager {
             text: document.getText()
         }
         let response: VerificationStatus = await this.client.sendRequest('custom/verifyStatus', { text_document: documentItem });
-        this.setStatus(response);
+        this.setStatus(editor, response);
         return response;
     }
 

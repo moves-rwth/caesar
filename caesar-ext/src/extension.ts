@@ -4,10 +4,13 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
 import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind } from 'vscode-languageclient/node';
-import { VerificationManager } from './VerificationManager';
-import { GutterInformationView } from './GutterInformationView';
-import { StatusBarView } from './StatusBarView';
-import { State, StateManager } from './StateManager';
+import { VerificationManager } from './manager/VerificationManager';
+import { GutterInformationView } from './view/GutterInformationView';
+import { StatusBarView } from './view/StatusBarView';
+import { State, StateManager } from './manager/StateManager';
+import { InlineGhostTextView } from './view/InlineGhostTextView';
+import { ViewCollection } from './view/ViewCollection';
+import APIRegister from './APIRegister';
 
 
 let client: LanguageClient;
@@ -56,35 +59,67 @@ export function activate(context: vscode.ExtensionContext) {
 	let verificationManager = new VerificationManager(client);
 	let stateManager = new StateManager(client);
 
-	// Initialize UI Views
-	let gutterInfo = new GutterInformationView(verificationManager, context);
-	let statusBar = new StatusBarView(stateManager);
+	// // Initialize UI Views
+	let viewCollection = new ViewCollection(verificationManager, stateManager, context);
 
 
-	vscode.workspace.onDidSaveTextDocument(event => {
-		if (stateManager.getState() === State.Starting) {
-			return
+	APIRegister.register('onDidSaveTextDocument', (textDocument) => {
+		if (textDocument.languageId === "heyvl") {
+			if (stateManager.getState() === State.Starting) {
+				return
+			}
+			const openEditor = vscode.window.visibleTextEditors.filter(
+				editor => editor.document.uri === textDocument.uri
+			)[0]
+			stateManager.setState(State.Verifying);
+			console.log("Verification Started")
+
+			verificationManager.verify(openEditor, textDocument).then((_) => {
+				stateManager.setState(State.Finished)
+			})
 		}
-		const openEditor = vscode.window.visibleTextEditors.filter(
-			editor => editor.document.uri === event.uri
-		)[0]
-		stateManager.setState(State.Verifying);
-		console.log("Verification Started")
-		verificationManager.verify(openEditor, openEditor.document).then((_) => {
-			stateManager.setState(State.Finished)
-		}
-		)
+	});
 
+
+	vscode.commands.registerCommand('caesar.restartServer', async () => {
+		console.log("Restarting Caesar...")
+		client.restart()
+	});
+
+	vscode.commands.registerCommand('caesar.startServer', async () => {
+		console.log("Starting Caesar...")
+		client.start()
 
 	});
 
+	vscode.commands.registerCommand('caesar.stopServer', async () => {
+		console.log("Stopping Caesar...")
+		client.stop()
+	});
+
+	vscode.commands.registerCommand('caesar.verify', async () => {
+		const openEditor = vscode.window.activeTextEditor
+		if (openEditor) {
+			stateManager.setState(State.Verifying);
+			console.log("Verification Started")
+			verificationManager.verify(openEditor, openEditor.document).then((_) => {
+				stateManager.setState(State.Finished)
+			})
+		}
+	});
+
+
+	// Submit all received callbacks to vscode api
+	APIRegister.submitAll();
 	// Start the client. This will also launch the server
 	client.start();
 
 	console.log('Caesar is now active!');
 
-	context.subscriptions.push(statusBar);
-	context.subscriptions.push(gutterInfo);
+
+
+	// Add to a list of disposables which are disposed when this extension is deactivated.
+	context.subscriptions.push(viewCollection);
 	context.subscriptions.push(client);
 
 }

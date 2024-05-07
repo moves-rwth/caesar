@@ -11,6 +11,24 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "caesar.restartServer",
+        "title": "Caesar: Restart Server"
+      },
+      {
+        "command": "caesar.startServer",
+        "title": "Caesar: Start Server"
+      },
+      {
+        "command": "caesar.stopServer",
+        "title": "Caesar: Stop Server"
+      },
+      {
+        "command": "caesar.verify",
+        "title": "Caesar: Verify"
+      }
+    ],
     "languages": [
       {
         "id": "heyvl",
@@ -29,6 +47,56 @@
         "language": "heyvl",
         "scopeName": "source.heyvl",
         "path": "./syntaxes/heyvl.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Caesar",
+      "properties": {
+        "caesar.uI.gutterIcons.showGutterIcons": {
+          "type": "boolean",
+          "default": true,
+          "description": "Specifies whether to show icons on the gutter about the verification status."
+        },
+        "caesar.uI.inlineGhostText.showInlineGhostText": {
+          "type": "boolean",
+          "default": true,
+          "description": "Specifies whether to show inline ghost text about the wp/wlp/ert."
+        },
+        "caesar.uI.statusBar.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Specifies whether to show the status bar."
+        },
+        "caesar.automaticVerification": {
+          "type": "string",
+          "default": "onsave",
+          "enum": [
+            "never",
+            "onsave"
+          ],
+          "description": "Specifies when Caesar automatically verifies the file."
+        }
+      }
+    },
+    "colors": [
+      {
+        "id": "caesar.inlineGhostBackgroundColor",
+        "description": "Specifies the background color of the inline ghost texts ",
+        "defaults": {
+          "dark": "#00000000",
+          "light": "#00000000",
+          "highContrast": "#00000000"
+        }
+      },
+      {
+        "id": "caesar.inlineGhostForegroundColor",
+        "description": "Specifies the foreground color of the inline ghost texts",
+        "defaults": {
+          "dark": "#99999959",
+          "light": "#99999959",
+          "highContrast": "#99999999"
+        }
       }
     ]
   },

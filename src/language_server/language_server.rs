@@ -45,7 +45,7 @@ pub fn run_server(options: &Options) -> Result<(), Box<dyn Error + Send + Sync>>
     let mut workspace_folders = Arc::new(Mutex::new(Vec::new()));
     let mut proc_status_map: HashMap<Url, Vec<(lsp_types::Range, bool)>> = HashMap::new();
 
-    let start_notification = lsp_server::Notification::new("custom/serverReady".to_string(), {});
+    let start_notification = lsp_server::Notification::new("custom/serverReady".to_string(), ());
     let _ = connection
         .sender
         .send(Message::Notification(start_notification));

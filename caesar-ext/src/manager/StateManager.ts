@@ -18,11 +18,13 @@ export class StateManager extends Manager {
 
     private client: LanguageClient;
 
-    private state: State = State.Starting;
+    private state: State;
 
     constructor(client: LanguageClient) {
         super();
         this.client = client;
+        this.state = State.Starting;
+        this.notify(this.state);
 
         client.onNotification("custom/serverReady", () => {
             this.setState(State.Ready);
