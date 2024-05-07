@@ -9,26 +9,26 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onLanguage:heyvl"
-  ],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "caesar.helloWorld",
-        "title": "Hello World"
-      }
-    ],
     "languages": [
       {
         "id": "heyvl",
+        "aliases": [
+          "HeyVL",
+          "heyvl"
+        ],
         "extensions": [
           ".heyvl"
         ],
-        "aliases": [
-          "HeyVL"
-        ]
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "heyvl",
+        "scopeName": "source.heyvl",
+        "path": "./syntaxes/heyvl.tmLanguage.json"
       }
     ]
   },
