@@ -17,7 +17,7 @@ datatype-eureal = ["z3rro/datatype-eureal"]
 datatype-eureal-funcs = ["z3rro/datatype-eureal-funcs"]
 static-link-z3 = ["z3/static-link-z3"]
 # Emit log messages to stderr without timing information. This is useful to diff logs.
-log-print-timeless = [] 
+log-print-timeless = []
 
 [dependencies]
 string-interner = "0.12"
@@ -68,10 +68,6 @@ pretty_assertions = "1.4.0"
 name = "integration"
 path = "tests/integration.rs"
 harness = false
-
-[profile.dev]
-lto = false
-# debug = false
 
 [profile.release]
 # Debug information is nice, but it increases the binary size by about 500 megabytes.
