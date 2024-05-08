@@ -4,6 +4,8 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "VSCode Extension: npm watch",
+			"path": "vscode-ext",
 			"type": "npm",
 			"script": "watch",
 			"problemMatcher": "$tsc-watch",
@@ -13,7 +15,7 @@
 			},
 			"group": {
 				"kind": "build",
-				"isDefault": true
+				"isDefault": false,
 			}
 		}
 	]
