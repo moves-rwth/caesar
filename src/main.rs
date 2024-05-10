@@ -214,7 +214,7 @@ async fn run_cli(options: Options) -> ExitCode {
         return ExitCode::from(1);
     }
 
-    let mut client = CliServer::new();
+    let mut client = CliServer::new(&options);
     let user_files: Vec<FileId> = options
         .files
         .iter()
@@ -333,15 +333,17 @@ pub async fn verify_files(
 pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, servers::TestServer) {
     use ast::SourceFilePath;
 
-    let mut server = servers::TestServer::new();
+    let mut options = Options::default();
+    options.werr = true;
+
+    let mut server = servers::TestServer::new(&options);
     let file_id = server
         .get_files_internal()
         .lock()
         .unwrap()
         .add(SourceFilePath::Builtin, source.to_owned())
         .id;
-    let mut options = Options::default();
-    options.werr = true;
+
     let options = Arc::new(options);
     let limits_ref = LimitsRef::new(None);
     let res = verify_files_main(&options, limits_ref, &mut server, &[file_id]);
@@ -352,15 +354,16 @@ pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, servers::
 pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
     use ast::SourceFilePath;
 
-    let mut client = servers::TestServer::new();
+    let mut options = Options::default();
+    options.werr = true;
+
+    let mut client = servers::TestServer::new(&options);
     let file_id = client
         .get_files_internal()
         .lock()
         .unwrap()
         .add(SourceFilePath::Builtin, source.to_owned())
         .id;
-    let mut options = Options::default();
-    options.werr = true;
 
     let mut source_units: Vec<Item<SourceUnit>> =
         SourceUnit::parse(&client.get_file(file_id).unwrap(), options.raw)
@@ -371,6 +374,7 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
     // 2. Resolving (and declaring) idents
     let mut tcx = TyCtx::new(TyKind::EUReal);
     let mut files = client.get_files_internal().lock().unwrap();
+    init_calculi(&mut files, &mut tcx);
     init_encodings(&mut files, &mut tcx);
     init_distributions(&mut files, &mut tcx);
     init_lists(&mut files, &mut tcx);
@@ -462,9 +466,7 @@ fn verify_files_main(
 
         let monotonicity_res = source_unit.check_monotonicity();
         if let Err(err) = monotonicity_res {
-            server
-                .add_diagnostic(err)
-                .map_err(VerifyError::ServerError)?;
+            server.add_diagnostic(err)?;
         }
     }
 
@@ -473,9 +475,7 @@ fn verify_files_main(
         let source_unit = source_unit.enter();
         let jani_res = source_unit.write_to_jani_if_requested(options, &tcx);
         match jani_res {
-            Err(VerifyError::Diagnostic(diagnostic)) => server
-                .add_diagnostic(diagnostic)
-                .map_err(VerifyError::ServerError)?,
+            Err(VerifyError::Diagnostic(diagnostic)) => server.add_diagnostic(diagnostic)?,
             Err(err) => Err(err)?,
             _ => (),
         }

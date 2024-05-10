@@ -3,13 +3,17 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::ast::{Diagnostic, FileId, Files, Span, StoredFile};
+use crate::{
+    ast::{Diagnostic, FileId, Files, Span, StoredFile},
+    VerifyError,
+};
 
 mod cli;
 mod lsp;
 #[cfg(test)]
 mod test;
 
+use ariadne::ReportKind;
 pub use cli::CliServer;
 pub use lsp::LspServer;
 #[cfg(test)]
@@ -27,9 +31,18 @@ pub trait Server: Send {
 
     fn get_files_internal(&mut self) -> &Mutex<Files>;
 
-    /// Add a new [`Diagnostic`].
-    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), ServerError>;
+    /// Add a new [`Diagnostic`]. Abort with a [`VerifyError::Diagnostic`] if
+    /// the diagnostic is fatal.
+    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError>;
 
     /// Send a verification status message to the client (a custom notification).
     fn set_verify_status(&mut self, span: Span, status: bool) -> Result<(), ServerError>;
+}
+
+fn unless_fatal_error(werr: bool, diagnostic: Diagnostic) -> Result<Diagnostic, VerifyError> {
+    if diagnostic.kind() == ReportKind::Error || werr {
+        Err(VerifyError::Diagnostic(diagnostic))
+    } else {
+        Ok(diagnostic)
+    }
 }

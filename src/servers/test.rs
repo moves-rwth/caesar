@@ -3,20 +3,25 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::ast::{Diagnostic, FileId, Files, Span, StoredFile};
+use crate::{
+    ast::{Diagnostic, FileId, Files, Span, StoredFile},
+    Options, VerifyError,
+};
 
-use super::{Server, ServerError};
+use super::{unless_fatal_error, Server, ServerError};
 
 pub struct TestServer {
     pub files: Arc<Mutex<Files>>,
+    werr: bool,
     pub diagnostics: Vec<Diagnostic>,
     pub statuses: HashMap<Span, bool>,
 }
 
 impl TestServer {
-    pub fn new() -> Self {
+    pub fn new(options: &Options) -> Self {
         TestServer {
             files: Default::default(),
+            werr: options.werr,
             diagnostics: Default::default(),
             statuses: Default::default(),
         }
@@ -36,8 +41,9 @@ impl Server for TestServer {
         &self.files
     }
 
-    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), ServerError> {
-        self.diagnostics.push(diagnostic);
+    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+        self.diagnostics
+            .push(unless_fatal_error(self.werr, diagnostic)?);
         Ok(())
     }
 

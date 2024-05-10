@@ -4,17 +4,22 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::ast::{Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile};
+use crate::{
+    ast::{Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
+    Options, VerifyError,
+};
 
-use super::{Server, ServerError};
+use super::{unless_fatal_error, Server, ServerError};
 
 pub struct CliServer {
+    werr: bool,
     files: Arc<Mutex<Files>>,
 }
 
 impl CliServer {
-    pub fn new() -> Self {
+    pub fn new(options: &Options) -> Self {
         CliServer {
+            werr: options.werr,
             files: Default::default(),
         }
     }
@@ -53,7 +58,8 @@ impl Server for CliServer {
         &self.files
     }
 
-    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), ServerError> {
+    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+        let diagnostic = unless_fatal_error(self.werr, diagnostic)?;
         let files = self.files.lock().unwrap();
         print_diagnostic(&files, diagnostic)?;
         Ok(())

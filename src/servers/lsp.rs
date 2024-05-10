@@ -96,10 +96,15 @@ impl LspServer {
                             .id;
                         drop(files);
                         self.clear_all();
-                        verify(self, &[file_id])?;
+                        let result = verify(self, &[file_id]);
+                        let res = match &result {
+                            Ok(_) => Response::new_ok(id, Value::Null),
+                            Err(err) => Response::new_err(id, 0, format!("{}", err)),
+                        };
                         sender
-                            .send(Message::Response(Response::new_ok(id, Value::Null)))
+                            .send(Message::Response(res))
                             .map_err(|e| VerifyError::ServerError(e.into()))?;
+                        result?;
                     }
                 }
                 Message::Response(_) => todo!(),
@@ -239,9 +244,11 @@ impl Server for LspServer {
         &self.files
     }
 
-    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), ServerError> {
+    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+        // TODO: add --werr support
         self.diagnostics.push(diagnostic);
-        self.publish_diagnostics()?;
+        self.publish_diagnostics()
+            .map_err(VerifyError::ServerError)?;
         Ok(())
     }
 

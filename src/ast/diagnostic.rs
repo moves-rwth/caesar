@@ -457,6 +457,14 @@ impl Diagnostic {
         self
     }
 
+    pub fn kind(&self) -> ReportKind {
+        self.0.kind
+    }
+
+    pub fn span(&self) -> Span {
+        self.0.location
+    }
+
     /// Generate the [`ariadne::ReportBuilder`].
     pub fn into_ariadne(self, files: &Files) -> ReportBuilder<CharSpan> {
         // note that ariadne's report doesn't use the span end
@@ -475,10 +483,6 @@ impl Diagnostic {
             builder = builder.with_label(label.into_ariadne(files));
         }
         builder
-    }
-
-    pub fn span(&self) -> Span {
-        self.0.location
     }
 
     pub fn into_lsp_diagnostic(
