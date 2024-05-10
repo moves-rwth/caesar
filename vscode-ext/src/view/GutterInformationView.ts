@@ -5,6 +5,8 @@ import { Manager, Observer } from "../manager/Manager";
 import Configuration, { CONFIGURATION_SECTION, ConfigCategory, GutterInformationViewConfig } from "../Configuration";
 import APIRegister from "../APIRegister";
 import { EditorView } from "./View";
+import { VersionedTextDocumentIdentifier } from "vscode-languageclient";
+import { LanguageClient } from "vscode-languageclient/node";
 
 
 
@@ -30,9 +32,9 @@ export class GutterInformationView extends EditorView {
     private failedDecType: vscode.TextEditorDecorationType;
     private unknownDecType: vscode.TextEditorDecorationType;
 
-    private procStatus: VerificationStatus = [];
+    private procStatus?: VerificationStatus;
 
-    constructor(verificationManager: VerificationManager, context: vscode.ExtensionContext) {
+    constructor(verificationManager: VerificationManager, context: vscode.ExtensionContext, client: LanguageClient) {
         super();
 
         this.enabled = GutterInformationViewConfig.get("showGutterIcons");
@@ -54,6 +56,10 @@ export class GutterInformationView extends EditorView {
                 }
             }
         });
+
+        client.onNotification("custom/verifyStatus", (params: VerificationStatus) => {
+            this.receiveVerificationUpdate(params);
+        })
     }
 
     /// Enable the GutterInformationView
@@ -96,24 +102,22 @@ export class GutterInformationView extends EditorView {
 
     /// Update the checkmarks based on the latest verification status received from the VerificationManager
     public updateView(editor: vscode.TextEditor) {
-        if (this.procStatus.length === 0 || !this.enabled) {
-            return;
-        }
         const verifiedProcs: vscode.DecorationOptions[] = [];
         const failedProcs: vscode.DecorationOptions[] = [];
         const unknownProcs: vscode.DecorationOptions[] = [];
+        if (this.enabled && this.procStatus != null && this.procStatus.document.uri == editor.document.uri.toString()) {
+            for (const proc of this.procStatus.statuses) {
+                const verified = proc[1];
 
-        for (const proc of this.procStatus) {
-            const verified = proc[1];
-
-            const line = proc[0].start.line;
-            const range = new vscode.Range(line, 0, line, 0);
-            if (verified) {
-                // Put the checkmark before the proc.
-                verifiedProcs.push({ range, hoverMessage: 'Verified' });
-            } else {
-                // Put the X before the proc.
-                failedProcs.push({ range, hoverMessage: 'Not Verified' });
+                const line = proc[0].start.line;
+                const range = new vscode.Range(line, 0, line, 0);
+                if (verified) {
+                    // Put the checkmark before the proc.
+                    verifiedProcs.push({ range, hoverMessage: 'Verified' });
+                } else {
+                    // Put the X before the proc.
+                    failedProcs.push({ range, hoverMessage: 'Not Verified' });
+                }
             }
         }
         editor.setDecorations(this.verifyDecType, verifiedProcs);

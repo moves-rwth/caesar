@@ -28,6 +28,7 @@ use crate::{
         verify_proc, SpecCall,
     },
     proof_rules::EncCall,
+    servers::Server,
     smt::{translate_exprs::TranslateExprs, SmtCtx},
     tyctx::TyCtx,
     vc::{subst::apply_subst, vcgen::Vcgen},
@@ -302,15 +303,14 @@ impl SourceUnit {
         match self {
             SourceUnit::Decl(decl) => {
                 match decl {
-                    DeclKind::ProcDecl(proc_decl) => {
-                        verify_proc(&proc_decl.borrow()).map(VerifyUnit)
-                    }
+                    DeclKind::ProcDecl(proc_decl) => verify_proc(&proc_decl.borrow())
+                        .map(|block| VerifyUnit(proc_decl.borrow().span, block)),
                     DeclKind::DomainDecl(_domain_decl) => None, // TODO: check that the axioms are not contradictions
                     DeclKind::FuncDecl(_func_decl) => None,
                     _ => unreachable!(), // axioms and variable declarations are not allowed on the top level
                 }
             }
-            SourceUnit::Raw(block) => Some(VerifyUnit(block)),
+            SourceUnit::Raw(_block) => todo!(),
         }
     }
 }
@@ -333,14 +333,14 @@ impl fmt::Display for SourceUnit {
 /// A series of HeyVL statements to be verified.
 #[derive(Debug)]
 
-pub struct VerifyUnit(Block);
+pub struct VerifyUnit(Span, Block);
 
 impl VerifyUnit {
     /// Desugar some statements, such as assignments with procedure calls.
     #[instrument(skip(self, tcx))]
     pub fn desugar(&mut self, tcx: &mut TyCtx) -> Result<(), ()> {
         let mut spec_call = SpecCall::new(tcx);
-        spec_call.visit_stmts(&mut self.0)
+        spec_call.visit_stmts(&mut self.1)
     }
 
     /// Generate the verification conditions with post-expectation `∞`.
@@ -352,7 +352,7 @@ impl VerifyUnit {
             ty: Some(TyKind::EUReal),
             span: Span::dummy_span(),
         });
-        Ok(vcgen.vcgen_stmts(&self.0, infinity))
+        Ok(vcgen.vcgen_stmts(&self.1, infinity))
     }
 
     pub fn verify(
@@ -360,6 +360,7 @@ impl VerifyUnit {
         name: &SourceUnitName,
         tcx: &mut TyCtx,
         options: &Options,
+        server: &mut dyn Server,
     ) -> Result<bool, VerifyError> {
         // 4. Desugaring: transforming spec calls to procs
         self.desugar(tcx).unwrap();
@@ -439,6 +440,13 @@ impl VerifyUnit {
             // Now let's examine the result.
             print_prove_result(result, name, &prover);
         }
+        let status = match result {
+            ProveResult::Proof => true,
+            ProveResult::Counterexample | ProveResult::Unknown => false,
+        };
+        server
+            .set_verify_status(self.0, status)
+            .map_err(|err| VerifyError::ClientError(err))?;
 
         write_smtlib(options, smtlib, name, result).unwrap();
 
@@ -457,7 +465,7 @@ impl VerifyUnit {
 
 impl SimplePretty for VerifyUnit {
     fn pretty(&self) -> Doc {
-        self.0.pretty()
+        self.1.pretty()
     }
 }
 

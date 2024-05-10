@@ -60,8 +60,7 @@ export function activate(context: vscode.ExtensionContext) {
 	let stateManager = new StateManager(client);
 
 	// // Initialize UI Views
-	let viewCollection = new ViewCollection(verificationManager, stateManager, context);
-
+	let viewCollection = new ViewCollection(verificationManager, stateManager, context, client);
 
 	APIRegister.register('onDidSaveTextDocument', (textDocument) => {
 		if (textDocument.languageId === "heyvl") {
@@ -89,7 +88,6 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.commands.registerCommand('caesar.startServer', async () => {
 		console.log("Starting Caesar...")
 		client.start()
-
 	});
 
 	vscode.commands.registerCommand('caesar.stopServer', async () => {
@@ -115,8 +113,6 @@ export function activate(context: vscode.ExtensionContext) {
 	client.start();
 
 	console.log('Caesar is now active!');
-
-
 
 	// Add to a list of disposables which are disposed when this extension is deactivated.
 	context.subscriptions.push(viewCollection);

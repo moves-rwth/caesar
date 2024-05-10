@@ -5,6 +5,7 @@ import { VerificationManager } from "../manager/VerificationManager";
 import { GutterInformationView } from "./GutterInformationView";
 import { InlineGhostTextView } from "./InlineGhostTextView";
 import { StatusBarView } from "./StatusBarView";
+import { LanguageClient } from "vscode-languageclient/node";
 
 
 /// A container for all the views in the extension
@@ -15,8 +16,8 @@ export class ViewCollection {
     public inlineGhostText: InlineGhostTextView | null;
 
 
-    constructor(verificationManager: VerificationManager, stateManager: StateManager, context: vscode.ExtensionContext) {
-        this.gutterInfo = new GutterInformationView(verificationManager, context);
+    constructor(verificationManager: VerificationManager, stateManager: StateManager, context: vscode.ExtensionContext, client: LanguageClient) {
+        this.gutterInfo = new GutterInformationView(verificationManager, context, client);
         this.statusBar = new StatusBarView(stateManager);
         this.inlineGhostText = new InlineGhostTextView(verificationManager);
     }
