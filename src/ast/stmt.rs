@@ -101,10 +101,7 @@ impl SimplePretty for StmtKind {
 
         let res = match self {
             StmtKind::Block(stmts) => pretty_block(stmts.pretty()),
-            StmtKind::Var(decl_ref) => {
-                let var_decl = decl_ref.borrow();
-                var_decl.pretty()
-            }
+            StmtKind::Var(decl_ref) => decl_ref.borrow().pretty_stmt(),
             StmtKind::Assign(lhs, rhs) => Doc::intersperse(
                 lhs.iter().map(|lhs| Doc::as_string(lhs.name)),
                 Doc::text(", "),
@@ -160,6 +157,13 @@ pub enum Direction {
 }
 
 impl Direction {
+    pub fn map<T>(&self, a: T, b: T) -> T {
+        match self {
+            Direction::Down => a,
+            Direction::Up => b,
+        }
+    }
+
     pub fn toggle(&self) -> Direction {
         match self {
             Direction::Down => Direction::Up,

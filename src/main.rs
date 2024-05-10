@@ -14,29 +14,34 @@ use std::{
 
 use crate::{
     ast::TyKind,
+    driver::mk_z3_ctx,
     front::{resolve::Resolve, tycheck::Tycheck},
+    smt::{translate_exprs::TranslateExprs, SmtCtx},
     timing::TimingLayer,
     tyctx::TyCtx,
+    vc::vcgen::Vcgen,
 };
 use ast::{Diagnostic, FileId};
 use driver::{Item, SourceUnit, VerifyUnit};
-use intrinsic::{distributions::init_distributions, list::init_lists};
-use servers::{CliServer, LspServer, Server, ServerError};
-
+use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use procs::add_default_specs;
 use proof_rules::init_encodings;
-use resource_limits::{await_with_resource_limits, LimitError};
+use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
+use servers::{CliServer, LspServer, Server, ServerError};
+use slicing::init_slicing;
 use thiserror::Error;
 use timing::DispatchBuilder;
 use tokio::task::JoinError;
-use tracing::warn;
+use tracing::{error, info, warn};
 
 use structopt::StructOpt;
+use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
 pub mod ast;
 mod driver;
 pub mod front;
 pub mod intrinsic;
+pub mod mc;
 pub mod opt;
 pub mod pretty;
 mod procs;
@@ -44,6 +49,7 @@ mod proof_rules;
 mod resource_limits;
 mod scope_map;
 mod servers;
+mod slicing;
 mod smt;
 mod timing;
 pub mod tyctx;
@@ -69,12 +75,12 @@ pub struct Options {
     pub no_qelim: bool,
 
     /// Time limit in seconds.
-    #[structopt(long)]
-    pub timeout: Option<u64>,
+    #[structopt(long, default_value = "300")]
+    pub timeout: u64,
 
     /// Memory usage limit in megabytes.
-    #[structopt(long = "mem")]
-    pub mem_limit: Option<u64>,
+    #[structopt(long = "mem", default_value = "8192")]
+    pub mem_limit: u64,
 
     /// Emit tracing events as json instead of (ANSI) text.
     #[structopt(long)]
@@ -147,7 +153,7 @@ pub struct Options {
     pub print_core_procs: bool,
 
     /// Print the theorem that is sent to the SMT solver to prove. That is, the
-    /// result of preparing vc(S)[⊤] = ⊤. Note that axioms are not included.
+    /// result of preparing `vc(S)[⊤] = ⊤`. Note that axioms are not included.
     #[structopt(long)]
     pub print_theorem: bool,
 
@@ -159,6 +165,25 @@ pub struct Options {
     /// Run the language server.
     #[structopt(long)]
     pub language_server: bool,
+
+    /// Export declarations to JANI files in the provided directory.
+    #[structopt(long, parse(from_os_str))]
+    pub jani_dir: Option<PathBuf>,
+
+    /// During extraction of the pre for JANI generation, skip the quantitative
+    /// pres (instead of failing with an error).
+    #[structopt(long)]
+    pub jani_skip_quant_pre: bool,
+
+    /// Do not try to slice after an error occurs. Just return the first
+    /// counterexample.
+    #[structopt(long)]
+    pub no_slice_error: bool,
+
+    /// Slice if the program verifies to return a smaller, verifying program.
+    /// This is not enabled by default.
+    #[structopt(long)]
+    pub slice_verify: bool,
 }
 
 #[tokio::main]
@@ -217,17 +242,14 @@ async fn run_cli(options: Options) -> ExitCode {
             ExitCode::from(1)
         }
         Err(VerifyError::LimitError(LimitError::Timeout)) => {
-            tracing::error!("Timed out after {} seconds, exiting.", timeout.unwrap());
+            tracing::error!("Timed out after {} seconds, exiting.", timeout);
             std::process::exit(2); // exit ASAP
         }
         Err(VerifyError::LimitError(LimitError::Oom)) => {
-            tracing::error!(
-                "Exhausted {} megabytes of memory, exiting.",
-                mem_limit.unwrap()
-            );
+            tracing::error!("Exhausted {} megabytes of memory, exiting.", mem_limit);
             std::process::exit(3); // exit ASAP
         }
-        Err(VerifyError::ClientError(err)) => panic!("{}", err),
+        Err(VerifyError::ServerError(err)) => panic!("{}", err),
         Err(VerifyError::Panic(join_error)) => panic!("{}", join_error),
         Err(VerifyError::Interrupted) => {
             tracing::error!("Interrupted");
@@ -237,14 +259,15 @@ async fn run_cli(options: Options) -> ExitCode {
 }
 
 async fn run_server(options: &Options) -> ExitCode {
-    let (mut client, _io_threads) = LspServer::connect_stdio();
-    client.initialize().unwrap();
-    let res = client.run_server(|client, user_files| {
-        let res = verify_files_main(options, client, user_files);
+    let (mut server, _io_threads) = LspServer::connect_stdio();
+    server.initialize().unwrap();
+    let res = server.run_server(|server, user_files| {
+        let limits_ref = LimitsRef::new(None); // TODO
+        let res = verify_files_main(options, limits_ref, server, user_files);
         match res {
             Ok(_) => Ok(()),
             Err(VerifyError::Diagnostic(diag)) => {
-                client.add_diagnostic(diag).unwrap();
+                server.add_diagnostic(diag).unwrap();
                 Ok(())
             }
             Err(err) => Err(err),
@@ -253,7 +276,7 @@ async fn run_server(options: &Options) -> ExitCode {
     match res {
         Ok(()) => ExitCode::SUCCESS,
         Err(VerifyError::Diagnostic(diag)) => {
-            client.add_diagnostic(diag).unwrap();
+            server.add_diagnostic(diag).unwrap();
             ExitCode::FAILURE
         }
         Err(err) => panic!("{}", err), // TODO
@@ -273,7 +296,7 @@ pub enum VerifyError {
     #[error("{0}")]
     LimitError(#[from] LimitError),
     #[error("{0}")]
-    ClientError(ServerError),
+    ServerError(ServerError),
     #[error("panic: {0}")]
     Panic(#[from] JoinError),
     #[error("interrupted")]
@@ -281,23 +304,27 @@ pub enum VerifyError {
 }
 
 /// Verify a list of `user_files`. The `options.files` value is ignored here.
-/// This function should be used when Caesar is invoked from Rust and not on the
-/// command-line, such as in tests.
 pub async fn verify_files(
     options: &Arc<Options>,
     server: &Arc<Mutex<dyn Server>>,
     user_files: Vec<FileId>,
 ) -> Result<bool, VerifyError> {
-    let handle = {
+    let handle = |limits_ref: LimitsRef| {
         let options = options.clone();
-        let client = server.clone();
+        let server = server.clone();
         tokio::task::spawn_blocking(move || {
-            let mut client = client.lock().unwrap();
-            verify_files_main(&options, client.deref_mut(), &user_files)
+            // execute the verifier with a larger stack size of 50MB. the
+            // default stack size might be quite small and we need to do quite a
+            // lot of recursion.
+            let stack_size = 50 * 1024 * 1024;
+            stacker::maybe_grow(stack_size, stack_size, move || {
+                let mut server = server.lock().unwrap();
+                verify_files_main(&options, limits_ref, server.deref_mut(), &user_files)
+            })
         })
     };
-    // Unpacking lots of results with `.await??` :-)
-    await_with_resource_limits(options.timeout, options.mem_limit, handle).await??
+    // Unpacking lots of Results with `.await??` :-)
+    await_with_resource_limits(Some(options.timeout), Some(options.mem_limit), handle).await??
 }
 
 /// Synchronously verify the given source code. This is used for tests. The
@@ -306,8 +333,8 @@ pub async fn verify_files(
 pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, servers::TestServer) {
     use ast::SourceFilePath;
 
-    let mut client = servers::TestServer::new();
-    let file_id = client
+    let mut server = servers::TestServer::new();
+    let file_id = server
         .get_files_internal()
         .lock()
         .unwrap()
@@ -315,8 +342,10 @@ pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, servers::
         .id;
     let mut options = Options::default();
     options.werr = true;
-    let res = verify_files_main(&options, &mut client, &[file_id]);
-    (res, client)
+    let options = Arc::new(options);
+    let limits_ref = LimitsRef::new(None);
+    let res = verify_files_main(&options, limits_ref, &mut server, &[file_id]);
+    (res, server)
 }
 
 #[cfg(test)]
@@ -345,41 +374,29 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
     init_encodings(&mut files, &mut tcx);
     init_distributions(&mut files, &mut tcx);
     init_lists(&mut files, &mut tcx);
+    init_slicing(&mut tcx);
     drop(files);
 
     let mut resolve = Resolve::new(&mut tcx);
     // first, do forward declarations
-    source_unit
-        .enter()
-        .forward_declare(&mut resolve)
-        .map_err(|resolve_err| resolve_err.diagnostic())?;
+    source_unit.enter().forward_declare(&mut resolve)?;
     // then, the actual resolving
-    source_unit
-        .enter()
-        .resolve(&mut resolve)
-        .map_err(|resolve_err| resolve_err.diagnostic())?;
+    source_unit.enter().resolve(&mut resolve)?;
 
     // 3. Type checking
     add_default_specs(&mut tcx);
 
     let mut tycheck = Tycheck::new(&mut tcx);
 
-    {
-        // Make a new scope to be able to drop 'entered' afterwards
-        let mut entered = source_unit.enter();
-        entered
-            .tycheck(&mut tycheck)
-            .map_err(|ty_err| ty_err.diagnostic())?;
-        entered
-            .check_monotonicity()
-            .map_err(|ann_err| ann_err.diagnostic())?;
-    }
+    let mut entered = source_unit.enter();
+    entered.tycheck(&mut tycheck)?;
+    entered.check_monotonicity()?;
+    drop(entered);
+
     let mut new_source_units: Vec<Item<SourceUnit>> = vec![];
-    // Desugar encodings from source units
     source_unit
         .enter()
-        .desugar(&mut tcx, &mut new_source_units)
-        .map_err(|ann_err| ann_err.diagnostic())?;
+        .apply_encodings(&mut tcx, &mut new_source_units)?;
 
     new_source_units.push(source_unit);
 
@@ -393,30 +410,10 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
 /// Synchronously verify the given files.
 fn verify_files_main(
     options: &Options,
+    limits_ref: LimitsRef,
     server: &mut dyn Server,
     user_files: &[FileId],
 ) -> Result<bool, VerifyError> {
-    let (source_units, mut tcx) = get_source_units_from_files(options, server, user_files)?;
-
-    let mut verify_units = transform_source_to_verify(options, source_units);
-
-    let mut all_proven: bool = true;
-    for verify_unit in &mut verify_units {
-        let (name, mut verify_unit) = verify_unit.enter_with_name();
-
-        let result = verify_unit.verify(name, &mut tcx, options, server)?;
-
-        all_proven = all_proven && result;
-    }
-
-    Ok(all_proven)
-}
-
-pub fn get_source_units_from_files(
-    options: &Options,
-    server: &mut dyn Server,
-    user_files: &[FileId],
-) -> Result<(Vec<Item<SourceUnit>>, TyCtx), VerifyError> {
     // 1. Parsing
     let mut source_units: Vec<Item<SourceUnit>> = Vec::new();
     for file_id in user_files {
@@ -438,25 +435,21 @@ pub fn get_source_units_from_files(
     // 2. Resolving (and declaring) idents
     let mut tcx = TyCtx::new(TyKind::EUReal);
     let mut files = server.get_files_internal().lock().unwrap();
+    init_calculi(&mut files, &mut tcx);
     init_encodings(&mut files, &mut tcx);
     init_distributions(&mut files, &mut tcx);
     init_lists(&mut files, &mut tcx);
+    init_slicing(&mut tcx);
     drop(files);
 
     let mut resolve = Resolve::new(&mut tcx);
     // first, do forward declarations
     for source_unit in &mut source_units {
-        source_unit
-            .enter()
-            .forward_declare(&mut resolve)
-            .map_err(|resolve_err| resolve_err.diagnostic())?;
+        source_unit.enter().forward_declare(&mut resolve)?;
     }
     // then, the actual resolving
     for source_unit in &mut source_units {
-        source_unit
-            .enter()
-            .resolve(&mut resolve)
-            .map_err(|resolve_err| resolve_err.diagnostic())?;
+        source_unit.enter().resolve(&mut resolve)?;
     }
 
     // 3. Type checking
@@ -464,29 +457,38 @@ pub fn get_source_units_from_files(
 
     let mut tycheck = Tycheck::new(&mut tcx);
     for source_unit in &mut source_units {
-        let mut entered = source_unit.enter();
-        entered
-            .tycheck(&mut tycheck)
-            .map_err(|ty_err| ty_err.diagnostic())?;
-        let monotonicity_res = entered
-            .check_monotonicity()
-            .map_err(|ty_err| ty_err.diagnostic());
+        let mut source_unit = source_unit.enter();
+        source_unit.tycheck(&mut tycheck)?;
+
+        let monotonicity_res = source_unit.check_monotonicity();
         if let Err(err) = monotonicity_res {
             server
                 .add_diagnostic(err)
-                .map_err(|e| VerifyError::ClientError(e))?;
+                .map_err(VerifyError::ServerError)?;
         }
     }
 
-    let mut source_units_buf = vec![];
+    // write to JANI if requested
+    for source_unit in &mut source_units {
+        let source_unit = source_unit.enter();
+        let jani_res = source_unit.write_to_jani_if_requested(options, &tcx);
+        match jani_res {
+            Err(VerifyError::Diagnostic(diagnostic)) => server
+                .add_diagnostic(diagnostic)
+                .map_err(VerifyError::ServerError)?,
+            Err(err) => Err(err)?,
+            _ => (),
+        }
+    }
 
+    // Desugar encodings from source units. They might generate new source
+    // units (for side conditions).
+    let mut source_units_buf = vec![];
     for source_unit in &mut source_units {
         source_unit
             .enter()
-            .desugar(&mut tcx, &mut source_units_buf)
-            .map_err(|ann_err| ann_err.diagnostic())?;
+            .apply_encodings(&mut tcx, &mut source_units_buf)?;
     }
-
     source_units.extend(source_units_buf);
 
     if options.print_core_procs {
@@ -496,14 +498,7 @@ pub fn get_source_units_from_files(
         }
     }
 
-    Ok((source_units, tcx))
-}
-
-fn transform_source_to_verify(
-    options: &Options,
-    source_units: Vec<Item<SourceUnit>>,
-) -> Vec<Item<VerifyUnit>> {
-    let verify_units: Vec<Item<VerifyUnit>> = source_units
+    let mut verify_units: Vec<Item<VerifyUnit>> = source_units
         .into_iter()
         .flat_map(|item| item.flat_map(SourceUnit::into_verify_unit))
         .collect();
@@ -512,8 +507,126 @@ fn transform_source_to_verify(
         warn!("Z3 tracing is enabled with multiple verification units. Intermediate tracing results will be overwritten.");
     }
 
-    verify_units
+    let mut num_proven: usize = 0;
+    let mut num_failures: usize = 0;
+
+    for verify_unit in &mut verify_units {
+        let (name, mut verify_unit) = verify_unit.enter_with_name();
+
+        // 4. Desugaring: transforming spec calls to procs
+        verify_unit.desugar_spec_calls(&mut tcx).unwrap();
+
+        // 5. Prepare slicing
+        let slice_vars = verify_unit.prepare_slicing(options, &mut tcx);
+
+        // print HeyVL core after desugaring if requested
+        if options.print_core {
+            println!("{}: HeyVL core query:\n{}\n", name, *verify_unit);
+        }
+
+        // 6. Generating verification conditions
+        let vcgen = Vcgen::new(&tcx, options.print_label_vc);
+        let mut vc_expr = verify_unit.vcgen(&vcgen)?;
+
+        // 7. Unfolding
+        vc_expr.unfold(options, &limits_ref, &tcx)?;
+
+        // 8. Quantifier elimination
+        if !options.no_qelim {
+            vc_expr.qelim(&mut tcx);
+        }
+
+        // In-between, gather some stats about the vc expression
+        vc_expr.trace_expr_stats();
+
+        // 9. Create the "vc[S] is valid" expression
+        let mut vc_is_valid = vc_expr.to_boolean();
+
+        if options.egraph {
+            vc_is_valid.egraph_simplify();
+        }
+
+        // 10. Optimizations
+        if !options.no_boolify || options.opt_rel {
+            vc_is_valid.remove_parens();
+        }
+        if !options.no_boolify {
+            vc_is_valid.opt_boolify();
+        }
+        if options.opt_rel {
+            vc_is_valid.opt_relational();
+        }
+
+        // print theorem to prove if requested
+        if options.print_theorem {
+            vc_is_valid.print_theorem(name);
+        }
+
+        // 11. Translate to Z3
+        let ctx = mk_z3_ctx(options);
+        let smt_ctx = SmtCtx::new(&ctx, &tcx);
+        let mut translate = TranslateExprs::new(&smt_ctx);
+        let mut vc_is_valid = vc_is_valid.to_smt(&mut translate);
+
+        // 12. Simplify
+        if !options.no_simplify {
+            vc_is_valid.simplify();
+        }
+
+        // 13. Create Z3 solver with axioms, solve
+        let mut result =
+            vc_is_valid.run_solver(options, &limits_ref, &ctx, &mut translate, &slice_vars)?;
+
+        // Now let's examine the result.
+        if !options.language_server {
+            let files_mutex = server.get_files_internal();
+            result.print_prove_result(files_mutex, &vc_expr, &mut translate, name);
+        }
+        let status = match &result.prove_result {
+            ProveResult::Proof => true,
+            ProveResult::Counterexample(_) | ProveResult::Unknown(_) => false,
+        };
+        server
+            .set_verify_status(verify_unit.span, status)
+            .map_err(VerifyError::ServerError)?;
+
+        // If requested, write the SMT-LIB output.
+        result.write_smtlib(options, name)?;
+
+        if options.z3_trace {
+            info!("Z3 tracing output will be written to `z3.log`.");
+        }
+
+        // Handle reasons to stop the verifier.
+        match result.prove_result {
+            ProveResult::Unknown(ReasonUnknown::Interrupted) => {
+                return Err(VerifyError::Interrupted)
+            }
+            ProveResult::Unknown(ReasonUnknown::Timeout) => return Err(LimitError::Timeout.into()),
+            _ => {}
+        }
+
+        // Increment counters
+        match result.prove_result {
+            ProveResult::Proof => num_proven += 1,
+            ProveResult::Counterexample(_) | ProveResult::Unknown(_) => num_failures += 1,
+        }
+    }
+
+    println!();
+    let ending = if num_failures == 0 {
+        " veni, vidi, vici!"
+    } else {
+        ""
+    };
+    println!(
+        "{} verified, {} failed.{}",
+        num_proven, num_failures, ending
+    );
+
+    Ok(num_failures == 0)
 }
+
 fn setup_tracing(options: &Options) {
     timing::init_tracing(
         DispatchBuilder::default()

@@ -13,7 +13,7 @@ use crate::{
     ast::{
         util::FreeVariableCollector,
         visit::{walk_expr, VisitorMut},
-        Expr, ExprBuilder, ExprKind, Ident, QuantVar, SpanVariant,
+        Expr, ExprBuilder, ExprKind, Ident, QuantVar, Span, SpanVariant, VarKind,
     },
     tyctx::TyCtx,
 };
@@ -47,7 +47,7 @@ impl<'a> Subst<'a> {
         self.cur.substs.insert(ident, expr);
     }
 
-    pub fn push_quant(&mut self, vars: &mut [QuantVar], tcx: &TyCtx) {
+    pub fn push_quant(&mut self, span: Span, vars: &mut [QuantVar], tcx: &TyCtx) {
         self.stack.push(self.cur.clone());
         for var in vars {
             let ident = var.name();
@@ -61,7 +61,8 @@ impl<'a> Subst<'a> {
             // renamed.
 
             if self.cur.free_vars.contains(&ident) {
-                let new_ident = tcx.fresh_var(ident, SpanVariant::Subst);
+                let new_ident =
+                    tcx.clone_var(ident, span.variant(SpanVariant::Subst), VarKind::Subst);
                 *var = QuantVar::Shadow(new_ident);
                 let builder = ExprBuilder::new(new_ident.span);
                 self.cur.substs.insert(ident, builder.var(new_ident, tcx));
@@ -82,6 +83,7 @@ impl<'a> VisitorMut for Subst<'a> {
     type Err = ();
 
     fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
+        let span = e.span;
         match &mut e.deref_mut().kind {
             ExprKind::Var(ident) => {
                 if let Some(subst) = self.lookup_var(*ident) {
@@ -90,7 +92,7 @@ impl<'a> VisitorMut for Subst<'a> {
                 Ok(())
             }
             ExprKind::Quant(_, ref mut vars, _, ref mut expr) => {
-                self.push_quant(vars, self.tcx);
+                self.push_quant(span, vars, self.tcx);
                 self.visit_expr(expr)?;
                 self.pop();
                 Ok(())

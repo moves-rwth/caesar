@@ -19,8 +19,9 @@ pub mod interpreted;
 pub mod orders;
 pub mod scope;
 
-pub mod pretty;
+pub mod model;
 pub mod prover;
+pub mod smtlib;
 mod uint;
 pub use uint::UInt;
 mod ureal;
@@ -39,7 +40,7 @@ use z3::{
 };
 
 /// SMT values who have an associated factory to create new values of its type.
-pub trait SmtAst<'ctx> {
+pub trait SmtFactory<'ctx> {
     /// The value of the factory type. You'll probably use [`Factory`] most of the time.
     type FactoryType;
 
@@ -47,13 +48,13 @@ pub trait SmtAst<'ctx> {
     fn factory(&self) -> Factory<'ctx, Self>;
 }
 
-/// Type alias for a reference to the the factory type of an [`SmtAst`] type.
-pub type Factory<'ctx, T> = <T as SmtAst<'ctx>>::FactoryType;
+/// Type alias for a reference to the the factory type of an [`SmtFactory`] type.
+pub type Factory<'ctx, T> = <T as SmtFactory<'ctx>>::FactoryType;
 
-// Many built-in Z3 AST object trivially implement [`SmtAst`].
+// Many built-in Z3 AST object trivially implement [`SmtFactory`].
 macro_rules! z3_smt_ast {
     ($ty:ident) => {
-        impl<'ctx> SmtAst<'ctx> for $ty<'ctx> {
+        impl<'ctx> SmtFactory<'ctx> for $ty<'ctx> {
             type FactoryType = &'ctx Context;
 
             fn factory(&self) -> &'ctx Context {
@@ -68,29 +69,25 @@ z3_smt_ast!(Bool);
 z3_smt_ast!(Int);
 z3_smt_ast!(Real);
 
-/*
-TODO: the following code does not compile because there's a lifetime bug in z3.rs at the moment
-
 #[derive(Debug, Clone)]
 pub struct ArrayFactory<'ctx> {
     pub domain: Sort<'ctx>,
     pub range: Sort<'ctx>,
 }
 
-impl<'ctx> SmtAst<'ctx> for Array<'ctx> {
+impl<'ctx> SmtFactory<'ctx> for Array<'ctx> {
     type FactoryType = ArrayFactory<'ctx>;
 
     fn factory(&self) -> Factory<'ctx, Self> {
         let sort = self.get_sort();
-        ArrayFactory{
+        ArrayFactory {
             domain: sort.array_domain().unwrap(),
             range: sort.array_range().unwrap(),
         }
     }
 }
- */
 
-impl<'ctx> SmtAst<'ctx> for Dynamic<'ctx> {
+impl<'ctx> SmtFactory<'ctx> for Dynamic<'ctx> {
     type FactoryType = (&'ctx Context, Sort<'ctx>);
 
     fn factory(&self) -> Factory<'ctx, Self> {
@@ -98,7 +95,7 @@ impl<'ctx> SmtAst<'ctx> for Dynamic<'ctx> {
     }
 }
 
-impl<'ctx> SmtAst<'ctx> for Datatype<'ctx> {
+impl<'ctx> SmtFactory<'ctx> for Datatype<'ctx> {
     type FactoryType = (&'ctx Context, Sort<'ctx>);
 
     fn factory(&self) -> Factory<'ctx, Self> {

@@ -83,11 +83,11 @@ impl LspServer {
         let receiver = self.connection.receiver.clone();
         for msg in &receiver {
             match msg {
-                Message::Request(req) => match req.method.as_str() {
-                    "custom/verifyStatus" => {
+                Message::Request(req) => {
+                    if let "custom/verifyStatus" = req.method.as_str() {
                         let (id, params) = req
                             .extract::<VerifyStatusRequest>("custom/verifyStatus")
-                            .map_err(|e| VerifyError::ClientError(e.into()))?;
+                            .map_err(|e| VerifyError::ServerError(e.into()))?;
                         self.project_root = Some(params.text_document.clone());
                         let files = self.files.lock().unwrap();
                         let file_id = files
@@ -99,14 +99,13 @@ impl LspServer {
                         verify(self, &[file_id])?;
                         sender
                             .send(Message::Response(Response::new_ok(id, Value::Null)))
-                            .map_err(|e| VerifyError::ClientError(e.into()))?;
+                            .map_err(|e| VerifyError::ServerError(e.into()))?;
                     }
-                    _ => {} // TODO
-                },
+                }
                 Message::Response(_) => todo!(),
                 Message::Notification(notification) => {
                     self.handle_notification(notification)
-                        .map_err(|e| VerifyError::ClientError(e.into()))?;
+                        .map_err(VerifyError::ServerError)?;
                 }
             }
         }

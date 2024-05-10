@@ -1,11 +1,17 @@
 use std::ops::{Add, Div, Mul, Sub};
 
+use num::BigRational;
 use z3::{
     ast::{Ast, Bool, Real},
     Context,
 };
 
-use crate::{forward_binary_op, scope::SmtAlloc, Factory, SmtAst, SmtInvariant, UInt};
+use crate::{
+    forward_binary_op,
+    model::{InstrumentedModel, SmtEval, SmtEvalError},
+    scope::SmtAlloc,
+    Factory, SmtFactory, SmtInvariant, UInt,
+};
 
 use super::{
     orders::{SmtOrdering, SmtPartialOrd},
@@ -43,7 +49,7 @@ impl<'ctx> UReal<'ctx> {
     }
 }
 
-impl<'ctx> SmtAst<'ctx> for UReal<'ctx> {
+impl<'ctx> SmtFactory<'ctx> for UReal<'ctx> {
     type FactoryType = &'ctx Context;
 
     fn factory(&self) -> Factory<'ctx, Self> {
@@ -85,6 +91,14 @@ impl<'ctx> SmtBranch<'ctx> for UReal<'ctx> {
 impl<'ctx> SmtPartialOrd<'ctx> for UReal<'ctx> {
     fn smt_cmp(&self, other: &Self, ordering: SmtOrdering) -> Bool<'ctx> {
         self.0.smt_cmp(&other.0, ordering)
+    }
+}
+
+impl<'ctx> SmtEval<'ctx> for UReal<'ctx> {
+    type Value = BigRational;
+
+    fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
+        self.0.eval(model)
     }
 }
 

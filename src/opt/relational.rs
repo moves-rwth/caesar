@@ -6,6 +6,7 @@ use std::mem;
 use num::Zero;
 
 use crate::ast::{
+    util::{is_bot_lit, is_top_lit},
     visit::{walk_expr, VisitorMut},
     BinOpKind, Expr, ExprBuilder, ExprKind, Span, TyKind, UnOpKind,
 };
@@ -32,17 +33,15 @@ impl VisitorMut for Relational {
                     mem::swap(lhs, rhs);
                     return self.visit_expr(expr);
                 }
-                BinOpKind::Eq => match &lhs.kind {
-                    ExprKind::Lit(lit) if lit.node.is_top() => {
+                BinOpKind::Eq => {
+                    if is_top_lit(lhs) {
                         bin_op.node = BinOpKind::Le;
                         return self.visit_expr(expr);
-                    }
-                    ExprKind::Lit(lit) if lit.node.is_bot() => {
+                    } else if is_bot_lit(lhs) {
                         bin_op.node = BinOpKind::Ge;
                         return self.visit_expr(expr);
                     }
-                    _ => {}
-                },
+                }
                 _ => {}
             },
             _ => {}
@@ -57,8 +56,8 @@ fn relational_leq(span: Span, lower: &Expr, upper: &Expr) -> Expr {
 
     // First match on the upper expression (this is for lower bound proofs/down).
     match &upper.kind {
-        ExprKind::Lit(lit) if lit.node.is_top() => return builder.bool_lit(true),
-        // ExprKind::Lit(lit) if lit.node.is_bot() => {
+        _ if is_top_lit(upper) => return builder.bool_lit(true),
+        // _ => is_bot_lit(&upper) => {
         //     let zero = builder.frac_lit(Zero::zero());
         //     return builder.binary(BinOpKind::Eq, bool_ty, lower.clone(), zero);
         // }
@@ -105,7 +104,7 @@ fn relational_leq(span: Span, lower: &Expr, upper: &Expr) -> Expr {
         //     let infty = builder.infinity_lit();
         //     return builder.binary(BinOpKind::Eq, bool_ty, upper.clone(), infty);
         // },
-        ExprKind::Lit(lit) if lit.node.is_bot() => return builder.bool_lit(true),
+        _ if is_bot_lit(lower) => return builder.bool_lit(true),
         ExprKind::Binary(bin_op, lhs, rhs) => match bin_op.node {
             BinOpKind::Inf => {
                 let a = relational_leq(lower.span, lhs, upper);

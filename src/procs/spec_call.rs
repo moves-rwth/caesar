@@ -7,6 +7,7 @@ use crate::{
         DeclKind, DeclRef, Expr, ExprData, ExprKind, Ident, Param, ProcSpec, Shared, Span,
         SpanVariant, Spanned, Stmt, StmtKind, Symbol, VarDecl, VarKind,
     },
+    slicing::{wrap_with_error_message, wrap_with_success_message},
     tyctx::TyCtx,
 };
 
@@ -73,7 +74,7 @@ impl<'tcx> SpecCall<'tcx> {
                 let span = span.variant(SpanVariant::SpecCall);
 
                 // first push all asserts
-                for spec in &proc.spec {
+                for (i, spec) in proc.spec.iter().enumerate() {
                     #[allow(clippy::single_match)]
                     match spec {
                         ProcSpec::Requires(expr) => {
@@ -81,8 +82,10 @@ impl<'tcx> SpecCall<'tcx> {
                                 expr.clone(),
                                 proc.inputs.node.iter().zip(args.iter().cloned()),
                             );
-                            let stmt_kind = StmtKind::Assert(direction, assert_expr);
-                            buf.push(Spanned::new(span, stmt_kind));
+                            buf.push(wrap_with_error_message(
+                                Spanned::new(span, StmtKind::Assert(direction, assert_expr)),
+                                &format!("pre#{} might not hold", i),
+                            ));
                         }
                         _ => {}
                     }
@@ -131,11 +134,14 @@ impl<'tcx> SpecCall<'tcx> {
                     let output_subst = proc.outputs.node.iter().zip(lhs_exprs);
                     let substs: Vec<(&Param, Expr)> =
                         stable_inputs.into_iter().chain(output_subst).collect();
-                    for spec in &proc.spec {
+                    for (i, spec) in proc.spec.iter().enumerate() {
                         if let ProcSpec::Ensures(expr) = spec {
                             let compare_expr = subst(expr.clone(), substs.iter().cloned());
                             let stmt_kind = StmtKind::Compare(direction, compare_expr);
-                            buf.push(Spanned::new(span, stmt_kind));
+                            buf.push(wrap_with_success_message(
+                                Spanned::new(span, stmt_kind),
+                                &format!("post #{} is not necessary", i),
+                            ));
                         };
                     }
                 }
@@ -154,6 +160,7 @@ impl<'tcx> SpecCall<'tcx> {
             name: Symbol::intern(&format!("old_{}", param.name)),
             span,
         };
+        // Reuse an existing declaration if possible.
         if let Some(_decl) = self.tcx.get(name).as_deref() {
             let stmt = Spanned::new(span, StmtKind::Assign(vec![name], value));
             (stmt, ident_to_expr(self.tcx, span, name))
@@ -172,6 +179,7 @@ impl<'tcx> SpecCall<'tcx> {
                 kind: VarKind::Mut, // we might use the variable again in another proc call
                 init: Some(value),
                 span,
+                created_from: Some(param.name),
             };
             let decl = DeclRef::new(var_decl);
             self.tcx.declare(DeclKind::VarDecl(decl.clone()));

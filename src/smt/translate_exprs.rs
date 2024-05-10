@@ -28,7 +28,6 @@ use z3rro::{
         SmtPartialOrd,
     },
     scope::SmtScope,
-    util::real_from_big_rational,
     List, SmtBranch, SmtEq, UInt, UReal,
 };
 
@@ -78,6 +77,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         scope
     }
 
+    pub fn local_idents<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
+        self.locals.local_iter().map(|(ident, _)| *ident)
+    }
+
     pub fn fresh(&mut self, ident: Ident) {
         self.locals.remove(ident);
     }
@@ -93,6 +96,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             TyKind::Tuple(_) => todo!(),
             TyKind::List(_) => Symbolic::List(self.t_list(expr)),
             TyKind::Domain(_) => Symbolic::Uninterpreted(self.t_uninterpreted(expr)),
+            TyKind::String => unreachable!(),
             TyKind::SpecTy => unreachable!(),
             TyKind::Unresolved(_) => unreachable!(),
             TyKind::None => unreachable!(),
@@ -409,7 +413,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(lit) => match &lit.node {
                 LitKind::Frac(frac) => {
-                    UReal::unchecked_from_real(real_from_big_rational(self.ctx.ctx, frac))
+                    UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac))
                 }
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
@@ -497,7 +501,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 LitKind::Infinity => EUReal::infinity(self.ctx.eureal()),
                 LitKind::Frac(frac) => EUReal::from_ureal(
                     self.ctx.eureal(),
-                    &UReal::unchecked_from_real(real_from_big_rational(self.ctx.ctx, frac)),
+                    &UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac)),
                 ),
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
@@ -642,6 +646,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 }
                 TyKind::Tuple(_) => todo!(),
                 TyKind::List(element_ty) => ScopeSymbolic::fresh_list(self.ctx, ident, element_ty),
+                TyKind::String => unreachable!(),
                 TyKind::SpecTy => unreachable!(),
                 TyKind::Unresolved(_) => todo!(),
                 TyKind::None => todo!(),

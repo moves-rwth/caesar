@@ -3,7 +3,7 @@ use indexmap::IndexSet;
 
 use super::{
     visit::{walk_expr, walk_stmt, VisitorMut},
-    Expr, ExprKind, Ident, StmtKind,
+    Direction, Expr, ExprKind, Ident, StmtKind,
 };
 
 /// Helper to find all free variables in expressions.
@@ -112,6 +112,36 @@ impl VisitorMut for ModifiedVariableCollector {
     }
 }
 
+/// For [`Direction::Down`], this is [`is_top_lit`], for [`Direction::Up`] this
+/// is [`is_bot_lit`].
+pub fn is_dir_top_lit(direction: Direction, expr: &Expr) -> bool {
+    match direction {
+        Direction::Down => is_top_lit(expr),
+        Direction::Up => is_bot_lit(expr),
+    }
+}
+
+/// Whether this is a [`ExprKind::Lit`] that is a top element.
+pub fn is_top_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(lit) => lit.node.is_top(),
+        _ => false,
+    }
+}
+
+/// Whether this is a [`ExprKind::Lit`] that is a bottom element. Will walk
+/// through one [`ExprKind::Cast`] expression (as generated for 0 for EUReal).
+pub fn is_bot_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(lit) => lit.node.is_bot(),
+        ExprKind::Cast(inner) => match &inner.kind {
+            ExprKind::Lit(lit) => lit.node.is_bot(),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{
@@ -134,9 +164,10 @@ mod test {
         tcx.declare(crate::ast::DeclKind::VarDecl(DeclRef::new(VarDecl {
             name: ident,
             ty: TyKind::Bool,
-            kind: VarKind::Const,
+            kind: VarKind::Input,
             init: None,
             span: Span::dummy_span(),
+            created_from: None,
         })));
         let mut expr = builder.binary(
             BinOpKind::And,

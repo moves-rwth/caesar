@@ -15,7 +15,7 @@
   --ifm-color-primary-lightest: #1a8c74;
 }
 
-/* 
+/*
 :root {
   --ifm-color-primary: #2e8555;
   --ifm-color-primary-dark: #29784c;
@@ -51,4 +51,11 @@ p a:hover, .markdown ul a:hover {
 
 a.button {
   text-decoration: none;
+}
+
+/* fixing a bug in docosaurus: inline TOCs should be shown in print mode */
+@media print {
+  article .table-of-contents {
+    display: inherit;
+  }
 }

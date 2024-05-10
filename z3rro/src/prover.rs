@@ -1,15 +1,36 @@
 //! Not a SAT solver, but a prover. There's a difference.
 
-use z3::{ast::Bool, Context, Model, Params, SatResult, Solver};
+use std::{fmt::Display, time::Duration};
 
-use crate::util::ReasonUnknown;
+use z3::{
+    ast::{forall_const, Ast, Bool, Dynamic},
+    Context, Model, SatResult, Solver,
+};
+
+use crate::{
+    model::InstrumentedModel,
+    smtlib::Smtlib,
+    util::{set_solver_timeout, ReasonUnknown},
+};
 
 /// The result of a prove query.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ProveResult {
+#[derive(Debug)]
+pub enum ProveResult<'ctx> {
     Proof,
-    Counterexample,
-    Unknown,
+    Counterexample(InstrumentedModel<'ctx>),
+    Unknown(ReasonUnknown),
+}
+
+impl<'ctx> Display for ProveResult<'ctx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProveResult::Proof => f.write_str("Proof"),
+            ProveResult::Counterexample(_) => f.write_str("Counterexample"),
+            ProveResult::Unknown(reason) => {
+                f.write_fmt(format_args!("Unknown (reason: {})", reason))
+            }
+        }
+    }
 }
 
 /// A prover wraps a SAT solver, but it's used to prove validity of formulas.
@@ -24,13 +45,14 @@ pub enum ProveResult {
 ///
 /// In contrast to [`z3::Solver`], the [`Prover`] requires exclusive ownership
 /// to do any modifications of the solver.
+#[derive(Debug)]
 pub struct Prover<'ctx> {
     /// The underlying solver.
     solver: Solver<'ctx>,
     /// Number of times push was called minus number of times pop was called.
     level: usize,
     /// The minimum level where an assertion was added to the solver.
-    min_level_with_assertions: Option<usize>,
+    min_level_with_provables: Option<usize>,
 }
 
 impl<'ctx> Prover<'ctx> {
@@ -39,19 +61,17 @@ impl<'ctx> Prover<'ctx> {
         Prover {
             solver: Solver::new(ctx),
             level: 0,
-            min_level_with_assertions: None,
+            min_level_with_provables: None,
         }
     }
 
-    /// Set solver parameters.
-    pub fn set_params(&mut self, params: &Params<'ctx>) {
-        self.solver.set_params(params);
+    pub fn set_timeout(&mut self, duration: Duration) {
+        set_solver_timeout(&self.solver, duration);
     }
 
     /// Add an assumption to this prover.
     pub fn add_assumption(&mut self, value: &Bool<'ctx>) {
         self.solver.assert(value);
-        self.min_level_with_assertions.get_or_insert(self.level);
     }
 
     /// Add a proof obligation to this prover. It adds the negated formula to
@@ -61,20 +81,32 @@ impl<'ctx> Prover<'ctx> {
     /// `assert` methods.
     pub fn add_provable(&mut self, value: &Bool<'ctx>) {
         self.solver.assert(&value.not());
-        self.min_level_with_assertions.get_or_insert(self.level);
+        self.min_level_with_provables.get_or_insert(self.level);
     }
 
-    /// Do the SAT check, but consider a check with no assumptions to be a
+    pub fn check_proof(&mut self) -> ProveResult<'ctx> {
+        self.check_proof_assuming(&[])
+    }
+
+    /// Do the SAT check, but consider a check with no provables to be a
     /// [`ProveResult::Proof`].
-    pub fn check_proof(&mut self) -> ProveResult {
-        if self.min_level_with_assertions.is_none() {
-            debug_assert_eq!(self.solver.check(), SatResult::Sat);
+    pub fn check_proof_assuming(&mut self, assumptions: &[Bool<'ctx>]) -> ProveResult<'ctx> {
+        if self.min_level_with_provables.is_none() {
             return ProveResult::Proof;
         }
-        match self.solver.check() {
+        let res = if assumptions.is_empty() {
+            self.solver.check()
+        } else {
+            self.solver.check_assumptions(assumptions)
+        };
+        match res {
             SatResult::Unsat => ProveResult::Proof,
-            SatResult::Unknown => ProveResult::Unknown,
-            SatResult::Sat => ProveResult::Counterexample,
+            SatResult::Unknown => ProveResult::Unknown(self.get_reason_unknown().unwrap()),
+            SatResult::Sat => {
+                let model = self.get_model().unwrap();
+                let model = InstrumentedModel::new(model);
+                ProveResult::Counterexample(model)
+            }
         }
     }
 
@@ -105,17 +137,51 @@ impl<'ctx> Prover<'ctx> {
     pub fn pop(&mut self) {
         self.solver.pop(1);
         self.level = self.level.checked_sub(1).expect("cannot pop level 0");
-        if let Some(prev_min_level) = self.min_level_with_assertions {
+        if let Some(prev_min_level) = self.min_level_with_provables {
             // if there are no assertions at this level, remove the counter
             if prev_min_level > self.level {
-                self.min_level_with_assertions.take();
+                self.min_level_with_provables.take();
             }
         }
+    }
+
+    /// Retrieve the current stack level. Useful for debug assertions.
+    pub fn level(&self) -> usize {
+        self.level
     }
 
     /// Return a reference to the underlying solver. Please do not modifiy it!
     pub fn solver(&self) -> &Solver<'ctx> {
         &self.solver
+    }
+
+    /// Turns this prover into a regular [`Solver`].
+    pub fn into_solver(self) -> Solver<'ctx> {
+        self.solver
+    }
+
+    /// Create an exists-forall solver. All constants provided in the iterator
+    /// will be universally quantified. The rest will be existentially
+    /// quantified.
+    ///
+    /// The result is a [`Prover`] for convenience (such as using the
+    /// [`Self::level()`] function), but it should be used as a [`Solver`] via
+    /// [`Self::check_sat()`].
+    pub fn to_exists_forall(&self, universal: &[Dynamic<'ctx>]) -> Prover<'ctx> {
+        // TODO: what about the params?
+        let ctx = self.solver.get_context();
+        let universal: Vec<&dyn Ast<'ctx>> =
+            universal.iter().map(|v| v as &dyn Ast<'ctx>).collect();
+        let assertions = self.solver.get_assertions();
+        let theorem = forall_const(ctx, &universal, &[], &Bool::and(ctx, &assertions).not());
+        let mut res = Prover::new(ctx);
+        res.add_assumption(&theorem);
+        res
+    }
+
+    /// Return the SMT-LIB that represents the solver state.
+    pub fn get_smtlib(&self) -> Smtlib {
+        Smtlib::from_solver(&self.solver)
     }
 }
 
@@ -129,16 +195,16 @@ mod test {
     fn test_prover() {
         let ctx = Context::new(&Config::default());
         let mut prover = Prover::new(&ctx);
-        assert_eq!(prover.check_proof(), ProveResult::Proof);
+        assert!(matches!(prover.check_proof(), ProveResult::Proof));
         assert_eq!(prover.check_sat(), SatResult::Sat);
 
         prover.push();
         prover.add_assumption(&Bool::from_bool(&ctx, true));
-        assert_eq!(prover.check_proof(), ProveResult::Counterexample);
+        assert!(matches!(prover.check_proof(), ProveResult::Proof));
         assert_eq!(prover.check_sat(), SatResult::Sat);
         prover.pop();
 
-        assert_eq!(prover.check_proof(), ProveResult::Proof);
+        assert!(matches!(prover.check_proof(), ProveResult::Proof));
         assert_eq!(prover.check_sat(), SatResult::Sat);
     }
 }

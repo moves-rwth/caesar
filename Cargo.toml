@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "scooter",
+    "jani",
     "z3rro"
 ]
 
@@ -24,8 +25,8 @@ string-interner = "0.12"
 once_cell = "1.8"
 typed-arena = "2.0"
 lalrpop-util = "0.19"
-z3 = "^0.11.2"
-z3-sys = "^0"
+z3 = "^0.12"
+z3-sys = "^0.8"
 ref-cast = "1.0"
 replace_with = "0.1"
 num = "0.4"
@@ -37,7 +38,6 @@ egg = "0.7"
 tokio = { version = "1", features = ["time", "macros", "rt", "rt-multi-thread"] }
 simple-process-stats = "1.0"
 hdrhistogram = "7.4"
-memchr = "2"
 ariadne = "0.1"
 atty = "0.2"
 shellwords = "1.1.0"
@@ -46,12 +46,15 @@ indexmap = "1.9"
 pretty = "0.11"
 z3rro = { path = "./z3rro" }
 dashmap = "5.4"
-im-rc = "15.1.0"
+im-rc = "15"
 cfg-if = "1.0.0"
 lsp-types = "0.95.0"
 serde_json = "1.0.114"
 lsp-server = "0.7.6"
 serde = "1.0.197"
+jani = { path = "./jani" }
+itertools = "0.12.0"
+stacker = "0.1.15"
 
 [build-dependencies]
 lalrpop = "0.19"
@@ -70,9 +73,9 @@ path = "tests/integration.rs"
 harness = false
 
 [profile.release]
-# Debug information is nice, but it increases the binary size by about 500 megabytes.
-# So we don't enable it for release builds.
-# debug = 1
+# We do want at least minimal debugging information in case we get a crash.
+# Cargo's default is no debug information at all.
+debug = "line-tables-only"
 
 # there are tests which take more than 10x longer with z3 not optimized, so just optimize z3 as well as possible.
 # this might make some debugging a bit harder, so you might want to disable it for that.
@@ -80,8 +83,12 @@ harness = false
 opt-level = 3
 
 [patch.crates-io]
-z3 = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = '002e5c9ea805563cf33030c969d95b8102c9340f' }
+z3 = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = 'bdd501ca1e50785365b875b3438a0cf953cffbfc' }
+z3-sys = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = 'bdd501ca1e50785365b875b3438a0cf953cffbfc' }
 # to work on z3.rs locally, clone it into the main directory and use the following directive instead:
 # z3 = { path = 'z3.rs/z3' }
 
 lit = { git = 'https://github.com/Philipp15b/lit.git', rev = '40426a541626b90aed4ceaac9b7008b647f06d1e' }
+
+# see https://github.com/heim-rs/darwin-libproc/pull/3#issuecomment-1645444056
+darwin-libproc = { git = "https://github.com/Orycterope/darwin-libproc.git", rev = "f73ddb1002d51ae74c1b41670fae56bd5896b7a3" }

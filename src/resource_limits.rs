@@ -2,18 +2,23 @@
 
 use std::{
     future::{pending, Future},
-    time::Duration,
+    sync::{
+        atomic::{AtomicU8, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant},
 };
 
 use simple_process_stats::ProcessStats;
 use thiserror::Error;
 use tokio::{
     select,
-    time::{interval, timeout, MissedTickBehavior},
+    time::{error::Elapsed, interval, timeout, MissedTickBehavior},
 };
 use tracing::error;
 
 const CHECK_MEM_USAGE_INTERVAL: Duration = Duration::from_millis(20);
+pub const HARD_TIMEOUT_SLACK: Duration = Duration::from_millis(500);
 
 /// A timeout or an out-of-memory condition.
 #[derive(Debug, Clone, Copy, Error)]
@@ -24,42 +29,63 @@ pub enum LimitError {
     Oom,
 }
 
-/// Wait for the given future `fut`. Returns [`LimitError::Timeout`] if the
-/// future took too long to complete. If the memory limit was exceeded, return
-/// [`LimitError::Oom`]. Otherwise, return the result wrapped in [`Result::Ok`].
+/// Wait for the future  returned by `fut`. Returns [`LimitError::Timeout`] if
+/// the future took too long to complete. If the memory limit was exceeded,
+/// return [`LimitError::Oom`]. Otherwise, return the result wrapped in
+/// [`Result::Ok`].
+///
+/// The `fut` is given a [`LimitsRef`] which it is supposed to check
+/// periodically. After the given duration plus [`HARD_TIMEOUT_SLACK`], the
+/// future will return a [`LimitError::Timeout`] in case `fut` did not catch the
+/// timeout itself.
 ///
 /// Note that the memory limit is checked for the whole process by a background
 /// thread. Therefore, the memory limit is not specific to the given future.
-pub async fn await_with_resource_limits<T: Unpin>(
+pub async fn await_with_resource_limits<T, F>(
     timeout_secs: Option<u64>,
     mem_limit_mb: Option<u64>,
-    fut: impl Future<Output = T>,
-) -> Result<T, LimitError> {
+    fut: impl FnOnce(LimitsRef) -> F,
+) -> Result<T, LimitError>
+where
+    T: Unpin,
+    F: Future<Output = T>,
+{
     if let Some(timeout_secs) = timeout_secs {
-        let fut = timeout(Duration::from_secs(timeout_secs), fut);
-        if let Some(mem_mbs) = mem_limit_mb {
+        let duration = Duration::from_secs(timeout_secs);
+        let limits_ref = LimitsRef::new(Some(Instant::now() + duration));
+
+        let hard_duration = duration + HARD_TIMEOUT_SLACK;
+        let fut = timeout(hard_duration, fut(limits_ref.clone()));
+        let res = if let Some(mem_mbs) = mem_limit_mb {
             select! {
                 _ = wait_for_oom(mem_mbs) => {
                     Err(LimitError::Oom)
                 }
                 res = fut => {
-                    res.map_err(|_| LimitError::Timeout)
+                    res.map_err(|_: Elapsed| LimitError::Timeout)
                 }
             }
         } else {
-            fut.await.map_err(|_| LimitError::Timeout)
+            fut.await.map_err(|_: Elapsed| LimitError::Timeout)
+        };
+        if let Err(err) = res {
+            limits_ref.set_error(err);
         }
+        res
     } else if let Some(mem_mbs) = mem_limit_mb {
+        let limits_ref = LimitsRef::new(None);
         select! {
             _ = wait_for_oom(mem_mbs) => {
+                limits_ref.set_error(LimitError::Oom);
                 Err(LimitError::Oom)
             }
-            res = fut => {
+            res = fut(limits_ref.clone()) => {
                 Ok(res)
             }
         }
     } else {
-        Ok(fut.await)
+        let limits_ref = LimitsRef::new(None);
+        Ok(fut(limits_ref).await)
     }
 }
 
@@ -90,5 +116,53 @@ async fn wait_for_oom(mem_limit_mb: u64) {
                 pending().await // do not terminate this function
             }
         }
+    }
+}
+
+/// An object to pass around that allows to check whether the resource limits
+/// were exceeded and the task needs to be stopped as a consequence.
+#[derive(Debug, Clone)]
+pub struct LimitsRef(Arc<LimitsRefData>);
+
+#[derive(Debug)]
+struct LimitsRefData {
+    done: AtomicU8,
+    timeout: Option<Instant>,
+}
+
+impl LimitsRef {
+    pub fn new(timeout: Option<Instant>) -> Self {
+        LimitsRef(Arc::new(LimitsRefData {
+            done: AtomicU8::new(0),
+            timeout,
+        }))
+    }
+
+    pub fn check_limits(&self) -> Result<(), LimitError> {
+        match self.0.done.load(Ordering::Relaxed) {
+            0 => Ok(()),
+            1 => Err(LimitError::Timeout),
+            2 => Err(LimitError::Oom),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Returns the time left or `None` if there was no timeout. Will return
+    /// zero if the timeout has elapsed.
+    pub fn time_left(&self) -> Option<Duration> {
+        Some(self.0.timeout?.duration_since(Instant::now()))
+    }
+
+    /// Sets an error. Will only store the first error, any subsequent errors
+    /// are discarded.
+    fn set_error(&self, err: LimitError) {
+        let new = match err {
+            LimitError::Timeout => 1,
+            LimitError::Oom => 2,
+        };
+        let _ = self
+            .0
+            .done
+            .compare_exchange(0, new, Ordering::Acquire, Ordering::Relaxed);
     }
 }
