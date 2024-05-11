@@ -1,0 +1,65 @@
+import { StatusBarItem } from "vscode";
+import * as vscode from 'vscode';
+import { CONFIGURATION_SECTION, StatusBarViewConfig } from "./Configuration";
+import { ServerStatus } from "./CaesarClient";
+import { Verifier } from "./Verifier";
+
+export class StatusBarComponent {
+
+    private enabled: boolean;
+    private status: ServerStatus = ServerStatus.Starting;
+    private view: StatusBarItem;
+
+    constructor(verifier: Verifier) {
+        // create the view
+        this.view = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
+        verifier.context.subscriptions.push(this.view);
+        this.view.text = "Caesar";
+
+        this.view.tooltip = new vscode.MarkdownString(
+            "[Restart Caesar](command:caesar.restartServer)\n\n" +
+            "[Start Caesar](command:caesar.startServer)\n\n" +
+            "[Stop Caesar](command:caesar.stopServer)",
+            true);
+
+        // render if enabled
+        this.enabled = StatusBarViewConfig.get("showStatusBar");
+        this.render();
+
+        // subscribe to config changes
+        verifier.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
+            if (e.affectsConfiguration(CONFIGURATION_SECTION)) {
+                this.enabled = StatusBarViewConfig.get("showStatusBar");
+                this.render();
+            }
+        }));
+
+        // listen to verifier updates
+        verifier.client.onStatusUpdate((status) => {
+            this.status = status;
+            this.render();
+        });
+    }
+
+    render() {
+        if (this.enabled) {
+            switch (this.status) {
+                case ServerStatus.Starting:
+                    this.view.text = "$(sync~spin) Starting Caesar...";
+                    break;
+                case ServerStatus.Ready:
+                    this.view.text = "$(check) Caesar Ready";
+                    break;
+                case ServerStatus.Verifying:
+                    this.view.text = "$(sync~spin) Verifying...";
+                    break;
+                case ServerStatus.Finished:
+                    this.view.text = "$(check) Verified";
+                    break;
+            }
+            this.view.show();
+        } else {
+            this.view.hide();
+        }
+    }
+}
