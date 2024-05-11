@@ -4,9 +4,9 @@ export const CONFIGURATION_SECTION = 'caesar';
 
 export default class Configuration {
 
-    /// Get a configuration value from the configuration file with the given key    
+    /// Get a configuration value from the configuration file with the given key
     public static get(key: string): any {
-        const val: any | undefined = vscode.workspace.getConfiguration(CONFIGURATION_SECTION).get(key)
+        const val = vscode.workspace.getConfiguration(CONFIGURATION_SECTION).get(key)
         if (val === undefined) {
             throw new Error(`${key} is not defined in the configuration file`);
         }
@@ -34,13 +34,12 @@ export class ConfigCategory {
         return Configuration.get(this.getPath() + "." + key);
     }
 
-
 }
 
-// Configurations 
+// Configurations
 // ------------------------------------------------
 
-// Root Configurations: 
+// Root Configurations:
 
 export const ViewConfiguration = new ConfigCategory("uI", null);
 
@@ -50,9 +49,3 @@ export const ViewConfiguration = new ConfigCategory("uI", null);
 export const GutterInformationViewConfig = new ConfigCategory('gutterIcons', ViewConfiguration,);
 export const StatusBarViewConfig = new ConfigCategory('statusBar', ViewConfiguration);
 export const InlineGhostTextViewConfig = new ConfigCategory('inlineGhostText', ViewConfiguration);
-
-
-
-
-
-

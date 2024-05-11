@@ -9,7 +9,7 @@ use crate::{
     Options, VerifyError,
 };
 
-use super::{unless_fatal_error, Server, ServerError};
+use super::{unless_fatal_error, Server, ServerError, VerifyResult};
 
 pub struct CliServer {
     werr: bool,
@@ -65,7 +65,7 @@ impl Server for CliServer {
         Ok(())
     }
 
-    fn set_verify_status(&mut self, _span: Span, _status: bool) -> Result<(), ServerError> {
+    fn set_verify_status(&mut self, _span: Span, _status: VerifyResult) -> Result<(), ServerError> {
         // TODO
         Ok(())
     }

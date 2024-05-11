@@ -17,17 +17,17 @@ use crate::{
     VerifyError,
 };
 
-use super::{Server, ServerError};
+use super::{Server, ServerError, VerifyResult};
 
 #[derive(Debug, Serialize, Deserialize)]
-struct VerifyStatusRequest {
+struct VerifyRequest {
     text_document: VersionedTextDocumentIdentifier,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct VerifyStatusUpdate {
     document: VersionedTextDocumentIdentifier,
-    statuses: Vec<(lsp_types::Range, bool)>,
+    statuses: Vec<(lsp_types::Range, VerifyResult)>,
 }
 
 /// A connection to an LSP client.
@@ -36,7 +36,7 @@ pub struct LspServer {
     files: Arc<Mutex<Files>>,
     connection: Connection,
     diagnostics: Vec<Diagnostic>,
-    statuses: HashMap<Span, bool>,
+    statuses: HashMap<Span, VerifyResult>,
 }
 
 impl LspServer {
@@ -84,9 +84,9 @@ impl LspServer {
         for msg in &receiver {
             match msg {
                 Message::Request(req) => {
-                    if let "custom/verifyStatus" = req.method.as_str() {
+                    if let "custom/verify" = req.method.as_str() {
                         let (id, params) = req
-                            .extract::<VerifyStatusRequest>("custom/verifyStatus")
+                            .extract::<VerifyRequest>("custom/verify")
                             .map_err(|e| VerifyError::ServerError(e.into()))?;
                         self.project_root = Some(params.text_document.clone());
                         let files = self.files.lock().unwrap();
@@ -252,7 +252,7 @@ impl Server for LspServer {
         Ok(())
     }
 
-    fn set_verify_status(&mut self, span: Span, status: bool) -> Result<(), ServerError> {
+    fn set_verify_status(&mut self, span: Span, status: VerifyResult) -> Result<(), ServerError> {
         self.statuses.insert(span, status);
         self.publish_verify_statuses()?;
         Ok(())

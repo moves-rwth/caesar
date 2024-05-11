@@ -16,10 +16,19 @@ mod test;
 use ariadne::ReportKind;
 pub use cli::CliServer;
 pub use lsp::LspServer;
+use serde::{Deserialize, Serialize};
 #[cfg(test)]
 pub use test::TestServer;
 
 pub type ServerError = Box<dyn Error + Send + Sync>;
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum VerifyResult {
+    Verified,
+    Failed,
+    Unknown,
+}
 
 /// A server that serves information to a client, such as the CLI or an LSP
 /// client.
@@ -36,7 +45,7 @@ pub trait Server: Send {
     fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError>;
 
     /// Send a verification status message to the client (a custom notification).
-    fn set_verify_status(&mut self, span: Span, status: bool) -> Result<(), ServerError>;
+    fn set_verify_status(&mut self, span: Span, status: VerifyResult) -> Result<(), ServerError>;
 }
 
 fn unless_fatal_error(werr: bool, diagnostic: Diagnostic) -> Result<Diagnostic, VerifyError> {

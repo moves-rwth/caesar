@@ -27,7 +27,7 @@ use intrinsic::{annotations::init_calculi, distributions::init_distributions, li
 use procs::add_default_specs;
 use proof_rules::init_encodings;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
-use servers::{CliServer, LspServer, Server, ServerError};
+use servers::{CliServer, LspServer, Server, ServerError, VerifyResult};
 use slicing::init_slicing;
 use thiserror::Error;
 use timing::DispatchBuilder;
@@ -583,8 +583,9 @@ fn verify_files_main(
             result.print_prove_result(files_mutex, &vc_expr, &mut translate, name);
         }
         let status = match &result.prove_result {
-            ProveResult::Proof => true,
-            ProveResult::Counterexample(_) | ProveResult::Unknown(_) => false,
+            ProveResult::Proof => VerifyResult::Verified,
+            ProveResult::Counterexample(_) => VerifyResult::Failed,
+            ProveResult::Unknown(_) => VerifyResult::Unknown,
         };
         server
             .set_verify_status(verify_unit.span, status)
@@ -613,16 +614,18 @@ fn verify_files_main(
         }
     }
 
-    println!();
-    let ending = if num_failures == 0 {
-        " veni, vidi, vici!"
-    } else {
-        ""
-    };
-    println!(
-        "{} verified, {} failed.{}",
-        num_proven, num_failures, ending
-    );
+    if !options.language_server {
+        println!();
+        let ending = if num_failures == 0 {
+            " veni, vidi, vici!"
+        } else {
+            ""
+        };
+        println!(
+            "{} verified, {} failed.{}",
+            num_proven, num_failures, ending
+        );
+    }
 
     Ok(num_failures == 0)
 }

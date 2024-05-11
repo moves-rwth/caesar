@@ -8,13 +8,13 @@ use crate::{
     Options, VerifyError,
 };
 
-use super::{unless_fatal_error, Server, ServerError};
+use super::{unless_fatal_error, Server, ServerError, VerifyResult};
 
 pub struct TestServer {
     pub files: Arc<Mutex<Files>>,
     werr: bool,
     pub diagnostics: Vec<Diagnostic>,
-    pub statuses: HashMap<Span, bool>,
+    pub statuses: HashMap<Span, VerifyResult>,
 }
 
 impl TestServer {
@@ -47,7 +47,7 @@ impl Server for TestServer {
         Ok(())
     }
 
-    fn set_verify_status(&mut self, span: Span, status: bool) -> Result<(), ServerError> {
+    fn set_verify_status(&mut self, span: Span, status: VerifyResult) -> Result<(), ServerError> {
         self.statuses.insert(span, status);
         Ok(())
     }
