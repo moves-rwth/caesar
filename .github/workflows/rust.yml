@@ -8,6 +8,11 @@ jobs:
     runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v3
+      - name: Install packages
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake llvm-dev libclang-dev clang lld
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --workspace
 
@@ -27,6 +32,11 @@ jobs:
     runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v3
+      - name: Install packages
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake llvm-dev libclang-dev clang lld
       - uses: dtolnay/rust-toolchain@stable
         with: 
           components: clippy

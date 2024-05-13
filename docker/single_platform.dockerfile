@@ -2,7 +2,7 @@
 FROM rust:latest as builder
 
 # install required dependencies to build z3.rs...
-RUN apt-get update && apt-get install -y cmake llvm-dev libclang-dev clang
+RUN apt-get update && apt-get install -y cmake llvm-dev libclang-dev clang lld
 
 WORKDIR /root/caesar
 COPY . .
