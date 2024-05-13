@@ -5,7 +5,7 @@ name: Rust
 jobs:
   test:
     name: Test Suite
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Install packages
@@ -18,7 +18,7 @@ jobs:
 
   fmt:
     name: Rustfmt
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
@@ -29,7 +29,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Install packages
