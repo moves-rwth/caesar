@@ -27,7 +27,7 @@ export class GutterStatusComponent {
         // subscribe to config changes
         verifier.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
             if (e.affectsConfiguration(CONFIGURATION_SECTION)) {
-                this.enabled = StatusBarViewConfig.get("showGutterIcons");
+                this.enabled = GutterInformationViewConfig.get("showGutterIcons");
                 this.render();
             }
         }));
