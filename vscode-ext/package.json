@@ -64,6 +64,16 @@
       "type": "object",
       "title": "Caesar",
       "properties": {
+        "caesar.server.timeout": {
+          "type": "number",
+          "default": 300,
+          "description": "Specifies the timeout for the verifier. (Changing this setting will restart the server)"
+        },
+        "caesar.server.flags": {
+          "type": "string",
+          "default": "",
+          "description": "Specifies the flags to be passed to the Caesar server. (Changing this setting will restart the server)"
+        },
         "caesar.server.installationOptions": {
           "type": "string",
           "default": "binary",
@@ -75,7 +85,7 @@
             "Use the binary of Caesar",
             "Build Caesar from the source code"
           ],
-          "description": "Specifies how caesar will be executed from the extension."
+          "description": "Specifies how caesar will be executed from the extension. (Changing this setting will restart the server)"
         },
         "caesar.server.autoStartServer": {
           "type": "boolean",
@@ -85,7 +95,7 @@
         "caesar.server.path": {
           "type": "string",
           "default": "",
-          "description": "Specifies the path to the Caesar binary or source code."
+          "description": "Specifies the path to the Caesar binary or source code. (Changing this setting will restart the server)"
         },
         "caesar.uI.gutterIcons.showGutterIcons": {
           "type": "boolean",

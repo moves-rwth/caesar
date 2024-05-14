@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { CONFIGURATION_SECTION, GutterInformationViewConfig } from "./Configuration";
 import { ServerStatus, VerifyResult } from "./CaesarClient";
 import { DocumentMap, Verifier } from "./Verifier";
+import { ConfigurationConstants } from "./constants";
 
 export class GutterStatusComponent {
 
@@ -20,14 +21,14 @@ export class GutterStatusComponent {
         this.unknownDecType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath('images/unknown.png') });
 
         // render if enabled
-        this.enabled = GutterInformationViewConfig.get("showGutterIcons");
+        this.enabled = GutterInformationViewConfig.get(ConfigurationConstants.showGutterIcons);
 
         this.status = new DocumentMap();
 
         // subscribe to config changes
         verifier.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
-            if (e.affectsConfiguration(CONFIGURATION_SECTION)) {
-                this.enabled = GutterInformationViewConfig.get("showGutterIcons");
+            if (e.affectsConfiguration(GutterInformationViewConfig.getFullPath(ConfigurationConstants.showGutterIcons))) {
+                this.enabled = GutterInformationViewConfig.get(ConfigurationConstants.showGutterIcons);
                 this.render();
             }
         }));

@@ -58,10 +58,26 @@ export class CaesarClient {
         vscode.commands.registerCommand('caesar.stopServer', async () => {
             await this.stop();
         });
+
+        vscode.commands.registerCommand('caesar.verify', async () => {
+            let openEditor = vscode.window.activeTextEditor;
+            if (openEditor) {
+                this.verify(openEditor.document);
+            }
+        });
+
+        this.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
+            // If the configuration that changed is a server configuration but not the autoStartServer configuration, restart the server
+            if (e.affectsConfiguration(ServerConfig.getFullPath()) && !e.affectsConfiguration(ServerConfig.getFullPath(ConfigurationConstants.autoStartServer))) {
+                console.log("Configuration changed")
+                // Create a new client with the new flags
+                this.completeRestart();
+            }
+        }));
     }
 
     /// Try to initialize the client and return the client if successful otherwise return null
-    private initialize(context: ExtensionContext): LanguageClient | null {
+    public initialize(context: ExtensionContext): LanguageClient | null {
         try {
             this.client = this.createClient(context);
         } catch (error) {
@@ -76,7 +92,16 @@ export class CaesarClient {
 
     private createClient(context: vscode.ExtensionContext): LanguageClient {
         // Get the source code / binary path from the configurations
-        const serverPath: string = ServerConfig.get(ConfigurationConstants.installationPath);
+
+        let flags: Array<string> = ServerConfig.get(ConfigurationConstants.flags).split(" ");
+        let timeout = ServerConfig.get(ConfigurationConstants.timeout);
+
+        // The timeout in flags configuration overwrites the timeout configuration.
+        if ("--timeout"! in flags) {
+            flags.push("--timeout", timeout);
+        }
+
+        let serverPath: string = ServerConfig.get(ConfigurationConstants.installationPath);
         if (serverPath === "") {
             void vscode.window.showErrorMessage("Caesar: Installation path is not set. Please set the path in the settings.");
             throw new Error("Installation path is not set");
@@ -86,7 +111,7 @@ export class CaesarClient {
         switch (ServerConfig.get(ConfigurationConstants.installationOptions)) {
             case ConfigurationConstants.binaryOption:
                 serverExecutable = "caesar";
-                args = ['--language-server'];
+                args = ['--language-server'].concat(flags);
                 break;
             case ConfigurationConstants.sourceCodeOption:
                 if (!fs.existsSync(path.resolve(serverPath, "Cargo.toml"))) {
@@ -94,7 +119,7 @@ export class CaesarClient {
                     throw new Error("Cargo.toml file is not found in the path");
                 }
                 serverExecutable = "cargo";
-                args = ['run', '--', '--language-server'];
+                args = ['run', '--', '--language-server'].concat(flags);
                 break;
         }
 
@@ -155,6 +180,7 @@ export class CaesarClient {
             }
         }));
 
+
         // listen to onDidSaveTextDocument events
         context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
             // TODO: look at setting
@@ -164,13 +190,13 @@ export class CaesarClient {
             void this.verify(document);
         }));
 
-        vscode.commands.registerCommand('caesar.verify', async () => {
-            const openEditor = vscode.window.activeTextEditor;
-            if (openEditor) {
-                await this.verify(openEditor.document);
-            }
-        });
         return client;
+    }
+
+    async completeRestart() {
+        await this.stop();
+        this.initialize(this.context);
+        await this.start();
     }
 
     async start() {
@@ -183,7 +209,11 @@ export class CaesarClient {
                 return;
             };
         }
-        await this.client!.start();
+        await this.client!.start().catch((error) => {
+            console.error("Failed to start Caesar", error);
+            vscode.window.showErrorMessage("Failed to start Caesar:", error.message);
+            this.notifyStatusUpdate(ServerStatus.FailedToStart);
+        });
         this.notifyStatusUpdate(ServerStatus.Ready);
 
     }
@@ -193,19 +223,29 @@ export class CaesarClient {
             await this.start();
         } else {
             console.log("Restarting Caesar");
-            await this.client?.restart();
+            this.notifyStatusUpdate(ServerStatus.Starting);
+            await this.client?.restart().catch((error) => {
+                console.error("Failed to restart Caesar", error);
+                this.notifyStatusUpdate(ServerStatus.FailedToStart);
+            });
         }
     }
 
     async stop() {
+        if (this.client === null) {
+            return
+        }
         console.log("Stopping Caesar");
-        await this.client?.stop();
+        await this.client?.stop().catch((error) => {
+            console.error("Failed to stop Caesar", error);
+        });
         this.notifyStatusUpdate(ServerStatus.Stopped);
     }
 
     async verify(document: TextDocument) {
         if (this.client === null) {
-            return;
+            vscode.window.showErrorMessage("Caesar is not running")
+            return
         }
         const documentItem = {
             uri: document.uri.toString(),
