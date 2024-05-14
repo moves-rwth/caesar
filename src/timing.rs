@@ -77,7 +77,8 @@ impl DispatchBuilder {
                 cfg_if::cfg_if! {
                     if #[cfg(not(test))] {
                     logging_layer = tracing_subscriber::fmt::layer()
-                        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE);
+                        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+                        .with_writer(std::io::stderr);
                     } else {
                         use tracing_subscriber::fmt::format::*;
                         logging_layer = tracing_subscriber::fmt::layer()
