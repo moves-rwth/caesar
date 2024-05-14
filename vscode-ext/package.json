@@ -36,6 +36,10 @@
       {
         "command": "caesar.copyCommand",
         "title": "Caesar: Copy Command"
+      },
+      {
+        "command": "caesar.showOutput",
+        "title": "Caesar: Show Output Channel"
       }
     ],
     "languages": [

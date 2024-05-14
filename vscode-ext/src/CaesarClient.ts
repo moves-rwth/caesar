@@ -62,6 +62,10 @@ export class CaesarClient {
         vscode.commands.registerCommand('caesar.copyCommand', async () => {
             await this.copyCommand();
         });
+
+        vscode.commands.registerCommand('caesar.showOutput', () => {
+            this.client?.outputChannel.show();
+        });
     }
 
     /// Try to initialize the client and return the client if successful otherwise return null
@@ -94,7 +98,8 @@ export class CaesarClient {
             synchronize: {
                 // Notify the server about file changes to '.clientrc files contained in the workspace
                 fileEvents: vscode.workspace.createFileSystemWatcher('**/*.heyvl')
-            }
+            },
+
         };
 
         const client = new LanguageClient(
@@ -105,6 +110,9 @@ export class CaesarClient {
         );
 
         context.subscriptions.push(client);
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        client.info(`Starting Caesar for VSCode ${context.extension.packageJSON.version}.`);
 
         // set up listeners for our custom events
         context.subscriptions.push(client.onNotification("custom/verifyStatus", (params: VerifyStatusNotification) => {
@@ -143,12 +151,12 @@ export class CaesarClient {
             void vscode.window.showErrorMessage("Caesar: Installation path is not set. Please set the path in the settings.");
             throw new Error("Installation path is not set");
         }
-        let serverExecutable = "";
-        let args: string[] = [];
+        let serverExecutable;
+        const args: string[] = [];
         switch (ServerConfig.get(ConfigurationConstants.installationOptions)) {
             case ConfigurationConstants.binaryOption:
                 serverExecutable = "caesar";
-                args = ['--language-server'];
+                args.push('--language-server');
                 break;
             case ConfigurationConstants.sourceCodeOption:
                 if (!fs.existsSync(path.resolve(serverPath, "Cargo.toml"))) {
@@ -156,9 +164,12 @@ export class CaesarClient {
                     throw new Error("Cargo.toml file is not found in the path");
                 }
                 serverExecutable = "cargo";
-                args = ['run', '--', '--language-server'];
+                args.push('run', '--', '--language-server');
                 break;
+            default:
+                throw new Error(`Unknown config setting`);
         }
+        args.push("--debug"); // print debug information
         return {
             command: serverExecutable,
             args: args,
