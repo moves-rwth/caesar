@@ -53,7 +53,7 @@ export class ConfigCategory {
 
 // Root Configurations:
 
-export const ViewConfig = new ConfigCategory("uI", null);
+export const ViewConfig = new ConfigCategory("userInterface", null);
 export const ServerConfig = new ConfigCategory("server", null);
 
 // View Configurations:
