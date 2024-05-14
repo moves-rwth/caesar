@@ -6,9 +6,6 @@
       "include": "#keywords"
     },
     {
-      "include": "#strings"
-    },
-    {
       "include": "#comments"
     },
     {
@@ -88,6 +85,11 @@
         {
           "name": "constant.language.heyvl",
           "match": "\\b(true|false|∞|\\\\[a-zA-Z]+)\\b"
+        },
+        {
+          "name": "string.heyvl",
+          "begin": "\"",
+          "end": "\""
         }
       ]
     },
