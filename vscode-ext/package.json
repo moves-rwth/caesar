@@ -94,10 +94,15 @@
           "default": false,
           "description": "Specifies whether to automatically start the server when the extension is activated."
         },
-        "caesar.server.path": {
+        "caesar.server.binaryPath": {
           "type": "string",
           "default": "",
-          "description": "Specifies the path to the Caesar binary or source code."
+          "description": "Specifies the path to the Caesar binary"
+        },
+        "caesar.server.sourcePath": {
+          "type": "string",
+          "default": "",
+          "description": "Specifies the path to Caesar's source code. The extension will start Caesar using `cargo run`."
         },
         "caesar.uI.gutterIcons.showGutterIcons": {
           "type": "boolean",

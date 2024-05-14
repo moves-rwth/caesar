@@ -146,19 +146,29 @@ export class CaesarClient {
     }
 
     private getExecutable(): Executable {
-        const serverPath: string = ServerConfig.get(ConfigurationConstants.installationPath);
-        if (serverPath === "") {
-            void vscode.window.showErrorMessage("Caesar: Installation path is not set. Please set the path in the settings.");
-            throw new Error("Installation path is not set");
-        }
+        let serverPath: string;
         let serverExecutable;
         const args: string[] = [];
         switch (ServerConfig.get(ConfigurationConstants.installationOptions)) {
             case ConfigurationConstants.binaryOption:
+                serverPath = ServerConfig.get(ConfigurationConstants.binaryPath);
+                if (serverPath === "") {
+                    void vscode.window.showErrorMessage("Caesar: Binary path is not set. Please set the path in the settings.", "Open settings").then(async () => {
+                        await vscode.commands.executeCommand('workbench.action.openSettings', 'caesar.server');
+                    });
+                    throw new Error("Installation path is not set");
+                }
                 serverExecutable = "caesar";
                 args.push('--language-server');
                 break;
             case ConfigurationConstants.sourceCodeOption:
+                serverPath = ServerConfig.get(ConfigurationConstants.sourcePath);
+                if (serverPath === "") {
+                    void vscode.window.showErrorMessage("Caesar: Source path is not set. Please set the path in the settings.", "Open settings").then(async () => {
+                        await vscode.commands.executeCommand('workbench.action.openSettings', 'caesar.server');
+                    });
+                    throw new Error("Installation path is not set");
+                }
                 if (!fs.existsSync(path.resolve(serverPath, "Cargo.toml"))) {
                     void vscode.window.showErrorMessage("Caesar: Cargo.toml file is not found in the path. Please check the path in the settings.");
                     throw new Error("Cargo.toml file is not found in the path");
