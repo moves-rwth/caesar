@@ -63,6 +63,7 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
     }
 
     Some(VerifyUnit {
+        span: proc.span,
         direction,
         block: stmts,
     })

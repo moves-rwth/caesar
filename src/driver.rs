@@ -11,7 +11,7 @@ use std::{
 use crate::{
     ast::{
         stats::StatsVisitor, visit::VisitorMut, BinOpKind, Block, DeclKind, Diagnostic, Direction,
-        Expr, ExprBuilder, Files, SourceFilePath, Span, StoredFile, TyKind, UnOpKind,
+        Expr, ExprBuilder, Files, SourceFilePath, Span, Spanned, StoredFile, TyKind, UnOpKind,
     },
     front::{
         parser::{self, ParseError},
@@ -24,7 +24,6 @@ use crate::{
         RemoveParens,
     },
     pretty::{Doc, SimplePretty},
-    print_diagnostic,
     procs::{
         monotonicity::MonotonicityVisitor,
         proc_verify::{to_direction_lower_bounds, verify_proc},
@@ -44,7 +43,6 @@ use crate::{
     Options, VerifyError,
 };
 
-use tracing::{info_span, instrument, trace};
 use z3::{
     ast::{Ast, Bool},
     Config, Context,
@@ -55,8 +53,10 @@ use z3rro::{
     util::PrefixWriter,
 };
 
+use tracing::{info_span, instrument, trace};
+
 /// Human-readable name for a source unit. Used for debugging and error messages.
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct SourceUnitName(String);
 
 impl SourceUnitName {
@@ -198,7 +198,7 @@ impl<'a, T> DerefMut for ItemEntered<'a, T> {
 #[derive(Debug)]
 pub enum SourceUnit {
     Decl(DeclKind),
-    Raw(Block),
+    Raw(Spanned<Block>),
 }
 
 impl SourceUnit {
@@ -248,7 +248,7 @@ impl SourceUnit {
     fn visit_mut<V: VisitorMut>(&mut self, visitor: &mut V) -> Result<(), V::Err> {
         match self {
             SourceUnit::Decl(decl) => visitor.visit_decl(decl),
-            SourceUnit::Raw(block) => visitor.visit_stmts(block),
+            SourceUnit::Raw(block) => visitor.visit_stmts(&mut block.node),
         }
     }
 
@@ -269,7 +269,9 @@ impl SourceUnit {
         // Raw source units get their own subscope
         let res = match self {
             SourceUnit::Decl(decl) => resolve.visit_decl(decl),
-            SourceUnit::Raw(block) => resolve.with_subscope(|resolve| resolve.visit_stmts(block)),
+            SourceUnit::Raw(block) => {
+                resolve.with_subscope(|resolve| resolve.visit_stmts(&mut block.node))
+            }
         };
         Ok(res.map_err(|resolve_err| resolve_err.diagnostic())?)
     }
@@ -300,7 +302,6 @@ impl SourceUnit {
     pub fn write_to_jani_if_requested(
         &self,
         options: &Options,
-        files: &Mutex<Files>,
         tcx: &TyCtx,
     ) -> Result<(), VerifyError> {
         if let Some(jani_dir) = &options.jani_dir {
@@ -310,15 +311,8 @@ impl SourceUnit {
                         let jani_options = JaniOptions {
                             skip_quant_pre: options.jani_skip_quant_pre,
                         };
-                        let jani_model = mc::proc_to_model(&jani_options, tcx, &decl_ref.borrow());
-                        let jani_model = match jani_model {
-                            Ok(jani_model) => jani_model,
-                            Err(err) => {
-                                let files = files.lock().unwrap();
-                                print_diagnostic(&files, err.diagnostic())?;
-                                return Ok(());
-                            }
-                        };
+                        let jani_model = mc::proc_to_model(&jani_options, tcx, &decl_ref.borrow())
+                            .map_err(|err| VerifyError::Diagnostic(err.diagnostic()))?;
                         let file_path = jani_dir.join(format!("{}.jani", decl.name()));
                         create_dir_all(file_path.parent().unwrap())?;
                         std::fs::write(file_path, jani::to_string(&jani_model))?;
@@ -340,7 +334,7 @@ impl SourceUnit {
         let mut enc_call = EncCall::new(tcx, source_units_buf);
         let res = match self {
             SourceUnit::Decl(decl) => enc_call.visit_decl(decl),
-            SourceUnit::Raw(block) => enc_call.visit_stmts(block),
+            SourceUnit::Raw(block) => enc_call.visit_stmts(&mut block.node),
         };
         Ok(res.map_err(|ann_err| ann_err.diagnostic())?)
     }
@@ -359,8 +353,9 @@ impl SourceUnit {
                 }
             }
             SourceUnit::Raw(block) => Some(VerifyUnit {
+                span: block.span,
                 direction: Direction::Down,
-                block,
+                block: block.node,
             }),
         }
     }
@@ -384,6 +379,7 @@ impl fmt::Display for SourceUnit {
 /// A block of HeyVL statements to be verified with a certain [`Direction`].
 #[derive(Debug, Clone)]
 pub struct VerifyUnit {
+    pub span: Span,
     pub direction: Direction,
     pub block: Block,
 }

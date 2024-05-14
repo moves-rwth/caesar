@@ -28,8 +28,7 @@ use super::{Encoding, EncodingEnvironment, EncodingGenerated};
 
 use super::util::*;
 
-/// Syntactic sugar encoding for K-Induction encodings of type k=1
-
+/// The "@induction" encoding is just syntactic sugar for 1-induction.
 pub struct InvariantAnnotation(pub AnnotationDecl);
 
 impl InvariantAnnotation {
@@ -100,45 +99,9 @@ impl Encoding for InvariantAnnotation {
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
-        // Unpack values from struct
-        let annotation_span = enc_env.annotation_span;
-        let direction = enc_env.direction;
-
-        let mut visitor = ModifiedVariableCollector::new();
-        visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
-        let havoc_vars = visitor.modified_variables.into_iter().collect();
-
         let [invariant] = one_arg(args);
-
-        let mut buf = vec![];
-
-        // Construct the specification of the k-induction encoding
-        buf.extend(encode_loop_spec(
-            annotation_span,
-            invariant,
-            invariant,
-            havoc_vars,
-            direction,
-        ));
-
-        // Extend the loop k-1 times with the opposite direction
-        let next_iter = encode_extend(
-            annotation_span,
-            inner_stmt,
-            0,
-            invariant,
-            direction.toggle(),
-            park_iteration_terminator(annotation_span, invariant, direction, tcx),
-        );
-
-        // Encode the last iteration in the normal direction
-        buf.push(encode_iter(annotation_span, inner_stmt, next_iter).unwrap());
-
-        Ok(EncodingGenerated {
-            span: annotation_span,
-            stmts: buf,
-            decls: None,
-        })
+        let k = 1;
+        transform_k_induction(tcx, inner_stmt, enc_env, k, invariant)
     }
 
     fn is_terminator(&self) -> bool {
@@ -210,6 +173,7 @@ impl Encoding for KIndAnnotation {
                 | (CalculusType::Wlp, Direction::Down)
         )
     }
+
     fn transform(
         &self,
         tcx: &TyCtx,
@@ -217,55 +181,9 @@ impl Encoding for KIndAnnotation {
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
-        let annotation_span = enc_env.annotation_span;
-        let direction = enc_env.direction;
-
-        let mut visitor = ModifiedVariableCollector::new();
-        visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
-        let havoc_vars = visitor.modified_variables.into_iter().collect();
-
         let [k, invariant] = two_args(args);
-
         let k: u128 = lit_u128(k);
-
-        let mut buf = vec![];
-
-        // Construct the specification of the k-induction encoding
-        buf.extend(encode_loop_spec(
-            annotation_span,
-            invariant,
-            invariant,
-            havoc_vars,
-            direction,
-        ));
-
-        // If we do Park induction here, then use the terminator with error and
-        // success messages. If we do k-induction with k > 1, then do not emit
-        // these messages - they're not accurate then.
-        let terminator = if k == 1 {
-            park_iteration_terminator(annotation_span, invariant, direction, tcx)
-        } else {
-            iteration_terminator(annotation_span, invariant, direction, tcx)
-        };
-
-        // Extend the loop k-1 times with the opposite direction
-        let next_iter = encode_extend(
-            annotation_span,
-            inner_stmt,
-            k - 1,
-            invariant,
-            direction.toggle(),
-            terminator,
-        );
-
-        // Encode the last iteration in the normal direction
-        buf.push(encode_iter(annotation_span, inner_stmt, next_iter).unwrap());
-
-        Ok(EncodingGenerated {
-            span: annotation_span,
-            stmts: buf,
-            decls: None,
-        })
+        transform_k_induction(tcx, inner_stmt, enc_env, k, invariant)
     }
 
     fn is_terminator(&self) -> bool {
@@ -273,11 +191,65 @@ impl Encoding for KIndAnnotation {
     }
 }
 
+/// Generic implementation of the encoding for both k-induction and induction.
+/// Since induction is just 1-induction, we can reuse almost all of the code.
+fn transform_k_induction(
+    tcx: &TyCtx,
+    inner_stmt: &Stmt,
+    enc_env: EncodingEnvironment,
+    k: u128,
+    invariant: &Expr,
+) -> Result<EncodingGenerated, AnnotationError> {
+    let annotation_span = enc_env.annotation_span;
+    let direction = enc_env.direction;
+
+    let mut visitor = ModifiedVariableCollector::new();
+    visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
+    let havoc_vars = visitor.modified_variables.into_iter().collect();
+
+    let mut buf = vec![];
+
+    // Construct the specification of the k-induction encoding
+    buf.extend(encode_loop_spec(
+        annotation_span,
+        invariant,
+        havoc_vars,
+        direction,
+    ));
+
+    // If we do Park induction here, then use the terminator with error and
+    // success messages. If we do k-induction with k > 1, then do not emit
+    // these messages - they're not accurate then.
+    let terminator = if k == 1 {
+        park_iteration_terminator(annotation_span, invariant, direction, tcx)
+    } else {
+        iteration_terminator(annotation_span, invariant, direction, tcx)
+    };
+
+    // Extend the loop k-1 times with the opposite direction
+    let next_iter = encode_extend(
+        annotation_span,
+        inner_stmt,
+        k - 1,
+        invariant,
+        direction.toggle(),
+        terminator,
+    );
+
+    // Encode the last iteration in the normal direction
+    buf.push(encode_iter(annotation_span, inner_stmt, next_iter).unwrap());
+
+    Ok(EncodingGenerated {
+        span: annotation_span,
+        stmts: buf,
+        decls: None,
+    })
+}
+
 /// Encode the loop "spec call" with respective error messages.
 fn encode_loop_spec(
     span: Span,
-    pre: &Expr,
-    post: &Expr,
+    invariant: &Expr,
     variables: Vec<Ident>,
     direction: Direction,
 ) -> Vec<Stmt> {
@@ -288,13 +260,13 @@ fn encode_loop_spec(
     let error_msg = format!("pre might not entail the invariant ({})", error_condition);
     vec![
         wrap_with_error_message(
-            Spanned::new(span, StmtKind::Assert(direction, pre.clone())),
+            Spanned::new(span, StmtKind::Assert(direction, invariant.clone())),
             &error_msg,
         ),
         Spanned::new(span, StmtKind::Havoc(direction, variables)),
         Spanned::new(span, StmtKind::Validate(direction)),
         wrap_with_success_message(
-            Spanned::new(span, StmtKind::Assume(direction, post.clone())),
+            Spanned::new(span, StmtKind::Assume(direction, invariant.clone())),
             "invariant not necessary for inductivity",
         ),
     ]

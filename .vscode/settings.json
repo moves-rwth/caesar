@@ -1,4 +1,14 @@
 {
-  "cSpell.words": ["intern", "interner"],
-  "cSpell.enabled": false
+    "files.exclude": {
+        "vscode-ext/out": false // set this to true to hide the "out" folder with the compiled JS files
+    },
+    "search.exclude": {
+        "vscode-ext/out": true // set this to false to include "out" folder in search results
+    },
+    // Turn off tsc task auto detection since we have the necessary tasks as npm scripts
+    "typescript.tsc.autoDetect": "off",
+    "eslint.workingDirectories": [
+        "./vscode-ext"
+    ],
+    "eslint.experimental.useFlatConfig": true
 }

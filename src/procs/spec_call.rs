@@ -233,7 +233,7 @@ mod test {
                 assert ?(false) // this should never verify!
             }
         "#;
-        let res = verify_test(&source).0.unwrap();
+        let res = verify_test(source).0.unwrap();
         assert_eq!(res, false);
     }
 }

@@ -6,28 +6,33 @@ use std::{
     error::Error,
     fmt::{self, Display, Formatter},
     path::PathBuf,
+    sync::Arc,
 };
 
 use ariadne::{Cache, Report, ReportBuilder, ReportKind, Source};
+use lsp_types::VersionedTextDocumentIdentifier;
 use pathdiff::diff_paths;
 
 use crate::pretty::{Doc, SimplePretty};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FileId(u16);
 
 impl FileId {
     pub const DUMMY: FileId = FileId(0);
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceFilePath {
     Path(PathBuf),
+    Lsp(VersionedTextDocumentIdentifier),
     Builtin,
     Generated,
 }
 
 impl SourceFilePath {
+    /// Rewrites a [`SourceFilePath::Path`] to be relative to the process
+    /// working directory.
     pub fn relative_to_cwd(&self) -> std::io::Result<Self> {
         match self {
             SourceFilePath::Path(path) => {
@@ -37,16 +42,25 @@ impl SourceFilePath {
                 let path_buf = diff_paths(path, current_dir).unwrap_or(path.to_path_buf());
                 Ok(SourceFilePath::Path(path_buf))
             }
-            SourceFilePath::Builtin => Ok(SourceFilePath::Builtin),
-            SourceFilePath::Generated => Ok(SourceFilePath::Generated),
+            _ => Ok(self.clone()),
         }
     }
 
     pub fn to_string_lossy(&self) -> Cow<'_, str> {
         match self {
             SourceFilePath::Path(path) => path.to_string_lossy(),
+            SourceFilePath::Lsp(ident) => {
+                Cow::Owned(format!("{} (version {})", ident.uri, ident.version))
+            }
             SourceFilePath::Builtin => Cow::from("<builtin>"),
             SourceFilePath::Generated => Cow::from("<generated>"),
+        }
+    }
+
+    pub fn to_lsp_identifier(&self) -> Option<VersionedTextDocumentIdentifier> {
+        match self {
+            SourceFilePath::Lsp(ident) => Some(ident.clone()),
+            _ => None,
         }
     }
 }
@@ -101,7 +115,7 @@ impl fmt::Debug for StoredFile {
 
 #[derive(Debug, Default)]
 pub struct Files {
-    files: Vec<StoredFile>,
+    files: Vec<Arc<StoredFile>>,
 }
 
 impl Files {
@@ -109,15 +123,41 @@ impl Files {
         Default::default()
     }
 
-    pub fn add(&mut self, path: SourceFilePath, source: String) -> &StoredFile {
+    pub fn add(&mut self, path: SourceFilePath, source: String) -> &Arc<StoredFile> {
         let id = FileId(u16::try_from(self.files.len() + 1).unwrap());
-        self.files.push(StoredFile::new(id, path, source));
-        self.files.last().unwrap()
+        self.files.push(Arc::new(StoredFile::new(id, path, source)));
+        self.get(id).unwrap()
     }
 
-    pub fn get(&self, file_id: FileId) -> Option<&StoredFile> {
-        assert_ne!(file_id, FileId::DUMMY);
+    pub fn add_or_update_uri(
+        &mut self,
+        document_id: VersionedTextDocumentIdentifier,
+        source: String,
+    ) -> &StoredFile {
+        let file = self.files.iter_mut().find(|file| {
+            if let SourceFilePath::Lsp(ident) = &file.path {
+                ident.uri != document_id.uri
+            } else {
+                true
+            }
+        });
+        let path = SourceFilePath::Lsp(document_id);
+        if let Some(file) = file {
+            let file_id = file.id;
+            *file = Arc::new(StoredFile::new(file_id, path, source));
+            self.get(file_id).unwrap()
+        } else {
+            self.add(path, source)
+        }
+    }
+
+    pub fn get(&self, file_id: FileId) -> Option<&Arc<StoredFile>> {
+        assert_ne!(file_id.0, 0);
         self.files.get((file_id.0 - 1) as usize)
+    }
+
+    pub fn find(&self, path: &SourceFilePath) -> Option<&Arc<StoredFile>> {
+        self.files.iter().find(|file| &file.path == path)
     }
 
     pub fn char_span(&self, span: Span) -> CharSpan {
@@ -224,6 +264,47 @@ impl Span {
             end: self.end,
             variant,
         }
+    }
+
+    pub fn to_lsp(
+        self,
+        files: &Files,
+    ) -> Option<(VersionedTextDocumentIdentifier, lsp_types::Range)> {
+        let file = files.get(self.file).unwrap();
+        let char_span = file.char_span(self);
+
+        let mut start_line = 0;
+        let mut start_offset = 0;
+        let mut end_line = 0;
+        let mut end_offset = 0;
+
+        for (i, c) in file.source.chars().enumerate() {
+            if i == char_span.end {
+                break;
+            }
+            if i == char_span.start {
+                (start_line, start_offset) = (end_line, end_offset);
+            }
+
+            if c == '\n' {
+                end_line += 1;
+                end_offset = 0;
+            } else {
+                end_offset += 1;
+            }
+        }
+
+        let range = lsp_types::Range {
+            start: lsp_types::Position {
+                line: start_line,
+                character: start_offset,
+            },
+            end: lsp_types::Position {
+                line: end_line,
+                character: end_offset,
+            },
+        };
+        Some((file.path.to_lsp_identifier()?, range))
     }
 }
 
@@ -376,6 +457,14 @@ impl Diagnostic {
         self
     }
 
+    pub fn kind(&self) -> ReportKind {
+        self.0.kind
+    }
+
+    pub fn span(&self) -> Span {
+        self.0.location
+    }
+
     /// Generate the [`ariadne::ReportBuilder`].
     pub fn into_ariadne(self, files: &Files) -> ReportBuilder<CharSpan> {
         // note that ariadne's report doesn't use the span end
@@ -394,6 +483,63 @@ impl Diagnostic {
             builder = builder.with_label(label.into_ariadne(files));
         }
         builder
+    }
+
+    pub fn into_lsp_diagnostic(
+        &self,
+        files: &Files,
+    ) -> Option<(VersionedTextDocumentIdentifier, lsp_types::Diagnostic)> {
+        let (document_id, range) = self.0.location.to_lsp(files)?;
+
+        let severity = match self.0.kind {
+            ReportKind::Error => lsp_types::DiagnosticSeverity::ERROR,
+            ReportKind::Warning => lsp_types::DiagnosticSeverity::WARNING,
+            ReportKind::Advice => lsp_types::DiagnosticSeverity::HINT,
+            _ => lsp_types::DiagnosticSeverity::ERROR,
+        };
+        let code = self
+            .0
+            .code
+            .map(|code| lsp_types::NumberOrString::Number(code as i32));
+        let code_description = None;
+        let source = None;
+        let message = self
+            .0
+            .msg
+            .clone()
+            .unwrap_or_else(|| "(no message)".to_string());
+        let related_information = self
+            .0
+            .labels
+            .iter()
+            .flat_map(|label| {
+                let (uri, range) = if let Some(res) = label.span.to_lsp(files) {
+                    res
+                } else {
+                    tracing::error!("{:?} is not an LSP path, skipping label", label.span);
+                    return None;
+                };
+                Some(lsp_types::DiagnosticRelatedInformation {
+                    location: lsp_types::Location {
+                        uri: uri.uri,
+                        range,
+                    },
+                    message: label.msg.clone()?,
+                })
+            })
+            .collect::<Vec<_>>();
+        let diagnostic = lsp_types::Diagnostic {
+            range,
+            severity: Some(severity),
+            code,
+            code_description,
+            source,
+            message,
+            related_information: Some(related_information),
+            tags: None,
+            data: None,
+        };
+        Some((document_id, diagnostic))
     }
 
     /// Write the diagnostic to a simple [`String`] without ANSI colors.

@@ -6,6 +6,7 @@
 use std::{
     collections::HashMap,
     io,
+    ops::DerefMut,
     path::PathBuf,
     process::ExitCode,
     sync::{Arc, Mutex},
@@ -20,12 +21,13 @@ use crate::{
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
 };
-use ast::{Diagnostic, FileId, Files, SourceFilePath};
+use ast::{Diagnostic, FileId};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use procs::add_default_specs;
 use proof_rules::init_encodings;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
+use servers::{CliServer, LspServer, Server, ServerError, VerifyResult};
 use slicing::init_slicing;
 use thiserror::Error;
 use timing::DispatchBuilder;
@@ -36,7 +38,6 @@ use structopt::StructOpt;
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
 pub mod ast;
-// mod calculi;
 mod driver;
 pub mod front;
 pub mod intrinsic;
@@ -47,6 +48,7 @@ mod procs;
 mod proof_rules;
 mod resource_limits;
 mod scope_map;
+mod servers;
 mod slicing;
 mod smt;
 mod timing;
@@ -160,6 +162,10 @@ pub struct Options {
     #[structopt(long)]
     pub print_label_vc: bool,
 
+    /// Run the language server.
+    #[structopt(long)]
+    pub language_server: bool,
+
     /// Export declarations to JANI files in the provided directory.
     #[structopt(long, parse(from_os_str))]
     pub jani_dir: Option<PathBuf>,
@@ -192,37 +198,43 @@ async fn main() -> ExitCode {
         let mut stdout = io::stdout().lock();
         version::write_detailed_version_info(&mut stdout).unwrap();
     }
-
     // install global collector configured based on RUST_LOG env var.
     setup_tracing(&options);
 
-    let (timeout, mem_limit) = (options.timeout, options.mem_limit);
+    if !options.language_server {
+        run_cli(options).await
+    } else {
+        run_server(&options).await
+    }
+}
+
+async fn run_cli(options: Options) -> ExitCode {
     if options.files.is_empty() {
         eprintln!("Error: list of files must not be empty.\n");
         return ExitCode::from(1);
     }
 
-    let mut files = Files::new();
+    let mut client = CliServer::new(&options);
     let user_files: Vec<FileId> = options
         .files
         .iter()
-        .map(|path| load_file(&mut files, path))
+        .map(|path| client.load_file(path))
         .collect();
 
     let options = Arc::new(options);
-    let files = Arc::new(Mutex::new(files));
-    let verify_result = verify_files(&options, &files, user_files).await;
+    let server: Arc<Mutex<dyn Server>> = Arc::new(Mutex::new(client));
+    let verify_result = verify_files(&options, &server, user_files).await;
 
     if options.timing {
         print_timings();
     }
 
+    let (timeout, mem_limit) = (options.timeout, options.mem_limit);
     match verify_result {
         #[allow(clippy::bool_to_int_with_if)]
         Ok(all_verified) => ExitCode::from(if all_verified { 0 } else { 1 }),
         Err(VerifyError::Diagnostic(diagnostic)) => {
-            let files = files.lock().unwrap();
-            print_diagnostic(&files, diagnostic).unwrap();
+            server.lock().unwrap().add_diagnostic(diagnostic).unwrap();
             ExitCode::from(1)
         }
         Err(VerifyError::IoError(err)) => {
@@ -237,11 +249,37 @@ async fn main() -> ExitCode {
             tracing::error!("Exhausted {} megabytes of memory, exiting.", mem_limit);
             std::process::exit(3); // exit ASAP
         }
+        Err(VerifyError::ServerError(err)) => panic!("{}", err),
         Err(VerifyError::Panic(join_error)) => panic!("{}", join_error),
         Err(VerifyError::Interrupted) => {
             tracing::error!("Interrupted");
             ExitCode::from(130) // 130 seems to be a standard exit code for CTRL+C
         }
+    }
+}
+
+async fn run_server(options: &Options) -> ExitCode {
+    let (mut server, _io_threads) = LspServer::connect_stdio();
+    server.initialize().unwrap();
+    let res = server.run_server(|server, user_files| {
+        let limits_ref = LimitsRef::new(None); // TODO
+        let res = verify_files_main(options, limits_ref, server, user_files);
+        match res {
+            Ok(_) => Ok(()),
+            Err(VerifyError::Diagnostic(diag)) => {
+                server.add_diagnostic(diag).unwrap();
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    });
+    match res {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(VerifyError::Diagnostic(diag)) => {
+            server.add_diagnostic(diag).unwrap();
+            ExitCode::FAILURE
+        }
+        Err(err) => panic!("{}", err), // TODO
     }
 }
 
@@ -257,6 +295,8 @@ pub enum VerifyError {
     IoError(#[from] io::Error),
     #[error("{0}")]
     LimitError(#[from] LimitError),
+    #[error("{0}")]
+    ServerError(ServerError),
     #[error("panic: {0}")]
     Panic(#[from] JoinError),
     #[error("interrupted")]
@@ -266,19 +306,20 @@ pub enum VerifyError {
 /// Verify a list of `user_files`. The `options.files` value is ignored here.
 pub async fn verify_files(
     options: &Arc<Options>,
-    files: &Arc<Mutex<Files>>,
+    server: &Arc<Mutex<dyn Server>>,
     user_files: Vec<FileId>,
 ) -> Result<bool, VerifyError> {
     let handle = |limits_ref: LimitsRef| {
         let options = options.clone();
-        let files = files.clone();
+        let server = server.clone();
         tokio::task::spawn_blocking(move || {
             // execute the verifier with a larger stack size of 50MB. the
             // default stack size might be quite small and we need to do quite a
             // lot of recursion.
             let stack_size = 50 * 1024 * 1024;
-            stacker::maybe_grow(stack_size, stack_size, || {
-                verify_files_main(&options, limits_ref, &files, &user_files)
+            stacker::maybe_grow(stack_size, stack_size, move || {
+                let mut server = server.lock().unwrap();
+                verify_files_main(&options, limits_ref, server.deref_mut(), &user_files)
             })
         })
     };
@@ -289,37 +330,50 @@ pub async fn verify_files(
 /// Synchronously verify the given source code. This is used for tests. The
 /// `--werr` option is enabled by default.
 #[cfg(test)]
-pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, Files) {
-    use std::time::{Duration, Instant};
+pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, servers::TestServer) {
+    use ast::SourceFilePath;
 
-    let mut files = Files::new();
-    let file_id = files.add(SourceFilePath::Builtin, source.to_owned()).id;
-    let files_mutex = Mutex::new(files);
     let mut options = Options::default();
     options.werr = true;
-    let limits_ref = LimitsRef::new(
-        Some(options.timeout).map(|seconds| Instant::now() + Duration::from_secs(seconds)),
-    );
-    let res = verify_files_main(&options, limits_ref, &files_mutex, &[file_id]);
-    (res, files_mutex.into_inner().unwrap())
+
+    let mut server = servers::TestServer::new(&options);
+    let file_id = server
+        .get_files_internal()
+        .lock()
+        .unwrap()
+        .add(SourceFilePath::Builtin, source.to_owned())
+        .id;
+
+    let options = Arc::new(options);
+    let limits_ref = LimitsRef::new(None);
+    let res = verify_files_main(&options, limits_ref, &mut server, &[file_id]);
+    (res, server)
 }
 
 #[cfg(test)]
 pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
-    let mut files = Files::new();
-    let file_id = files.add(SourceFilePath::Builtin, source.to_owned()).id;
-    let files_mutex = Mutex::new(files);
-    let options = Options::default();
+    use ast::SourceFilePath;
 
-    let mut files = files_mutex.lock().unwrap();
-    let file = files.get(file_id).unwrap();
+    let mut options = Options::default();
+    options.werr = true;
+
+    let mut client = servers::TestServer::new(&options);
+    let file_id = client
+        .get_files_internal()
+        .lock()
+        .unwrap()
+        .add(SourceFilePath::Builtin, source.to_owned())
+        .id;
+
     let mut source_units: Vec<Item<SourceUnit>> =
-        SourceUnit::parse(file, options.raw).map_err(|parse_err| parse_err.diagnostic())?;
+        SourceUnit::parse(&client.get_file(file_id).unwrap(), options.raw)
+            .map_err(|parse_err| parse_err.diagnostic())?;
 
     let mut source_unit = source_units.remove(0);
 
     // 2. Resolving (and declaring) idents
     let mut tcx = TyCtx::new(TyKind::EUReal);
+    let mut files = client.get_files_internal().lock().unwrap();
     init_calculi(&mut files, &mut tcx);
     init_encodings(&mut files, &mut tcx);
     init_distributions(&mut files, &mut tcx);
@@ -361,16 +415,15 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
 fn verify_files_main(
     options: &Options,
     limits_ref: LimitsRef,
-    files_mutex: &Mutex<Files>,
+    server: &mut dyn Server,
     user_files: &[FileId],
 ) -> Result<bool, VerifyError> {
     // 1. Parsing
     let mut source_units: Vec<Item<SourceUnit>> = Vec::new();
-    let mut files = files_mutex.lock().unwrap();
     for file_id in user_files {
-        let file = files.get(*file_id).unwrap();
+        let file = server.get_file(*file_id).unwrap();
         let new_units =
-            SourceUnit::parse(file, options.raw).map_err(|parse_err| parse_err.diagnostic())?;
+            SourceUnit::parse(&file, options.raw).map_err(|parse_err| parse_err.diagnostic())?;
 
         // Print the result of parsing if requested
         if options.print_parsed {
@@ -385,6 +438,7 @@ fn verify_files_main(
 
     // 2. Resolving (and declaring) idents
     let mut tcx = TyCtx::new(TyKind::EUReal);
+    let mut files = server.get_files_internal().lock().unwrap();
     init_calculi(&mut files, &mut tcx);
     init_encodings(&mut files, &mut tcx);
     init_distributions(&mut files, &mut tcx);
@@ -412,15 +466,19 @@ fn verify_files_main(
 
         let monotonicity_res = source_unit.check_monotonicity();
         if let Err(err) = monotonicity_res {
-            let files = files_mutex.lock().unwrap();
-            print_warning(options, &files, err)?;
+            server.add_diagnostic(err)?;
         }
     }
 
     // write to JANI if requested
     for source_unit in &mut source_units {
         let source_unit = source_unit.enter();
-        source_unit.write_to_jani_if_requested(options, files_mutex, &tcx)?;
+        let jani_res = source_unit.write_to_jani_if_requested(options, &tcx);
+        match jani_res {
+            Err(VerifyError::Diagnostic(diagnostic)) => server.add_diagnostic(diagnostic)?,
+            Err(err) => Err(err)?,
+            _ => (),
+        }
     }
 
     // Desugar encodings from source units. They might generate new source
@@ -520,7 +578,18 @@ fn verify_files_main(
             vc_is_valid.run_solver(options, &limits_ref, &ctx, &mut translate, &slice_vars)?;
 
         // Now let's examine the result.
-        result.print_prove_result(files_mutex, &vc_expr, &mut translate, name);
+        if !options.language_server {
+            let files_mutex = server.get_files_internal();
+            result.print_prove_result(files_mutex, &vc_expr, &mut translate, name);
+        }
+        let status = match &result.prove_result {
+            ProveResult::Proof => VerifyResult::Verified,
+            ProveResult::Counterexample(_) => VerifyResult::Failed,
+            ProveResult::Unknown(_) => VerifyResult::Unknown,
+        };
+        server
+            .set_verify_status(verify_unit.span, status)
+            .map_err(VerifyError::ServerError)?;
 
         // If requested, write the SMT-LIB output.
         result.write_smtlib(options, name)?;
@@ -545,16 +614,18 @@ fn verify_files_main(
         }
     }
 
-    println!();
-    let ending = if num_failures == 0 {
-        " veni, vidi, vici!"
-    } else {
-        ""
-    };
-    println!(
-        "{} verified, {} failed.{}",
-        num_proven, num_failures, ending
-    );
+    if !options.language_server {
+        println!();
+        let ending = if num_failures == 0 {
+            " veni, vidi, vici!"
+        } else {
+            ""
+        };
+        println!(
+            "{} verified, {} failed.{}",
+            num_proven, num_failures, ending
+        );
+    }
 
     Ok(num_failures == 0)
 }
@@ -574,46 +645,4 @@ fn print_timings() {
         .map(|(key, value)| (*key, format!("{}", value.as_nanos())))
         .collect();
     eprintln!("Timings: {:?}", timings);
-}
-
-fn print_warning(
-    options: &Options,
-    files: &Files,
-    diagnostic: Diagnostic,
-) -> Result<(), VerifyError> {
-    if !options.werr {
-        print_diagnostic(files, diagnostic)?;
-        Ok(())
-    } else {
-        Err(diagnostic.into())
-    }
-}
-
-fn print_diagnostic(mut files: &Files, diagnostic: Diagnostic) -> io::Result<()> {
-    let mut report = diagnostic.into_ariadne(files);
-    if atty::isnt(atty::Stream::Stderr) {
-        // let's hope there's no config already there
-        report = report.with_config(ariadne::Config::default().with_color(false));
-    }
-    let report = report.finish();
-    report.eprint(&mut files)
-}
-
-fn load_file(files: &mut Files, path: &PathBuf) -> FileId {
-    let source = match std::fs::read_to_string(path) {
-        Ok(source) => source,
-        Err(err) => match err.kind() {
-            io::ErrorKind::NotFound => {
-                panic!("Error: Could not find file '{}'", path.to_string_lossy())
-            }
-            _ => panic!(
-                "Error while loading file '{}': {}",
-                path.to_string_lossy(),
-                err
-            ),
-        },
-    };
-    let source_file_path = SourceFilePath::Path(path.clone());
-    let file = files.add(source_file_path, source);
-    file.id
 }

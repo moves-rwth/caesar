@@ -8,7 +8,8 @@ use ariadne::ReportKind;
 use tracing::instrument;
 
 use crate::ast::{
-    Block, DeclKind, Diagnostic, Expr, FileId, Label, LitKind, Span, SpanVariant, StoredFile,
+    Block, DeclKind, Diagnostic, Expr, FileId, Label, LitKind, Span, SpanVariant, Spanned,
+    StoredFile,
 };
 
 lalrpop_util::lalrpop_mod!(
@@ -100,9 +101,9 @@ pub fn parse_decls(file_id: FileId, source: &str) -> Result<Vec<DeclKind>, Parse
 
 /// Parse a source code file into a block of HeyVL statements.
 #[instrument]
-pub fn parse_raw(file_id: FileId, source: &str) -> Result<Block, ParseError> {
+pub fn parse_raw(file_id: FileId, source: &str) -> Result<Spanned<Block>, ParseError> {
     let clean_source = remove_comments(source);
-    let parser = grammar::StmtsParser::new();
+    let parser = grammar::SpannedStmtsParser::new();
     parser
         .parse(file_id, &clean_source)
         .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))

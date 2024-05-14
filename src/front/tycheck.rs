@@ -797,7 +797,7 @@ mod test {
     }
 
     fn parse_block_and_tycheck(input: &str) -> Result<Block, TycheckError> {
-        let mut block = parser::parse_raw(FileId::DUMMY, input).unwrap();
+        let mut block = parser::parse_raw(FileId::DUMMY, input).unwrap().node;
 
         let mut tcx = TyCtx::new(TyKind::EUReal);
         let mut resolve = Resolve::new(&mut tcx);
@@ -850,6 +850,6 @@ mod test {
                 test()
             }
         "#;
-        parse_decls_and_tycheck(&source).unwrap();
+        parse_decls_and_tycheck(source).unwrap();
     }
 }
