@@ -8,7 +8,7 @@ export default tseslint.config(
     {
         "languageOptions": {
             "parserOptions": {
-                "project": "tsconfig.json",
+                "project": "./tsconfig.json",
                 tsconfigRootDir: import.meta.dirname,
                 "ecmaVersion": 6,
                 "sourceType": "module"
@@ -37,6 +37,14 @@ export default tseslint.config(
             "no-throw-literal": "warn",
             "semi": "off",
             "@typescript-eslint/no-floating-promises": "error",
-            "@typescript-eslint/no-explicit-any": "off"
+            "@typescript-eslint/no-explicit-any": "off",
+            "@typescript-eslint/no-unsafe-assignment": "off"
         },
-    });
+    }, {
+    ignores: [
+        "eslint.config.mjs",
+        ".vscode-text.mjs",
+        "out/",
+        ".vscode-test.mjs"
+    ]
+});

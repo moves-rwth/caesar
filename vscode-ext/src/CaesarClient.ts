@@ -22,23 +22,23 @@ export enum VerifyResult {
     Unknown = "unknown"
 }
 
-export type VerifyStatusNotification = {
+export interface VerifyStatusNotification {
     document: VersionedTextDocumentIdentifier;
-    statuses: Array<[vscode.Range, VerifyResult]>;
-};
+    statuses: [vscode.Range, VerifyResult][];
+}
 
-export type ComputedPreNotification = {
+export interface ComputedPreNotification {
     document: VersionedTextDocumentIdentifier;
-    pres: Array<[vscode.Range, string]>;
-};
+    pres: [vscode.Range, string][];
+}
 
 
 export class CaesarClient {
     private client: LanguageClient | null;
     private context: ExtensionContext;
-    private statusListeners: Array<(status: ServerStatus) => void> = new Array();
-    private updateListeners: Array<(document: TextDocumentIdentifier, results: Array<[Range, VerifyResult]>) => void> = new Array();
-    private computedPreListeners: Array<(document: TextDocumentIdentifier, results: Array<[Range, string]>) => void> = new Array();
+    private statusListeners = new Array<(status: ServerStatus) => void>();
+    private updateListeners = new Array<(document: TextDocumentIdentifier, results: [Range, VerifyResult][]) => void>();
+    private computedPreListeners = new Array<(document: TextDocumentIdentifier, results: [Range, string][]) => void>();
 
 
     constructor(context: ExtensionContext) {
@@ -66,8 +66,8 @@ export class CaesarClient {
             this.client = this.createClient(context);
         } catch (error) {
             this.notifyStatusUpdate(ServerStatus.FailedToStart);
-            vscode.window.showErrorMessage("Failed to initialize Caesar")
-            console.error(error)
+            void vscode.window.showErrorMessage("Failed to initialize Caesar");
+            console.error(error);
             this.client = null;
         }
 
@@ -76,10 +76,10 @@ export class CaesarClient {
 
     private createClient(context: vscode.ExtensionContext): LanguageClient {
         // Get the source code / binary path from the configurations
-        let serverPath: string = ServerConfig.get(ConfigurationConstants.installationPath);
+        const serverPath: string = ServerConfig.get(ConfigurationConstants.installationPath);
         if (serverPath === "") {
-            vscode.window.showErrorMessage("Caesar: Installation path is not set. Please set the path in the settings.")
-            throw new Error("Installation path is not set")
+            void vscode.window.showErrorMessage("Caesar: Installation path is not set. Please set the path in the settings.");
+            throw new Error("Installation path is not set");
         }
         let serverExecutable = "";
         let args: string[] = [];
@@ -90,8 +90,8 @@ export class CaesarClient {
                 break;
             case ConfigurationConstants.sourceCodeOption:
                 if (!fs.existsSync(path.resolve(serverPath, "Cargo.toml"))) {
-                    vscode.window.showErrorMessage("Caesar: Cargo.toml file is not found in the path. Please check the path in the settings.")
-                    throw new Error("Cargo.toml file is not found in the path")
+                    void vscode.window.showErrorMessage("Caesar: Cargo.toml file is not found in the path. Please check the path in the settings.");
+                    throw new Error("Cargo.toml file is not found in the path");
                 }
                 serverExecutable = "cargo";
                 args = ['run', '--', '--language-server'];
@@ -100,7 +100,7 @@ export class CaesarClient {
 
         // If the extension is launched in debug mode then the debug server options are used
         // Otherwise the run options are used
-        let serverOptions: ServerOptions = {
+        const serverOptions: ServerOptions = {
             run: {
                 command: serverExecutable,
                 args: args,
@@ -123,7 +123,7 @@ export class CaesarClient {
         };
 
         // Options to control the language client
-        let clientOptions: LanguageClientOptions = {
+        const clientOptions: LanguageClientOptions = {
             diagnosticCollectionName: 'caesar',
             // Register the server for heyvl documents
             documentSelector: [{ scheme: 'file', language: 'heyvl' }],
@@ -133,24 +133,24 @@ export class CaesarClient {
             }
         };
 
-        let client = new LanguageClient(
+        const client = new LanguageClient(
             'caesar',
             'Caesar',
             serverOptions,
             clientOptions
         );
 
-        context.subscriptions.push(client)
+        context.subscriptions.push(client);
 
         // set up listeners for our custom events
         context.subscriptions.push(client.onNotification("custom/verifyStatus", (params: VerifyStatusNotification) => {
-            for (let listener of this.updateListeners) {
+            for (const listener of this.updateListeners) {
                 listener(params.document, params.statuses);
             }
         }));
 
         context.subscriptions.push(client.onNotification("custom/computedPre", (params: ComputedPreNotification) => {
-            for (let listener of this.computedPreListeners) {
+            for (const listener of this.computedPreListeners) {
                 listener(params.document, params.pres);
             }
         }));
@@ -159,15 +159,15 @@ export class CaesarClient {
         context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
             // TODO: look at setting
             if (document.languageId !== "heyvl") {
-                return
+                return;
             }
-            this.verify(document);
+            void this.verify(document);
         }));
 
         vscode.commands.registerCommand('caesar.verify', async () => {
-            let openEditor = vscode.window.activeTextEditor;
+            const openEditor = vscode.window.activeTextEditor;
             if (openEditor) {
-                this.verify(openEditor.document);
+                await this.verify(openEditor.document);
             }
         });
         return client;
@@ -180,7 +180,7 @@ export class CaesarClient {
         if (this.client === null) {
             // First initialize the client by creating a new one, if it fails return
             if (this.initialize(this.context) === null) {
-                return
+                return;
             };
         }
         await this.client!.start();
@@ -190,25 +190,24 @@ export class CaesarClient {
 
     async restart() {
         if (this.client === null) {
-            this.start()
-            return
+            await this.start();
         } else {
             console.log("Restarting Caesar");
-            this.client?.restart();
+            await this.client?.restart();
         }
     }
 
     async stop() {
         console.log("Stopping Caesar");
-        this.client?.stop();
+        await this.client?.stop();
         this.notifyStatusUpdate(ServerStatus.Stopped);
     }
 
     async verify(document: TextDocument) {
         if (this.client === null) {
-            return
+            return;
         }
-        let documentItem = {
+        const documentItem = {
             uri: document.uri.toString(),
             languageId: document.languageId,
             version: document.version,
@@ -225,16 +224,16 @@ export class CaesarClient {
     }
 
     private notifyStatusUpdate(status: ServerStatus) {
-        for (let listener of this.statusListeners) {
+        for (const listener of this.statusListeners) {
             listener(status);
         }
     }
 
-    public onVerifyResult(callback: (document: TextDocumentIdentifier, results: Array<[Range, VerifyResult]>) => void) {
+    public onVerifyResult(callback: (document: TextDocumentIdentifier, results: [Range, VerifyResult][]) => void) {
         this.updateListeners.push(callback);
     }
 
-    public onComputedPre(callback: (document: TextDocumentIdentifier, results: Array<[Range, string]>) => void) {
+    public onComputedPre(callback: (document: TextDocumentIdentifier, results: [Range, string][]) => void) {
         this.computedPreListeners.push(callback);
     }
 }

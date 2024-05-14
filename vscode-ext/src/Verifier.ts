@@ -6,21 +6,21 @@ import { GutterStatusComponent } from "./GutterStatusComponent";
 import { ComputedPreComponent } from "./ComputedPreComponent";
 
 export class DocumentMap<T> {
-    private map: Map<string, [TextDocumentIdentifier, T]> = new Map();
+    private map = new Map<string, [TextDocumentIdentifier, T]>();
 
     public insert(document_id: TextDocumentIdentifier, value: T) {
         this.map.set(document_id.uri.toString(), [document_id, value]);
     }
 
     public get(document_id: TextDocumentIdentifier): T | undefined {
-        let res = this.map.get(document_id.uri.toString());
+        const res = this.map.get(document_id.uri.toString());
         if (res !== undefined) {
             return res[1];
         }
         return undefined;
     }
 
-    public entries(): Array<[TextDocumentIdentifier, T]> {
+    public entries(): [TextDocumentIdentifier, T][] {
         return Array.from(this.map.values());
     }
 }

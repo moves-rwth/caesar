@@ -1,13 +1,13 @@
 import { Range } from "vscode";
 import * as vscode from 'vscode';
-import { CONFIGURATION_SECTION, GutterInformationViewConfig, StatusBarViewConfig } from "./Configuration";
+import { CONFIGURATION_SECTION, GutterInformationViewConfig } from "./Configuration";
 import { ServerStatus, VerifyResult } from "./CaesarClient";
 import { DocumentMap, Verifier } from "./Verifier";
 
 export class GutterStatusComponent {
 
     private enabled: boolean;
-    private status: DocumentMap<Array<[Range, VerifyResult]>>;
+    private status: DocumentMap<[Range, VerifyResult][]>;
 
     private verifyDecType: vscode.TextEditorDecorationType;
     private failedDecType: vscode.TextEditorDecorationType;
@@ -33,14 +33,14 @@ export class GutterStatusComponent {
         }));
 
         // render when visible editors change
-        verifier.context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors((_visibleEditors) => {
+        verifier.context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(() => {
             this.render();
         }));
 
         // listen to status and verify updates
         verifier.client.onStatusUpdate((status) => {
-            if (status == ServerStatus.Verifying) {
-                for (let [_document, results] of this.status.entries()) {
+            if (status === ServerStatus.Verifying) {
+                for (const [_document, results] of this.status.entries()) {
                     results.length = 0;
                 }
                 this.render();
@@ -54,20 +54,20 @@ export class GutterStatusComponent {
     }
 
     render() {
-        for (let [document_id, results] of this.status.entries()) {
-            for (let editor of vscode.window.visibleTextEditors) {
+        for (const [document_id, results] of this.status.entries()) {
+            for (const editor of vscode.window.visibleTextEditors) {
                 if (editor.document.uri.toString() !== document_id.uri) {
                     continue;
                 }
 
-                let verifiedProcs: vscode.DecorationOptions[] = [];
-                let failedProcs: vscode.DecorationOptions[] = [];
-                let unknownProcs: vscode.DecorationOptions[] = [];
+                const verifiedProcs: vscode.DecorationOptions[] = [];
+                const failedProcs: vscode.DecorationOptions[] = [];
+                const unknownProcs: vscode.DecorationOptions[] = [];
 
                 if (this.enabled) {
-                    for (let [range, result] of results) {
-                        let line = range.start.line;
-                        let gutterRange = new vscode.Range(line, 0, line, 0);
+                    for (const [range, result] of results) {
+                        const line = range.start.line;
+                        const gutterRange = new vscode.Range(line, 0, line, 0);
                         switch (result) {
                             case VerifyResult.Verified:
                                 verifiedProcs.push({ range: gutterRange, hoverMessage: 'Verified' });

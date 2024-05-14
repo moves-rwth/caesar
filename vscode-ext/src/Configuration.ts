@@ -6,7 +6,7 @@ export default class Configuration {
 
     /// Get a configuration value from the configuration file with the given key
     public static get(key: string): any {
-        const val = vscode.workspace.getConfiguration(CONFIGURATION_SECTION).get(key)
+        const val = vscode.workspace.getConfiguration(CONFIGURATION_SECTION).get(key);
         if (val === undefined) {
             throw new Error(`${key} is not defined in the configuration file`);
         }
