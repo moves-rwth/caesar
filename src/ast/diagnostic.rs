@@ -501,8 +501,6 @@ impl Diagnostic {
             .0
             .code
             .map(|code| lsp_types::NumberOrString::Number(code as i32));
-        let code_description = None;
-        let source = None;
         let message = self
             .0
             .msg
@@ -532,8 +530,8 @@ impl Diagnostic {
             range,
             severity: Some(severity),
             code,
-            code_description,
-            source,
+            code_description: None,
+            source: Some("caesar".to_owned()),
             message,
             related_information: Some(related_information),
             tags: None,

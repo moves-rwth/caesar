@@ -219,7 +219,6 @@ impl LspServer {
             };
             let notification =
                 lsp_server::Notification::new("custom/verifyStatus".to_string(), params);
-            dbg!(&notification);
             self.connection
                 .sender
                 .send(lsp_server::Message::Notification(notification))?;
