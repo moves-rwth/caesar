@@ -83,8 +83,8 @@ impl LspServer {
         let receiver = self.connection.receiver.clone();
         for msg in &receiver {
             match msg {
-                Message::Request(req) => {
-                    if let "custom/verify" = req.method.as_str() {
+                Message::Request(req) => match req.method.as_str() {
+                    "custom/verify" => {
                         let (id, params) = req
                             .extract::<VerifyRequest>("custom/verify")
                             .map_err(|e| VerifyError::ServerError(e.into()))?;
@@ -106,7 +106,17 @@ impl LspServer {
                             .map_err(|e| VerifyError::ServerError(e.into()))?;
                         result?;
                     }
-                }
+                    "shutdown" => {
+                        self.connection
+                            .sender
+                            .send(Message::Response(Response::new_ok(
+                                req.id.clone(),
+                                Value::Null,
+                            )))
+                            .map_err(|e| VerifyError::ServerError(e.into()))?;
+                    }
+                    _ => {}
+                },
                 Message::Response(_) => todo!(),
                 Message::Notification(notification) => {
                     self.handle_notification(notification)

@@ -114,7 +114,7 @@ pub struct Options {
     #[structopt(long)]
     pub no_simplify: bool,
 
-    /// Print version information to standard output.
+    /// Print version information to standard error.
     #[structopt(short, long)]
     pub debug: bool,
 
@@ -195,8 +195,8 @@ async fn main() -> ExitCode {
     let options = Options::from_clap(&clap.get_matches());
 
     if options.debug {
-        let mut stdout = io::stdout().lock();
-        version::write_detailed_version_info(&mut stdout).unwrap();
+        let mut stderr = io::stderr().lock();
+        version::write_detailed_version_info(&mut stderr).unwrap();
     }
     // install global collector configured based on RUST_LOG env var.
     setup_tracing(&options);

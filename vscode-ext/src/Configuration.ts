@@ -26,8 +26,20 @@ export class ConfigCategory {
     }
 
     /// Construct the path of the category based on its hiearchical position
-    public getPath(): string {
-        return this.parent ? this.parent.getPath() + "." + this.name : this.name;
+    public getPath(key?: string): string {
+        const path = this.parent ? this.parent.getPath() + "." + this.name : this.name;
+        if (key) {
+            return path + "." + key;
+        }
+        return path;
+    }
+
+    public getFullPath(key?: string): string {
+        const path = CONFIGURATION_SECTION + "." + this.getPath();
+        if (key) {
+            return path + "." + key;
+        }
+        return path;
     }
 
     public get(key: string): any {

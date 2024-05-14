@@ -32,6 +32,14 @@
       {
         "command": "caesar.verify",
         "title": "Caesar: Verify"
+      },
+      {
+        "command": "caesar.copyCommand",
+        "title": "Caesar: Copy Command"
+      },
+      {
+        "command": "caesar.showOutput",
+        "title": "Caesar: Show Output Channel"
       }
     ],
     "languages": [
@@ -44,6 +52,10 @@
         "extensions": [
           ".heyvl"
         ],
+        "icon": {
+          "light": "./images/heyvl.png",
+          "dark": "./images/heyvl.png"
+        },
         "configuration": "./heyvl/language-configuration.json"
       }
     ],
@@ -64,6 +76,16 @@
       "type": "object",
       "title": "Caesar",
       "properties": {
+        "caesar.server.timeout": {
+          "type": "number",
+          "default": 300,
+          "description": "Specifies the timeout for the verifier."
+        },
+        "caesar.server.args": {
+          "type": "string",
+          "default": "",
+          "description": "Specifies the arguments to be passed to the Caesar server."
+        },
         "caesar.server.installationOptions": {
           "type": "string",
           "default": "binary",
@@ -82,10 +104,15 @@
           "default": false,
           "description": "Specifies whether to automatically start the server when the extension is activated."
         },
-        "caesar.server.path": {
+        "caesar.server.binaryPath": {
           "type": "string",
           "default": "",
-          "description": "Specifies the path to the Caesar binary or source code."
+          "description": "Specifies the path to the Caesar binary"
+        },
+        "caesar.server.sourcePath": {
+          "type": "string",
+          "default": "",
+          "description": "Specifies the path to Caesar's source code. The extension will start Caesar using `cargo run`."
         },
         "caesar.uI.gutterIcons.showGutterIcons": {
           "type": "boolean",

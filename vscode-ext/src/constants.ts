@@ -10,8 +10,11 @@ export const enum ConfigurationConstants {
     showGutterIcons = "showGutterIcons",
     showStatusBar = "showStatusBar",
     showInlineGhostText = "showInlineGhostText",
-    installationPath = "path",
+    binaryPath = "binaryPath",
+    sourcePath = "sourcePath",
     autoStartServer = "autoStartServer",
     binaryOption = "binary",
     sourceCodeOption = "source-code",
+    args = "args",
+    timeout = "timeout",
 }
