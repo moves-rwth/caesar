@@ -1,5 +1,5 @@
 import { LanguageClientOptions, TextDocumentIdentifier, VersionedTextDocumentIdentifier } from "vscode-languageclient";
-import { LanguageClient, ServerOptions } from "vscode-languageclient/node";
+import { Executable, LanguageClient, ServerOptions } from "vscode-languageclient/node";
 import { ExtensionContext, Range, TextDocument } from "vscode";
 import * as vscode from "vscode";
 import { ConfigurationConstants } from "./constants";
@@ -58,6 +58,10 @@ export class CaesarClient {
         vscode.commands.registerCommand('caesar.stopServer', async () => {
             await this.stop();
         });
+
+        vscode.commands.registerCommand('caesar.copyCommand', async () => {
+            await this.copyCommand();
+        });
     }
 
     /// Try to initialize the client and return the client if successful otherwise return null
@@ -76,53 +80,10 @@ export class CaesarClient {
 
     private createClient(context: vscode.ExtensionContext): LanguageClient {
         // Get the source code / binary path from the configurations
-        const serverPath: string = ServerConfig.get(ConfigurationConstants.installationPath);
-        if (serverPath === "") {
-            void vscode.window.showErrorMessage("Caesar: Installation path is not set. Please set the path in the settings.");
-            throw new Error("Installation path is not set");
-        }
-        let serverExecutable = "";
-        let args: string[] = [];
-        switch (ServerConfig.get(ConfigurationConstants.installationOptions)) {
-            case ConfigurationConstants.binaryOption:
-                serverExecutable = "caesar";
-                args = ['--language-server'];
-                break;
-            case ConfigurationConstants.sourceCodeOption:
-                if (!fs.existsSync(path.resolve(serverPath, "Cargo.toml"))) {
-                    void vscode.window.showErrorMessage("Caesar: Cargo.toml file is not found in the path. Please check the path in the settings.");
-                    throw new Error("Cargo.toml file is not found in the path");
-                }
-                serverExecutable = "cargo";
-                args = ['run', '--', '--language-server'];
-                break;
-        }
-
-        // If the extension is launched in debug mode then the debug server options are used
-        // Otherwise the run options are used
-        const env = {
-            ...process.env,
-            "NO_COLOR": "1",
-            "RUST_LOG": "caesar=info",
-            "RUST_BACKTRACE": "1"
-        };
+        const executable = this.getExecutable();
         const serverOptions: ServerOptions = {
-            run: {
-                command: serverExecutable,
-                args: args,
-                options: {
-                    cwd: serverPath,
-                    env,
-                }
-            },
-            debug: {
-                command: serverExecutable,
-                args: args,
-                options: {
-                    cwd: serverPath,
-                    env,
-                }
-            }
+            run: executable,
+            debug: executable,
         };
 
         // Options to control the language client
@@ -176,6 +137,43 @@ export class CaesarClient {
         return client;
     }
 
+    private getExecutable(): Executable {
+        const serverPath: string = ServerConfig.get(ConfigurationConstants.installationPath);
+        if (serverPath === "") {
+            void vscode.window.showErrorMessage("Caesar: Installation path is not set. Please set the path in the settings.");
+            throw new Error("Installation path is not set");
+        }
+        let serverExecutable = "";
+        let args: string[] = [];
+        switch (ServerConfig.get(ConfigurationConstants.installationOptions)) {
+            case ConfigurationConstants.binaryOption:
+                serverExecutable = "caesar";
+                args = ['--language-server'];
+                break;
+            case ConfigurationConstants.sourceCodeOption:
+                if (!fs.existsSync(path.resolve(serverPath, "Cargo.toml"))) {
+                    void vscode.window.showErrorMessage("Caesar: Cargo.toml file is not found in the path. Please check the path in the settings.");
+                    throw new Error("Cargo.toml file is not found in the path");
+                }
+                serverExecutable = "cargo";
+                args = ['run', '--', '--language-server'];
+                break;
+        }
+        return {
+            command: serverExecutable,
+            args: args,
+            options: {
+                cwd: serverPath,
+                env: {
+                    ...process.env,
+                    "NO_COLOR": "1",
+                    "RUST_LOG": "caesar=info",
+                    "RUST_BACKTRACE": "1"
+                },
+            }
+        };
+    }
+
     async start() {
         console.log("Starting Caesar");
         this.notifyStatusUpdate(ServerStatus.Starting);
@@ -220,6 +218,16 @@ export class CaesarClient {
         await this.client.sendRequest('custom/verify', { text_document: documentItem });
         // TODO: handle errors
         this.notifyStatusUpdate(ServerStatus.Finished);
+    }
+
+    private async copyCommand() {
+        const executable = this.getExecutable();
+        let line = `${executable.command} ${executable.args!.join(" ")}`;
+        const cwd = executable.options && executable.options.cwd;
+        if (cwd !== undefined) {
+            line = `pushd ${cwd} && ${line}; popd`;
+        }
+        await vscode.env.clipboard.writeText(line);
     }
 
     public onStatusUpdate(callback: (status: ServerStatus) => void) {

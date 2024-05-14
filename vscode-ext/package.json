@@ -32,6 +32,10 @@
       {
         "command": "caesar.verify",
         "title": "Caesar: Verify"
+      },
+      {
+        "command": "caesar.copyCommand",
+        "title": "Caesar: Copy Command"
       }
     ],
     "languages": [
