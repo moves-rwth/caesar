@@ -4,8 +4,8 @@ import { ExtensionContext, Range, TextDocument } from "vscode";
 import * as vscode from "vscode";
 import { ConfigurationConstants } from "./constants";
 import { ServerConfig } from "./Configuration";
-import path from "path";
-import fs from 'fs';
+import * as path from "path";
+import * as fs from 'fs';
 
 export enum ServerStatus {
     Stopped,
@@ -63,7 +63,7 @@ export class CaesarClient {
     /// Try to initialize the client and return the client if successful otherwise return null
     private initialize(context: ExtensionContext): LanguageClient | null {
         try {
-            this.client = this.create_client(context);
+            this.client = this.createClient(context);
         } catch (error) {
             this.notifyStatusUpdate(ServerStatus.FailedToStart);
             vscode.window.showErrorMessage("Failed to initialize Caesar")
@@ -74,7 +74,7 @@ export class CaesarClient {
         return this.client;
     }
 
-    private create_client(context: vscode.ExtensionContext): LanguageClient {
+    private createClient(context: vscode.ExtensionContext): LanguageClient {
         // Get the source code / binary path from the configurations
         let serverPath: string = ServerConfig.get(ConfigurationConstants.installationPath);
         if (serverPath === "") {
