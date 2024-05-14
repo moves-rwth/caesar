@@ -100,12 +100,19 @@ export class CaesarClient {
 
         // If the extension is launched in debug mode then the debug server options are used
         // Otherwise the run options are used
+        const env = {
+            ...process.env,
+            "NO_COLOR": "1",
+            "RUST_LOG": "caesar=info",
+            "RUST_BACKTRACE": "1"
+        };
         const serverOptions: ServerOptions = {
             run: {
                 command: serverExecutable,
                 args: args,
                 options: {
                     cwd: serverPath,
+                    env,
                 }
             },
             debug: {
@@ -113,11 +120,7 @@ export class CaesarClient {
                 args: args,
                 options: {
                     cwd: serverPath,
-                    env: {
-                        ...process.env,
-                        "NO_COLOR": "1",
-                        "RUST_BACKTRACE": "1"
-                    }
+                    env,
                 }
             }
         };
