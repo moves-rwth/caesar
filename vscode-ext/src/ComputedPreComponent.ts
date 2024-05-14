@@ -23,7 +23,7 @@ export class ComputedPreComponent {
 
         // subscribe to config changes
         verifier.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
-            if (e.affectsConfiguration(CONFIGURATION_SECTION)) {
+            if (e.affectsConfiguration(InlineGhostTextViewConfig.getFullPath(ConfigurationConstants.showInlineGhostText))) {
                 this.enabled = InlineGhostTextViewConfig.get(ConfigurationConstants.showInlineGhostText);
                 this.render();
             }
