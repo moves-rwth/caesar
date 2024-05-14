@@ -59,6 +59,13 @@ export class CaesarClient {
             await this.stop();
         });
 
+        vscode.commands.registerCommand('caesar.verify', async () => {
+            const openEditor = vscode.window.activeTextEditor;
+            if (openEditor) {
+                await this.verify(openEditor.document);
+            }
+        });
+
         vscode.commands.registerCommand('caesar.copyCommand', async () => {
             await this.copyCommand();
         });
@@ -136,12 +143,6 @@ export class CaesarClient {
             void this.verify(document);
         }));
 
-        vscode.commands.registerCommand('caesar.verify', async () => {
-            const openEditor = vscode.window.activeTextEditor;
-            if (openEditor) {
-                await this.verify(openEditor.document);
-            }
-        });
         return client;
     }
 
@@ -226,6 +227,9 @@ export class CaesarClient {
     }
 
     async verify(document: TextDocument) {
+        if (this.client === null) {
+            await this.start();
+        }
         if (this.client === null) {
             return;
         }
