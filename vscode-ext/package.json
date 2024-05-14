@@ -52,6 +52,10 @@
         "extensions": [
           ".heyvl"
         ],
+        "icon": {
+          "light": "./images/heyvl.png",
+          "dark": "./images/heyvl.png"
+        },
         "configuration": "./heyvl/language-configuration.json"
       }
     ],
