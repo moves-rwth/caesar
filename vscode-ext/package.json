@@ -1,13 +1,18 @@
 {
   "name": "caesar",
-  "displayName": "caesar",
-  "description": "VSCode Extension of the Deductive Probabilistic Program Verifier Caesar",
+  "displayName": "Caesar Verifier",
+  "description": "The quantitative deductive verifier Caesar for VSCode",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.87.0"
   },
   "categories": [
-    "Other"
+    "Programming Languages"
+  ],
+  "icon": "images/icon.png",
+  "tags": [
+    "verification",
+    "snippet"
   ],
   "main": "./out/extension.js",
   "contributes": {

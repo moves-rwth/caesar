@@ -1,71 +1,45 @@
-# caesar README
+# The Deductive Verifier *Caesar* for VSCode
 
-This is the README for your extension "caesar". After writing up a brief description, we recommend including the following sections.
+This is the VSCode extension for the [Caesar deductive verifier](https://www.caesarverifier.org).
+Caesar is a verifier for probabilistic and quantitative programs and thus supports reasoning about quantitative specifications such as "the expected runtime is at most `2x`".
+Caesar uses the *HeyVL* language as its quantitative *intermediate verification language* (IVL).
+This VSCode extension recognizes the `.heyvl` file extension.
 
-## Features
+You can find more information about Caesar and HeyVL on the website: https://www.caesarverifier.org/.
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
-
-For example if there is an image subfolder under your extension project workspace:
+On the website, you can also download the Caesar command-line binary for more advanced use cases that are not included in this VSCode extension.
 
 \!\[feature X\]\(images/feature-x.png\)
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+## Features
+
+ * Syntax highlighting and language configuration for HeyVL.
+ * Snippets for HeyVL.
+ * Verify HeyVL files on file save or on command.
+ * Verification errors and successes are shown in the gutter via icons.
+ * Diagnostics such as errors or warnings are shown in the code and in the "Problems" menu in VSCode.
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+You will need to provide the Caesar binary for the extension to run.
+See [installation instructions](https://www.caesarverifier.org/docs/getting-started/installation) for more information.
+
+We provide binaries for MacOS (ARM and x86-64), Windows (x86-64), and Debian/Linux (x86-64).
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+You can find Caesar's settings in the settings menu in the "Caesar" section.
+Importantly, you will need to configure how the Caesar binary is started.
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+This is a very new VSCode extension for Caesar.
+If you encounter any issues, [feel free to open an issue](https://github.com/moves-rwth/caesar/issues).
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+On Github, we have a list of all of [Caesar's releases](https://github.com/moves-rwth/caesar/releases) along with binaries.
 
-### 1.0.0
+### 0.0.1
 
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+Initial release.
