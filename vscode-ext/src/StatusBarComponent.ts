@@ -1,8 +1,9 @@
 import { StatusBarItem } from "vscode";
 import * as vscode from 'vscode';
-import { CONFIGURATION_SECTION, StatusBarViewConfig } from "./Configuration";
+import { StatusBarViewConfig } from "./Configuration";
 import { ServerStatus } from "./CaesarClient";
 import { Verifier } from "./Verifier";
+import { ConfigurationConstants } from "./constants";
 
 export class StatusBarComponent {
 
@@ -23,13 +24,13 @@ export class StatusBarComponent {
             true);
 
         // render if enabled
-        this.enabled = StatusBarViewConfig.get("showStatusBar");
+        this.enabled = StatusBarViewConfig.get(ConfigurationConstants.showStatusBar);
         this.render();
 
         // subscribe to config changes
         verifier.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
-            if (e.affectsConfiguration(CONFIGURATION_SECTION)) {
-                this.enabled = StatusBarViewConfig.get("showStatusBar");
+            if (e.affectsConfiguration(StatusBarViewConfig.getFullPath(ConfigurationConstants.showStatusBar))) {
+                this.enabled = StatusBarViewConfig.get(ConfigurationConstants.showStatusBar);
                 this.render();
             }
         }));

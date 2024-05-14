@@ -15,4 +15,6 @@ export const enum ConfigurationConstants {
     autoStartServer = "autoStartServer",
     binaryOption = "binary",
     sourceCodeOption = "source-code",
+    args = "args",
+    timeout = "timeout",
 }

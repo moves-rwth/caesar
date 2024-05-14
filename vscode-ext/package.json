@@ -76,6 +76,16 @@
       "type": "object",
       "title": "Caesar",
       "properties": {
+        "caesar.server.timeout": {
+          "type": "number",
+          "default": 300,
+          "description": "Specifies the timeout for the verifier."
+        },
+        "caesar.server.args": {
+          "type": "string",
+          "default": "",
+          "description": "Specifies the arguments to be passed to the Caesar server."
+        },
         "caesar.server.installationOptions": {
           "type": "string",
           "default": "binary",
