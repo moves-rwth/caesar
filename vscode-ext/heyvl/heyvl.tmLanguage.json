@@ -16,6 +16,9 @@
     },
     {
       "include": "#constant"
+    },
+    {
+      "include": "#annotations"
     }
   ],
   "repository": {
@@ -85,6 +88,14 @@
         {
           "name": "constant.language.heyvl",
           "match": "\\b(true|false|∞|\\\\[a-zA-Z]+)\\b"
+        }
+      ]
+    },
+    "annotations": {
+      "patterns": [
+        {
+          "name": "entity.name.tag",
+          "match": "@\\w+\\b"
         }
       ]
     }
