@@ -35,7 +35,7 @@ pub struct LspServer {
     project_root: Option<VersionedTextDocumentIdentifier>,
     files: Arc<Mutex<Files>>,
     connection: Connection,
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: HashMap<FileId, Vec<Diagnostic>>,
     statuses: HashMap<Span, VerifyResult>,
 }
 
@@ -95,7 +95,7 @@ impl LspServer {
                             .unwrap()
                             .id;
                         drop(files);
-                        self.clear_all();
+                        self.clear_all().map_err(VerifyError::ServerError)?;
                         let result = verify(self, &[file_id]);
                         let res = match &result {
                             Ok(_) => Response::new_ok(id, Value::Null),
@@ -174,17 +174,14 @@ impl LspServer {
             .lock()
             .unwrap()
             .add_or_update_uri(document_id, document.text);
-        self.clear_all();
     }
 
     fn publish_diagnostics(&mut self) -> Result<(), ServerError> {
         let files = self.files.lock().unwrap();
-        let diags_by_document = by_lsp_document(
-            &files,
-            self.diagnostics
-                .iter()
-                .map(|diagnostic| (diagnostic.span().file, diagnostic)),
-        );
+        let diags_by_document = self.diagnostics.iter().flat_map(|(file_id, diags)| {
+            let document_id = files.get(*file_id).unwrap().path.to_lsp_identifier()?;
+            Some((document_id, diags))
+        });
         for (document_id, diagnostics) in diags_by_document {
             let diagnostics = diagnostics
                 .iter()
@@ -230,9 +227,14 @@ impl LspServer {
         Ok(())
     }
 
-    fn clear_all(&mut self) {
-        self.diagnostics.clear();
+    fn clear_all(&mut self) -> Result<(), ServerError> {
+        for diags in self.diagnostics.values_mut() {
+            diags.clear();
+        }
         self.statuses.clear();
+        self.publish_diagnostics()?;
+        self.publish_verify_statuses()?;
+        Ok(())
     }
 }
 
@@ -256,7 +258,10 @@ impl Server for LspServer {
 
     fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
         // TODO: add --werr support
-        self.diagnostics.push(diagnostic);
+        self.diagnostics
+            .entry(diagnostic.span().file)
+            .or_default()
+            .push(diagnostic);
         self.publish_diagnostics()
             .map_err(VerifyError::ServerError)?;
         Ok(())
