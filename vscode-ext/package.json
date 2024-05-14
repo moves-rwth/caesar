@@ -39,14 +39,20 @@
         "extensions": [
           ".heyvl"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./heyvl/language-configuration.json"
       }
     ],
     "grammars": [
       {
         "language": "heyvl",
         "scopeName": "source.heyvl",
-        "path": "./syntaxes/heyvl.tmLanguage.json"
+        "path": "./heyvl/heyvl.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "heyvl",
+        "path": "./heyvl/snippets.json"
       }
     ],
     "configuration": {

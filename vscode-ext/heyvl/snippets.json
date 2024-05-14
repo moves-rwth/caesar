@@ -1,0 +1,201 @@
+{
+  "Proc Declaration": {
+    "prefix": [
+      "proc"
+    ],
+    "body": [
+      "proc ${1:name}(${2:}) -> (${3:}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "A proc declaration."
+  },
+  "Coproc Declaration": {
+    "prefix": [
+      "coproc"
+    ],
+    "body": [
+      "coproc ${1:name}(${2:}) -> (${3:}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "A coproc declaration."
+  },
+  "Domain Declaration": {
+    "prefix": [
+      "domain"
+    ],
+    "body": [
+      "domain ${1:Name} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "A domain declaration."
+  },
+  "Func Declaration": {
+    "prefix": [
+      "func"
+    ],
+    "body": [
+      "func ${1:name}($2): $0"
+    ],
+    "description": "An uninterpreted function declaration (func)."
+  },
+  "Func Definition": {
+    "prefix": [
+      "funcdef"
+    ],
+    "body": [
+      "func ${1:name}($2): ${1:UInt} = $0"
+    ],
+    "description": "An uninterpreted function definition with a body."
+  },
+  "Axiom Declaration": {
+    "prefix": [
+      "axiom"
+    ],
+    "body": [
+      "axiom ${1:axiom$RANDOM_HEX} $0"
+    ],
+    "description": "An axiom declaration."
+  },
+  "Axiom-Forall Declaration": {
+    "prefix": [
+      "axforall"
+    ],
+    "body": [
+      "axiom ${1:axiom$RANDOM_HEX} forall ${2:}. $0"
+    ],
+    "description": "An axiom declaration with a forall quantifier inside."
+  },
+  "Variable Declaration Statement": {
+    "prefix": [
+      "var"
+    ],
+    "body": [
+      "var ${1:name}: $2 "
+    ],
+    "description": "A variable declaration statement."
+  },
+  "Variable Initialization Statement": {
+    "prefix": [
+      "vardecl"
+    ],
+    "body": [
+      "var ${1:name}: $2 = $0"
+    ],
+    "description": "A variable declaration statement with an initializer."
+  },
+  "Coin Flip Statement": {
+    "prefix": [
+      "flip"
+    ],
+    "body": [
+      "var ${1:prob_choice}: Bool = flip(${2:0.5})"
+    ],
+    "description": "A coin flip."
+  },
+  "If Statement": {
+    "prefix": [
+      "if"
+    ],
+    "body": [
+      "if $1 {",
+      "\t$0",
+      "} else {",
+      "\t",
+      "}"
+    ],
+    "description": "An if-then-else statement."
+  },
+  "Boolean Assume Statement": {
+    "prefix": [
+      "bassume"
+    ],
+    "body": [
+      "assume ?($0)"
+    ],
+    "description": "A Boolean assumption statement."
+  },
+  "Boolean Assert Statement": {
+    "prefix": [
+      "bassert"
+    ],
+    "body": [
+      "assert ?($0)"
+    ],
+    "description": "A Boolean assertion statement."
+  },
+  "Boolean Coassume Statement": {
+    "prefix": [
+      "bcoassume"
+    ],
+    "body": [
+      "coassume !?($0)"
+    ],
+    "description": "A Boolean coassumption statement."
+  },
+  "Boolean Coassert Statement": {
+    "prefix": [
+      "bcoassert"
+    ],
+    "body": [
+      "coassert !?($0)"
+    ],
+    "description": "A Boolean coassertion statement."
+  },
+  "Constant Assertion Statement": {
+    "prefix": [
+      "assertconst"
+    ],
+    "body": [
+      "assert $1; assume ?(false)"
+    ],
+    "description": "A constant assertion statement."
+  },
+  "Constant Coassertion Statement": {
+    "prefix": [
+      "coassertconst"
+    ],
+    "body": [
+      "coassert $1; coassume !?(false)"
+    ],
+    "description": "A constant coassertion statement."
+  },
+  "Reward Statement": {
+    "prefix": [
+      "reward"
+    ],
+    "body": [
+      "reward ${1:1}"
+    ],
+    "description": "A reward statement."
+  },
+  "Forall Expression": {
+    "prefix": [
+      "forall"
+    ],
+    "body": [
+      "forall $1. $0"
+    ],
+    "description": "A forall expression."
+  },
+  "Exists Expression": {
+    "prefix": [
+      "exists"
+    ],
+    "body": [
+      "exists $1. $0"
+    ],
+    "description": "An exists expression."
+  },
+  "Ite Expression": {
+    "prefix": [
+      "ite"
+    ],
+    "body": [
+      "ite($1, $2, $0)"
+    ],
+    "description": "An ite expression (if-then-else)."
+  }
+}
