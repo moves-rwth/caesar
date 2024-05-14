@@ -64,6 +64,29 @@
       "type": "object",
       "title": "Caesar",
       "properties": {
+        "caesar.server.installationOptions": {
+          "type": "string",
+          "default": "binary",
+          "enum": [
+            "binary",
+            "source-code"
+          ],
+          "enumDescriptions": [
+            "Use the binary of Caesar",
+            "Build Caesar from the source code"
+          ],
+          "description": "Specifies how caesar will be executed from the extension."
+        },
+        "caesar.server.autoStartServer": {
+          "type": "boolean",
+          "default": false,
+          "description": "Specifies whether to automatically start the server when the extension is activated."
+        },
+        "caesar.server.path": {
+          "type": "string",
+          "default": "",
+          "description": "Specifies the path to the Caesar binary or source code."
+        },
         "caesar.uI.gutterIcons.showGutterIcons": {
           "type": "boolean",
           "default": true,

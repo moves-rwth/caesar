@@ -7,7 +7,7 @@ import { Verifier } from "./Verifier";
 export class StatusBarComponent {
 
     private enabled: boolean;
-    private status: ServerStatus = ServerStatus.Starting;
+    private status: ServerStatus = ServerStatus.Stopped;
     private view: StatusBarItem;
 
     constructor(verifier: Verifier) {
@@ -44,6 +44,12 @@ export class StatusBarComponent {
     render() {
         if (this.enabled) {
             switch (this.status) {
+                case ServerStatus.Stopped:
+                    this.view.text = "$(debug-stop) Et tu, Brute?";
+                    break;
+                case ServerStatus.FailedToStart:
+                    this.view.text = "$(warning) Failed to start Caesar";
+                    break;
                 case ServerStatus.Starting:
                     this.view.text = "$(sync~spin) Starting Caesar...";
                     break;

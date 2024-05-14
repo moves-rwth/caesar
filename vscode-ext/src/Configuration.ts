@@ -41,11 +41,11 @@ export class ConfigCategory {
 
 // Root Configurations:
 
-export const ViewConfiguration = new ConfigCategory("uI", null);
-
+export const ViewConfig = new ConfigCategory("uI", null);
+export const ServerConfig = new ConfigCategory("server", null);
 
 // View Configurations:
 
-export const GutterInformationViewConfig = new ConfigCategory('gutterIcons', ViewConfiguration,);
-export const StatusBarViewConfig = new ConfigCategory('statusBar', ViewConfiguration);
-export const InlineGhostTextViewConfig = new ConfigCategory('inlineGhostText', ViewConfiguration);
+export const GutterInformationViewConfig = new ConfigCategory('gutterIcons', ViewConfig);
+export const StatusBarViewConfig = new ConfigCategory('statusBar', ViewConfig);
+export const InlineGhostTextViewConfig = new ConfigCategory('inlineGhostText', ViewConfig);
