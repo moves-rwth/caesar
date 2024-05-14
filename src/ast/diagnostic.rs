@@ -134,12 +134,9 @@ impl Files {
         document_id: VersionedTextDocumentIdentifier,
         source: String,
     ) -> &StoredFile {
-        let file = self.files.iter_mut().find(|file| {
-            if let SourceFilePath::Lsp(ident) = &file.path {
-                ident.uri != document_id.uri
-            } else {
-                true
-            }
+        let file = self.files.iter_mut().find(|file| match &file.path {
+            SourceFilePath::Lsp(ident) => ident.uri == document_id.uri,
+            _ => false,
         });
         let path = SourceFilePath::Lsp(document_id);
         if let Some(file) = file {
