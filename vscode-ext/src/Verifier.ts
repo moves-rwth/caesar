@@ -1,9 +1,10 @@
 import { TextDocumentIdentifier } from "vscode-languageclient";
-import { ExtensionContext } from "vscode";
+import { ExtensionContext, OutputChannel } from "vscode";
 import { CaesarClient } from "./CaesarClient";
 import { StatusBarComponent } from "./StatusBarComponent";
 import { GutterStatusComponent } from "./GutterStatusComponent";
 import { ComputedPreComponent } from "./ComputedPreComponent";
+import * as vscode from 'vscode';
 
 export class DocumentMap<T> {
     private map = new Map<string, [TextDocumentIdentifier, T]>();
@@ -28,6 +29,7 @@ export class DocumentMap<T> {
 export class Verifier {
 
     public context: ExtensionContext;
+    public outputChannel: OutputChannel;
     public client: CaesarClient;
     private statusBar: StatusBarComponent;
     private gutterStatus: GutterStatusComponent;
@@ -35,7 +37,8 @@ export class Verifier {
 
     constructor(context: ExtensionContext) {
         this.context = context;
-        this.client = new CaesarClient(context);
+        this.outputChannel = vscode.window.createOutputChannel("Caesar", "heyvl");
+        this.client = new CaesarClient(context, this.outputChannel);
         this.statusBar = new StatusBarComponent(this);
         this.gutterStatus = new GutterStatusComponent(this);
         this.displayComputedPre = new ComputedPreComponent(this);

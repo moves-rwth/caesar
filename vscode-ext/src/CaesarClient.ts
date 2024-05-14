@@ -1,6 +1,6 @@
 import { LanguageClientOptions, TextDocumentIdentifier, VersionedTextDocumentIdentifier } from "vscode-languageclient";
 import { Executable, LanguageClient, ServerOptions } from "vscode-languageclient/node";
-import { ExtensionContext, Range, TextDocument } from "vscode";
+import { ExtensionContext, OutputChannel, Range, TextDocument } from "vscode";
 import * as vscode from "vscode";
 import { ConfigurationConstants } from "./constants";
 import { ServerConfig } from "./Configuration";
@@ -34,17 +34,16 @@ export interface ComputedPreNotification {
 
 
 export class CaesarClient {
-    private client: LanguageClient | null;
+    private outputChannel: OutputChannel;
+    private client: LanguageClient | null = null;
     private context: ExtensionContext;
     private statusListeners = new Array<(status: ServerStatus) => void>();
     private updateListeners = new Array<(document: TextDocumentIdentifier, results: [Range, VerifyResult][]) => void>();
     private computedPreListeners = new Array<(document: TextDocumentIdentifier, results: [Range, string][]) => void>();
 
-
-    constructor(context: ExtensionContext) {
+    constructor(context: ExtensionContext, outputChannel: OutputChannel) {
         this.context = context;
-        // Initialize and start the server if the autoStartServer configuration is set otherwise set the client to null
-        this.client = this.initialize(context);
+        this.outputChannel = outputChannel;
 
         // listen to commands
         vscode.commands.registerCommand('caesar.restartServer', async () => {
@@ -75,27 +74,13 @@ export class CaesarClient {
         });
 
         this.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(async (e: vscode.ConfigurationChangeEvent) => {
-            // If the configuration that changed is a server configuration but not the autoStartServer configuration, restart the server
-            if (e.affectsConfiguration(ServerConfig.getFullPath()) && !e.affectsConfiguration(ServerConfig.getFullPath(ConfigurationConstants.autoStartServer))) {
+            if (e.affectsConfiguration(ServerConfig.getFullPath())) {
                 console.log("Configuration changed");
-                // Create a new client with the new flags
-                await this.reinitialize();
+                if (this.client !== null) {
+                    await this.restart();
+                }
             }
         }));
-    }
-
-    /// Try to initialize the client and return the client if successful otherwise return null
-    public initialize(context: ExtensionContext): LanguageClient | null {
-        try {
-            this.client = this.createClient(context);
-        } catch (error) {
-            this.notifyStatusUpdate(ServerStatus.FailedToStart);
-            void vscode.window.showErrorMessage("Failed to initialize Caesar");
-            console.error(error);
-            this.client = null;
-        }
-
-        return this.client;
     }
 
     private createClient(context: vscode.ExtensionContext): LanguageClient {
@@ -115,7 +100,7 @@ export class CaesarClient {
                 // Notify the server about file changes to '.clientrc files contained in the workspace
                 fileEvents: vscode.workspace.createFileSystemWatcher('**/*.heyvl')
             },
-
+            outputChannel: this.outputChannel,
         };
 
         const client = new LanguageClient(
@@ -142,7 +127,6 @@ export class CaesarClient {
                 listener(params.document, params.pres);
             }
         }));
-
 
         // listen to onDidSaveTextDocument events
         context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
@@ -216,23 +200,24 @@ export class CaesarClient {
         };
     }
 
-    async reinitialize() {
-        await this.stop();
-        this.initialize(this.context);
-        await this.start();
-    }
-
     async start() {
+        if (this.client !== null) {
+            return;
+        }
+
         console.log("Starting Caesar");
         this.notifyStatusUpdate(ServerStatus.Starting);
-        // If the client is null, try initializing it and if it also fails show an error message
-        if (this.client === null) {
-            // First initialize the client by creating a new one, if it fails return
-            if (this.initialize(this.context) === null) {
-                return;
-            };
+
+        try {
+            this.client = this.createClient(this.context);
+        } catch (error) {
+            this.notifyStatusUpdate(ServerStatus.FailedToStart);
+            void vscode.window.showErrorMessage("Failed to initialize Caesar");
+            console.error(error);
+            this.client = null;
         }
-        await this.client!.start().catch(async (error: Error) => {
+
+        await this.client!.start().catch((error: Error) => {
             console.error("Failed to start Caesar", error);
             void vscode.window.showErrorMessage("Failed to start Caesar:", error.message);
             this.notifyStatusUpdate(ServerStatus.FailedToStart);
@@ -241,16 +226,8 @@ export class CaesarClient {
     }
 
     async restart() {
-        if (this.client === null) {
-            await this.start();
-        } else {
-            console.log("Restarting Caesar");
-            this.notifyStatusUpdate(ServerStatus.Starting);
-            await this.client?.restart().catch((error) => {
-                console.error("Failed to restart Caesar", error);
-                this.notifyStatusUpdate(ServerStatus.FailedToStart);
-            });
-        }
+        await this.stop();
+        await this.start();
     }
 
     async stop() {
@@ -258,9 +235,13 @@ export class CaesarClient {
             return;
         }
         console.log("Stopping Caesar");
-        await this.client?.stop().catch((error) => {
+        try {
+            await this.client.stop();
+            await this.client.dispose();
+            this.client = null;
+        } catch (error) {
             console.error("Failed to stop Caesar", error);
-        });
+        };
         this.notifyStatusUpdate(ServerStatus.Stopped);
     }
 
