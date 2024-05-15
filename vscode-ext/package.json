@@ -18,6 +18,7 @@
     "verification",
     "snippet"
   ],
+  "license": "MIT",
   "engines": {
     "vscode": "^1.87.0"
   },
