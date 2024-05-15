@@ -16,10 +16,10 @@ use crate::{
     ast::{Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
     driver::{SmtVcCheckResult, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
-    VerifyError,
+    Options, VerifyError,
 };
 
-use super::{Server, ServerError, VerifyResult};
+use super::{unless_fatal_error, Server, ServerError, VerifyResult};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct VerifyRequest {
@@ -34,6 +34,7 @@ struct VerifyStatusUpdate {
 
 /// A connection to an LSP client.
 pub struct LspServer {
+    werr: bool,
     project_root: Option<VersionedTextDocumentIdentifier>,
     files: Arc<Mutex<Files>>,
     connection: Connection,
@@ -45,9 +46,10 @@ impl LspServer {
     const HEYVL_LANGUAGE_IDENTIFIER: &'static str = "heyvl";
 
     /// Create a new client connection on stdin and stdout.
-    pub fn connect_stdio() -> (LspServer, IoThreads) {
+    pub fn connect_stdio(options: &Options) -> (LspServer, IoThreads) {
         let (connection, io_threads) = Connection::stdio();
         let connection = LspServer {
+            werr: options.werr,
             project_root: None,
             files: Default::default(),
             connection,
@@ -271,7 +273,6 @@ impl Server for LspServer {
     }
 
     fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
-        // TODO: add --werr support
         self.diagnostics
             .entry(diagnostic.span().file)
             .or_default()
@@ -279,6 +280,11 @@ impl Server for LspServer {
         self.publish_diagnostics()
             .map_err(VerifyError::ServerError)?;
         Ok(())
+    }
+
+    fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+        let diagnostic = unless_fatal_error(self.werr, diagnostic)?;
+        self.add_diagnostic(diagnostic)
     }
 
     fn handle_vc_check_result<'smt, 'ctx>(

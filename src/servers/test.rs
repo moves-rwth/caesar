@@ -44,9 +44,13 @@ impl Server for TestServer {
     }
 
     fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
-        self.diagnostics
-            .push(unless_fatal_error(self.werr, diagnostic)?);
+        self.diagnostics.push(diagnostic);
         Ok(())
+    }
+
+    fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+        let diagnostic = unless_fatal_error(self.werr, diagnostic)?;
+        self.add_diagnostic(diagnostic)
     }
 
     fn handle_vc_check_result<'smt, 'ctx>(

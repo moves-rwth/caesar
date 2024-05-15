@@ -260,7 +260,7 @@ async fn run_cli(options: Options) -> ExitCode {
 }
 
 async fn run_server(options: &Options) -> ExitCode {
-    let (mut server, _io_threads) = LspServer::connect_stdio();
+    let (mut server, _io_threads) = LspServer::connect_stdio(options);
     server.initialize().unwrap();
     let res = server.run_server(|server, user_files| {
         let limits_ref =

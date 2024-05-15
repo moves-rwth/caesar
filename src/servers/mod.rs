@@ -56,6 +56,10 @@ pub trait Server: Send {
     /// Add a new [`Diagnostic`].
     fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError>;
 
+    /// Add a new [`Diagnostic`], but throw it as a [`VerifyError::Diagnostic`]
+    /// if it is a fatal error.
+    fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError>;
+
     /// Send a verification status message to the client (a custom notification).
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,

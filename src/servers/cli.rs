@@ -61,10 +61,14 @@ impl Server for CliServer {
     }
 
     fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
-        let diagnostic = unless_fatal_error(self.werr, diagnostic)?;
         let files = self.files.lock().unwrap();
         print_diagnostic(&files, diagnostic)?;
         Ok(())
+    }
+
+    fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+        let diagnostic = unless_fatal_error(self.werr, diagnostic)?;
+        self.add_diagnostic(diagnostic)
     }
 
     fn handle_vc_check_result<'smt, 'ctx>(
