@@ -206,7 +206,7 @@ export class CaesarClient {
     }
 
     async start() {
-        if (this.client !== null) {
+        if (this.client?.isRunning()) {
             return;
         }
 
@@ -216,17 +216,25 @@ export class CaesarClient {
         try {
             this.client = this.createClient(this.context);
         } catch (error) {
+            if (!(error instanceof Error)) { throw error; }
             this.notifyStatusUpdate(ServerStatus.FailedToStart);
-            void vscode.window.showErrorMessage("Failed to initialize Caesar");
+            void vscode.window.showErrorMessage(`Failed to initialize Caesar: ${error.message})`, "Show Output").then(() => {
+                this.outputChannel.show();
+            });;
             console.error(error);
             this.client = null;
         }
 
-        await this.client!.start().catch((error: Error) => {
+        try {
+            await this.client!.start();
+        } catch (error) {
+            if (!(error instanceof Error)) { throw error; }
             console.error("Failed to start Caesar", error);
-            void vscode.window.showErrorMessage("Failed to start Caesar:", error.message);
+            void vscode.window.showErrorMessage(`Failed to start Caesar: ${error.message}`, "Show Output").then(() => {
+                this.outputChannel.show();
+            });
             this.notifyStatusUpdate(ServerStatus.FailedToStart);
-        });
+        }
         this.notifyStatusUpdate(ServerStatus.Ready);
     }
 
@@ -236,7 +244,7 @@ export class CaesarClient {
     }
 
     async stop() {
-        if (this.client === null) {
+        if (!this.client?.isRunning()) {
             return;
         }
         console.log("Stopping Caesar");
@@ -251,10 +259,10 @@ export class CaesarClient {
     }
 
     async verify(document: TextDocument) {
-        if (this.client === null) {
+        if (!this.client?.isRunning()) {
             await this.start();
         }
-        if (this.client === null) {
+        if (!this.client?.isRunning()) {
             return;
         }
         const documentItem = {
