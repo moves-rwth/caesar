@@ -18,7 +18,7 @@ fn test_k_induction_transform() {
             {
                 var x: UInt
                 {
-                    @slice_error("pre might not entail the invariant (pre ≰ I)")
+                    @error_msg("pre might not entail the invariant (pre ≰ I)")
                     assert cast(EUReal, x)
                     havoc x
                     validate
@@ -26,7 +26,7 @@ fn test_k_induction_transform() {
                     assume cast(EUReal, x)
                     if (1 <= x) {
                         x = (x - 1)
-                        @slice_error("invariant might not be inductive (I ≰ 𝚽(I))")
+                        @error_msg("invariant might not be inductive (I ≰ 𝚽(I))")
                         assert cast(EUReal, x)
                         @success_msg("while could be an if statement")
                         assume cast(EUReal, 0)
@@ -474,7 +474,7 @@ fn test_k_induction_nested_transform() {
                 var x: UInt
                 var y: UInt
                 {
-                    @slice_error("pre might not entail the invariant (pre ≰ I)")
+                    @error_msg("pre might not entail the invariant (pre ≰ I)")
                     assert cast(EUReal, x)
                     havoc x, y
                     validate
@@ -483,7 +483,7 @@ fn test_k_induction_nested_transform() {
                     if (1 <= x) {
                         x = (x - 1)
                         {
-                            @slice_error("pre might not entail the invariant (pre ≰ I)")
+                            @error_msg("pre might not entail the invariant (pre ≰ I)")
                             assert cast(EUReal, y)
                             havoc y
                             validate
@@ -491,7 +491,7 @@ fn test_k_induction_nested_transform() {
                             assume cast(EUReal, y)
                             if (1 <= y) {
                                 y = (y - 1)
-                                @slice_error("invariant might not be inductive (I ≰ 𝚽(I))")
+                                @error_msg("invariant might not be inductive (I ≰ 𝚽(I))")
                                 assert cast(EUReal, y)
                                 @success_msg("while could be an if statement")
                                 assume cast(EUReal, 0)
@@ -499,7 +499,7 @@ fn test_k_induction_nested_transform() {
 
                             }
                         }
-                        @slice_error("invariant might not be inductive (I ≰ 𝚽(I))")
+                        @error_msg("invariant might not be inductive (I ≰ 𝚽(I))")
                         assert cast(EUReal, x)
                         @success_msg("while could be an if statement")
                         assume cast(EUReal, 0)

@@ -29,7 +29,7 @@ pub fn init_slicing(tcx: &mut TyCtx) {
 }
 
 pub fn wrap_with_error_message(stmt: Stmt, message: &str) -> Stmt {
-    wrap_with_annotation(SliceAnnotationKind::SliceError, stmt, message)
+    wrap_with_annotation(SliceAnnotationKind::ErrorMessage, stmt, message)
 }
 
 pub fn wrap_with_success_message(stmt: Stmt, message: &str) -> Stmt {

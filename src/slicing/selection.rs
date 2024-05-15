@@ -254,12 +254,20 @@ impl SelectionBuilder {
         self.stack.push(self.state().clone());
         let state = self.state_mut();
         match kind {
-            SliceAnnotationKind::SliceVerify => state.in_slice_verify_annotation = true,
-            SliceAnnotationKind::SliceError => state.in_slice_error_annotation = true,
+            SliceAnnotationKind::SliceVerify => {
+                assert_eq!(args.len(), 0);
+                state.in_slice_verify_annotation = true
+            }
+            SliceAnnotationKind::SliceError => {
+                assert_eq!(args.len(), 0);
+                state.in_slice_error_annotation = true
+            }
             SliceAnnotationKind::SuccessMessage => {
-                state.success_message = Some(lit_expr_to_symbol(&args[0]))
+                assert_eq!(args.len(), 1);
+                state.success_message = Some(lit_expr_to_symbol(&args[0]));
             }
             SliceAnnotationKind::ErrorMessage => {
+                assert_eq!(args.len(), 1);
                 state.failure_message = Some(lit_expr_to_symbol(&args[0]))
             }
         }
