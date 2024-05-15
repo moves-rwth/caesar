@@ -1,8 +1,8 @@
-# Create a release for a given Git ref.
+# Build binaries for a given Git ref.
 # Based on:
 # - https://github.com/BurntSushi/ripgrep/blob/d922b7ac114c24d6800ae5f79d2967481f380c83/.github/workflows/release.yml
 # - https://github.com/dafny-lang/dafny/blob/beab582113744ea72e2727d934f5a03d42c4ba17/.github/workflows/publish-release-reusable.yml
-name: Create Release
+name: Build Binaries
 
 on:
   workflow_call:
@@ -10,56 +10,16 @@ on:
       git_ref:
         required: true
         type: string
+      version:
+        required: true
+        type: string
       is_prerelease:
         required: true
         type: boolean
+
 jobs:
-  # The create-release job runs purely to initialize the GitHub release itself,
-  # and names the release after the provided Git ref (e.g. tag). It's separate
-  # from building the release so that we only create the release once.
-  create-release:
-    name: create-release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.git_ref }}
-
-      - name: Get the release version from the tag
-        if: env.VERSION == ''
-        run: echo "VERSION=${{ inputs.git_ref }}" >> $GITHUB_ENV
-
-      - name: Show the version
-        run: |
-          echo "version is: $VERSION"
-
-      - name: Check that tag version and Cargo.toml version are the same
-        if: ${{ !inputs.is_prerelease }}
-        shell: bash
-        # Remove leading v from semantic versioning tag v<major>.<minor>.<patch>
-        run: |
-          VERSION_WITHOUT_V=${VERSION#v}
-          if ! grep -q "version = \"${VERSION_WITHOUT_V}\"" Cargo.toml; then
-            echo "version ${VERSION_WITHOUT_V} does not match Cargo.toml" >&2
-            exit 1
-          fi
-      
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ env.VERSION }}
-          tag_name: ${{ inputs.git_ref }}
-          draft: ${{ !inputs.is_prerelease }}
-          prerelease: ${{ inputs.is_prerelease }}
-          generate_release_notes: ${{ inputs.is_prerelease }}
-
-    outputs:
-      version: ${{ env.VERSION }}
-
   build-release:
     name: build-release
-    needs: ['create-release']
     runs-on: ${{ matrix.os }}
     env:
       # For some builds, we use cross to test on 32-bit and big-endian
@@ -160,7 +120,7 @@ jobs:
     - name: Determine archive name
       shell: bash
       run: |
-        version="${{ needs.create-release.outputs.version }}"
+        version="${{ inputs.version }}"
         echo "ARCHIVE=caesar-$version-${{ matrix.target }}" >> $GITHUB_ENV
 
     - name: Creating directory for archive

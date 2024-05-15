@@ -1,0 +1,54 @@
+name: Nightly release (on change to main branch)
+on:
+  push:
+    branches:
+    - main
+
+env:
+  # Name of the tag to mark current nightly build
+  NIGHTLY_TAG: nightly
+
+jobs:
+  create-nightly-tag:
+    name: create-nightly-tag
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Ensure tag exists
+      run: |
+        git tag ${{ env.NIGHTLY_TAG }} -f
+        git push origin ${{ env.NIGHTLY_TAG }} -f
+    outputs:
+      tag: ${{ env.NIGHTLY_TAG }}
+  
+  prepare-release:
+    needs: create-nightly-tag
+    uses: ./.github/workflows/setup_gh_release.yml
+    with:
+      git_ref: ${{ needs.create-nightly-tag.outputs.tag }}
+      is_prerelease: true
+  
+  build-binaries:
+    needs: [create-nightly-tag, prepare-release]
+    uses: ./.github/workflows/build-binaries-gh_release.yml
+    with:
+      git_ref: ${{ needs.create-nightly-tag.outputs.tag }}
+      version: ${{ needs.prepare-release.outputs.version }}
+      is_prerelease: true
+
+  build-vsix:
+    needs: [create-nightly-tag, prepare-release]
+    uses: ./.github/workflows/build-vsix-gh_release.yml
+    with:
+      git_ref: ${{ needs.create-nightly-tag.outputs.tag }}
+      version: ${{ needs.prepare-release.outputs.version }}
+      is_prerelease: true
+  
+  publish-docker-image:
+    needs: [create-nightly-tag, prepare-release]
+    uses: ./.github/workflows/build-docker-registry.yml
+    with:
+      git_ref: ${{ needs.create-nightly-tag.outputs.tag }}
+      image_tags: |
+        type=raw,value=${{ needs.create-nightly-tag.outputs.tag }}
