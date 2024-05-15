@@ -772,7 +772,8 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
                         let ident = var_decl.name;
                         let value = pretty_var_value(translate, ident, model);
                         labels.push(Label::new(ident.span).with_message(format!(
-                            "in the cex, {} evaluates to {}",
+                            "in the cex, {} variable {} is {}",
+                            var_decl.kind,
                             var_decl.original_name(),
                             value
                         )));
