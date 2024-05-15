@@ -623,7 +623,11 @@ impl<'ctx> SmtVcUnit<'ctx> {
         let mut slice_solver = SliceSolver::new(slice_vars.clone(), translate, prover);
         let (result, mut slice_model) = slice_solver.slice_while_failing(limits_ref)?;
         if matches!(result, ProveResult::Proof) && options.slice_verify {
-            slice_model = slice_solver.slice_while_verified(limits_ref)?;
+            if translate.ctx.uninterpreteds().is_empty() {
+                slice_model = slice_solver.slice_while_verified(limits_ref)?;
+            } else {
+                tracing::warn!("There are uninterpreted sorts, functions, or axioms present. Slicing for correctness is disabled because it does not support them.");
+            }
         }
 
         Ok(SmtVcCheckResult {
