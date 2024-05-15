@@ -92,7 +92,10 @@ impl LspServer {
                         let files = self.files.lock().unwrap();
                         let file_id = files
                             .find(&SourceFilePath::Lsp(params.text_document.clone()))
-                            .unwrap()
+                            .expect(&format!(
+                                "Could not find file id for document {:?}",
+                                params.text_document
+                            ))
                             .id;
                         drop(files);
                         self.clear_all().map_err(VerifyError::ServerError)?;
@@ -104,7 +107,15 @@ impl LspServer {
                         sender
                             .send(Message::Response(res))
                             .map_err(|e| VerifyError::ServerError(e.into()))?;
-                        result?;
+                        match result {
+                            Ok(()) => {}
+                            Err(VerifyError::Diagnostic(diagnostic)) => {
+                                self.add_diagnostic(diagnostic)?;
+                            }
+                            Err(VerifyError::Interrupted) => {}
+                            Err(VerifyError::LimitError(_)) => {}
+                            Err(err) => Err(err)?,
+                        }
                     }
                     "shutdown" => {
                         self.connection

@@ -1,4 +1,4 @@
-import { LanguageClientOptions, TextDocumentIdentifier, VersionedTextDocumentIdentifier } from "vscode-languageclient";
+import { LanguageClientOptions, ResponseError, TextDocumentIdentifier, VersionedTextDocumentIdentifier } from "vscode-languageclient";
 import { Executable, LanguageClient, ServerOptions } from "vscode-languageclient/node";
 import { ExtensionContext, OutputChannel, Range, TextDocument } from "vscode";
 import * as vscode from "vscode";
@@ -259,9 +259,14 @@ export class CaesarClient {
             text: document.getText()
         };
         this.notifyStatusUpdate(ServerStatus.Verifying);
-        await this.client.sendRequest('custom/verify', { text_document: documentItem });
-        // TODO: handle errors
-        this.notifyStatusUpdate(ServerStatus.Finished);
+        try {
+            await this.client.sendRequest('custom/verify', { text_document: documentItem });
+            this.notifyStatusUpdate(ServerStatus.Finished);
+        } catch (error) {
+            if (!(error instanceof ResponseError)) { throw error; }
+            void vscode.window.showErrorMessage(`Verification had an error: ${error.message}`);
+            this.notifyStatusUpdate(ServerStatus.Ready);
+        }
     }
 
     private async copyCommand() {

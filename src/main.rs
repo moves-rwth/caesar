@@ -10,6 +10,7 @@ use std::{
     path::PathBuf,
     process::ExitCode,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -262,7 +263,8 @@ async fn run_server(options: &Options) -> ExitCode {
     let (mut server, _io_threads) = LspServer::connect_stdio();
     server.initialize().unwrap();
     let res = server.run_server(|server, user_files| {
-        let limits_ref = LimitsRef::new(None); // TODO
+        let limits_ref =
+            LimitsRef::new(Some(Instant::now() + Duration::from_secs(options.timeout)));
         let res = verify_files_main(options, limits_ref, server, user_files);
         match res {
             Ok(_) => Ok(()),
