@@ -12,7 +12,7 @@ use crate::{
     },
     driver::QuantVcUnit,
     pretty::Doc,
-    slicing::solver::{SliceMode, SliceModel, SliceResult},
+    slicing::model::{SliceMode, SliceModel, SliceResult},
     smt::translate_exprs::TranslateExprs,
 };
 
@@ -40,27 +40,25 @@ pub fn pretty_model<'smt, 'ctx>(
         res.push(slice_lines);
     }
 
-    res.push(print_vc_value(vc_expr, translate, model, slice_model));
+    res.push(pretty_vc_value(vc_expr, translate, model, slice_model));
 
-    let doc = Doc::intersperse(res, Doc::line_().append(Doc::line_())).append(Doc::line_());
-    doc
+    Doc::intersperse(res, Doc::line_().append(Doc::line_())).append(Doc::line_())
 }
 
-fn print_vc_value<'smt, 'ctx>(
+pub fn pretty_vc_value<'smt, 'ctx>(
     vc_expr: &QuantVcUnit,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     model: &InstrumentedModel<'ctx>,
     slice_model: &SliceModel,
 ) -> Doc {
-    let text = if slice_model.count_sliced_stmts() > 0 {
-        "in the sliced program, the pre-quantity evaluated to:"
-    } else {
-        "the pre-quantity evaluated to:"
-    };
-
+    let mut header = "the pre-quantity evaluated to:";
     let ast = translate.t_symbolic(&vc_expr.expr);
     let value = ast.eval(model);
     let mut res = pretty_eval_result(value);
+
+    if slice_model.count_sliced_stmts() > 0 {
+        header = "in the sliced program, the pre-quantity evaluated to:"
+    }
 
     // add a note if the computed pre-quantity is affected by slicing. this can
     // only happen when we slice for errors (otherwise we don't compute the
@@ -73,10 +71,10 @@ fn print_vc_value<'smt, 'ctx>(
         )));
     }
 
-    Doc::text(text).append(Doc::hardline().append(res).nest(4))
+    Doc::text(header).append(Doc::hardline().append(res).nest(4))
 }
 
-fn pretty_globals<'smt, 'ctx>(
+pub fn pretty_globals<'smt, 'ctx>(
     translate: &mut TranslateExprs<'smt, 'ctx>,
     model: &InstrumentedModel<'ctx>,
     files: &Files,
@@ -112,7 +110,7 @@ fn pretty_globals<'smt, 'ctx>(
                 let ident = var_decl.name;
 
                 // pretty print the value of this variable
-                let value = pretty_var(translate, ident, model);
+                let value = pretty_var_value(translate, ident, model);
 
                 // pretty print the span of this variable declaration
                 let span = pretty_span(files, ident.span);
@@ -129,11 +127,11 @@ fn pretty_globals<'smt, 'ctx>(
     }
 }
 
-fn pretty_var<'smt, 'ctx>(
+pub fn pretty_var_value<'smt, 'ctx>(
     translate: &mut TranslateExprs<'smt, 'ctx>,
     ident: Ident,
     model: &InstrumentedModel<'ctx>,
-) -> Doc {
+) -> String {
     let builder = ExprBuilder::new(Span::dummy_span());
     let symbolic = translate.t_symbolic(&builder.var(ident, translate.ctx.tcx));
 
@@ -142,7 +140,10 @@ fn pretty_var<'smt, 'ctx>(
     // on.
     let res = model.atomically(|| symbolic.eval(model));
 
-    pretty_eval_result(res)
+    match res {
+        Ok(value) => format!("{}", value),
+        Err(err) => format!("({})", err),
+    }
 }
 
 fn pretty_eval_result<T>(res: Result<T, SmtEvalError>) -> Doc
@@ -209,7 +210,7 @@ pub fn pretty_slice(files: &Files, slice_model: &SliceModel) -> Option<Doc> {
     Some(Doc::intersperse(lines, Doc::line_()).nest(4))
 }
 
-fn pretty_unaccessed(model: &InstrumentedModel<'_>) -> Option<Doc> {
+pub fn pretty_unaccessed(model: &InstrumentedModel<'_>) -> Option<Doc> {
     let unaccessed: Vec<_> = model.iter_unaccessed().collect();
     if unaccessed.is_empty() {
         return None;

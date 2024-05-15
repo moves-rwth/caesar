@@ -8,6 +8,7 @@ use crate::{
 
 use self::selection::{SliceAnnotation, SliceAnnotationKind};
 
+pub mod model;
 pub mod selection;
 pub mod solver;
 pub mod transform;

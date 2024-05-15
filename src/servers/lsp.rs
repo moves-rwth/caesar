@@ -14,6 +14,8 @@ use serde_json::Value;
 
 use crate::{
     ast::{Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
+    driver::{SmtVcCheckResult, SourceUnitName},
+    smt::translate_exprs::TranslateExprs,
     VerifyError,
 };
 
@@ -92,10 +94,12 @@ impl LspServer {
                         let files = self.files.lock().unwrap();
                         let file_id = files
                             .find(&SourceFilePath::Lsp(params.text_document.clone()))
-                            .expect(&format!(
-                                "Could not find file id for document {:?}",
-                                params.text_document
-                            ))
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Could not find file id for document {:?}",
+                                    params.text_document
+                                )
+                            })
                             .id;
                         drop(files);
                         self.clear_all().map_err(VerifyError::ServerError)?;
@@ -277,8 +281,16 @@ impl Server for LspServer {
         Ok(())
     }
 
-    fn set_verify_status(&mut self, span: Span, status: VerifyResult) -> Result<(), ServerError> {
-        self.statuses.insert(span, status);
+    fn handle_vc_check_result<'smt, 'ctx>(
+        &mut self,
+        _name: &SourceUnitName,
+        span: Span,
+        result: &mut SmtVcCheckResult<'ctx>,
+        translate: &mut TranslateExprs<'smt, 'ctx>,
+    ) -> Result<(), ServerError> {
+        result.emit_diagnostics(span, self, translate)?;
+        self.statuses
+            .insert(span, VerifyResult::from_prove_result(&result.prove_result));
         self.publish_verify_statuses()?;
         Ok(())
     }

@@ -454,6 +454,12 @@ impl Diagnostic {
         self
     }
 
+    /// Add new labels to the diagnostic.
+    pub fn with_labels(mut self, labels: impl IntoIterator<Item = Label>) -> Self {
+        self.0.labels.extend(labels);
+        self
+    }
+
     pub fn kind(&self) -> ReportKind {
         self.0.kind
     }

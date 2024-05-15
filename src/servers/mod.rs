@@ -5,6 +5,8 @@ use std::{
 
 use crate::{
     ast::{Diagnostic, FileId, Files, Span, StoredFile},
+    driver::{SmtVcCheckResult, SourceUnitName},
+    smt::translate_exprs::TranslateExprs,
     VerifyError,
 };
 
@@ -19,6 +21,7 @@ pub use lsp::LspServer;
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
 pub use test::TestServer;
+use z3rro::prover::ProveResult;
 
 pub type ServerError = Box<dyn Error + Send + Sync>;
 
@@ -28,6 +31,16 @@ pub enum VerifyResult {
     Verified,
     Failed,
     Unknown,
+}
+
+impl VerifyResult {
+    pub fn from_prove_result(result: &ProveResult) -> Self {
+        match &result {
+            ProveResult::Proof => VerifyResult::Verified,
+            ProveResult::Counterexample(_) => VerifyResult::Failed,
+            ProveResult::Unknown(_) => VerifyResult::Unknown,
+        }
+    }
 }
 
 /// A server that serves information to a client, such as the CLI or an LSP
@@ -40,12 +53,17 @@ pub trait Server: Send {
 
     fn get_files_internal(&mut self) -> &Mutex<Files>;
 
-    /// Add a new [`Diagnostic`]. Abort with a [`VerifyError::Diagnostic`] if
-    /// the diagnostic is fatal.
+    /// Add a new [`Diagnostic`].
     fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError>;
 
     /// Send a verification status message to the client (a custom notification).
-    fn set_verify_status(&mut self, span: Span, status: VerifyResult) -> Result<(), ServerError>;
+    fn handle_vc_check_result<'smt, 'ctx>(
+        &mut self,
+        name: &SourceUnitName,
+        span: Span,
+        result: &mut SmtVcCheckResult<'ctx>,
+        translate: &mut TranslateExprs<'smt, 'ctx>,
+    ) -> Result<(), ServerError>;
 }
 
 fn unless_fatal_error(werr: bool, diagnostic: Diagnostic) -> Result<Diagnostic, VerifyError> {

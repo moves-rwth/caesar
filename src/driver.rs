@@ -5,13 +5,13 @@ use std::{
     fs::{create_dir_all, File},
     io::Write,
     ops::{Deref, DerefMut},
-    sync::Mutex,
 };
 
 use crate::{
     ast::{
-        stats::StatsVisitor, visit::VisitorMut, BinOpKind, Block, DeclKind, Diagnostic, Direction,
-        Expr, ExprBuilder, Files, SourceFilePath, Span, Spanned, StoredFile, TyKind, UnOpKind,
+        stats::StatsVisitor, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclKindName,
+        Diagnostic, Direction, Expr, ExprBuilder, Label, SourceFilePath, Span, Spanned, StoredFile,
+        TyKind, UnOpKind, VarKind,
     },
     front::{
         parser::{self, ParseError},
@@ -31,18 +31,28 @@ use crate::{
     },
     proof_rules::EncCall,
     resource_limits::{LimitError, LimitsRef},
+    servers::Server,
     slicing::{
+        model::SliceModel,
         selection::SliceSelection,
-        solver::{SliceModel, SliceSolver},
+        solver::SliceSolver,
         transform::{SliceStmts, StmtSliceVisitor},
     },
-    smt::{pretty_model, pretty_slice, translate_exprs::TranslateExprs, SmtCtx},
+    smt::{
+        pretty_model::{
+            pretty_model, pretty_slice, pretty_unaccessed, pretty_var_value, pretty_vc_value,
+        },
+        translate_exprs::TranslateExprs,
+        SmtCtx,
+    },
     tyctx::TyCtx,
     vc::{subst::apply_subst, vcgen::Vcgen},
     version::write_detailed_version_info,
     Options, VerifyError,
 };
 
+use ariadne::ReportKind;
+use itertools::Itertools;
 use z3::{
     ast::{Ast, Bool},
     Config, Context,
@@ -508,7 +518,7 @@ impl QuantVcUnit {
 
     /// Convert his verification condition into a Boolean query of the form `top
     /// == expr`.
-    pub fn to_boolean(&self) -> BoolVcUnit {
+    pub fn into_bool_vc(self) -> BoolVcUnit {
         let builder = ExprBuilder::new(Span::dummy_span());
         let terminal = builder.top_lit(self.expr.ty.as_ref().unwrap());
         let mut expr = self.expr.clone();
@@ -522,65 +532,77 @@ impl QuantVcUnit {
             expr = builder.unary(UnOpKind::Not, Some(expr.ty.clone().unwrap()), expr);
         }
         let res = builder.binary(BinOpKind::Eq, Some(TyKind::Bool), terminal, expr);
-        BoolVcUnit(res)
+        BoolVcUnit {
+            quant_vc: self,
+            vc: res,
+        }
     }
 }
 
 /// The next step is a Boolean verification condition - it represents that the
 /// quantative verification conditions are true/false depending on the direction.
-pub struct BoolVcUnit(Expr);
+pub struct BoolVcUnit {
+    quant_vc: QuantVcUnit,
+    vc: Expr,
+}
 
 impl BoolVcUnit {
     /// E-Graph simplifications. They're not being used at the moment and are
     /// very limited.
     pub fn egraph_simplify(&self) {
-        egraph::simplify(&self.0);
+        egraph::simplify(&self.vc);
     }
 
     /// Removing parentheses before optimizations.
     pub fn remove_parens(&mut self) {
-        RemoveParens.visit_expr(&mut self.0).unwrap();
+        RemoveParens.visit_expr(&mut self.vc).unwrap();
     }
 
     /// Apply the "boolify" optimization.
     pub fn opt_boolify(&mut self) {
         let span = info_span!("boolify");
         let _entered = span.enter();
-        (Boolify {}).visit_expr(&mut self.0).unwrap();
+        (Boolify {}).visit_expr(&mut self.vc).unwrap();
     }
 
     /// Apply the "relational" optimization.
     pub fn opt_relational(&mut self) {
         let span = info_span!("relationalize");
         let _entered = span.enter();
-        (Relational {}).visit_expr(&mut self.0).unwrap();
+        (Relational {}).visit_expr(&mut self.vc).unwrap();
     }
 
     /// Print the theorem to prove.
     pub fn print_theorem(&self, name: &SourceUnitName) {
-        println!("{}: Theorem to prove:\n{}\n", name, &self.0);
+        println!("{}: Theorem to prove:\n{}\n", name, &self.vc);
     }
 
     /// Translate to SMT.
-    pub fn to_smt<'smt, 'ctx>(
-        &self,
+    pub fn into_smt_vc<'smt, 'ctx>(
+        self,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> SmtVcUnit<'ctx> {
         let span = info_span!("translation to Z3");
         let _entered = span.enter();
-        SmtVcUnit(translate.t_bool(&self.0))
+        SmtVcUnit {
+            quant_vc: self.quant_vc,
+            vc: translate.t_bool(&self.vc),
+        }
     }
 }
 
 /// The verification condition validitiy formula as a Z3 formula.
-pub struct SmtVcUnit<'ctx>(Bool<'ctx>);
+pub struct SmtVcUnit<'ctx> {
+    quant_vc: QuantVcUnit,
+    vc: Bool<'ctx>,
+}
 
 impl<'ctx> SmtVcUnit<'ctx> {
     /// Simplify the SMT formula using Z3's simplifier.
     pub fn simplify(&mut self) {
         let span = info_span!("simplify query");
         let _entered = span.enter();
-        self.0 = self.0.simplify();
+        self.vc = self.vc.simplify();
     }
 
     /// Run the solver(s) on this SMT formula.
@@ -595,7 +617,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
         let span = info_span!("SAT check");
         let _entered = span.enter();
 
-        let prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.0);
+        let prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc);
         let smtlib = get_smtlib(options, &prover);
 
         let mut slice_solver = SliceSolver::new(slice_vars.clone(), translate, prover);
@@ -606,6 +628,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
 
         Ok(SmtVcCheckResult {
             prove_result: result,
+            quant_vc: self.quant_vc,
             slice_model,
             smtlib,
         })
@@ -665,6 +688,7 @@ fn get_smtlib(options: &Options, prover: &Prover) -> Option<Smtlib> {
 pub struct SmtVcCheckResult<'ctx> {
     pub prove_result: ProveResult<'ctx>,
     slice_model: Option<SliceModel>,
+    quant_vc: QuantVcUnit,
     smtlib: Option<Smtlib>,
 }
 
@@ -672,12 +696,11 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
     /// Print the result of the query to stdout.
     pub fn print_prove_result<'smt>(
         &mut self,
-        files_mutex: &Mutex<Files>,
-        vc_expr: &QuantVcUnit,
+        server: &mut dyn Server,
         translate: &mut TranslateExprs<'smt, 'ctx>,
         name: &SourceUnitName,
     ) {
-        let files = files_mutex.lock().unwrap();
+        let files = server.get_files_internal().lock().unwrap();
         match &mut self.prove_result {
             ProveResult::Proof => {
                 println!("{}: Verified.", name);
@@ -692,10 +715,15 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
                 }
             }
             ProveResult::Counterexample(model) => {
-                let slice_model = self.slice_model.as_ref().unwrap();
                 println!("{}: Counter-example to verification found!", name);
                 let mut w = Vec::new();
-                let doc = pretty_model(&files, slice_model, vc_expr, translate, model);
+                let doc = pretty_model(
+                    &files,
+                    self.slice_model.as_ref().unwrap(),
+                    &self.quant_vc,
+                    translate,
+                    model,
+                );
                 doc.nest(4).render(120, &mut w).unwrap();
                 println!("    {}", String::from_utf8(w).unwrap());
             }
@@ -703,6 +731,85 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
                 println!("{}: Unknown result! (reason: {})", name, reason)
             }
         }
+    }
+
+    /// Emit diagnostics for this check result.
+    ///
+    /// The provided span is for the location to attach the counterexample to.
+    pub fn emit_diagnostics<'smt>(
+        &mut self,
+        span: Span,
+        server: &mut dyn Server,
+        translate: &mut TranslateExprs<'smt, 'ctx>,
+    ) -> Result<(), VerifyError> {
+        // TODO: batch all those messages
+
+        if let Some(slice_model) = &self.slice_model {
+            for diagnostic in slice_model.to_diagnostics() {
+                server.add_diagnostic(diagnostic)?;
+            }
+        }
+
+        match &mut self.prove_result {
+            ProveResult::Proof => {}
+            ProveResult::Counterexample(model) => {
+                let mut labels = vec![];
+                let files = server.get_files_internal().lock().unwrap();
+                // Print the values of the global variables in the model.
+                let global_decls = translate
+                    .local_idents()
+                    .sorted_by_key(|ident| ident.span.start)
+                    .map(|ident| translate.ctx.tcx().get(ident).unwrap())
+                    .filter(|decl| decl.kind_name() != DeclKindName::Var(VarKind::Slice))
+                    .collect_vec();
+                for decl_kind in global_decls {
+                    if let DeclKind::VarDecl(decl_ref) = &*decl_kind {
+                        let var_decl = decl_ref.borrow();
+                        let ident = var_decl.name;
+                        let value = pretty_var_value(translate, ident, model);
+                        labels.push(Label::new(ident.span).with_message(format!(
+                            "in the cex, {} evaluates to {}",
+                            var_decl.original_name(),
+                            value
+                        )));
+                    }
+                }
+                drop(files);
+
+                let mut res: Vec<Doc> = vec![Doc::text("Counter-example to verification found!")];
+
+                // Print the unaccessed definitions.
+                if let Some(unaccessed) = pretty_unaccessed(model) {
+                    res.push(unaccessed);
+                }
+
+                res.push(pretty_vc_value(
+                    &self.quant_vc,
+                    translate,
+                    model,
+                    self.slice_model.as_ref().unwrap(),
+                ));
+
+                let mut w = Vec::new();
+                Doc::intersperse(res, Doc::line_().append(Doc::line_()))
+                    .render(120, &mut w)
+                    .unwrap();
+                let text = String::from_utf8(w).unwrap();
+
+                let diagnostic = Diagnostic::new(ReportKind::Error, span)
+                    .with_message(text)
+                    .with_labels(labels);
+                server.add_diagnostic(diagnostic)?;
+            }
+            ProveResult::Unknown(reason) => {
+                server.add_diagnostic(
+                    Diagnostic::new(ReportKind::Error, span)
+                        .with_message(format!("Unknown result: {}", reason)),
+                )?;
+            }
+        }
+
+        Ok(())
     }
 
     /// Write the SMT-LIB dump to a file if requested.

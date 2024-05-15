@@ -6,10 +6,12 @@ use std::{
 
 use crate::{
     ast::{Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
+    driver::{SmtVcCheckResult, SourceUnitName},
+    smt::translate_exprs::TranslateExprs,
     Options, VerifyError,
 };
 
-use super::{unless_fatal_error, Server, ServerError, VerifyResult};
+use super::{unless_fatal_error, Server, ServerError};
 
 pub struct CliServer {
     werr: bool,
@@ -65,8 +67,14 @@ impl Server for CliServer {
         Ok(())
     }
 
-    fn set_verify_status(&mut self, _span: Span, _status: VerifyResult) -> Result<(), ServerError> {
-        // TODO
+    fn handle_vc_check_result<'smt, 'ctx>(
+        &mut self,
+        name: &SourceUnitName,
+        _span: Span,
+        result: &mut SmtVcCheckResult<'ctx>,
+        translate: &mut TranslateExprs<'smt, 'ctx>,
+    ) -> Result<(), ServerError> {
+        result.print_prove_result(self, translate, name);
         Ok(())
     }
 }

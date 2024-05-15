@@ -28,7 +28,7 @@ use intrinsic::{annotations::init_calculi, distributions::init_distributions, li
 use procs::add_default_specs;
 use proof_rules::init_encodings;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
-use servers::{CliServer, LspServer, Server, ServerError, VerifyResult};
+use servers::{CliServer, LspServer, Server, ServerError};
 use slicing::init_slicing;
 use thiserror::Error;
 use timing::DispatchBuilder;
@@ -518,13 +518,13 @@ fn verify_files_main(
         // 4. Desugaring: transforming spec calls to procs
         verify_unit.desugar_spec_calls(&mut tcx).unwrap();
 
-        // 5. Prepare slicing
-        let slice_vars = verify_unit.prepare_slicing(options, &mut tcx);
-
         // print HeyVL core after desugaring if requested
         if options.print_core {
             println!("{}: HeyVL core query:\n{}\n", name, *verify_unit);
         }
+
+        // 5. Prepare slicing
+        let slice_vars = verify_unit.prepare_slicing(options, &mut tcx);
 
         // 6. Generating verification conditions
         let vcgen = Vcgen::new(&tcx, options.print_label_vc);
@@ -542,7 +542,7 @@ fn verify_files_main(
         vc_expr.trace_expr_stats();
 
         // 9. Create the "vc[S] is valid" expression
-        let mut vc_is_valid = vc_expr.to_boolean();
+        let mut vc_is_valid = vc_expr.into_bool_vc();
 
         if options.egraph {
             vc_is_valid.egraph_simplify();
@@ -568,7 +568,7 @@ fn verify_files_main(
         let ctx = mk_z3_ctx(options);
         let smt_ctx = SmtCtx::new(&ctx, &tcx);
         let mut translate = TranslateExprs::new(&smt_ctx);
-        let mut vc_is_valid = vc_is_valid.to_smt(&mut translate);
+        let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
 
         // 12. Simplify
         if !options.no_simplify {
@@ -579,18 +579,8 @@ fn verify_files_main(
         let mut result =
             vc_is_valid.run_solver(options, &limits_ref, &ctx, &mut translate, &slice_vars)?;
 
-        // Now let's examine the result.
-        if !options.language_server {
-            let files_mutex = server.get_files_internal();
-            result.print_prove_result(files_mutex, &vc_expr, &mut translate, name);
-        }
-        let status = match &result.prove_result {
-            ProveResult::Proof => VerifyResult::Verified,
-            ProveResult::Counterexample(_) => VerifyResult::Failed,
-            ProveResult::Unknown(_) => VerifyResult::Unknown,
-        };
         server
-            .set_verify_status(verify_unit.span, status)
+            .handle_vc_check_result(name, verify_unit.span, &mut result, &mut translate)
             .map_err(VerifyError::ServerError)?;
 
         // If requested, write the SMT-LIB output.

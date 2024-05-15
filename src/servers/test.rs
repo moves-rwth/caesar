@@ -5,6 +5,8 @@ use std::{
 
 use crate::{
     ast::{Diagnostic, FileId, Files, Span, StoredFile},
+    driver::{SmtVcCheckResult, SourceUnitName},
+    smt::translate_exprs::TranslateExprs,
     Options, VerifyError,
 };
 
@@ -47,8 +49,15 @@ impl Server for TestServer {
         Ok(())
     }
 
-    fn set_verify_status(&mut self, span: Span, status: VerifyResult) -> Result<(), ServerError> {
-        self.statuses.insert(span, status);
+    fn handle_vc_check_result<'smt, 'ctx>(
+        &mut self,
+        _name: &SourceUnitName,
+        span: Span,
+        result: &mut SmtVcCheckResult<'ctx>,
+        _translate: &mut TranslateExprs<'smt, 'ctx>,
+    ) -> Result<(), ServerError> {
+        self.statuses
+            .insert(span, VerifyResult::from_prove_result(&result.prove_result));
         Ok(())
     }
 }
