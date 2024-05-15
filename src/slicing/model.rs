@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use lsp_types::DiagnosticTag;
 use z3::ast::Bool;
 use z3rro::model::{InstrumentedModel, SmtEval, SmtEvalError};
 
@@ -78,27 +79,26 @@ impl SliceModel {
 
     /// Create diagnostics for this slice model. This is used for the LSP server.
     pub fn to_diagnostics(&self) -> impl Iterator<Item = Diagnostic> + '_ {
-        self.iter_results()
-            .flat_map(|(span, result)| match result {
-                SliceResult::PartOfError(message) => Some(
-                    Diagnostic::new(ariadne::ReportKind::Error, span)
-                        .with_message(
-                            message
-                                .unwrap_or(Symbol::intern("This statement is part of the error")),
-                        )
-                        .with_label(Label::new(span).with_message("here")),
-                ),
-                SliceResult::NotNecessary(message) => Some(
-                    Diagnostic::new(ariadne::ReportKind::Advice, span)
-                        .with_message(
-                            message.unwrap_or(Symbol::intern("This statement is not necessary")),
-                        )
-                        .with_label(Label::new(span).with_message("here")),
-                ),
-                SliceResult::Error(err) => {
-                    tracing::error!(err=?err, "error encountered in slice result");
-                    None
-                }
-            })
+        self.iter_results().flat_map(|(span, result)| match result {
+            SliceResult::PartOfError(message) => Some(
+                Diagnostic::new(ariadne::ReportKind::Error, span)
+                    .with_message(
+                        message.unwrap_or(Symbol::intern("This statement is part of the error")),
+                    )
+                    .with_label(Label::new(span).with_message("here")),
+            ),
+            SliceResult::NotNecessary(message) => Some(
+                Diagnostic::new(ariadne::ReportKind::Warning, span)
+                    .with_message(
+                        message.unwrap_or(Symbol::intern("This statement is not necessary")),
+                    )
+                    .with_label(Label::new(span).with_message("here"))
+                    .with_tag(DiagnosticTag::UNNECESSARY),
+            ),
+            SliceResult::Error(err) => {
+                tracing::error!(err=?err, "error encountered in slice result");
+                None
+            }
+        })
     }
 }

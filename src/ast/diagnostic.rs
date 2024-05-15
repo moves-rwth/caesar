@@ -10,7 +10,7 @@ use std::{
 };
 
 use ariadne::{Cache, Report, ReportBuilder, ReportKind, Source};
-use lsp_types::VersionedTextDocumentIdentifier;
+use lsp_types::{DiagnosticTag, VersionedTextDocumentIdentifier};
 use pathdiff::diff_paths;
 
 use crate::pretty::{Doc, SimplePretty};
@@ -415,6 +415,7 @@ struct DiagnosticInner {
     note: Option<String>,
     location: Span,
     labels: Vec<Label>,
+    tags: Option<Vec<DiagnosticTag>>,
 }
 
 impl Diagnostic {
@@ -426,6 +427,7 @@ impl Diagnostic {
             note: None,
             location: span,
             labels: vec![],
+            tags: None,
         };
         Diagnostic(Box::new(inner))
     }
@@ -457,6 +459,12 @@ impl Diagnostic {
     /// Add new labels to the diagnostic.
     pub fn with_labels(mut self, labels: impl IntoIterator<Item = Label>) -> Self {
         self.0.labels.extend(labels);
+        self
+    }
+
+    /// Add a new [`DiagnosticTag`] (relevant for LSP only).
+    pub fn with_tag(mut self, tag: DiagnosticTag) -> Self {
+        self.0.tags.get_or_insert(vec![]).push(tag);
         self
     }
 
@@ -537,7 +545,7 @@ impl Diagnostic {
             source: Some("caesar".to_owned()),
             message,
             related_information: Some(related_information),
-            tags: None,
+            tags: self.0.tags.clone(),
             data: None,
         };
         Some((document_id, diagnostic))

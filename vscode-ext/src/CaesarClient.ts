@@ -185,6 +185,11 @@ export class CaesarClient {
             args.push("--timeout", timeout);
         }
 
+        const sliceVerify: boolean = ServerConfig.get(ConfigurationConstants.sliceVerify);
+        if (sliceVerify) {
+            args.push("--slice-verify");
+        }
+
         return {
             command: serverExecutable,
             args: args,
