@@ -2,11 +2,14 @@
   "name": "caesar",
   "displayName": "Caesar Verifier",
   "description": "The quantitative deductive verifier Caesar for VSCode",
+  "publisher": "rwth-moves",
   "version": "0.0.1",
   "preview": true,
-  "engines": {
-    "vscode": "^1.87.0"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/moves-rwth/caesar.git"
   },
+  "homepage": "https://www.caesarverifier.org/",
   "categories": [
     "Programming Languages"
   ],
@@ -15,6 +18,9 @@
     "verification",
     "snippet"
   ],
+  "engines": {
+    "vscode": "^1.87.0"
+  },
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
