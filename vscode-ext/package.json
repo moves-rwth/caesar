@@ -3,6 +3,7 @@
   "displayName": "Caesar Verifier",
   "description": "The quantitative deductive verifier Caesar for VSCode",
   "version": "0.0.1",
+  "preview": true,
   "engines": {
     "vscode": "^1.87.0"
   },
