@@ -10,6 +10,7 @@
     "url": "https://github.com/moves-rwth/caesar.git"
   },
   "homepage": "https://www.caesarverifier.org/",
+  "qna": "https://github.com/moves-rwth/caesar/discussions/categories/q-a",
   "categories": [
     "Programming Languages"
   ],
