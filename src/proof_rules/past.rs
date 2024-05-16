@@ -99,7 +99,7 @@ impl Encoding for PASTAnnotation {
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
         // Unpack values from struct
-        let annotation_span = enc_env.annotation_span;
+        let annotation_span = enc_env.call_span;
         let base_proc_ident = enc_env.base_proc_ident;
 
         let [inv, eps, k] = three_args(args);
@@ -256,9 +256,9 @@ impl Encoding for PASTAnnotation {
         let mut cond3_body = init_assigns;
         cond3_body.push(
             encode_iter(
-                annotation_span,
+                &enc_env,
                 inner_stmt,
-                hey_const(annotation_span, inv, Direction::Up, tcx),
+                hey_const(&enc_env, inv, Direction::Up, tcx),
             )
             .unwrap(),
         );

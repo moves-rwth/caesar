@@ -98,15 +98,11 @@ impl Encoding for UnrollAnnotation {
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
-        // Unpack values from struct
-        let annotation_span = enc_env.annotation_span;
-        let direction = enc_env.direction;
-
         let [k, terminator] = two_args(args);
 
         let k: u128 = lit_u128(k);
 
-        match direction {
+        match enc_env.direction {
             Direction::Down => {
                 if !is_top_lit(terminator) {
                     tracing::warn!("Top terminator is not used with down direction!");
@@ -121,14 +117,14 @@ impl Encoding for UnrollAnnotation {
 
         // Extend the loop k times without asserts (unlike k-induction) because bmc flag is set
         let buf = encode_unroll(
-            annotation_span,
+            &enc_env,
             inner_stmt,
             k,
-            hey_const(annotation_span, terminator, direction, tcx),
+            hey_const(&enc_env, terminator, enc_env.direction, tcx),
         );
 
         Ok(EncodingGenerated {
-            block: Spanned::new(annotation_span, buf),
+            block: Spanned::new(enc_env.stmt_span, buf),
             decls: None,
         })
     }

@@ -13,7 +13,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::ProcInfo;
+use super::{EncodingEnvironment, ProcInfo};
 
 /// Encode the extend step in k-induction and bmc recursively for k times
 /// # Arguments
@@ -24,7 +24,7 @@ use super::ProcInfo;
 /// * `direction` - The direction of the statements in the extend
 /// * `next_iter` - Parameter necessary for the recursion
 pub fn encode_extend(
-    span: Span,
+    enc_env: &EncodingEnvironment,
     inner_stmt: &Stmt,
     k: u128,
     invariant: &Expr,
@@ -34,36 +34,47 @@ pub fn encode_extend(
     if k == 0 {
         return next_iter;
     }
-    let next_iter = encode_extend(span, inner_stmt, k - 1, invariant, direction, next_iter);
+    let next_iter = encode_extend(enc_env, inner_stmt, k - 1, invariant, direction, next_iter);
     vec![
-        Spanned::new(span, StmtKind::Assert(direction, invariant.clone())),
-        encode_iter(span, inner_stmt, next_iter).unwrap(),
+        Spanned::new(
+            enc_env.call_span,
+            StmtKind::Assert(direction, invariant.clone()),
+        ),
+        encode_iter(enc_env, inner_stmt, next_iter).unwrap(),
     ]
 }
 
 /// Encode the extend step in bmc recursively for k times:
 ///
 /// # Arguments
-/// * `span` - The span of the new generated statement
 /// * `inner_stmt` - A While statement to be encoded
 /// * `k` - How many times the loop will be extended
 /// * `next_iter` - Parameter necessary for the recursion
-pub fn encode_unroll(span: Span, inner_stmt: &Stmt, k: u128, next_iter: Vec<Stmt>) -> Vec<Stmt> {
+pub fn encode_unroll(
+    enc_env: &EncodingEnvironment,
+    inner_stmt: &Stmt,
+    k: u128,
+    next_iter: Vec<Stmt>,
+) -> Vec<Stmt> {
     if k == 0 {
         return next_iter;
     }
-    let next_iter = encode_unroll(span, inner_stmt, k - 1, next_iter);
-    vec![encode_iter(span, inner_stmt, next_iter).unwrap()]
+    let next_iter = encode_unroll(enc_env, inner_stmt, k - 1, next_iter);
+    vec![encode_iter(enc_env, inner_stmt, next_iter).unwrap()]
 }
 
 /// Encode one iteration of a while loop with an if then else statement
-pub fn encode_iter(span: Span, stmt: &Stmt, next_iter: Vec<Stmt>) -> Option<Stmt> {
+pub fn encode_iter(
+    enc_env: &EncodingEnvironment,
+    stmt: &Stmt,
+    next_iter: Vec<Stmt>,
+) -> Option<Stmt> {
     if let StmtKind::While(expr, body) = &stmt.node {
         let mut next_body = body.clone();
         next_body.node.extend(next_iter);
-        let empty_block = Spanned::new(span, vec![]);
+        let empty_block = Spanned::new(enc_env.stmt_span, vec![]);
         return Some(Spanned::new(
-            span,
+            enc_env.stmt_span,
             StmtKind::If(expr.clone(), next_body, empty_block),
         ));
     };
@@ -71,7 +82,13 @@ pub fn encode_iter(span: Span, stmt: &Stmt, next_iter: Vec<Stmt>) -> Option<Stmt
 }
 
 /// Constant program which always evaluates to the given expression
-pub fn hey_const(span: Span, expr: &Expr, direction: Direction, tcx: &TyCtx) -> Vec<Stmt> {
+pub fn hey_const(
+    enc_env: &EncodingEnvironment,
+    expr: &Expr,
+    direction: Direction,
+    tcx: &TyCtx,
+) -> Vec<Stmt> {
+    let span = enc_env.call_span;
     let builder = ExprBuilder::new(span);
     let extreme_lit = match direction {
         Direction::Up => builder.top_lit(tcx.spec_ty()),

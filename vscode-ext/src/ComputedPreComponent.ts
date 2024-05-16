@@ -80,14 +80,14 @@ export class ComputedPreComponent {
                 const decorations: vscode.DecorationOptions[] = [];
 
                 if (this.enabled) {
-                    let prevLine;
+                    const processedLines = new Set();
 
                     for (const [range, isBlockItself, expls] of expr_expls) {
                         const line = range.start.line;
-                        if (line === prevLine) {
-                            break;
+                        if (processedLines.has(line)) {
+                            continue;
                         }
-                        prevLine = line;
+                        processedLines.add(line);
 
                         // how many lines are empty above the span?
                         let freeLines = 0;

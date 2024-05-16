@@ -131,7 +131,7 @@ impl Encoding for ASTAnnotation {
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
         // Unpack values from struct
-        let annotation_span = enc_env.annotation_span;
+        let annotation_span = enc_env.call_span;
         let base_proc_ident = enc_env.base_proc_ident;
 
         let [invariant, variant, free_var, prob, decrease] = five_args(args);
@@ -280,7 +280,7 @@ impl Encoding for ASTAnnotation {
         let mut cond3_body = init_assigns.clone();
         cond3_body.push(
             encode_iter(
-                annotation_span,
+                &enc_env,
                 inner_stmt,
                 // hey_const(annotation_span, &cond3_expr, tcx),
                 vec![],
@@ -345,7 +345,7 @@ impl Encoding for ASTAnnotation {
         let mut cond5_body = init_assigns.clone();
         cond5_body.push(
             encode_iter(
-                annotation_span,
+                &enc_env,
                 inner_stmt,
                 // hey_const(annotation_span, &variant, tcx),
                 vec![],

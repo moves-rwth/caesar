@@ -37,7 +37,7 @@ export class Verifier {
 
     constructor(context: ExtensionContext) {
         this.context = context;
-        this.outputChannel = vscode.window.createOutputChannel("Caesar", "heyvl");
+        this.outputChannel = vscode.window.createOutputChannel("Caesar", "text");
         this.client = new CaesarClient(context, this.outputChannel);
         this.statusBar = new StatusBarComponent(this);
         this.gutterStatus = new GutterStatusComponent(this);

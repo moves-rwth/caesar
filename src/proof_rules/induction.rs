@@ -208,7 +208,7 @@ fn transform_k_induction(
     k: u128,
     invariant: &Expr,
 ) -> Result<EncodingGenerated, AnnotationError> {
-    let annotation_span = enc_env.annotation_span;
+    let annotation_span = enc_env.call_span;
     let direction = enc_env.direction;
 
     let mut visitor = ModifiedVariableCollector::new();
@@ -236,7 +236,7 @@ fn transform_k_induction(
 
     // Extend the loop k-1 times with the opposite direction
     let next_iter = encode_extend(
-        annotation_span,
+        &enc_env,
         inner_stmt,
         k - 1,
         invariant,
@@ -245,10 +245,10 @@ fn transform_k_induction(
     );
 
     // Encode the last iteration in the normal direction
-    buf.push(encode_iter(annotation_span, inner_stmt, next_iter).unwrap());
+    buf.push(encode_iter(&enc_env, inner_stmt, next_iter).unwrap());
 
     Ok(EncodingGenerated {
-        block: Spanned::new(annotation_span, buf),
+        block: Spanned::new(enc_env.stmt_span, buf),
         decls: None,
     })
 }

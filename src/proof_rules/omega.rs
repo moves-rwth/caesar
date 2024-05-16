@@ -112,7 +112,7 @@ impl Encoding for OmegaInvAnnotation {
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
         // Unpack values from struct
-        let annotation_span = enc_env.annotation_span;
+        let annotation_span = enc_env.call_span;
         let direction = enc_env.direction;
 
         let [free_var, omega_inv] = two_args(args);
@@ -145,18 +145,18 @@ impl Encoding for OmegaInvAnnotation {
 
         // Phi_x(I_n)
         let iter = encode_iter(
-            annotation_span,
+            &enc_env,
             inner_stmt,
-            hey_const(annotation_span, omega_inv, direction, tcx),
+            hey_const(&enc_env, omega_inv, direction, tcx),
         )
         .unwrap();
 
         // Phi_x(0)
         let null_iter = encode_iter(
-            annotation_span,
+            &enc_env,
             inner_stmt,
             hey_const(
-                annotation_span,
+                &enc_env,
                 &builder.cast(tcx.spec_ty().clone(), builder.uint(0)),
                 direction,
                 tcx,

@@ -53,6 +53,10 @@
       {
         "command": "caesar.explainVc",
         "title": "Caesar: Explain Verification Condition Generation"
+      },
+      {
+        "command": "caesar.explainCoreVc",
+        "title": "Caesar: Explain HeyVL Core Verification Condition Generation"
       }
     ],
     "languages": [

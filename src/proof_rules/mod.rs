@@ -52,7 +52,8 @@ pub struct EncodingGenerated {
 /// The environment information when the encoding annotation is called
 pub struct EncodingEnvironment {
     base_proc_ident: Ident,
-    annotation_span: Span,
+    stmt_span: Span,
+    call_span: Span,
     direction: Direction,
 }
 
@@ -231,7 +232,8 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                         base_proc_ident: self
                             .current_proc_ident
                             .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,
-                        annotation_span: *annotation_span,
+                        stmt_span: s.span,
+                        call_span: *annotation_span, // TODO: if I change this to stmt_span, explain core vc works :(
                         direction: self
                             .direction
                             .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,

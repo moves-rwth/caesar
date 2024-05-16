@@ -74,19 +74,24 @@ export class CaesarClient {
             this.client?.outputChannel.show();
         });
 
-        vscode.commands.registerCommand('caesar.explainVc', async () => {
-            const key = ConfigurationConstants.explainVc;
-            const explainVc: string = ServerConfig.get(key);
-            if (explainVc === "explain") {
-                await ServerConfig.setWorkspace(key, "no");
-            } else {
-                await ServerConfig.setWorkspace(key, "explain");
-            }
-            const openEditor = vscode.window.activeTextEditor;
-            if (openEditor) {
-                await this.verify(openEditor.document);
-            }
-        });
+        const explainToggleCommandHandler = (setting: string) => {
+            return async () => {
+                const key = ConfigurationConstants.explainVc;
+                const explainVc: string = ServerConfig.get(key);
+                if (explainVc === setting) {
+                    await ServerConfig.setWorkspace(key, "no");
+                } else {
+                    await ServerConfig.setWorkspace(key, setting);
+                }
+                const openEditor = vscode.window.activeTextEditor;
+                if (openEditor) {
+                    await this.verify(openEditor.document);
+                }
+            };
+        };
+
+        vscode.commands.registerCommand('caesar.explainVc', explainToggleCommandHandler("explain"));
+        vscode.commands.registerCommand('caesar.explainCoreVc', explainToggleCommandHandler("core"));
 
         this.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
             if (e.affectsConfiguration(ServerConfig.getFullPath())) {

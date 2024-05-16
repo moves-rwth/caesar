@@ -45,7 +45,7 @@ impl<'tcx> Vcgen<'tcx> {
         res
     }
 
-    fn vcgen_stmts(&mut self, stmts: &[Stmt], post: Expr) -> Result<Expr, Diagnostic> {
+    pub fn vcgen_stmts(&mut self, stmts: &[Stmt], post: Expr) -> Result<Expr, Diagnostic> {
         stmts
             .iter()
             .rev()

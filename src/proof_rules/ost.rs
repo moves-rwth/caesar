@@ -104,7 +104,7 @@ impl Encoding for OSTAnnotation {
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
         // Unpack values from struct
-        let annotation_span = enc_env.annotation_span;
+        let annotation_span = enc_env.call_span;
         let base_proc_ident = enc_env.base_proc_ident;
 
         let [inv, past_inv, c, post] = four_args(args);
@@ -209,10 +209,10 @@ impl Encoding for OSTAnnotation {
             annotation_span,
             StmtKind::Tick(builder.cast(TyKind::EUReal, builder.uint(1))),
         )];
-        cond2_next_iter.extend(hey_const(annotation_span, past_inv, Direction::Up, tcx));
+        cond2_next_iter.extend(hey_const(&enc_env, past_inv, Direction::Up, tcx));
         // Condition 2 : \Phi_{0}(past_I) <= past_I, so ert[P](0) <= past_I
         let mut cond2_body = init_assigns.clone();
-        cond2_body.push(encode_iter(annotation_span, inner_stmt, cond2_next_iter).unwrap());
+        cond2_body.push(encode_iter(&enc_env, inner_stmt, cond2_next_iter).unwrap());
 
         let cond2_proc_info = ProcInfo {
             name: "past".to_string(),
@@ -302,9 +302,9 @@ impl Encoding for OSTAnnotation {
                 StmtKind::Assume(Direction::Down, builder.top_lit(&TyKind::EUReal)),
             ),
             encode_iter(
-                annotation_span,
+                &enc_env,
                 inner_stmt,
-                hey_const(annotation_span, inv, Direction::Up, tcx),
+                hey_const(&enc_env, inv, Direction::Up, tcx),
             )
             .unwrap(),
         ]);
@@ -326,9 +326,9 @@ impl Encoding for OSTAnnotation {
         let mut cond6_body = init_assigns;
         cond6_body.push(
             encode_iter(
-                annotation_span,
+                &enc_env,
                 inner_stmt,
-                hey_const(annotation_span, inv, Direction::Down, tcx),
+                hey_const(&enc_env, inv, Direction::Down, tcx),
             )
             .unwrap(),
         );

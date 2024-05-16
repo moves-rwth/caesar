@@ -52,7 +52,19 @@ impl ExprExplanation {
             files.get_human_span_start(block_span).unwrap();
         let (_file, span_start_line, _span_start_col) =
             files.get_human_span_start(self.span).unwrap();
-        let space = (span_start_line - block_start_line).saturating_sub(1);
+
+        if span_start_line < block_start_line {
+            let expl = self.to_strings().map(|p| p.0).collect_vec();
+            tracing::debug!(
+                ?span_start_line,
+                ?block_start_line,
+                ?expl,
+                "Not printing explanation because its span starts before its surrounding block"
+            );
+        }
+        let space = span_start_line
+            .saturating_sub(block_start_line)
+            .saturating_sub(1);
         self.steps.drain(0..self.steps.len().saturating_sub(space));
     }
 
