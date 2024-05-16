@@ -36,7 +36,8 @@ struct VerifyStatusUpdate {
 #[derive(Debug, Serialize, Deserialize)]
 struct ComputedPreUpdate {
     document: VersionedTextDocumentIdentifier,
-    pres: Vec<(lsp_types::Range, bool, Vec<String>)>,
+    #[allow(clippy::type_complexity)]
+    pres: Vec<(lsp_types::Range, bool, Vec<(String, String)>)>,
 }
 
 /// A connection to an LSP client.
@@ -46,7 +47,8 @@ pub struct LspServer {
     files: Arc<Mutex<Files>>,
     connection: Connection,
     diagnostics: HashMap<FileId, Vec<Diagnostic>>,
-    vc_explanations: HashMap<FileId, Vec<(Span, bool, Vec<String>)>>,
+    #[allow(clippy::type_complexity)]
+    vc_explanations: HashMap<FileId, Vec<(Span, bool, Vec<(String, String)>)>>,
     statuses: HashMap<Span, VerifyResult>,
 }
 

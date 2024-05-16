@@ -59,12 +59,15 @@ impl ExprExplanation {
     /// Get the expression explanation steps as strings in the order they were added.
     ///
     /// Consecutive duplicate elements will be removed.
-    pub fn to_strings(&self) -> impl Iterator<Item = String> + '_ {
+    pub fn to_strings(&self) -> impl Iterator<Item = (String, String)> + '_ {
         self.steps
             .iter()
             .map(|expr| {
                 let expr = remove_casts(expr);
-                format!("{}", pretty::Doc::pretty(&expr.pretty(), usize::MAX))
+                let pretty = expr.pretty();
+                let one_line = format!("{}", pretty::Doc::pretty(&pretty, usize::MAX));
+                let hover = format!("{}", pretty::Doc::pretty(&pretty, 80));
+                (one_line, hover)
             })
             .dedup()
     }

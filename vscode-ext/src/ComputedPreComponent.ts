@@ -1,4 +1,4 @@
-import { Range, TextEditorDecorationType } from "vscode";
+import { MarkdownString, Range, TextEditorDecorationType } from "vscode";
 import * as vscode from 'vscode';
 import { InlineGhostTextViewConfig } from "./Configuration";
 import { ServerStatus } from "./CaesarClient";
@@ -8,7 +8,7 @@ import { ConfigurationConstants } from "./constants";
 export class ComputedPreComponent {
 
     private enabled: boolean;
-    private computedPres: DocumentMap<[Range, boolean, string[]][]>;
+    private computedPres: DocumentMap<[Range, boolean, [string, string][]][]>;
 
     private decorationType: TextEditorDecorationType;
 
@@ -103,7 +103,7 @@ export class ComputedPreComponent {
                         const expls_to_show = [...expls];
                         expls_to_show.splice(0, expls.length - freeLines);
 
-                        for (const [index, expl] of expls_to_show.entries()) {
+                        for (const [index, [expl_one_line, expl_hover]] of expls_to_show.entries()) {
                             const lineAbove = line - index - 1;
                             const rangeAbove = new vscode.Range(lineAbove, 0, lineAbove, 0);
                             let col = range.start.character;
@@ -112,13 +112,15 @@ export class ComputedPreComponent {
                             }
                             // insert padding with em space unicode character
                             // because actual spaces will be trimmed by vscode
-                            const contentText = "\u2003".repeat(col) + "▷ " + expl; // other options: ❯, ▷, ⟫, ⦊
+                            const contentText = "\u2003".repeat(col) + "▷ " + expl_one_line; // other options: ❯, ▷, ⟫, ⦊
+                            const hoverMessage = new MarkdownString("```heyvl\n" + expl_hover + "\n```");
                             decorations.push({
+                                hoverMessage,
                                 range: rangeAbove,
                                 renderOptions: {
                                     after: {
                                         contentText,
-                                    }
+                                    },
                                 }
                             });
                         }

@@ -29,7 +29,7 @@ export interface VerifyStatusNotification {
 
 export interface ComputedPreNotification {
     document: VersionedTextDocumentIdentifier;
-    pres: [vscode.Range, boolean, string[]][];
+    pres: [vscode.Range, boolean, [string, string][]][];
 }
 
 
