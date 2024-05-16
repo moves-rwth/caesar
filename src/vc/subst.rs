@@ -110,6 +110,11 @@ impl<'a> VisitorMut for Subst<'a> {
     }
 }
 
+/// Apply the [`crate::ast::expr::ExprKind::Subst`] inside the given expression
+/// so that it doesn't contain any substitutions anymore.
+///
+/// As said in the module description [`crate::vc::subst`], this is the "strict"
+/// and simpler version of the [`crate::opt::unfolder`].
 #[instrument(skip(tcx, e))]
 pub fn apply_subst(tcx: &TyCtx, e: &mut Expr) {
     let mut subst = Subst::new(tcx);

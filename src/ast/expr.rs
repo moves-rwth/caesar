@@ -506,10 +506,10 @@ impl ExprBuilder {
     pub fn subst_by(
         &self,
         expr: Expr,
-        idents: &[Ident],
+        idents: impl IntoIterator<Item = Ident>,
         mut subst: impl FnMut(Ident) -> Expr,
     ) -> Expr {
-        self.subst(expr, idents.iter().map(|ident| (*ident, subst(*ident))))
+        self.subst(expr, idents.into_iter().map(|ident| (ident, subst(ident))))
     }
 
     pub fn literal(&self, lit: LitKind, tcx: &TyCtx) -> Expr {

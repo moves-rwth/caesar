@@ -3,7 +3,7 @@ use lsp_types::DiagnosticTag;
 use z3::ast::Bool;
 use z3rro::model::{InstrumentedModel, SmtEval, SmtEvalError};
 
-use crate::ast::{Diagnostic, Label, Span, Symbol};
+use crate::ast::{Diagnostic, Ident, Label, Span, Symbol};
 
 use super::{selection::SliceSelection, transform::SliceStmt};
 
@@ -63,13 +63,12 @@ impl SliceModel {
         })
     }
 
-    /// Return the slice mode.
-    pub fn mode(&self) -> SliceMode {
-        self.mode
+    /// Iterate over all [`Ident`]s for slice variables.
+    pub fn iter_variables(&self) -> impl Iterator<Item = Ident> + '_ {
+        self.stmts.iter().map(|(stmt, _res)| stmt.ident)
     }
 
-    /// Whether this model has sliced any statements (true) or whether we have
-    /// not sliced any statements (false).
+    /// Count the number of statements that were sliced in this model.
     pub fn count_sliced_stmts(&self) -> usize {
         self.stmts
             .iter()

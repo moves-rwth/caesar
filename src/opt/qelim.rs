@@ -131,7 +131,7 @@ impl<'tcx> Qelim<'tcx> {
             })
             .collect();
         let builder = ExprBuilder::new(span);
-        builder.subst_by(operand, &idents, |ident| {
+        builder.subst_by(operand, idents.iter().cloned(), |ident| {
             let clone_var = self.tcx.clone_var(ident, span, VarKind::Quant);
             let fresh_ident = clone_var;
             builder.var(fresh_ident, self.tcx)

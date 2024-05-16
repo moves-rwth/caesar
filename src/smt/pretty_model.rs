@@ -12,8 +12,9 @@ use crate::{
     },
     driver::QuantVcUnit,
     pretty::Doc,
-    slicing::model::{SliceMode, SliceModel, SliceResult},
+    slicing::model::{SliceModel, SliceResult},
     smt::translate_exprs::TranslateExprs,
+    vc::subst::apply_subst,
 };
 
 /// Pretty-print a model.
@@ -51,27 +52,50 @@ pub fn pretty_vc_value<'smt, 'ctx>(
     model: &InstrumentedModel<'ctx>,
     slice_model: &SliceModel,
 ) -> Doc {
-    let mut header = "the pre-quantity evaluated to:";
-    let ast = translate.t_symbolic(&vc_expr.expr);
+    let original_program_vc = if slice_model.count_sliced_stmts() == 0 {
+        vc_expr.expr.clone()
+    } else {
+        // reconstruct the original program's vc by substituting the slice
+        // variables by `true`.
+        let builder = ExprBuilder::new(Span::dummy_span());
+        let expr_true = builder.bool_lit(true);
+        let subst_expr = builder.subst_by(
+            vc_expr.expr.clone(),
+            slice_model.iter_variables(),
+            |_ident| expr_true.clone(),
+        );
+        let mut res = subst_expr;
+        apply_subst(translate.ctx.tcx(), &mut res);
+        res
+    };
+
+    let mut lines = vec![];
+
+    let ast = translate.t_symbolic(&original_program_vc);
     let value = ast.eval(model);
-    let mut res = pretty_eval_result(value);
+    let res = pretty_eval_result(value);
+    lines.push(
+        Doc::text("the pre-quantity evaluated to:").append(Doc::hardline().append(res).nest(4)),
+    );
 
-    if slice_model.count_sliced_stmts() > 0 {
-        header = "in the sliced program, the pre-quantity evaluated to:"
-    }
-
-    // add a note if the computed pre-quantity is affected by slicing. this can
-    // only happen when we slice for errors (otherwise we don't compute the
-    // pre-quantity).
     let num_sliced_stmts = slice_model.count_sliced_stmts();
-    if slice_model.mode() == SliceMode::Error && num_sliced_stmts > 0 {
-        res = res.append(Doc::line_()).append(Doc::text(format!(
-            "(slicing removed {} statements. disable with option --no-slice-error)",
-            num_sliced_stmts
-        )));
+    if num_sliced_stmts > 0 {
+        let ast = translate.t_symbolic(&vc_expr.expr);
+        let value = ast.eval(model);
+        let slice_pre = pretty_eval_result(value)
+            .append(Doc::line_())
+            .append(Doc::text(format!(
+                "(slicing removed {} statements)",
+                num_sliced_stmts
+            )));
+        lines.push(Doc::nil());
+        lines.push(
+            Doc::text("in the sliced program, the pre-quantity evaluated to:")
+                .append(Doc::hardline().append(slice_pre).nest(4)),
+        );
     }
 
-    Doc::text(header).append(Doc::hardline().append(res).nest(4))
+    Doc::intersperse(lines, Doc::line())
 }
 
 pub fn pretty_globals<'smt, 'ctx>(
