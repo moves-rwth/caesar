@@ -4,9 +4,9 @@ use crate::pretty::{pretty_block, Doc, SimplePretty};
 
 use super::{DeclRef, Expr, Ident, Spanned, VarDecl};
 
-pub type Block = Vec<Stmt>;
+pub type Block = Spanned<Vec<Stmt>>;
 
-impl SimplePretty for Block {
+impl SimplePretty for Vec<Stmt> {
     fn pretty(&self) -> Doc {
         Doc::intersperse(
             self.iter().map(|stmt| stmt.pretty()),
@@ -28,7 +28,7 @@ impl Display for Stmt {
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     /// A sequence of statements.
-    Block(Block),
+    Seq(Vec<Stmt>),
     /// A variable declaration.
     Var(DeclRef<VarDecl>),
     /// An assignment.
@@ -100,7 +100,7 @@ impl SimplePretty for StmtKind {
         }
 
         let res = match self {
-            StmtKind::Block(stmts) => pretty_block(stmts.pretty()),
+            StmtKind::Seq(stmts) => pretty_block(stmts.pretty()),
             StmtKind::Var(decl_ref) => decl_ref.borrow().pretty_stmt(),
             StmtKind::Assign(lhs, rhs) => Doc::intersperse(
                 lhs.iter().map(|lhs| Doc::as_string(lhs.name)),

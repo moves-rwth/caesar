@@ -165,19 +165,25 @@ impl Encoding for OmegaInvAnnotation {
         .unwrap();
 
         // I_0 <= Phi_{post}(0)
-        let cond1 = vec![
-            Spanned::new(annotation_span, StmtKind::Validate(direction)),
-            Spanned::new(annotation_span, StmtKind::Assume(direction, null_omega_inv)),
-            null_iter,
-        ];
+        let cond1 = Spanned::new(
+            annotation_span,
+            vec![
+                Spanned::new(annotation_span, StmtKind::Validate(direction)),
+                Spanned::new(annotation_span, StmtKind::Assume(direction, null_omega_inv)),
+                null_iter,
+            ],
+        );
 
         // for all n. I_{n+1} <= Phi_{post}(I_n)
-        let cond2 = vec![
-            Spanned::new(annotation_span, StmtKind::Havoc(direction, vec![omega_var])),
-            Spanned::new(annotation_span, StmtKind::Validate(direction)),
-            Spanned::new(annotation_span, StmtKind::Assume(direction, next_omega_inv)),
-            iter,
-        ];
+        let cond2 = Spanned::new(
+            annotation_span,
+            vec![
+                Spanned::new(annotation_span, StmtKind::Havoc(direction, vec![omega_var])),
+                Spanned::new(annotation_span, StmtKind::Validate(direction)),
+                Spanned::new(annotation_span, StmtKind::Assume(direction, next_omega_inv)),
+                iter,
+            ],
+        );
 
         // conditions are checked with demonic if,
         // we take sup or inf of the omega_inv before the demonic if
@@ -207,8 +213,7 @@ impl Encoding for OmegaInvAnnotation {
         ];
 
         Ok(EncodingGenerated {
-            span: annotation_span,
-            stmts: buf,
+            block: Spanned::new(annotation_span, buf),
             decls: None,
         })
     }

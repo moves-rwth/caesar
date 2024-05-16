@@ -4,7 +4,7 @@ use crate::{
     ast::{
         util::FreeVariableCollector,
         visit::{walk_stmt, VisitorMut},
-        DeclKind, DeclRef, Expr, ExprData, ExprKind, Ident, Param, ProcSpec, Shared, Span,
+        Block, DeclKind, DeclRef, Expr, ExprData, ExprKind, Ident, Param, ProcSpec, Shared, Span,
         SpanVariant, Spanned, Stmt, StmtKind, Symbol, VarDecl, VarKind,
     },
     slicing::{wrap_with_error_message, wrap_with_success_message},
@@ -29,23 +29,25 @@ impl<'tcx> VisitorMut for SpecCall<'tcx> {
             StmtKind::Var(decl_ref) => {
                 let decl = decl_ref.borrow();
                 if let Some(rhs) = &decl.init {
-                    if let Some((span, mut buf)) = self.encode_assign(s.span, &[decl.name], rhs) {
+                    if let Some(mut block) = self.encode_assign(s.span, &[decl.name], rhs) {
                         drop(decl);
                         {
                             let mut decl = decl_ref.borrow_mut();
                             decl.init = None;
                         }
-                        buf.insert(0, Spanned::new(span, StmtKind::Var(decl_ref.clone())));
-                        s.span = span;
-                        s.node = StmtKind::Block(buf);
+                        block
+                            .node
+                            .insert(0, Spanned::new(block.span, StmtKind::Var(decl_ref.clone())));
+                        s.span = block.span;
+                        s.node = StmtKind::Seq(block.node);
                         return Ok(());
                     }
                 }
             }
             StmtKind::Assign(lhses, rhs) => {
-                if let Some((span, buf)) = self.encode_assign(s.span, lhses, rhs) {
-                    s.span = span;
-                    s.node = StmtKind::Block(buf);
+                if let Some(block) = self.encode_assign(s.span, lhses, rhs) {
+                    s.span = block.span;
+                    s.node = StmtKind::Seq(block.node);
                     return Ok(());
                 }
             }
@@ -56,12 +58,7 @@ impl<'tcx> VisitorMut for SpecCall<'tcx> {
 }
 
 impl<'tcx> SpecCall<'tcx> {
-    fn encode_assign(
-        &mut self,
-        span: Span,
-        lhses: &[Ident],
-        rhs: &Expr,
-    ) -> Option<(Span, Vec<Stmt>)> {
+    fn encode_assign(&mut self, span: Span, lhses: &[Ident], rhs: &Expr) -> Option<Block> {
         if let ExprKind::Call(ident, args) = &rhs.kind {
             if let DeclKind::ProcDecl(proc_ref) = self.tcx.get(*ident).unwrap().as_ref() {
                 let proc_ref = proc_ref.clone(); // lose the reference to &mut self
@@ -145,7 +142,7 @@ impl<'tcx> SpecCall<'tcx> {
                         };
                     }
                 }
-                return Some((span, buf));
+                return Some(Spanned::new(span, buf));
             }
         }
         None

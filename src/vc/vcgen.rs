@@ -7,8 +7,8 @@ use ariadne::ReportKind;
 
 use crate::{
     ast::{
-        BinOpKind, DeclKind, Diagnostic, Direction, Expr, ExprBuilder, ExprKind, Ident, Label,
-        QuantOpKind, Span, SpanVariant, Stmt, StmtKind, UnOpKind,
+        BinOpKind, Block, DeclKind, Diagnostic, Direction, Expr, ExprBuilder, ExprKind, Ident,
+        Label, QuantOpKind, Span, SpanVariant, Stmt, StmtKind, UnOpKind,
     },
     tyctx::TyCtx,
 };
@@ -28,7 +28,11 @@ impl<'tcx> Vcgen<'tcx> {
         }
     }
 
-    pub fn vcgen_stmts(&mut self, stmts: &[Stmt], post: Expr) -> Result<Expr, Diagnostic> {
+    pub fn vcgen_block(&mut self, block: &Block, post: Expr) -> Result<Expr, Diagnostic> {
+        self.vcgen_stmts(&block.node, post)
+    }
+
+    fn vcgen_stmts(&mut self, stmts: &[Stmt], post: Expr) -> Result<Expr, Diagnostic> {
         stmts
             .iter()
             .rev()
@@ -39,7 +43,7 @@ impl<'tcx> Vcgen<'tcx> {
         let builder = ExprBuilder::new(stmt.span.variant(SpanVariant::VC));
         let spec_ty = Some(self.tcx.spec_ty().clone());
         let res = match &stmt.node {
-            StmtKind::Block(block) => self.vcgen_stmts(block, post)?,
+            StmtKind::Seq(block) => self.vcgen_stmts(block, post)?,
             StmtKind::Var(var_def) => {
                 let var_def = var_def.borrow();
                 if let Some(init) = &var_def.init {
@@ -120,18 +124,18 @@ impl<'tcx> Vcgen<'tcx> {
             }
             StmtKind::Tick(expr) => builder.binary(BinOpKind::Add, spec_ty, expr.clone(), post),
             StmtKind::Demonic(block1, block2) => {
-                let post1 = self.vcgen_stmts(block1, post.clone())?;
-                let post2 = self.vcgen_stmts(block2, post)?;
+                let post1 = self.vcgen_block(block1, post.clone())?;
+                let post2 = self.vcgen_block(block2, post)?;
                 builder.binary(BinOpKind::Inf, spec_ty, post1, post2)
             }
             StmtKind::Angelic(block1, block2) => {
-                let post1 = self.vcgen_stmts(block1, post.clone())?;
-                let post2 = self.vcgen_stmts(block2, post)?;
+                let post1 = self.vcgen_block(block1, post.clone())?;
+                let post2 = self.vcgen_block(block2, post)?;
                 builder.binary(BinOpKind::Sup, spec_ty, post1, post2)
             }
             StmtKind::If(cond, block1, block2) => {
-                let post1 = self.vcgen_stmts(block1, post.clone())?;
-                let post2 = self.vcgen_stmts(block2, post)?;
+                let post1 = self.vcgen_block(block1, post.clone())?;
+                let post2 = self.vcgen_block(block2, post)?;
                 builder.ite(spec_ty, cond.clone(), post1, post2)
             }
             StmtKind::While(_, _) => return Err(unsupported_while_loop_diagnostic(stmt)),

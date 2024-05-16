@@ -248,8 +248,7 @@ fn transform_k_induction(
     buf.push(encode_iter(annotation_span, inner_stmt, next_iter).unwrap());
 
     Ok(EncodingGenerated {
-        span: annotation_span,
-        stmts: buf,
+        block: Spanned::new(annotation_span, buf),
         decls: None,
     })
 }

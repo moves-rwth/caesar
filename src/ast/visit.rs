@@ -1,8 +1,8 @@
 use std::ops::DerefMut;
 
 use super::{
-    AxiomDecl, DeclKind, DeclRef, DomainDecl, DomainSpec, Expr, ExprKind, FuncDecl, Ident, Param,
-    ProcDecl, ProcSpec, QuantAnn, QuantVar, Stmt, StmtKind, TyKind, VarDecl,
+    AxiomDecl, Block, DeclKind, DeclRef, DomainDecl, DomainSpec, Expr, ExprKind, FuncDecl, Ident,
+    Param, ProcDecl, ProcSpec, QuantAnn, QuantVar, Stmt, StmtKind, TyKind, VarDecl,
 };
 
 pub trait VisitorMut: Sized {
@@ -57,11 +57,15 @@ pub trait VisitorMut: Sized {
         self.visit_expr(&mut axiom_decl.axiom)
     }
 
-    fn visit_stmts(&mut self, stmts: &mut Vec<Stmt>) -> Result<(), Self::Err> {
+    fn visit_stmts(&mut self, stmts: &mut [Stmt]) -> Result<(), Self::Err> {
         for s in stmts {
             self.visit_stmt(s)?;
         }
         Ok(())
+    }
+
+    fn visit_block(&mut self, block: &mut Block) -> Result<(), Self::Err> {
+        self.visit_stmts(&mut block.node)
     }
 
     fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
@@ -104,7 +108,7 @@ pub fn walk_proc<V: VisitorMut>(
     let proc = proc_ref.borrow(); // only take a shared reference to the declaration now
     let mut body = proc.body.borrow_mut();
     if let Some(ref mut block) = &mut *body {
-        visitor.visit_stmts(block)?;
+        visitor.visit_block(block)?;
     }
     Ok(())
 }
@@ -219,7 +223,7 @@ pub fn walk_quant_ann<V: VisitorMut>(visitor: &mut V, ann: &mut QuantAnn) -> Res
 
 pub fn walk_stmt<V: VisitorMut>(visitor: &mut V, s: &mut Stmt) -> Result<(), V::Err> {
     match &mut s.node {
-        StmtKind::Block(ref mut block) => {
+        StmtKind::Seq(ref mut block) => {
             visitor.visit_stmts(block)?;
         }
         StmtKind::Var(decl_ref) => {
@@ -251,21 +255,21 @@ pub fn walk_stmt<V: VisitorMut>(visitor: &mut V, s: &mut Stmt) -> Result<(), V::
             visitor.visit_expr(expr)?;
         }
         StmtKind::Demonic(ref mut block1, ref mut block2) => {
-            visitor.visit_stmts(block1)?;
-            visitor.visit_stmts(block2)?;
+            visitor.visit_block(block1)?;
+            visitor.visit_block(block2)?;
         }
         StmtKind::Angelic(ref mut block1, ref mut block2) => {
-            visitor.visit_stmts(block1)?;
-            visitor.visit_stmts(block2)?;
+            visitor.visit_block(block1)?;
+            visitor.visit_block(block2)?;
         }
         StmtKind::If(ref mut cond, ref mut block1, ref mut block2) => {
             visitor.visit_expr(cond)?;
-            visitor.visit_stmts(block1)?;
-            visitor.visit_stmts(block2)?;
+            visitor.visit_block(block1)?;
+            visitor.visit_block(block2)?;
         }
         StmtKind::While(ref mut cond, ref mut block) => {
             visitor.visit_expr(cond)?;
-            visitor.visit_stmts(block)?;
+            visitor.visit_block(block)?;
         }
         StmtKind::Annotation(ref mut ident, ref mut args, ref mut stmt) => {
             visitor.visit_ident(ident)?;

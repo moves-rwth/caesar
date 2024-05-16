@@ -60,10 +60,11 @@ pub fn encode_unroll(span: Span, inner_stmt: &Stmt, k: u128, next_iter: Vec<Stmt
 pub fn encode_iter(span: Span, stmt: &Stmt, next_iter: Vec<Stmt>) -> Option<Stmt> {
     if let StmtKind::While(expr, body) = &stmt.node {
         let mut next_body = body.clone();
-        next_body.extend(next_iter);
+        next_body.node.extend(next_iter);
+        let empty_block = Spanned::new(span, vec![]);
         return Some(Spanned::new(
             span,
-            StmtKind::If(expr.clone(), next_body, vec![]),
+            StmtKind::If(expr.clone(), next_body, empty_block),
         ));
     };
     None

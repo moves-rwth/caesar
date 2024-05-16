@@ -144,7 +144,7 @@ pub fn explain_decl_vc(
 /// Explain verification condition generation of a [`Block`] given a post.
 pub fn explain_raw_vc(tcx: &TyCtx, block: &Block, post: Expr) -> Result<VcExplanation, Diagnostic> {
     let mut vcgen = Vcgen::new(tcx, true);
-    vcgen.vcgen_stmts(block, post)?;
+    vcgen.vcgen_block(block, post)?;
     Ok(vcgen.explanation.unwrap())
 }
 
@@ -171,7 +171,7 @@ fn explain_block(
         end_span.start = end_span.end - 1;
         explanation.add(end_span, post.clone());
     }
-    vcgen.vcgen_stmts(block, post.clone())
+    vcgen.vcgen_block(block, post.clone())
 }
 
 /// Extract the post from a [`ProcDecl`].

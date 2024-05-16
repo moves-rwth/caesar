@@ -137,7 +137,7 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
 
             let mut body = proc.body.borrow_mut();
             if let Some(ref mut block) = &mut *body {
-                this.visit_stmts(block)?;
+                this.visit_block(block)?;
             }
 
             Ok(())
@@ -191,23 +191,23 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
 
     fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
         match &mut s.node {
-            StmtKind::Block(ref mut block) => self.with_subscope(|this| this.visit_stmts(block)),
+            StmtKind::Seq(ref mut block) => self.with_subscope(|this| this.visit_stmts(block)),
             StmtKind::Demonic(ref mut lhs, ref mut rhs) => {
-                self.with_subscope(|this| this.visit_stmts(lhs))?;
-                self.with_subscope(|this| this.visit_stmts(rhs))
+                self.with_subscope(|this| this.visit_block(lhs))?;
+                self.with_subscope(|this| this.visit_block(rhs))
             }
             StmtKind::Angelic(ref mut lhs, ref mut rhs) => {
-                self.with_subscope(|this| this.visit_stmts(lhs))?;
-                self.with_subscope(|this| this.visit_stmts(rhs))
+                self.with_subscope(|this| this.visit_block(lhs))?;
+                self.with_subscope(|this| this.visit_block(rhs))
             }
             StmtKind::If(ref mut cond, ref mut lhs, ref mut rhs) => {
                 self.visit_expr(cond)?;
-                self.with_subscope(|this| this.visit_stmts(lhs))?;
-                self.with_subscope(|this| this.visit_stmts(rhs))
+                self.with_subscope(|this| this.visit_block(lhs))?;
+                self.with_subscope(|this| this.visit_block(rhs))
             }
             StmtKind::While(ref mut cond, ref mut block) => {
                 self.visit_expr(cond)?;
-                self.with_subscope(|this| this.visit_stmts(block))
+                self.with_subscope(|this| this.visit_block(block))
             }
             StmtKind::Annotation(ref mut ident, ref mut args, ref mut inner_stmt) => {
                 self.visit_ident(ident)?;

@@ -254,7 +254,7 @@ impl Encoding for ASTAnnotation {
                 ProcSpec::Requires(cond1_2_pre.clone()),
                 ProcSpec::Ensures(cond1_post),
             ],
-            body: vec![],
+            body: Spanned::new(annotation_span, vec![]),
             direction: Direction::Down,
         };
 
@@ -268,7 +268,7 @@ impl Encoding for ASTAnnotation {
                 ProcSpec::Requires(cond1_2_pre),
                 ProcSpec::Ensures(cond2_post),
             ],
-            body: vec![],
+            body: Spanned::new(annotation_span, vec![]),
             direction: Direction::Down,
         };
 
@@ -302,7 +302,7 @@ impl Encoding for ASTAnnotation {
                 )),
                 ProcSpec::Ensures(cond3_expr.clone()),
             ],
-            body: cond3_body,
+            body: Spanned::new(annotation_span, cond3_body),
             direction: Direction::Down,
         };
 
@@ -332,10 +332,13 @@ impl Encoding for ASTAnnotation {
             inputs: params_from_idents(input_vars, tcx),
             outputs: vec![],
             spec: vec![],
-            body: vec![Spanned::new(
+            body: Spanned::new(
                 annotation_span,
-                StmtKind::Assert(Direction::Down, cond4_expr),
-            )],
+                vec![Spanned::new(
+                    annotation_span,
+                    StmtKind::Assert(Direction::Down, cond4_expr),
+                )],
+            ),
             direction: Direction::Down,
         };
         let cond4_proc = generate_proc(annotation_span, cond4_proc_info, base_proc_ident, tcx);
@@ -359,7 +362,7 @@ impl Encoding for ASTAnnotation {
                 ProcSpec::Requires(to_init_expr(tcx, annotation_span, variant, &modified_vars)),
                 ProcSpec::Ensures(variant.clone()),
             ],
-            body: cond5_body,
+            body: Spanned::new(annotation_span, cond5_body),
             direction: Direction::Up,
         };
 
@@ -402,7 +405,7 @@ impl Encoding for ASTAnnotation {
         );
 
         let mut cond6_body = init_assigns;
-        cond6_body.extend(loop_body.clone());
+        cond6_body.extend(loop_body.node.clone());
 
         //[I] * [G] * (p o V) <= \\s. wp[P]([V < V(s) - d(V(s))])(s)
         let cond6_proc_info = ProcInfo {
@@ -418,15 +421,14 @@ impl Encoding for ASTAnnotation {
                 )),
                 ProcSpec::Ensures(cond6_post),
             ],
-            body: cond6_body,
+            body: Spanned::new(annotation_span, cond6_body),
             direction: Direction::Down,
         };
 
         let cond6_proc = generate_proc(annotation_span, cond6_proc_info, base_proc_ident, tcx);
 
         Ok(EncodingGenerated {
-            span: annotation_span,
-            stmts: vec![],
+            block: Spanned::new(annotation_span, vec![]),
             decls: Some(vec![
                 cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,
             ]),

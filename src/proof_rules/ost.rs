@@ -194,10 +194,13 @@ impl Encoding for OSTAnnotation {
             inputs: params_from_idents(past_inv_variables, tcx),
             outputs: vec![],
             spec: vec![],
-            body: vec![Spanned::new(
+            body: Spanned::new(
                 annotation_span,
-                StmtKind::Assert(Direction::Down, cond1_assert),
-            )],
+                vec![Spanned::new(
+                    annotation_span,
+                    StmtKind::Assert(Direction::Down, cond1_assert),
+                )],
+            ),
             direction: Direction::Down,
         };
         let cond1_proc = generate_proc(annotation_span, cond1_proc_info, base_proc_ident, tcx);
@@ -219,14 +222,14 @@ impl Encoding for OSTAnnotation {
                 ProcSpec::Requires(init_past_inv),
                 ProcSpec::Ensures(builder.cast(TyKind::EUReal, builder.uint(0))),
             ],
-            body: cond2_body,
+            body: Spanned::new(annotation_span, cond2_body),
             direction: Direction::Up,
         };
         let cond2_proc = generate_proc(annotation_span, cond2_proc_info, base_proc_ident, tcx);
 
         // Init assigns followed by the loop body
         let mut cond3_body = init_assigns.clone();
-        cond3_body.extend(loop_body.clone());
+        cond3_body.extend(loop_body.node.clone());
 
         // Encode |I(s)-I| as ite(I(s) <= I, I - I(s), I(s) - I)
         let cond3_post = builder.ite(
@@ -259,7 +262,7 @@ impl Encoding for OSTAnnotation {
                 ProcSpec::Requires(builder.cast(TyKind::EUReal, c.clone())),
                 ProcSpec::Ensures(cond3_post),
             ],
-            body: cond3_body,
+            body: Spanned::new(annotation_span, cond3_body),
             direction: Direction::Up,
         };
 
@@ -271,10 +274,13 @@ impl Encoding for OSTAnnotation {
             inputs: params_from_idents(harmonize_expr_vars, tcx),
             outputs: vec![],
             spec: vec![],
-            body: vec![Spanned::new(
+            body: Spanned::new(
                 annotation_span,
-                StmtKind::Assert(Direction::Down, harmonize_expr),
-            )],
+                vec![Spanned::new(
+                    annotation_span,
+                    StmtKind::Assert(Direction::Down, harmonize_expr),
+                )],
+            ),
             direction: Direction::Down,
         };
 
@@ -311,7 +317,7 @@ impl Encoding for OSTAnnotation {
                 ProcSpec::Requires(builder.cast(TyKind::EUReal, builder.uint(0))),
                 ProcSpec::Ensures(post.clone()),
             ],
-            body: cond5_body,
+            body: Spanned::new(annotation_span, cond5_body),
             direction: Direction::Up,
         };
         let cond5_proc = generate_proc(annotation_span, cond5_proc_info, base_proc_ident, tcx);
@@ -335,7 +341,7 @@ impl Encoding for OSTAnnotation {
                 ProcSpec::Requires(init_inv),
                 ProcSpec::Ensures(post.clone()),
             ],
-            body: cond6_body,
+            body: Spanned::new(annotation_span, cond6_body),
             direction: Direction::Down,
         };
         let cond6_proc = generate_proc(annotation_span, cond6_proc_info, base_proc_ident, tcx);
@@ -356,8 +362,7 @@ impl Encoding for OSTAnnotation {
         )];
 
         Ok(EncodingGenerated {
-            span: annotation_span,
-            stmts: buf,
+            block: Spanned::new(annotation_span, buf),
             decls: Some(vec![
                 cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,
             ]),

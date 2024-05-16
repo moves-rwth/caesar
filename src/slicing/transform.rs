@@ -267,8 +267,8 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                     rhs_slice_var.clone(),
                 ));
 
-                lhs.insert(0, generate_slice_stmt(lhs_slice_var));
-                rhs.insert(0, generate_slice_stmt(rhs_slice_var));
+                lhs.node.insert(0, generate_slice_stmt(lhs_slice_var));
+                rhs.node.insert(0, generate_slice_stmt(rhs_slice_var));
             }
             StmtKind::Angelic(lhs, rhs) => {
                 let dir = self.direction;
@@ -319,8 +319,8 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                     rhs_slice_var.clone(),
                 ));
 
-                lhs.insert(0, generate_slice_stmt(lhs_slice_var));
-                rhs.insert(0, generate_slice_stmt(rhs_slice_var));
+                lhs.node.insert(0, generate_slice_stmt(lhs_slice_var));
+                rhs.node.insert(0, generate_slice_stmt(rhs_slice_var));
             }
             StmtKind::Negate(dir) => match (self.direction, dir) {
                 // TODO: improve this

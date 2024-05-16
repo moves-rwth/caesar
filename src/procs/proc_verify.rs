@@ -39,24 +39,24 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
         Direction::Up => "coproc",
     };
 
-    let mut stmts = Vec::new();
+    let mut block = Spanned::new(body.span, vec![]);
 
     // 1. push the assume statement for each requires
     for (i, expr) in proc.requires().enumerate() {
         let span = expr.span.variant(SpanVariant::ProcVerify);
-        stmts.push(wrap_with_success_message(
+        block.node.push(wrap_with_success_message(
             Spanned::new(span, StmtKind::Assume(direction, expr.clone())),
             &format!("{} pre #{} is not necessary", proc_kind, i),
         ));
     }
 
     // 2. append the procedure body's statements
-    stmts.extend(body.iter().cloned());
+    block.node.extend(body.node.iter().cloned());
 
     // 3. push the assert statements for each ensures
     for (i, expr) in proc.ensures().enumerate() {
         let span = expr.span.variant(SpanVariant::ProcVerify);
-        stmts.push(wrap_with_error_message(
+        block.node.push(wrap_with_error_message(
             Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
             &format!("{} post #{} is part of the error", proc_kind, i),
         ));
@@ -65,7 +65,7 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
     Some(VerifyUnit {
         span: proc.name.span,
         direction,
-        block: stmts,
+        block,
     })
 }
 
@@ -78,12 +78,13 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
 pub fn to_direction_lower_bounds(mut verify_unit: VerifyUnit) -> VerifyUnit {
     if verify_unit.direction == Direction::Up {
         verify_unit.direction = Direction::Down;
-        verify_unit.block.insert(
+        verify_unit.block.node.insert(
             0,
             Spanned::with_dummy_span(StmtKind::Negate(Direction::Down)),
         );
         verify_unit
             .block
+            .node
             .push(Spanned::with_dummy_span(StmtKind::Negate(Direction::Up)));
     }
     verify_unit

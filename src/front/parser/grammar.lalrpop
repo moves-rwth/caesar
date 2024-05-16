@@ -189,7 +189,7 @@ pub SpannedStmts: Spanned<Vec<Stmt>> = {
 }
 
 StmtKind: StmtKind = {
-    <block: Block> => StmtKind::Block(block),
+    <block: Block> => StmtKind::Seq(block.node),
     <l: @L> "var" <ident: Ident> ":" <ty: Ty> "=" <rhs: Expr> <r: @R>
         => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: Some(rhs), span: span(file, l, r), created_from: None })),
     <l: @L> "var" <ident: Ident> ":" <ty: Ty> <r: @R>
@@ -219,7 +219,7 @@ StmtKind: StmtKind = {
 }
 
 Block: Block = {
-    "{" <stmts: Stmts> "}" => stmts,
+    <l: @L> "{" <stmts: Stmts> "}" <r: @R> => spanned(file, l, r, stmts),
 }
 
 AnnotationInputs: Vec<Expr> = {

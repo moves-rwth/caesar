@@ -22,7 +22,7 @@ use std::{any::Any, fmt, rc::Rc};
 use crate::{
     ast::{
         visit::{walk_stmt, VisitorMut},
-        DeclKind, DeclRef, Direction, Expr, Files, Ident, Param, ProcDecl, ProcSpec,
+        Block, DeclKind, DeclRef, Direction, Expr, Files, Ident, Param, ProcDecl, ProcSpec,
         SourceFilePath, Span, Stmt, StmtKind,
     },
     driver::{Item, SourceUnit},
@@ -39,14 +39,13 @@ pub struct ProcInfo {
     inputs: Vec<Param>,
     outputs: Vec<Param>,
     spec: Vec<ProcSpec>,
-    body: Vec<Stmt>,
+    body: Block,
     direction: Direction,
 }
 
 /// The result of transforming an annotation call, it can contain generated statements and declarations
 pub struct EncodingGenerated {
-    span: Span,
-    stmts: Vec<Stmt>,
+    block: Block,
     decls: Option<Vec<DeclKind>>,
 }
 
@@ -180,7 +179,7 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
         let proc = proc_ref.borrow_mut();
         let mut body = proc.body.borrow_mut();
         if let Some(ref mut block) = &mut *body {
-            self.visit_stmts(block)?;
+            self.visit_block(block)?;
         }
 
         Ok(())
@@ -240,19 +239,15 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                     // Generate new statements (and declarations) from the annotated loop
                     let mut enc_gen = anno_ref.transform(self.tcx, inputs, inner_stmt, enc_env)?;
 
-                    let stmts: &mut Vec<Stmt> = &mut enc_gen.stmts;
-                    let span = enc_gen.span;
-                    let decls_opt = &mut enc_gen.decls;
-
                     // Visit generated statements
-                    self.visit_stmts(stmts)?;
+                    self.visit_block(&mut enc_gen.block)?;
 
                     // Replace the annotated loop with the generated statements
-                    s.span = span;
-                    s.node = StmtKind::Block(stmts.to_vec());
+                    s.span = enc_gen.block.span;
+                    s.node = StmtKind::Seq(enc_gen.block.node);
 
                     // Add the generated declarations to the list of source units of the compilation unit
-                    if let Some(ref mut decls) = decls_opt {
+                    if let Some(ref mut decls) = enc_gen.decls {
                         // Visit generated declarations
                         let temp = self.current_proc_ident;
                         self.visit_decls(decls)?;
@@ -280,7 +275,7 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
             StmtKind::If(_, _, _)
             | StmtKind::Angelic(_, _)
             | StmtKind::Demonic(_, _)
-            | StmtKind::Block(_) => {
+            | StmtKind::Seq(_) => {
                 if let Some(anno_name) = self.terminator_annotation {
                     return Err(AnnotationError::NotTerminator(s.span, anno_name));
                 } else {

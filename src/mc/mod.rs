@@ -34,7 +34,7 @@ use crate::{
 };
 
 use self::{
-    opsem::{translate_stmts, OpAutomaton},
+    opsem::{translate_block, OpAutomaton},
     specs::{extract_properties, SpecAutomaton},
 };
 
@@ -122,7 +122,11 @@ pub fn proc_to_model(
     // initialize the spec automaton
     let spec_part = SpecAutomaton::new(proc.direction);
     let mut verify_unit = verify_proc(proc).unwrap();
-    let property = extract_properties(&spec_part, &mut verify_unit.block, options.skip_quant_pre)?;
+    let property = extract_properties(
+        &spec_part,
+        &mut verify_unit.block.node,
+        options.skip_quant_pre,
+    )?;
 
     // initialize the rest of the automaton
     let mut op_automaton = OpAutomaton::new(tcx, spec_part);
@@ -133,7 +137,7 @@ pub fn proc_to_model(
 
     // translate the statements
     let next = op_automaton.spec_part.end_location();
-    let start = translate_stmts(&mut op_automaton, &verify_unit.block, next)?;
+    let start = translate_block(&mut op_automaton, &verify_unit.block, next)?;
 
     // now finish building the automaton
     let automaton_name = Identifier(proc.name.to_string());

@@ -457,7 +457,7 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
         let proc = proc_ref.borrow();
         let mut body = proc.body.borrow_mut();
         if let Some(ref mut block) = &mut *body {
-            self.visit_stmts(block)?;
+            self.visit_block(block)?;
         }
         Ok(())
     }
@@ -485,7 +485,7 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
         self.allow_impure_calls = false;
 
         match &mut s.node {
-            StmtKind::Block(_) => {}
+            StmtKind::Seq(_) => {}
             StmtKind::Var(var_decl) => {
                 self.visit_var_decl(var_decl)?;
             }
@@ -797,14 +797,14 @@ mod test {
     }
 
     fn parse_block_and_tycheck(input: &str) -> Result<Block, TycheckError> {
-        let mut block = parser::parse_raw(FileId::DUMMY, input).unwrap().node;
+        let mut block = parser::parse_raw(FileId::DUMMY, input).unwrap();
 
         let mut tcx = TyCtx::new(TyKind::EUReal);
         let mut resolve = Resolve::new(&mut tcx);
-        resolve.visit_stmts(&mut block).unwrap();
+        resolve.visit_block(&mut block).unwrap();
 
         let mut tycheck = Tycheck::new(&mut tcx);
-        tycheck.visit_stmts(&mut block)?;
+        tycheck.visit_block(&mut block)?;
         Ok(block)
     }
 
@@ -821,7 +821,7 @@ mod test {
             var ureal2: EUReal = uint;
         "#;
         let block = parse_block_and_tycheck(source).unwrap();
-        assert!(matches!(block[0].node, StmtKind::Var(_)));
+        assert!(matches!(block.node[0].node, StmtKind::Var(_)));
 
         let source = r#"
             var eureal: EUReal;

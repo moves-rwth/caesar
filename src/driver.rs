@@ -10,8 +10,8 @@ use std::{
 use crate::{
     ast::{
         stats::StatsVisitor, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclKindName,
-        Diagnostic, Direction, Expr, ExprBuilder, Label, SourceFilePath, Span, Spanned, StoredFile,
-        TyKind, UnOpKind, VarKind,
+        Diagnostic, Direction, Expr, ExprBuilder, Label, SourceFilePath, Span, StoredFile, TyKind,
+        UnOpKind, VarKind,
     },
     front::{
         parser::{self, ParseError},
@@ -212,7 +212,7 @@ impl<'a, T> DerefMut for ItemEntered<'a, T> {
 #[derive(Debug)]
 pub enum SourceUnit {
     Decl(DeclKind),
-    Raw(Spanned<Block>),
+    Raw(Block),
 }
 
 impl SourceUnit {
@@ -262,7 +262,7 @@ impl SourceUnit {
     fn visit_mut<V: VisitorMut>(&mut self, visitor: &mut V) -> Result<(), V::Err> {
         match self {
             SourceUnit::Decl(decl) => visitor.visit_decl(decl),
-            SourceUnit::Raw(block) => visitor.visit_stmts(&mut block.node),
+            SourceUnit::Raw(block) => visitor.visit_block(block),
         }
     }
 
@@ -283,9 +283,7 @@ impl SourceUnit {
         // Raw source units get their own subscope
         let res = match self {
             SourceUnit::Decl(decl) => resolve.visit_decl(decl),
-            SourceUnit::Raw(block) => {
-                resolve.with_subscope(|resolve| resolve.visit_stmts(&mut block.node))
-            }
+            SourceUnit::Raw(block) => resolve.with_subscope(|resolve| resolve.visit_block(block)),
         };
         Ok(res.map_err(|resolve_err| resolve_err.diagnostic())?)
     }
@@ -319,7 +317,7 @@ impl SourceUnit {
             SourceUnit::Raw(block) => {
                 let builder = ExprBuilder::new(Span::dummy_span());
                 let post = builder.top_lit(tcx.spec_ty());
-                explain_raw_vc(tcx, &block.node, post).map(Some)
+                explain_raw_vc(tcx, block, post).map(Some)
             }
         };
         match explanation {
@@ -365,7 +363,7 @@ impl SourceUnit {
         let mut enc_call = EncCall::new(tcx, source_units_buf);
         let res = match self {
             SourceUnit::Decl(decl) => enc_call.visit_decl(decl),
-            SourceUnit::Raw(block) => enc_call.visit_stmts(&mut block.node),
+            SourceUnit::Raw(block) => enc_call.visit_block(block),
         };
         Ok(res.map_err(|ann_err| ann_err.diagnostic())?)
     }
@@ -386,7 +384,7 @@ impl SourceUnit {
             SourceUnit::Raw(block) => Some(VerifyUnit {
                 span: block.span,
                 direction: Direction::Down,
-                block: block.node,
+                block,
             }),
         }
     }
@@ -422,7 +420,7 @@ impl VerifyUnit {
         let mut spec_call = SpecCall::new(tcx);
         // TODO: give direction to spec_call so that it can check that only
         // valid directions are called
-        spec_call.visit_stmts(&mut self.block)
+        spec_call.visit_block(&mut self.block)
     }
 
     /// Prepare the code for slicing.
@@ -436,7 +434,7 @@ impl VerifyUnit {
             selection |= SliceSelection::VERIFIED_SELECTION;
         }
         let mut stmt_slicer = StmtSliceVisitor::new(tcx, self.direction, selection);
-        stmt_slicer.visit_stmts(&mut self.block).unwrap();
+        stmt_slicer.visit_block(&mut self.block).unwrap();
         stmt_slicer.finish()
     }
 
@@ -449,7 +447,7 @@ impl VerifyUnit {
         let terminal = top_lit_in_lattice(self.direction, &TyKind::EUReal);
         Ok(QuantVcUnit {
             direction: self.direction,
-            expr: vcgen.vcgen_stmts(&self.block, terminal)?,
+            expr: vcgen.vcgen_block(&self.block, terminal)?,
         })
     }
 }

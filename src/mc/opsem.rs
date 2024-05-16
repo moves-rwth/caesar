@@ -10,7 +10,7 @@ use jani::{
 };
 
 use crate::{
-    ast::{Direction, Expr, ExprBuilder, ExprKind, Ident, Span, Stmt, StmtKind},
+    ast::{Block, Direction, Expr, ExprBuilder, ExprKind, Ident, Span, Stmt, StmtKind},
     intrinsic::distributions::DistributionProc,
     mc::extract_embed,
     tyctx::TyCtx,
@@ -82,7 +82,7 @@ fn translate_stmt(
 ) -> Result<Identifier, JaniConversionError> {
     let span = stmt.span;
     match &stmt.node {
-        StmtKind::Block(block) => translate_stmts(automaton, block, next),
+        StmtKind::Seq(block) => translate_stmts(automaton, block, next),
         StmtKind::Var(decl_ref) => {
             let decl = decl_ref.borrow();
             match &decl.init {
@@ -186,7 +186,7 @@ fn translate_stmt(
             let start = location.name.clone();
             automaton.locations.push(location);
 
-            let lhs_start = translate_stmts(automaton, lhs, next.clone())?;
+            let lhs_start = translate_block(automaton, lhs, next.clone())?;
             let to_lhs_edge = Edge {
                 location: start.clone(),
                 action: None,
@@ -202,7 +202,7 @@ fn translate_stmt(
             };
             automaton.edges.push(to_lhs_edge);
 
-            let rhs_start = translate_stmts(automaton, rhs, next.clone())?;
+            let rhs_start = translate_block(automaton, rhs, next.clone())?;
             let to_rhs_edge = Edge {
                 location: start.clone(),
                 action: None,
@@ -230,7 +230,7 @@ fn translate_stmt(
             automaton.locations.push(location);
 
             let cond_jani = translate_expr(cond)?;
-            let lhs_start = translate_stmts(automaton, lhs, next.clone())?;
+            let lhs_start = translate_block(automaton, lhs, next.clone())?;
             let to_lhs_edge = Edge {
                 location: start.clone(),
                 action: None,
@@ -250,7 +250,7 @@ fn translate_stmt(
                 op: UnaryOp::Not,
                 exp: translate_expr(cond)?,
             }));
-            let rhs_start = translate_stmts(automaton, rhs, next)?;
+            let rhs_start = translate_block(automaton, rhs, next)?;
             let to_rhs_edge = Edge {
                 location: start.clone(),
                 action: None,
@@ -278,7 +278,7 @@ fn translate_stmt(
             automaton.locations.push(location);
 
             let cond_jani = translate_expr(cond)?;
-            let body_start = translate_stmts(automaton, body, start.clone())?;
+            let body_start = translate_block(automaton, body, start.clone())?;
             let body_edge = Edge {
                 location: start.clone(),
                 action: None,
@@ -329,6 +329,14 @@ pub fn translate_stmts(
         next = translate_stmt(automaton, stmt, next)?;
     }
     Ok(next)
+}
+
+pub fn translate_block(
+    automaton: &mut OpAutomaton,
+    block: &Block,
+    next: Identifier,
+) -> Result<Identifier, JaniConversionError> {
+    translate_stmts(automaton, &block.node, next)
 }
 
 fn is_pure(expr: &Expr) -> bool {

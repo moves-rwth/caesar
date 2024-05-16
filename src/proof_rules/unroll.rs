@@ -128,8 +128,7 @@ impl Encoding for UnrollAnnotation {
         );
 
         Ok(EncodingGenerated {
-            span: annotation_span,
-            stmts: buf,
+            block: Spanned::new(annotation_span, buf),
             decls: None,
         })
     }

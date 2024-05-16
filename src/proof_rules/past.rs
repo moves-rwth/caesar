@@ -187,10 +187,13 @@ impl Encoding for PASTAnnotation {
             inputs: params_from_idents(cond1_expr_vars, tcx),
             outputs: vec![],
             spec: vec![],
-            body: vec![Spanned::new(
+            body: Spanned::new(
                 annotation_span,
-                StmtKind::Assert(Direction::Down, cond1_expr),
-            )],
+                vec![Spanned::new(
+                    annotation_span,
+                    StmtKind::Assert(Direction::Down, cond1_expr),
+                )],
+            ),
             direction: Direction::Down,
         };
         let cond1_proc = generate_proc(annotation_span, cond1_proc_info, base_proc_ident, tcx);
@@ -238,10 +241,13 @@ impl Encoding for PASTAnnotation {
             inputs: params_from_idents(cond2_expr_vars, tcx),
             outputs: vec![],
             spec: vec![],
-            body: vec![Spanned::new(
+            body: Spanned::new(
                 annotation_span,
-                StmtKind::Assert(Direction::Down, cond2_expr),
-            )],
+                vec![Spanned::new(
+                    annotation_span,
+                    StmtKind::Assert(Direction::Down, cond2_expr),
+                )],
+            ),
             direction: Direction::Down,
         };
         let cond2_proc = generate_proc(annotation_span, cond2_proc_info, base_proc_ident, tcx);
@@ -272,15 +278,14 @@ impl Encoding for PASTAnnotation {
                 ProcSpec::Requires(cond3_pre),
                 ProcSpec::Ensures(builder.cast(TyKind::EUReal, builder.uint(0))),
             ],
-            body: cond3_body,
+            body: Spanned::new(annotation_span, cond3_body),
             direction: Direction::Up,
         };
 
         let cond3_proc = generate_proc(annotation_span, cond3_proc_info, base_proc_ident, tcx);
 
         Ok(EncodingGenerated {
-            span: annotation_span,
-            stmts: vec![],
+            block: Spanned::new(annotation_span, vec![]),
             decls: Some(vec![cond1_proc, cond2_proc, cond3_proc]),
         })
     }
