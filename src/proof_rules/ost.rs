@@ -7,7 +7,7 @@
 //! - `c`: the constant c from the theorem, must be a literal
 //! - `post`: the postcondition of the loop
 //!
-use std::fmt;
+use std::{any::Any, fmt};
 
 use crate::{
     ast::{
@@ -366,5 +366,9 @@ impl Encoding for OSTAnnotation {
 
     fn is_terminator(&self) -> bool {
         true
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

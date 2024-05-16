@@ -46,6 +46,10 @@ export class ConfigCategory {
         return Configuration.get(this.getPath() + "." + key);
     }
 
+    public async setWorkspace(key: string, value: any) {
+        await vscode.workspace.getConfiguration(CONFIGURATION_SECTION).update(this.getPath() + "." + key, value);
+    }
+
 }
 
 // Configurations

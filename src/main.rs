@@ -158,10 +158,14 @@ pub struct Options {
     #[structopt(long)]
     pub print_theorem: bool,
 
-    /// Print the verification conditions computed at every label statement to
-    /// standard output.
+    /// Produce explanations of verification conditions.
     #[structopt(long)]
-    pub print_label_vc: bool,
+    pub explain_vc: bool,
+
+    /// Produce explanations of verification conditions for the core HeyVL
+    /// that's produced after proof rules have been desugared.
+    #[structopt(long)]
+    pub explain_core_vc: bool,
 
     /// Run the language server.
     #[structopt(long)]
@@ -472,6 +476,14 @@ fn verify_files_main(
         }
     }
 
+    // explain high-level HeyVL if requested
+    if options.explain_vc {
+        for source_unit in &mut source_units {
+            let source_unit = source_unit.enter();
+            source_unit.explain_vc(&tcx, server)?;
+        }
+    }
+
     // write to JANI if requested
     for source_unit in &mut source_units {
         let source_unit = source_unit.enter();
@@ -526,9 +538,12 @@ fn verify_files_main(
         // 5. Prepare slicing
         let slice_vars = verify_unit.prepare_slicing(options, &mut tcx);
 
-        // 6. Generating verification conditions
-        let vcgen = Vcgen::new(&tcx, options.print_label_vc);
-        let mut vc_expr = verify_unit.vcgen(&vcgen)?;
+        // 6. Generating verification conditions.
+        let mut vcgen = Vcgen::new(&tcx, options.explain_core_vc);
+        let mut vc_expr = verify_unit.vcgen(&mut vcgen)?;
+        if let Some(explanation) = vcgen.explanation {
+            server.add_vc_explanation(explanation)?;
+        }
 
         // 7. Unfolding
         vc_expr.unfold(options, &limits_ref, &tcx)?;

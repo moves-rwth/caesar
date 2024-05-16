@@ -142,6 +142,27 @@ pub fn is_bot_lit(expr: &Expr) -> bool {
     }
 }
 
+/// Remove [`ExprKind::Cast`] from this expression. This is mainly used to make
+/// the pretty-printed expression look less verbose.
+pub fn remove_casts(expr: &Expr) -> Expr {
+    let mut res = expr.clone();
+    RemoveCastsVisitor.visit_expr(&mut res).unwrap();
+    res
+}
+
+struct RemoveCastsVisitor;
+
+impl VisitorMut for RemoveCastsVisitor {
+    type Err = ();
+
+    fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
+        if let ExprKind::Cast(inner) = &mut e.kind {
+            *e = inner.clone();
+        }
+        walk_expr(self, e)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{

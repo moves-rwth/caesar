@@ -46,7 +46,11 @@ use crate::{
         SmtCtx,
     },
     tyctx::TyCtx,
-    vc::{subst::apply_subst, vcgen::Vcgen},
+    vc::{
+        explain::{explain_decl_vc, explain_raw_vc},
+        subst::apply_subst,
+        vcgen::Vcgen,
+    },
     version::write_detailed_version_info,
     Options, VerifyError,
 };
@@ -308,6 +312,23 @@ impl SourceUnit {
         Ok(())
     }
 
+    /// Explain high-level verification conditions.
+    pub fn explain_vc(&self, tcx: &TyCtx, server: &mut dyn Server) -> Result<(), VerifyError> {
+        let explanation = match self {
+            SourceUnit::Decl(decl) => explain_decl_vc(tcx, decl),
+            SourceUnit::Raw(block) => {
+                let builder = ExprBuilder::new(Span::dummy_span());
+                let post = builder.top_lit(tcx.spec_ty());
+                explain_raw_vc(tcx, &block.node, post).map(Some)
+            }
+        };
+        match explanation {
+            Ok(Some(explanation)) => server.add_vc_explanation(explanation),
+            Ok(None) => Ok(()),
+            Err(diagnostic) => server.add_diagnostic(diagnostic.with_kind(ReportKind::Warning)),
+        }
+    }
+
     /// Encode the source unit as a JANI file if requested.
     pub fn write_to_jani_if_requested(
         &self,
@@ -424,7 +445,7 @@ impl VerifyUnit {
     ///
     /// The desugaring must have already taken place.
     #[instrument(skip(self, vcgen))]
-    pub fn vcgen(&self, vcgen: &Vcgen) -> Result<QuantVcUnit, VerifyError> {
+    pub fn vcgen(&self, vcgen: &mut Vcgen) -> Result<QuantVcUnit, VerifyError> {
         let terminal = top_lit_in_lattice(self.direction, &TyKind::EUReal);
         Ok(QuantVcUnit {
             direction: self.direction,

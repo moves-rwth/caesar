@@ -8,7 +8,7 @@
 //! - `prob`: a probability function
 //! - `decrease`: a decrease function
 
-use std::fmt;
+use std::{any::Any, fmt};
 
 use indexmap::IndexSet;
 
@@ -431,5 +431,9 @@ impl Encoding for ASTAnnotation {
                 cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,
             ]),
         })
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

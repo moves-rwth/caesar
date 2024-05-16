@@ -18,4 +18,5 @@ export const enum ConfigurationConstants {
     args = "args",
     sliceVerify = "sliceVerify",
     timeout = "timeout",
+    explainVc = "explainVc"
 }

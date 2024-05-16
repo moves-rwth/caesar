@@ -17,7 +17,7 @@ mod util;
 #[cfg(test)]
 mod tests;
 
-use std::{fmt, rc::Rc};
+use std::{any::Any, fmt, rc::Rc};
 
 use crate::{
     ast::{
@@ -91,6 +91,9 @@ pub trait Encoding: fmt::Debug {
 
     /// Indicates if the encoding annotation is required to be the last statement of a procedure
     fn is_terminator(&self) -> bool;
+
+    /// Return an [`Any`] reference for this encoding.
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// Initialize all intrinsic annotations by declaring them

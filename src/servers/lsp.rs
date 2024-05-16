@@ -16,6 +16,7 @@ use crate::{
     ast::{Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
     driver::{SmtVcCheckResult, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
+    vc::explain::VcExplanation,
     Options, VerifyError,
 };
 
@@ -32,6 +33,12 @@ struct VerifyStatusUpdate {
     statuses: Vec<(lsp_types::Range, VerifyResult)>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct ComputedPreUpdate {
+    document: VersionedTextDocumentIdentifier,
+    pres: Vec<(lsp_types::Range, Vec<String>)>,
+}
+
 /// A connection to an LSP client.
 pub struct LspServer {
     werr: bool,
@@ -39,6 +46,7 @@ pub struct LspServer {
     files: Arc<Mutex<Files>>,
     connection: Connection,
     diagnostics: HashMap<FileId, Vec<Diagnostic>>,
+    vc_explanations: HashMap<FileId, Vec<(Span, Vec<String>)>>,
     statuses: HashMap<Span, VerifyResult>,
 }
 
@@ -54,6 +62,7 @@ impl LspServer {
             files: Default::default(),
             connection,
             diagnostics: Default::default(),
+            vc_explanations: Default::default(),
             statuses: Default::default(),
         };
         (connection, io_threads)
@@ -220,6 +229,33 @@ impl LspServer {
         Ok(())
     }
 
+    fn publish_explanations(&mut self) -> Result<(), ServerError> {
+        let files = self.files.lock().unwrap();
+        let by_document = self
+            .vc_explanations
+            .iter()
+            .flat_map(|(file_id, explanations)| {
+                let document_id = files.get(*file_id).unwrap().path.to_lsp_identifier()?;
+                Some((document_id, explanations))
+            });
+        for (document_id, explanations) in by_document {
+            let explanations = explanations
+                .iter()
+                .flat_map(|(span, expls)| Some((span.to_lsp(&files)?.1, expls.clone())))
+                .collect();
+            let params = ComputedPreUpdate {
+                document: document_id,
+                pres: explanations,
+            };
+            let notification =
+                lsp_server::Notification::new("custom/computedPre".to_string(), params);
+            self.connection
+                .sender
+                .send(lsp_server::Message::Notification(notification))?;
+        }
+        Ok(())
+    }
+
     fn publish_verify_statuses(&self) -> Result<(), ServerError> {
         let files = self.files.lock().unwrap();
         let statuses_by_document = by_lsp_document(
@@ -246,6 +282,9 @@ impl LspServer {
     fn clear_all(&mut self) -> Result<(), ServerError> {
         for diags in self.diagnostics.values_mut() {
             diags.clear();
+        }
+        for explanations in self.vc_explanations.values_mut() {
+            explanations.clear();
         }
         self.statuses.clear();
         self.publish_diagnostics()?;
@@ -285,6 +324,18 @@ impl Server for LspServer {
     fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
         let diagnostic = unless_fatal_error(self.werr, diagnostic)?;
         self.add_diagnostic(diagnostic)
+    }
+
+    fn add_vc_explanation(&mut self, explanation: VcExplanation) -> Result<(), VerifyError> {
+        for explanation in explanation.into_iter() {
+            self.vc_explanations
+                .entry(explanation.span.file)
+                .or_default()
+                .push((explanation.span, explanation.to_strings().collect()));
+        }
+        self.publish_explanations()
+            .map_err(VerifyError::ServerError)?;
+        Ok(())
     }
 
     fn handle_vc_check_result<'smt, 'ctx>(

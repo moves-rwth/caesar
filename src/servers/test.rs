@@ -7,6 +7,7 @@ use crate::{
     ast::{Diagnostic, FileId, Files, Span, StoredFile},
     driver::{SmtVcCheckResult, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
+    vc::explain::VcExplanation,
     Options, VerifyError,
 };
 
@@ -51,6 +52,11 @@ impl Server for TestServer {
     fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
         let diagnostic = unless_fatal_error(self.werr, diagnostic)?;
         self.add_diagnostic(diagnostic)
+    }
+
+    fn add_vc_explanation(&mut self, _explanation: VcExplanation) -> Result<(), VerifyError> {
+        // TODO
+        Ok(())
     }
 
     fn handle_vc_check_result<'smt, 'ctx>(

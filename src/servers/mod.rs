@@ -7,6 +7,7 @@ use crate::{
     ast::{Diagnostic, FileId, Files, Span, StoredFile},
     driver::{SmtVcCheckResult, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
+    vc::explain::VcExplanation,
     VerifyError,
 };
 
@@ -59,6 +60,9 @@ pub trait Server: Send {
     /// Add a new [`Diagnostic`], but throw it as a [`VerifyError::Diagnostic`]
     /// if it is a fatal error.
     fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError>;
+
+    /// Add an explanation for vc calculations.
+    fn add_vc_explanation(&mut self, explanation: VcExplanation) -> Result<(), VerifyError>;
 
     /// Send a verification status message to the client (a custom notification).
     fn handle_vc_check_result<'smt, 'ctx>(

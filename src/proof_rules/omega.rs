@@ -6,7 +6,7 @@
 //! - `omega_inv`: the omega invariant of the loop
 //!
 
-use std::fmt;
+use std::{any::Any, fmt};
 
 use crate::{
     ast::{
@@ -215,5 +215,9 @@ impl Encoding for OmegaInvAnnotation {
 
     fn is_terminator(&self) -> bool {
         false
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

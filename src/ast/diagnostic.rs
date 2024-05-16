@@ -432,6 +432,12 @@ impl Diagnostic {
         Diagnostic(Box::new(inner))
     }
 
+    /// Overwrite the [`ReportKind`].
+    pub fn with_kind(mut self, kind: ReportKind) -> Self {
+        self.0.kind = kind;
+        self
+    }
+
     /// Give this diagnostic a numerical code that may be used to more precisely look up the error in documentation.
     pub fn with_code(mut self, code: u32) -> Self {
         self.0.code = Some(code);

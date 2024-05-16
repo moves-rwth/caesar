@@ -8,7 +8,7 @@
 //!
 //! Note that eps must be smaller than k!
 //!
-use std::fmt;
+use std::{any::Any, fmt};
 
 use crate::{
     ast::{
@@ -287,5 +287,9 @@ impl Encoding for PASTAnnotation {
 
     fn is_terminator(&self) -> bool {
         false
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

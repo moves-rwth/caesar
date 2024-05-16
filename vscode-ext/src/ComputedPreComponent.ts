@@ -1,6 +1,6 @@
 import { Range, TextEditorDecorationType } from "vscode";
 import * as vscode from 'vscode';
-import { CONFIGURATION_SECTION, GutterInformationViewConfig, InlineGhostTextViewConfig } from "./Configuration";
+import { InlineGhostTextViewConfig } from "./Configuration";
 import { ServerStatus } from "./CaesarClient";
 import { DocumentMap, Verifier } from "./Verifier";
 import { ConfigurationConstants } from "./constants";
@@ -8,13 +8,21 @@ import { ConfigurationConstants } from "./constants";
 export class ComputedPreComponent {
 
     private enabled: boolean;
-    private computedPres: DocumentMap<[Range, string][]>;
+    private computedPres: DocumentMap<[Range, string[]][]>;
 
     private decorationType: TextEditorDecorationType;
 
     constructor(verifier: Verifier) {
         // create decoration
-        this.decorationType = vscode.window.createTextEditorDecorationType({});
+        const backgroundColor = new vscode.ThemeColor('caesar.inlineGhostBackgroundColor');
+        const color = new vscode.ThemeColor('caesar.inlineGhostForegroundColor');
+        this.decorationType = vscode.window.createTextEditorDecorationType({
+            after: {
+                backgroundColor,
+                color,
+                fontStyle: "italic",
+            }
+        });
 
         // set enabled flag
         this.enabled = InlineGhostTextViewConfig.get(ConfigurationConstants.showInlineGhostText);
@@ -34,9 +42,19 @@ export class ComputedPreComponent {
             this.render();
         }));
 
+        // render when the content is changed
+        verifier.context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((event) => {
+            const uri = event.document.uri.toString();
+            if (event.document.languageId === "heyvl" && this.computedPres.get({ uri }) !== undefined) {
+                this.computedPres.insert({ uri }, []);
+                this.render();
+            }
+        }));
+
         // listen to custom/computedPre notifications
-        verifier.client.onComputedPre((document, pres) => {
-            this.computedPres.insert(document, pres);
+        verifier.client.onComputedPre((update) => {
+            this.computedPres.insert(update.document, update.pres);
+            this.render();
         });
 
         // clear all information when a new verification task is started
@@ -53,10 +71,7 @@ export class ComputedPreComponent {
     }
 
     render() {
-        const backgroundColor = new vscode.ThemeColor('caesar.inlineGhostBackgroundColor');
-        const color = new vscode.ThemeColor('caesar.inlineGhostForegroundColor');
-
-        for (const [document_id, pres] of this.computedPres.entries()) {
+        for (const [document_id, expr_expls] of this.computedPres.entries()) {
             for (const editor of vscode.window.visibleTextEditors) {
                 if (editor.document.uri.toString() !== document_id.uri) {
                     continue;
@@ -65,21 +80,41 @@ export class ComputedPreComponent {
                 const decorations: vscode.DecorationOptions[] = [];
 
                 if (this.enabled) {
-                    for (const [range, text] of pres) {
+                    let prevLine;
+
+                    for (const [range, expls] of expr_expls) {
                         const line = range.start.line;
-                        if (line === 0) {
-                            continue;
+                        if (line === prevLine) {
+                            break;
                         }
-                        const lineAbove = line - 1;
-                        const rangeAbove = new vscode.Range(lineAbove, 0, lineAbove, 0);
-                        if (editor.document.lineAt(lineAbove).text.trim() === '') {
+                        prevLine = line;
+
+                        // how many lines are empty above the span?
+                        let freeLines = 0;
+                        // eslint-disable-next-line no-constant-condition
+                        while (true) {
+                            const checkLine = line - freeLines - 1;
+                            if (freeLines == expls.length || checkLine < 0 || editor.document.lineAt(checkLine).text.trim() !== '') {
+                                break;
+                            }
+                            freeLines++;
+                        }
+
+                        const expls_to_show = [...expls];
+                        expls_to_show.splice(0, expls.length - freeLines);
+
+                        for (const [index, expl] of expls_to_show.entries()) {
+                            const lineAbove = line - index - 1;
+                            const rangeAbove = new vscode.Range(lineAbove, 0, lineAbove, 0);
+                            const col = range.start.character;
+                            // insert padding with em space unicode character
+                            // because actual spaces will be trimmed by vscode
+                            const contentText = "\u2003".repeat(col) + "▷ " + expl; // other options: ❯, ▷, ⟫, ⦊
                             decorations.push({
                                 range: rangeAbove,
                                 renderOptions: {
                                     after: {
-                                        backgroundColor,
-                                        color,
-                                        contentText: text
+                                        contentText,
                                     }
                                 }
                             });

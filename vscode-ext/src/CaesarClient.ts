@@ -29,7 +29,7 @@ export interface VerifyStatusNotification {
 
 export interface ComputedPreNotification {
     document: VersionedTextDocumentIdentifier;
-    pres: [vscode.Range, string][];
+    pres: [vscode.Range, string[]][];
 }
 
 
@@ -39,7 +39,8 @@ export class CaesarClient {
     private context: ExtensionContext;
     private statusListeners = new Array<(status: ServerStatus) => void>();
     private updateListeners = new Array<(document: TextDocumentIdentifier, results: [Range, VerifyResult][]) => void>();
-    private computedPreListeners = new Array<(document: TextDocumentIdentifier, results: [Range, string][]) => void>();
+    private computedPreListeners = new Array<(update: ComputedPreNotification) => void>();
+    private needsRestart = false;
 
     constructor(context: ExtensionContext, outputChannel: OutputChannel) {
         this.context = context;
@@ -73,12 +74,23 @@ export class CaesarClient {
             this.client?.outputChannel.show();
         });
 
-        this.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(async (e: vscode.ConfigurationChangeEvent) => {
+        vscode.commands.registerCommand('caesar.explainVc', async () => {
+            const key = ConfigurationConstants.explainVc;
+            const explainVc: string = ServerConfig.get(key);
+            if (explainVc === "explain") {
+                await ServerConfig.setWorkspace(key, "no");
+            } else {
+                await ServerConfig.setWorkspace(key, "explain");
+            }
+            const openEditor = vscode.window.activeTextEditor;
+            if (openEditor) {
+                await this.verify(openEditor.document);
+            }
+        });
+
+        this.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
             if (e.affectsConfiguration(ServerConfig.getFullPath())) {
-                console.log("Configuration changed");
-                if (this.client !== null) {
-                    await this.restart();
-                }
+                this.needsRestart = true;
             }
         }));
     }
@@ -124,7 +136,7 @@ export class CaesarClient {
 
         context.subscriptions.push(client.onNotification("custom/computedPre", (params: ComputedPreNotification) => {
             for (const listener of this.computedPreListeners) {
-                listener(params.document, params.pres);
+                listener(params);
             }
         }));
 
@@ -190,6 +202,18 @@ export class CaesarClient {
             args.push("--slice-verify");
         }
 
+        const explainVc: string = ServerConfig.get(ConfigurationConstants.explainVc);
+        if (explainVc) {
+            switch (explainVc) {
+                case "explain":
+                    args.push("--explain-vc");
+                    break;
+                case "core":
+                    args.push("--explain-core-vc");
+                    break;
+            }
+        }
+
         return {
             command: serverExecutable,
             args: args,
@@ -207,7 +231,11 @@ export class CaesarClient {
 
     async start() {
         if (this.client?.isRunning()) {
-            return;
+            if (this.needsRestart) {
+                await this.stop();
+            } else {
+                return;
+            }
         }
 
         console.log("Starting Caesar");
@@ -244,6 +272,7 @@ export class CaesarClient {
     }
 
     async stop() {
+        this.needsRestart = false;
         if (!this.client?.isRunning()) {
             return;
         }
@@ -259,9 +288,7 @@ export class CaesarClient {
     }
 
     async verify(document: TextDocument) {
-        if (!this.client?.isRunning()) {
-            await this.start();
-        }
+        await this.start();
         if (!this.client?.isRunning()) {
             return;
         }
@@ -306,7 +333,7 @@ export class CaesarClient {
         this.updateListeners.push(callback);
     }
 
-    public onComputedPre(callback: (document: TextDocumentIdentifier, results: [Range, string][]) => void) {
+    public onComputedPre(callback: (update: ComputedPreNotification) => void) {
         this.computedPreListeners.push(callback);
     }
 }
