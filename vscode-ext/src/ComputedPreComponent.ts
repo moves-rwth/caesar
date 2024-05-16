@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { CONFIGURATION_SECTION, GutterInformationViewConfig, InlineGhostTextViewConfig } from "./Configuration";
 import { ServerStatus } from "./CaesarClient";
 import { DocumentMap, Verifier } from "./Verifier";
+import { ConfigurationConstants } from "./constants";
 
 export class ComputedPreComponent {
 
@@ -16,14 +17,14 @@ export class ComputedPreComponent {
         this.decorationType = vscode.window.createTextEditorDecorationType({});
 
         // set enabled flag
-        this.enabled = GutterInformationViewConfig.get("showGutterIcons");
+        this.enabled = InlineGhostTextViewConfig.get(ConfigurationConstants.showInlineGhostText);
 
         this.computedPres = new DocumentMap();
 
         // subscribe to config changes
         verifier.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
-            if (e.affectsConfiguration(CONFIGURATION_SECTION)) {
-                this.enabled = InlineGhostTextViewConfig.get("showInlineGhostText");
+            if (e.affectsConfiguration(InlineGhostTextViewConfig.getFullPath(ConfigurationConstants.showInlineGhostText))) {
+                this.enabled = InlineGhostTextViewConfig.get(ConfigurationConstants.showInlineGhostText);
                 this.render();
             }
         }));

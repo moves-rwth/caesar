@@ -97,7 +97,7 @@ export class CaesarClient {
             // Register the server for heyvl documents
             documentSelector: [{ scheme: 'file', language: 'heyvl' }],
             synchronize: {
-                // Notify the server about file changes to '.clientrc files contained in the workspace
+                // Notify the server about file changes to '.heyvl' files contained in the workspace
                 fileEvents: vscode.workspace.createFileSystemWatcher('**/*.heyvl')
             },
             outputChannel: this.outputChannel,
