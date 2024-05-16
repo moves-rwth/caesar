@@ -152,7 +152,7 @@ impl<'tcx> Vcgen<'tcx> {
                 builder.ite(spec_ty, cond.clone(), post1, post2)
             }
             StmtKind::While(_, _) => return Err(unsupported_while_loop_diagnostic(stmt)),
-            StmtKind::Annotation(_, _, _) => {
+            StmtKind::Annotation(_, _, _, _) => {
                 if self.explanation.is_some() {
                     explain_annotated_while(self, stmt, &post)?
                 } else {

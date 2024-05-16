@@ -136,7 +136,7 @@ pub(super) fn explain_annotated_while(
     stmt: &Stmt,
     _post: &Expr,
 ) -> Result<Expr, Diagnostic> {
-    if let StmtKind::Annotation(ident, args, inner_stmt) = &stmt.node {
+    if let StmtKind::Annotation(_, ident, args, inner_stmt) = &stmt.node {
         if let StmtKind::While(_cond, body) = &inner_stmt.node {
             if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
                 vcgen.tcx.get(*ident).unwrap().as_ref()

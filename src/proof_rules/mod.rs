@@ -188,7 +188,7 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
     fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
         match &mut s.node {
             // If the statement is an annotation, transform it
-            StmtKind::Annotation(ident, inputs, inner_stmt) => {
+            StmtKind::Annotation(annotation_span, ident, inputs, inner_stmt) => {
                 // First visit the statement that is annotated and handle inner annotations
                 self.nesting_level += 1;
                 self.visit_stmt(inner_stmt)?;
@@ -231,7 +231,7 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                         base_proc_ident: self
                             .current_proc_ident
                             .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,
-                        annotation_span: s.span,
+                        annotation_span: *annotation_span,
                         direction: self
                             .direction
                             .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,

@@ -315,7 +315,7 @@ fn translate_stmt(
 
             Ok(start)
         }
-        StmtKind::Annotation(_, _, stmt) => translate_stmt(automaton, stmt, next),
+        StmtKind::Annotation(_, _, _, stmt) => translate_stmt(automaton, stmt, next),
         StmtKind::Label(_) => todo!(),
     }
 }

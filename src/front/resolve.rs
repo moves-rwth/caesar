@@ -209,7 +209,7 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
                 self.visit_expr(cond)?;
                 self.with_subscope(|this| this.visit_block(block))
             }
-            StmtKind::Annotation(ref mut ident, ref mut args, ref mut inner_stmt) => {
+            StmtKind::Annotation(_, ref mut ident, ref mut args, ref mut inner_stmt) => {
                 self.visit_ident(ident)?;
 
                 match self.tcx.get(*ident).as_deref() {

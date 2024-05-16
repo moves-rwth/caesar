@@ -160,13 +160,13 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
         // push and pop the annotations to the [`Selector`] which tracks the
         // selection.
         match &mut s.node {
-            StmtKind::Annotation(ident, args, _) => {
+            StmtKind::Annotation(_, ident, args, _) => {
                 if let DeclKind::AnnotationDecl(AnnotationKind::Slicing(annotation)) =
                     self.tcx.get(*ident).unwrap().as_ref()
                 {
                     self.selector.push_annotation(annotation.kind, args);
                     replace_with_or_abort(s, |s| match s.node {
-                        StmtKind::Annotation(_, _, body) => *body,
+                        StmtKind::Annotation(_, _, _, body) => *body,
                         _ => unreachable!(),
                     });
                     let res = self.visit_stmt(s);

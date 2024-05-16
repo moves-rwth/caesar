@@ -2,7 +2,7 @@ use std::fmt::{self, Display};
 
 use crate::pretty::{pretty_block, Doc, SimplePretty};
 
-use super::{DeclRef, Expr, Ident, Spanned, VarDecl};
+use super::{DeclRef, Expr, Ident, Span, Spanned, VarDecl};
 
 pub type Block = Spanned<Vec<Stmt>>;
 
@@ -56,7 +56,7 @@ pub enum StmtKind {
     /// A `while` loop.
     While(Expr, Block),
     /// An annotation on a statement.
-    Annotation(Ident, Vec<Expr>, Box<Stmt>),
+    Annotation(Span, Ident, Vec<Expr>, Box<Stmt>),
     /// A label statement.
     Label(Ident),
 }
@@ -126,7 +126,7 @@ impl SimplePretty for StmtKind {
             StmtKind::Angelic(lhs, rhs) => pretty_branch(Doc::text("⊔"), lhs, rhs),
             StmtKind::If(cond, lhs, rhs) => pretty_branch(cond.pretty(), lhs, rhs),
             StmtKind::While(cond, body) => pretty_loop(cond.pretty(), body),
-            StmtKind::Annotation(ident, inputs, stmt) => Doc::text("@")
+            StmtKind::Annotation(_, ident, inputs, stmt) => Doc::text("@")
                 .append(Doc::as_string(ident.name))
                 .append(Doc::text("("))
                 .append(Doc::intersperse(

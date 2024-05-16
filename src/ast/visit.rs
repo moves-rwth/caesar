@@ -271,7 +271,7 @@ pub fn walk_stmt<V: VisitorMut>(visitor: &mut V, s: &mut Stmt) -> Result<(), V::
             visitor.visit_expr(cond)?;
             visitor.visit_block(block)?;
         }
-        StmtKind::Annotation(ref mut ident, ref mut args, ref mut stmt) => {
+        StmtKind::Annotation(_, ref mut ident, ref mut args, ref mut stmt) => {
             visitor.visit_ident(ident)?;
             visitor.visit_exprs(args)?;
             visitor.visit_stmt(stmt)?;

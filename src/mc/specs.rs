@@ -353,7 +353,7 @@ fn extract_post(
 
 fn through_annotation(stmt: &Stmt) -> &StmtKind {
     match stmt.node {
-        StmtKind::Annotation(_, _, ref inner) => &inner.node,
+        StmtKind::Annotation(_, _, _, ref inner) => &inner.node,
         _ => &stmt.node,
     }
 }

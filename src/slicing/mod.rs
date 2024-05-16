@@ -48,6 +48,11 @@ fn wrap_with_annotation(annotation: SliceAnnotationKind, stmt: Stmt, message: &s
     });
     Spanned::new(
         stmt.span,
-        StmtKind::Annotation(annotation.name(), vec![string_lit], Box::new(stmt)),
+        StmtKind::Annotation(
+            stmt.span,
+            annotation.name(),
+            vec![string_lit],
+            Box::new(stmt),
+        ),
     )
 }

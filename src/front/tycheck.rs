@@ -549,7 +549,7 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
             StmtKind::Angelic(_, _) => {}
             StmtKind::If(ref mut cond, _, _) => self.try_cast(s.span, &TyKind::Bool, cond)?,
             StmtKind::While(ref mut cond, _) => self.try_cast(s.span, &TyKind::Bool, cond)?,
-            StmtKind::Annotation(ref ident, ref mut args, _) => {
+            StmtKind::Annotation(_, ref ident, ref mut args, _) => {
                 match self.tcx.get(*ident).as_deref() {
                     None => {} // Declaration not found
                     Some(DeclKind::AnnotationDecl(intrin)) => {
