@@ -199,9 +199,9 @@
         "id": "caesar.inlineGhostForegroundColor",
         "description": "Specifies the foreground color of the inline ghost texts",
         "defaults": {
-          "dark": "#99999959",
+          "dark": "#cdcdcdb5",
           "light": "#00000097",
-          "highContrast": "#99999999"
+          "highContrast": "#e3e3e3"
         }
       }
     ]

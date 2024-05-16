@@ -3,7 +3,10 @@
 //! Caesar internally, but rather used for visualizations in VSCode that are
 //! used for teaching.
 
-use std::time::{Duration, Instant};
+use std::{
+    mem,
+    time::{Duration, Instant},
+};
 
 use itertools::Itertools;
 use z3::{Config, Context};
@@ -11,7 +14,7 @@ use z3::{Config, Context};
 use crate::{
     ast::{
         util::remove_casts, visit::VisitorMut, BinOpKind, Block, DeclKind, Diagnostic, Direction,
-        Expr, ExprBuilder, ProcDecl, Span, Stmt, StmtKind, TyKind,
+        Expr, ExprBuilder, Files, ProcDecl, Span, Stmt, StmtKind, TyKind,
     },
     intrinsic::annotations::AnnotationKind,
     opt::unfolder::Unfolder,
@@ -31,10 +34,28 @@ use super::{
 #[derive(Debug)]
 pub struct ExprExplanation {
     pub span: Span,
+    pub is_block_itself: bool,
+    pub block: Option<Span>,
     steps: Vec<Expr>,
 }
 
 impl ExprExplanation {
+    /// Remove all steps that cannot fit into the surrounding block, starting
+    /// with the earliest steps.
+    pub fn shrink_to_block(&mut self, files: &Files) {
+        let block_span = if let Some(block_span) = self.block {
+            block_span
+        } else {
+            return;
+        };
+        let (_file, block_start_line, _block_start_col) =
+            files.get_human_span_start(block_span).unwrap();
+        let (_file, span_start_line, _span_start_col) =
+            files.get_human_span_start(self.span).unwrap();
+        let space = (span_start_line - block_start_line).saturating_sub(1);
+        self.steps.drain(0..self.steps.len().saturating_sub(space));
+    }
+
     /// Get the expression explanation steps as strings in the order they were added.
     ///
     /// Consecutive duplicate elements will be removed.
@@ -51,23 +72,31 @@ impl ExprExplanation {
 
 #[derive(Debug, Default)]
 pub struct VcExplanation {
-    explanations: Vec<ExprExplanation>,
+    exprs: Vec<ExprExplanation>,
+    current_block: Option<Span>,
 }
 
 impl VcExplanation {
     /// Adds an explanation step to the explanations. If multiple explanation
     /// steps are added for the same span, this must be done consecutively.
-    pub fn add(&mut self, span: Span, expr: Expr) {
-        if let Some(last) = self.explanations.last_mut() {
+    pub fn add_expr(&mut self, span: Span, expr: Expr, is_block_itself: bool) {
+        if let Some(last) = self.exprs.last_mut() {
             if last.span == span {
+                assert_eq!(last.block, self.current_block);
                 last.steps.push(expr);
                 return;
             }
         }
-        self.explanations.push(ExprExplanation {
+        self.exprs.push(ExprExplanation {
             span,
+            is_block_itself,
+            block: self.current_block,
             steps: vec![expr],
         });
+    }
+
+    pub fn set_block_span(&mut self, span: Option<Span>) -> Option<Span> {
+        mem::replace(&mut self.current_block, span)
     }
 }
 
@@ -76,18 +105,18 @@ impl IntoIterator for VcExplanation {
     type IntoIter = std::vec::IntoIter<ExprExplanation>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.explanations.into_iter()
+        self.exprs.into_iter()
     }
 }
 
 pub(super) fn explain_subst(vcgen: &mut Vcgen, span: Span, expr: &mut Expr) {
     if let Some(explanation) = &mut vcgen.explanation {
         // first add the original expression with substitutions
-        explanation.add(span, expr.clone());
+        explanation.add_expr(span, expr.clone(), false);
 
         // now the simple substitutions
         apply_subst(vcgen.tcx, expr);
-        explanation.add(span, expr.clone());
+        explanation.add_expr(span, expr.clone(), false);
 
         // finally, run the unfolder for more detailed simplifications
         let ctx = Context::new(&Config::default());
@@ -114,8 +143,7 @@ pub(super) fn explain_annotated_while(
                     .downcast_ref::<InvariantAnnotation>()
                     .is_some()
                 {
-                    let loop_span = inner_stmt.span;
-                    return explain_park_induction(vcgen, loop_span, &args[0], body);
+                    return explain_park_induction(vcgen, &args[0], body);
                 }
             }
         }
@@ -150,28 +178,11 @@ pub fn explain_raw_vc(tcx: &TyCtx, block: &Block, post: Expr) -> Result<VcExplan
 
 fn explain_park_induction(
     vcgen: &mut Vcgen,
-    loop_span: Span,
     invariant: &Expr,
     body: &Block,
 ) -> Result<Expr, Diagnostic> {
-    let _inner_pre = explain_block(vcgen, loop_span, body, invariant);
+    let _inner_pre = vcgen.vcgen_block(body, invariant.clone());
     Ok(invariant.clone())
-}
-
-fn explain_block(
-    vcgen: &mut Vcgen,
-    span: Span,
-    block: &Block,
-    post: &Expr,
-) -> Result<Expr, Diagnostic> {
-    // TODO: somehow indent the span because right now the span points to the
-    // column of the closing brace
-    if let Some(ref mut explanation) = vcgen.explanation {
-        let mut end_span = span;
-        end_span.start = end_span.end - 1;
-        explanation.add(end_span, post.clone());
-    }
-    vcgen.vcgen_block(block, post.clone())
 }
 
 /// Extract the post from a [`ProcDecl`].

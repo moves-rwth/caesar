@@ -29,7 +29,20 @@ impl<'tcx> Vcgen<'tcx> {
     }
 
     pub fn vcgen_block(&mut self, block: &Block, post: Expr) -> Result<Expr, Diagnostic> {
-        self.vcgen_stmts(&block.node, post)
+        let prev_block_span = if let Some(ref mut explanation) = self.explanation {
+            let prev_block_span = explanation.set_block_span(Some(block.span));
+            let mut end_span = block.span;
+            end_span.start = end_span.end - 1;
+            explanation.add_expr(end_span, post.clone(), true);
+            prev_block_span
+        } else {
+            None
+        };
+        let res = self.vcgen_stmts(&block.node, post);
+        if let Some(ref mut explanation) = self.explanation {
+            explanation.set_block_span(prev_block_span);
+        }
+        res
     }
 
     fn vcgen_stmts(&mut self, stmts: &[Stmt], post: Expr) -> Result<Expr, Diagnostic> {
@@ -153,7 +166,7 @@ impl<'tcx> Vcgen<'tcx> {
         };
 
         if let Some(ref mut explanation) = self.explanation {
-            explanation.add(stmt.span, res.clone());
+            explanation.add_expr(stmt.span, res.clone(), false);
         }
 
         Ok(res)

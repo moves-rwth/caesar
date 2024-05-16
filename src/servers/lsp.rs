@@ -36,7 +36,7 @@ struct VerifyStatusUpdate {
 #[derive(Debug, Serialize, Deserialize)]
 struct ComputedPreUpdate {
     document: VersionedTextDocumentIdentifier,
-    pres: Vec<(lsp_types::Range, Vec<String>)>,
+    pres: Vec<(lsp_types::Range, bool, Vec<String>)>,
 }
 
 /// A connection to an LSP client.
@@ -46,7 +46,7 @@ pub struct LspServer {
     files: Arc<Mutex<Files>>,
     connection: Connection,
     diagnostics: HashMap<FileId, Vec<Diagnostic>>,
-    vc_explanations: HashMap<FileId, Vec<(Span, Vec<String>)>>,
+    vc_explanations: HashMap<FileId, Vec<(Span, bool, Vec<String>)>>,
     statuses: HashMap<Span, VerifyResult>,
 }
 
@@ -241,7 +241,9 @@ impl LspServer {
         for (document_id, explanations) in by_document {
             let explanations = explanations
                 .iter()
-                .flat_map(|(span, expls)| Some((span.to_lsp(&files)?.1, expls.clone())))
+                .flat_map(|(span, is_block_itself, expls)| {
+                    Some((span.to_lsp(&files)?.1, *is_block_itself, expls.clone()))
+                })
                 .collect();
             let params = ComputedPreUpdate {
                 document: document_id,
@@ -327,12 +329,19 @@ impl Server for LspServer {
     }
 
     fn add_vc_explanation(&mut self, explanation: VcExplanation) -> Result<(), VerifyError> {
-        for explanation in explanation.into_iter() {
+        let files = self.files.lock().unwrap();
+        for mut explanation in explanation.into_iter() {
+            explanation.shrink_to_block(&files);
             self.vc_explanations
                 .entry(explanation.span.file)
                 .or_default()
-                .push((explanation.span, explanation.to_strings().collect()));
+                .push((
+                    explanation.span,
+                    explanation.is_block_itself,
+                    explanation.to_strings().collect(),
+                ));
         }
+        drop(files);
         self.publish_explanations()
             .map_err(VerifyError::ServerError)?;
         Ok(())

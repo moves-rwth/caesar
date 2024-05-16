@@ -8,7 +8,7 @@ import { ConfigurationConstants } from "./constants";
 export class ComputedPreComponent {
 
     private enabled: boolean;
-    private computedPres: DocumentMap<[Range, string[]][]>;
+    private computedPres: DocumentMap<[Range, boolean, string[]][]>;
 
     private decorationType: TextEditorDecorationType;
 
@@ -82,7 +82,7 @@ export class ComputedPreComponent {
                 if (this.enabled) {
                     let prevLine;
 
-                    for (const [range, expls] of expr_expls) {
+                    for (const [range, isBlockItself, expls] of expr_expls) {
                         const line = range.start.line;
                         if (line === prevLine) {
                             break;
@@ -94,7 +94,7 @@ export class ComputedPreComponent {
                         // eslint-disable-next-line no-constant-condition
                         while (true) {
                             const checkLine = line - freeLines - 1;
-                            if (freeLines == expls.length || checkLine < 0 || editor.document.lineAt(checkLine).text.trim() !== '') {
+                            if (freeLines === expls.length || checkLine < 0 || editor.document.lineAt(checkLine).text.trim() !== '') {
                                 break;
                             }
                             freeLines++;
@@ -106,7 +106,10 @@ export class ComputedPreComponent {
                         for (const [index, expl] of expls_to_show.entries()) {
                             const lineAbove = line - index - 1;
                             const rangeAbove = new vscode.Range(lineAbove, 0, lineAbove, 0);
-                            const col = range.start.character;
+                            let col = range.start.character;
+                            if (isBlockItself) {
+                                col += 4;
+                            }
                             // insert padding with em space unicode character
                             // because actual spaces will be trimmed by vscode
                             const contentText = "\u2003".repeat(col) + "▷ " + expl; // other options: ❯, ▷, ⟫, ⦊

@@ -204,7 +204,7 @@ fn pretty_span(files: &Files, span: Span) -> Doc {
 pub fn pretty_slice(files: &Files, slice_model: &SliceModel) -> Option<Doc> {
     let mut lines: Vec<Doc> = vec![];
     for (stmt_span, result) in slice_model.iter_results() {
-        if let Some((_file, line_number, _col_number)) = files.get_human_span(stmt_span) {
+        if let Some((_file, line_number, _col_number)) = files.get_human_span_start(stmt_span) {
             let line = match result {
                 SliceResult::PartOfError(msg) => {
                     let msg = msg.map(|msg| msg.to_string()).unwrap_or_else(|| {

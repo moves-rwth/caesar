@@ -161,7 +161,7 @@ impl Files {
         self.get(span.file).unwrap().char_span(span)
     }
 
-    pub fn get_human_span(&self, span: Span) -> Option<(&StoredFile, usize, usize)> {
+    pub fn get_human_span_start(&self, span: Span) -> Option<(&StoredFile, usize, usize)> {
         if span.file == FileId::DUMMY {
             None
         } else {
@@ -182,7 +182,7 @@ impl Files {
     ///
     /// Returns `None` if the span's file id is [`FileId::DUMMY`].
     pub fn format_span_start(&self, span: Span) -> Option<String> {
-        let (file, line_number, col_number) = self.get_human_span(span)?;
+        let (file, line_number, col_number) = self.get_human_span_start(span)?;
         Some(format!("{}:{}:{}", file.path, line_number, col_number))
     }
 }
