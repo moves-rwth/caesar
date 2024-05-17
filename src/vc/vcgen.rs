@@ -10,6 +10,7 @@ use crate::{
         BinOpKind, Block, DeclKind, Diagnostic, Direction, Expr, ExprBuilder, ExprKind, Ident,
         Label, QuantOpKind, Span, SpanVariant, Stmt, StmtKind, UnOpKind,
     },
+    intrinsic::annotations::AnnotationKind,
     tyctx::TyCtx,
 };
 
@@ -152,7 +153,16 @@ impl<'tcx> Vcgen<'tcx> {
                 builder.ite(spec_ty, cond.clone(), post1, post2)
             }
             StmtKind::While(_, _) => return Err(unsupported_while_loop_diagnostic(stmt)),
-            StmtKind::Annotation(_, _, _, _) => {
+            StmtKind::Annotation(_, ident, _, inner_stmt) => {
+                // there may be still slicing annotations left, which we just
+                // walk through. this may happen if the slicing transformer
+                // didn't run at all (slicing disabled) or when it errored, but
+                // we still continue.
+                if let Some(decl_ref) = self.tcx.get(*ident) {
+                    if let DeclKind::AnnotationDecl(AnnotationKind::Slicing(_)) = *decl_ref {
+                        return self.vcgen_stmt(inner_stmt, post);
+                    }
+                }
                 if self.explanation.is_some() {
                     explain_annotated_while(self, stmt, &post)?
                 } else {

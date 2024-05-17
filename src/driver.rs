@@ -424,8 +424,13 @@ impl VerifyUnit {
     }
 
     /// Prepare the code for slicing.
-    #[instrument(skip(self, options, tcx))]
-    pub fn prepare_slicing(&mut self, options: &Options, tcx: &mut TyCtx) -> SliceStmts {
+    #[instrument(skip_all)]
+    pub fn prepare_slicing(
+        &mut self,
+        options: &Options,
+        tcx: &mut TyCtx,
+        server: &mut dyn Server,
+    ) -> Result<SliceStmts, VerifyError> {
         let mut selection = SliceSelection::default();
         if !options.no_slice_error {
             selection |= SliceSelection::FAILURE_SELECTION;
@@ -434,8 +439,11 @@ impl VerifyUnit {
             selection |= SliceSelection::VERIFIED_SELECTION;
         }
         let mut stmt_slicer = StmtSliceVisitor::new(tcx, self.direction, selection);
-        stmt_slicer.visit_block(&mut self.block).unwrap();
-        stmt_slicer.finish()
+        let res = stmt_slicer.visit_block(&mut self.block);
+        if let Err(err) = res {
+            server.add_or_throw_diagnostic(err.to_diagnostic())?;
+        }
+        Ok(stmt_slicer.finish())
     }
 
     /// Generate the verification conditions with post-expectation `∞` or `0`

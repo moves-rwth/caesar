@@ -13,14 +13,16 @@
 
 use std::rc::Rc;
 
+use ariadne::ReportKind;
 use replace_with::replace_with_or_abort;
 use tracing::{instrument, Level};
 
 use crate::{
     ast::{
         visit::{walk_proc, walk_stmt, VisitorMut},
-        BinOpKind, DeclKind, DeclRef, Direction, Expr, ExprBuilder, ExprKind, Ident, ProcDecl,
-        Span, SpanVariant, Spanned, Stmt, StmtKind, Symbol, TyKind, VarDecl, VarKind,
+        BinOpKind, DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprBuilder, ExprKind, Ident,
+        Label, ProcDecl, Span, SpanVariant, Spanned, Stmt, StmtKind, Symbol, TyKind, VarDecl,
+        VarKind,
     },
     intrinsic::annotations::AnnotationKind,
     tyctx::TyCtx,
@@ -142,8 +144,30 @@ impl<'tcx> StmtSliceVisitor<'tcx> {
     }
 }
 
+/// Errors during the slicing transformation. When an error occurred, the
+/// program may still be (partially) modified. The modified program is however
+/// still valid for further use in slicing!
+#[derive(Debug)]
+pub enum StmtSliceError {
+    /// When negation statements are used in an unsupported way. This should not
+    /// ever occur from Caesar's internal encodings.
+    UnsupportedNegation(Span),
+}
+
+impl StmtSliceError {
+    pub fn to_diagnostic(&self) -> Diagnostic {
+        match self {
+            StmtSliceError::UnsupportedNegation(span) => Diagnostic::new(ReportKind::Advice, *span)
+                .with_message("unsupported negation for slicing")
+                .with_label(
+                    Label::new(*span).with_message("after this statement, slicing is disabled"),
+                ),
+        }
+    }
+}
+
 impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
-    type Err = ();
+    type Err = StmtSliceError;
 
     fn visit_proc(&mut self, proc_ref: &mut DeclRef<ProcDecl>) -> Result<(), Self::Err> {
         let decl = proc_ref.borrow();
@@ -323,10 +347,9 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 rhs.node.insert(0, generate_slice_stmt(rhs_slice_var));
             }
             StmtKind::Negate(dir) => match (self.direction, dir) {
-                // TODO: improve this
                 (Direction::Down, Direction::Down) => self.direction = Direction::Up,
                 (Direction::Up, Direction::Up) => self.direction = Direction::Down,
-                _ => panic!("this combination of negations is not supported by slicing"),
+                _ => return Err(StmtSliceError::UnsupportedNegation(s.span)),
             },
             _ => {}
         }

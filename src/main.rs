@@ -472,7 +472,7 @@ fn verify_files_main(
 
         let monotonicity_res = source_unit.check_monotonicity();
         if let Err(err) = monotonicity_res {
-            server.add_diagnostic(err)?;
+            server.add_or_throw_diagnostic(err)?;
         }
     }
 
@@ -536,7 +536,7 @@ fn verify_files_main(
         }
 
         // 5. Prepare slicing
-        let slice_vars = verify_unit.prepare_slicing(options, &mut tcx);
+        let slice_vars = verify_unit.prepare_slicing(options, &mut tcx, server)?;
 
         // 6. Generating verification conditions.
         let mut vcgen = Vcgen::new(&tcx, options.explain_core_vc);
