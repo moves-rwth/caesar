@@ -6,10 +6,9 @@ import { Octokit } from '@octokit/rest';
 import * as AdmZip from 'adm-zip';
 import got from 'got';
 import { InstallerConfig } from './Configuration';
-import * as os from 'os';
 import { Verifier } from './Verifier';
 import * as semver from 'semver';
-import { getExtensionVersion, isPatchCompatible } from './version';
+import { getExtensionVersion, getPlatformAssetFilter, isPatchCompatible } from './version';
 
 export class ServerInstaller {
     private context: ExtensionContext;
@@ -198,34 +197,4 @@ interface ReleaseAsset {
 
 function hashRelease(asset: ReleaseAsset): string {
     return `${asset.releaseName}-${asset.date}`;
-}
-
-function getPlatformAssetFilter(): string | null {
-    const platform = os.platform();
-    const arch = os.arch();
-    switch (platform) {
-        case "linux":
-            if (arch === "x64") {
-                return "x86_64-unknown-linux";
-            } else {
-                return null;
-            }
-        case "win32":
-            if (arch === "x64") {
-                return "x86_64-pc-windows";
-            } else {
-                return null;
-            }
-        case "darwin":
-            if (arch === "x64") {
-                return "x86_64-apple-darwin";
-            } else if (arch === "arm64") {
-                return "aarch64-apple-darwin";
-            } else {
-                return null;
-            }
-        default:
-            console.log(`Unsupported platform: ${platform}`);
-            return null;
-    }
 }
