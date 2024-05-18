@@ -1,0 +1,21 @@
+name: Publish artifacts to external repositories when tagged version is released
+
+on:
+  release:
+    # Only do the release on proper releases (with semantic versioning tags).
+    types: [released]
+
+jobs:
+  publish-docker-image:
+    uses: ./.github/workflows/build-docker-registry.yml
+    with:
+      git_ref: ${{ github.ref_name }}
+      # Creation of semver tag also causes creation of 'latest' tag
+      image_tags: |
+        type=semver,pattern={{version}}
+  
+  publish-vsix:
+    uses: ./.github/workflows/build-vsix-marketplaces.yml
+    with:
+      git_ref: ${{ github.ref_name }}
+      version: ${{ github.ref_name }}

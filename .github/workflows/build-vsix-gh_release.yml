@@ -1,0 +1,55 @@
+# Build a VSIX bundle for the VScode extension and add it to GitHub release
+name: Build VSIX
+
+on:
+  workflow_call:
+    inputs:
+      git_ref:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      is_prerelease:
+        required: true
+        type: boolean
+
+env:
+  EXTENSION_DIRECTORY: ./vscode-ext
+
+jobs:
+  build-vsix:
+    runs-on: ubuntu-latest
+   
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref }}
+  
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+    
+      - name: Install NPM dependencies
+        working-directory: ${{ env.EXTENSION_DIRECTORY }}
+        run: npm install
+      
+      - name: Set npm flags (for pre-release)
+        if: ${{ inputs.is_prerelease }}
+        shell: bash
+        run: |
+          echo "NPM_EXTRA_FLAGS=--pre-release" >> $GITHUB_ENV
+  
+      - name: Package the extension
+        working-directory: ${{ env.EXTENSION_DIRECTORY }}
+        run: npm run package -- --out caesar-${{ inputs.version }}.vsix $NPM_EXTRA_FLAGS
+
+      - name: Upload Release Files
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.git_ref }}
+          # Also need to specify 'draft' again, so that the action finds the correct existing (draft) release
+          draft: ${{ !inputs.is_prerelease }}
+          files: |
+            ${{env.EXTENSION_DIRECTORY}}/caesar-${{ inputs.version }}.vsix
+  
