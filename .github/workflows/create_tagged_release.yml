@@ -1,0 +1,30 @@
+name: Tagged version release
+
+# Only do the release on semantic versioning v<major>.<minor>.<patch> tags.
+on:
+  push:
+    tags:
+    - "v[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  prepare-release:
+    uses: ./.github/workflows/setup_gh_release.yml
+    with:
+      git_ref: ${{ github.ref_name }}
+      is_prerelease: false
+
+  build-binaries:
+    needs: prepare-release
+    uses: ./.github/workflows/build-binaries-gh_release.yml
+    with:
+      git_ref: ${{ github.ref_name }}
+      version: ${{ needs.prepare-release.outputs.version }}
+      is_prerelease: false
+
+  build-vsix:
+    needs: prepare-release
+    uses: ./.github/workflows/build-vsix-gh_release.yml
+    with:
+      git_ref: ${{ github.ref_name }}
+      version: ${{ needs.prepare-release.outputs.version }}
+      is_prerelease: false

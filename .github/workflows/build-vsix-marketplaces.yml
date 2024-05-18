@@ -1,0 +1,51 @@
+# Build and publish VSIX bundle of the VScode extension to marketplaces
+name: Publish VSIX to Marketplaces
+
+on:
+  workflow_call:
+    inputs:
+      git_ref:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+
+env:
+  EXTENSION_DIRECTORY: ./vscode-ext
+  
+jobs:
+  publish-vsix:
+    runs-on: ubuntu-latest
+   
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref }}
+  
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+    
+      - name: Install NPM dependencies
+        working-directory: ${{ env.EXTENSION_DIRECTORY }}
+        run: npm install
+  
+      - name: Package the extension
+        working-directory: ${{ env.EXTENSION_DIRECTORY }}
+        run: npm run package -- --out caesar-${{ inputs.version }}.vsix
+
+      - name: Publish the extension (Visual Studio Marketplace)
+        uses: HaaLeo/publish-vscode-extension@v1
+        with:
+          registryUrl: https://marketplace.visualstudio.com
+          pat: ${{ secrets.VSCE_PAT }}
+          extensionFile: ${{env.EXTENSION_DIRECTORY}}/caesar-${{ inputs.version }}.vsix
+
+      - name: Publish the extension (Open VSX Registry)
+        uses: HaaLeo/publish-vscode-extension@v1
+        with:
+          registryUrl: https://open-vsx.org
+          pat: ${{ secrets.OPEN_VSX_PAT }}
+          extensionFile: ${{env.EXTENSION_DIRECTORY}}/caesar-${{ inputs.version }}.vsix
+  
