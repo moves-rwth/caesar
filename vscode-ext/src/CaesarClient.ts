@@ -8,6 +8,7 @@ import * as path from "path";
 import * as fs from 'fs/promises';
 import { ServerInstaller } from "./ServerInstaller";
 import * as semver from 'semver';
+import { isPatchCompatible } from "./version";
 
 export enum ServerStatus {
     Stopped,
@@ -183,7 +184,7 @@ export class CaesarClient {
             if (!serverSemver || !clientSemver) {
                 return;
             }
-            if (serverSemver.major !== clientSemver.major || serverSemver.minor !== clientSemver.minor) {
+            if (!isPatchCompatible(serverSemver, clientSemver)) {
                 void vscode.window.showWarningMessage(`Caesar for VSCode (${extensionVersion}) and Caesar server (${serverVersion}) have incompatible versions. You might see bugs. Consider updating both the extension and the server.`, "Update server").then(async (button) => {
                     if (button === "Update server") {
                         await this.installer.checkForUpdateOrInstall(true);

@@ -8,7 +8,8 @@ import got from 'got';
 import { InstallerConfig } from './Configuration';
 import * as os from 'os';
 import { Verifier } from './Verifier';
-
+import * as semver from 'semver';
+import { getExtensionVersion, isPatchCompatible } from './version';
 
 export class ServerInstaller {
     private context: ExtensionContext;
@@ -70,7 +71,7 @@ export class ServerInstaller {
         }
 
         const prerelease: boolean = InstallerConfig.get("nightly");
-        const release = await getLatestReleaseAsset("moves-rwth", "caesar", prerelease, assetFilter);
+        const release = await this.getLatestReleaseAsset("moves-rwth", "caesar", prerelease, assetFilter);
         const currentVersion = this.context.globalState.get("installedVersion");
         if (currentVersion === hashRelease(release)) {
             if (notifyNoNewVersion) {
@@ -139,6 +140,53 @@ export class ServerInstaller {
         await this.context.globalState.update("installedVersion", hashRelease(release));
         void window.showInformationMessage(`Caesar (${release.releaseName}, ${release.date}) installed successfully.`);
     }
+
+    async getLatestReleaseAsset(owner: string, repo: string, prerelease: boolean, assetNameIncludes: string): Promise<ReleaseAsset> {
+        const currentSemver = getExtensionVersion(this.context);
+
+        const octokit = new Octokit();
+
+        try {
+            const response = await octokit.repos.listReleases({
+                owner: owner,
+                repo: repo,
+            });
+
+            const releases = response.data;
+
+            for (const release of releases) {
+                if (release.draft || (release.prerelease && !prerelease)) {
+                    continue;
+                }
+                const releaseSemver = semver.parse(release.tag_name);
+                if (!releaseSemver || !isPatchCompatible(currentSemver, releaseSemver)) {
+                    continue;
+                }
+
+                for (const asset of release.assets) {
+                    if (asset.name.includes(assetNameIncludes)) {
+                        let extension;
+                        if (asset.name.endsWith(".zip")) {
+                            extension = "zip";
+                        } else if (asset.name.endsWith("tar.gz")) {
+                            extension = "tar.gz";
+                        } else {
+                            throw new Error(`Unsupported file type for asset: ${asset.name}`);
+                        }
+                        return {
+                            releaseName: release.name || "(no name)",
+                            date: asset.updated_at,
+                            url: asset.url,
+                            extension
+                        };
+                    }
+                }
+            }
+        } catch (error: any) {
+            throw new Error(`Failed to fetch releases or process assets: ${error}`);
+        }
+        throw new Error(`Could not find any compatible release for this platform`);
+    }
 }
 
 interface ReleaseAsset {
@@ -150,46 +198,6 @@ interface ReleaseAsset {
 
 function hashRelease(asset: ReleaseAsset): string {
     return `${asset.releaseName}-${asset.date}`;
-}
-
-async function getLatestReleaseAsset(owner: string, repo: string, prerelease: boolean, assetNameIncludes: string): Promise<ReleaseAsset> {
-    const octokit = new Octokit();
-
-    try {
-        const response = await octokit.repos.listReleases({
-            owner: owner,
-            repo: repo,
-        });
-
-        const releases = response.data;
-
-        for (const release of releases) {
-            if (release.draft || (release.prerelease && !prerelease)) {
-                continue;
-            }
-            for (const asset of release.assets) {
-                if (asset.name.includes(assetNameIncludes)) {
-                    let extension;
-                    if (asset.name.endsWith(".zip")) {
-                        extension = "zip";
-                    } else if (asset.name.endsWith("tar.gz")) {
-                        extension = "tar.gz";
-                    } else {
-                        throw new Error(`Unsupported file type for asset: ${asset.name}`);
-                    }
-                    return {
-                        releaseName: release.name || "(no name)",
-                        date: asset.updated_at,
-                        url: asset.url,
-                        extension
-                    };
-                }
-            }
-        }
-    } catch (error: any) {
-        throw new Error(`Failed to fetch releases or process assets: ${error}`);
-    }
-    throw new Error(`Could not find any release for this platform`);
 }
 
 function getPlatformAssetFilter(): string | null {
