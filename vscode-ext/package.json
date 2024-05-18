@@ -57,6 +57,14 @@
       {
         "command": "caesar.explainCoreVc",
         "title": "Caesar: Explain HeyVL Core Verification Condition Generation"
+      },
+      {
+        "command": "caesar.checkUpdate",
+        "title": "Caesar: Check for Update"
+      },
+      {
+        "command": "caesar.uninstall",
+        "title": "Caesar: Uninstall Caesar"
       }
     ],
     "languages": [
@@ -101,13 +109,15 @@
         },
         "caesar.server.installationOptions": {
           "type": "string",
-          "default": "binary",
+          "default": "installerBinary",
           "enum": [
-            "binary",
+            "installerBinary",
+            "userBinary",
             "source-code"
           ],
           "enumDescriptions": [
-            "Use the binary of Caesar",
+            "Use the binary from the installer",
+            "Use a user-provided binary of Caesar",
             "Build Caesar from the source code"
           ],
           "description": "Specifies how caesar will be executed from the extension.",
@@ -186,13 +196,23 @@
             "Verification whenever a .heyvl file is saved"
           ],
           "description": "Specifies when Caesar automatically verifies the file."
+        },
+        "caesar.installer.autoCheck": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically check for updates of Caesar every 24 hours."
+        },
+        "caesar.installer.nightly": {
+          "type": "boolean",
+          "default": false,
+          "description": "Install nightly releases. Warning: The latest nightly release might not work with your version of the VSCode extension!"
         }
       }
     },
     "colors": [
       {
         "id": "caesar.inlineGhostBackgroundColor",
-        "description": "Specifies the background color of the inline ghost texts ",
+        "description": "Specifies the background color of the inline ghost texts.",
         "defaults": {
           "dark": "#00000000",
           "light": "#00000000",
@@ -201,7 +221,7 @@
       },
       {
         "id": "caesar.inlineGhostForegroundColor",
-        "description": "Specifies the foreground color of the inline ghost texts",
+        "description": "Specifies the foreground color of the inline ghost texts.",
         "defaults": {
           "dark": "#cdcdcdb5",
           "light": "#00000097",
@@ -220,8 +240,10 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.2.0",
+    "@types/adm-zip": "^0.5.5",
     "@types/mocha": "^10.0.6",
     "@types/node": "18.x",
+    "@types/tar": "^6.1.13",
     "@types/vscode": "^1.87.0",
     "@typescript-eslint/eslint-plugin": "^7.0.2",
     "@typescript-eslint/parser": "^7.0.2",
@@ -232,6 +254,11 @@
     "typescript-eslint": "^7.9.0"
   },
   "dependencies": {
-    "vscode-languageclient": "^9.0.1"
+    "@octokit/rest": "^20.1.1",
+    "adm-zip": "^0.5.12",
+    "octokit": "^4.0.2",
+    "tar": "^7.1.0",
+    "vscode-languageclient": "^9.0.1",
+    "got": "^11.8.6"
   }
 }

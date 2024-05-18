@@ -59,6 +59,7 @@ export class ConfigCategory {
 
 export const ViewConfig = new ConfigCategory("userInterface", null);
 export const ServerConfig = new ConfigCategory("server", null);
+export const InstallerConfig = new ConfigCategory("installer", null);
 
 // View Configurations:
 

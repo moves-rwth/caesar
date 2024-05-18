@@ -5,7 +5,8 @@ import * as vscode from "vscode";
 import { ConfigurationConstants } from "./constants";
 import { ServerConfig } from "./Configuration";
 import * as path from "path";
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
+import { ServerInstaller } from "./ServerInstaller";
 
 export enum ServerStatus {
     Stopped,
@@ -35,6 +36,7 @@ export interface ComputedPreNotification {
 
 export class CaesarClient {
     private outputChannel: OutputChannel;
+    private installer: ServerInstaller;
     private client: LanguageClient | null = null;
     private context: ExtensionContext;
     private statusListeners = new Array<(status: ServerStatus) => void>();
@@ -42,8 +44,9 @@ export class CaesarClient {
     private computedPreListeners = new Array<(update: ComputedPreNotification) => void>();
     private needsRestart = false;
 
-    constructor(context: ExtensionContext, outputChannel: OutputChannel) {
+    constructor(context: ExtensionContext, outputChannel: OutputChannel, installer: ServerInstaller) {
         this.context = context;
+        this.installer = installer;
         this.outputChannel = outputChannel;
 
         // listen to commands
@@ -52,7 +55,7 @@ export class CaesarClient {
         });
 
         vscode.commands.registerCommand('caesar.startServer', async () => {
-            await this.start();
+            await this.start(true);
         });
 
         vscode.commands.registerCommand('caesar.stopServer', async () => {
@@ -62,6 +65,7 @@ export class CaesarClient {
         vscode.commands.registerCommand('caesar.verify', async () => {
             const openEditor = vscode.window.activeTextEditor;
             if (openEditor) {
+                await this.start(true);
                 await this.verify(openEditor.document);
             }
         });
@@ -85,6 +89,7 @@ export class CaesarClient {
                 }
                 const openEditor = vscode.window.activeTextEditor;
                 if (openEditor) {
+                    await this.start(false);
                     await this.verify(openEditor.document);
                 }
             };
@@ -100,9 +105,12 @@ export class CaesarClient {
         }));
     }
 
-    private createClient(context: vscode.ExtensionContext): LanguageClient {
+    private async createClient(recommendInstallation: boolean): Promise<LanguageClient | null> {
         // Get the source code / binary path from the configurations
-        const executable = this.getExecutable();
+        const executable = await this.getExecutable(recommendInstallation);
+        if (executable === null) {
+            return null;
+        }
         const serverOptions: ServerOptions = {
             run: executable,
             debug: executable,
@@ -126,6 +134,8 @@ export class CaesarClient {
             serverOptions,
             clientOptions
         );
+
+        const context = this.context;
 
         context.subscriptions.push(client);
 
@@ -157,31 +167,58 @@ export class CaesarClient {
         return client;
     }
 
-    private getExecutable(): Executable {
-        let serverPath: string;
+    private async getExecutable(recommendInstallation: boolean): Promise<Executable | null> {
+        let serverDirectory: string | undefined;
         let serverExecutable;
         const args: string[] = [];
         switch (ServerConfig.get(ConfigurationConstants.installationOptions)) {
-            case ConfigurationConstants.binaryOption:
-                serverPath = ServerConfig.get(ConfigurationConstants.binaryPath);
-                if (serverPath === "") {
+            case ConfigurationConstants.installerBinaryOption: {
+                let pathRes = await this.installer.getServerExecutable();
+                if (pathRes) {
+                    serverExecutable = pathRes;
+                } else {
+                    if (recommendInstallation) {
+                        await this.installer.checkForUpdateOrInstall(false);
+                        pathRes = await this.installer.getServerExecutable();
+                    }
+                    if (!pathRes) {
+                        void vscode.window.showErrorMessage("You must install a Caesar binary for the extension to work. Either re-try the download, or change the settings to use another installation method.", "Re-try installation", "Open settings").then(async (command) => {
+                            if (command === "Open settings") {
+                                await vscode.commands.executeCommand('workbench.action.openSettings', 'caesar.server');
+                            } else if (command === "Re-try installation") {
+                                void this.installer.checkForUpdateOrInstall(false);
+                            }
+                        });
+                        return null;
+                    } else {
+                        serverExecutable = pathRes;
+                    }
+                }
+                args.push('--language-server');
+            }
+                break;
+            case ConfigurationConstants.userBinaryOption:
+                serverExecutable = ServerConfig.get(ConfigurationConstants.binaryPath);
+                if (serverExecutable === "") {
                     void vscode.window.showErrorMessage("Caesar: Binary path is not set. Please set the path in the settings.", "Open settings").then(async () => {
                         await vscode.commands.executeCommand('workbench.action.openSettings', 'caesar.server');
                     });
                     throw new Error("Installation path is not set");
                 }
-                serverExecutable = "caesar";
                 args.push('--language-server');
                 break;
             case ConfigurationConstants.sourceCodeOption:
-                serverPath = ServerConfig.get(ConfigurationConstants.sourcePath);
-                if (serverPath === "") {
+                serverDirectory = ServerConfig.get(ConfigurationConstants.sourcePath);
+                if (serverDirectory === "" || serverDirectory === undefined) {
                     void vscode.window.showErrorMessage("Caesar: Source path is not set. Please set the path in the settings.", "Open settings").then(async () => {
                         await vscode.commands.executeCommand('workbench.action.openSettings', 'caesar.server');
                     });
                     throw new Error("Installation path is not set");
                 }
-                if (!fs.existsSync(path.resolve(serverPath, "Cargo.toml"))) {
+                try {
+                    const cargoTomlPath = path.join(serverDirectory, "Cargo.toml");
+                    await fs.access(cargoTomlPath, fs.constants.R_OK);
+                } catch (_error) {
                     void vscode.window.showErrorMessage("Caesar: Cargo.toml file is not found in the path. Please check the path in the settings.");
                     throw new Error("Cargo.toml file is not found in the path");
                 }
@@ -194,8 +231,12 @@ export class CaesarClient {
 
         args.push("--debug"); // print debug information
 
-        const userArgs: string = ServerConfig.get(ConfigurationConstants.args);
-        args.push(...userArgs.split(" "));
+        let userArgs: string = ServerConfig.get(ConfigurationConstants.args);
+        userArgs = userArgs.trim();
+        if (userArgs.length > 0) {
+            args.push(...userArgs.split(" "));
+        }
+
         const timeout: string = ServerConfig.get(ConfigurationConstants.timeout);
         // The timeout in args configuration overwrites the timeout configuration.
         if (userArgs.indexOf("--timeout") !== -1) {
@@ -223,7 +264,7 @@ export class CaesarClient {
             command: serverExecutable,
             args: args,
             options: {
-                cwd: serverPath,
+                cwd: serverDirectory,
                 env: {
                     ...process.env,
                     "NO_COLOR": "1",
@@ -234,7 +275,7 @@ export class CaesarClient {
         };
     }
 
-    async start() {
+    async start(recommendInstallation: boolean) {
         if (this.client?.isRunning()) {
             if (this.needsRestart) {
                 await this.stop();
@@ -247,7 +288,11 @@ export class CaesarClient {
         this.notifyStatusUpdate(ServerStatus.Starting);
 
         try {
-            this.client = this.createClient(this.context);
+            this.client = await this.createClient(recommendInstallation);
+            if (this.client === null) {
+                this.notifyStatusUpdate(ServerStatus.FailedToStart);
+                return;
+            }
         } catch (error) {
             if (!(error instanceof Error)) { throw error; }
             this.notifyStatusUpdate(ServerStatus.FailedToStart);
@@ -273,7 +318,7 @@ export class CaesarClient {
 
     async restart() {
         await this.stop();
-        await this.start();
+        await this.start(true);
     }
 
     async stop() {
@@ -293,7 +338,6 @@ export class CaesarClient {
     }
 
     async verify(document: TextDocument) {
-        await this.start();
         if (!this.client?.isRunning()) {
             return;
         }
@@ -315,11 +359,16 @@ export class CaesarClient {
     }
 
     private async copyCommand() {
-        const executable = this.getExecutable();
-        let line = `${executable.command} ${executable.args!.join(" ")}`;
-        const cwd = executable.options && executable.options.cwd;
+        const executable = await this.getExecutable(true);
+        if (executable === null) {
+            return;
+        }
+        const command = '"' + executable.command.replace(/(["'$`\\])/g, '\\$1') + '"';
+        let line = `${command} ${executable.args!.join(" ")}`;
+        let cwd = executable.options && executable.options.cwd;
         if (cwd !== undefined) {
-            line = `pushd ${cwd} && ${line}; popd`;
+            cwd = '"' + cwd.replace(/(["'$`\\])/g, '\\$1') + '"';
+            line = `pushd ${cwd}; ${line}; popd`;
         }
         await vscode.env.clipboard.writeText(line);
     }
