@@ -243,6 +243,7 @@
     "@types/adm-zip": "^0.5.5",
     "@types/mocha": "^10.0.6",
     "@types/node": "18.x",
+    "@types/semver": "^7.5.8",
     "@types/tar": "^6.1.13",
     "@types/vscode": "^1.87.0",
     "@typescript-eslint/eslint-plugin": "^7.0.2",
@@ -256,9 +257,10 @@
   "dependencies": {
     "@octokit/rest": "^20.1.1",
     "adm-zip": "^0.5.12",
+    "got": "^11.8.6",
     "octokit": "^4.0.2",
+    "semver": "^7.6.2",
     "tar": "^7.1.0",
-    "vscode-languageclient": "^9.0.1",
-    "got": "^11.8.6"
+    "vscode-languageclient": "^9.0.1"
   }
 }

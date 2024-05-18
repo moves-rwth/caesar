@@ -194,7 +194,7 @@ pub struct Options {
 #[tokio::main]
 async fn main() -> ExitCode {
     // add version to options config
-    let version_info = version::self_version_info();
+    let version_info = version::caesar_version_info();
     let clap = Options::clap().version(version_info.as_str());
     // now parse options
     let options = Options::from_clap(&clap.get_matches());

@@ -3,10 +3,11 @@ import { Executable, LanguageClient, ServerOptions } from "vscode-languageclient
 import { ExtensionContext, OutputChannel, Range, TextDocument } from "vscode";
 import * as vscode from "vscode";
 import { ConfigurationConstants } from "./constants";
-import { ServerConfig } from "./Configuration";
+import Configuration, { ServerConfig } from "./Configuration";
 import * as path from "path";
 import * as fs from 'fs/promises';
 import { ServerInstaller } from "./ServerInstaller";
+import * as semver from 'semver';
 
 export enum ServerStatus {
     Stopped,
@@ -106,6 +107,8 @@ export class CaesarClient {
     }
 
     private async createClient(recommendInstallation: boolean): Promise<LanguageClient | null> {
+        const context = this.context;
+
         // Get the source code / binary path from the configurations
         const executable = await this.getExecutable(recommendInstallation);
         if (executable === null) {
@@ -116,6 +119,10 @@ export class CaesarClient {
             debug: executable,
         };
 
+        const initializationOptions = {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            "vscodeExtensionVersion": context.extension.packageJSON["version"],
+        };
         // Options to control the language client
         const clientOptions: LanguageClientOptions = {
             diagnosticCollectionName: 'caesar',
@@ -125,7 +132,9 @@ export class CaesarClient {
                 // Notify the server about file changes to '.heyvl' files contained in the workspace
                 fileEvents: vscode.workspace.createFileSystemWatcher('**/*.heyvl')
             },
+            initializationOptions,
             outputChannel: this.outputChannel,
+
         };
 
         const client = new LanguageClient(
@@ -135,12 +144,11 @@ export class CaesarClient {
             clientOptions
         );
 
-        const context = this.context;
-
         context.subscriptions.push(client);
 
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        client.info(`Starting Caesar for VSCode ${context.extension.packageJSON.version}.`);
+        const extensionVersion: string = context.extension.packageJSON.version;
+        client.info(`Starting Caesar for VSCode ${extensionVersion}.`);
 
         // set up listeners for our custom events
         context.subscriptions.push(client.onNotification("custom/verifyStatus", (params: VerifyStatusNotification) => {
@@ -156,12 +164,32 @@ export class CaesarClient {
         }));
 
         // listen to onDidSaveTextDocument events
-        context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
-            // TODO: look at setting
-            if (document.languageId !== "heyvl") {
+        const autoVerify: string = Configuration.get(ConfigurationConstants.automaticVerification);
+        if (autoVerify === "onsave") {
+            context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
+                if (document.languageId !== "heyvl") {
+                    return;
+                }
+                void this.verify(document);
+            }));
+        }
+
+        // check server version
+        context.subscriptions.push(client.onNotification("custom/caesarReady", (event) => {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            const serverVersion: string = event["version"];
+            const serverSemver = semver.parse(serverVersion);
+            const clientSemver = semver.parse(extensionVersion);
+            if (!serverSemver || !clientSemver) {
                 return;
             }
-            void this.verify(document);
+            if (serverSemver.major !== clientSemver.major || serverSemver.minor !== clientSemver.minor) {
+                void vscode.window.showWarningMessage(`Caesar for VSCode (${extensionVersion}) and Caesar server (${serverVersion}) have incompatible versions. You might see bugs. Consider updating both the extension and the server.`, "Update server").then(async (button) => {
+                    if (button === "Update server") {
+                        await this.installer.checkForUpdateOrInstall(true);
+                    }
+                });
+            }
         }));
 
         return client;

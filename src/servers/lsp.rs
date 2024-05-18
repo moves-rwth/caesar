@@ -10,13 +10,14 @@ use lsp_types::{
     TextDocumentSyncKind, VersionedTextDocumentIdentifier,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::{
     ast::{Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
     driver::{SmtVcCheckResult, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
+    version::caesar_semver_version,
     Options, VerifyError,
 };
 
@@ -75,14 +76,27 @@ impl LspServer {
             text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
             ..ServerCapabilities::default()
         };
-        let res = self
-            .connection
-            .initialize(serde_json::json!(server_capabilities))?;
-        let _init_params: InitializeParams = serde_json::from_value(res)?;
+
+        let (id, params) = self.connection.initialize_start()?;
+        let init_params: InitializeParams = serde_json::from_value(params)?;
+        if let Some(Value::Object(obj)) = init_params.initialization_options {
+            if let Some(Value::String(version)) = obj.get("vscodeExtensionVersion") {
+                tracing::info!("initializing with VSCode extension {}", version)
+            }
+        }
+        let initialize_data = serde_json::json!({
+            "capabilities": server_capabilities,
+            "caesarVersion": caesar_semver_version(),
+        });
+        self.connection.initialize_finish(id, initialize_data)?;
 
         // TODO: just use the initialization result in the client
-        let start_notification =
-            lsp_server::Notification::new("custom/serverReady".to_string(), ());
+        let start_notification = lsp_server::Notification::new(
+            "custom/caesarReady".to_string(),
+            json!({
+                "version": caesar_semver_version(),
+            }),
+        );
         self.connection
             .sender
             .send(Message::Notification(start_notification))?;

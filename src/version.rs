@@ -13,7 +13,7 @@ mod built_info {
 }
 
 /// Return a String that describes the currently built version of Caesar.
-pub fn self_version_info() -> String {
+pub fn caesar_version_info() -> String {
     let cargo_version = env!("CARGO_PKG_VERSION");
     if let Some(git_commit) = built_info::GIT_COMMIT_HASH {
         let dirty_suffix = if built_info::GIT_DIRTY.unwrap_or(false) {
@@ -25,6 +25,12 @@ pub fn self_version_info() -> String {
     } else {
         format!("{} (no git info)", cargo_version)
     }
+}
+
+/// This is the Cargo.toml's package version. It's used to check if a VSCode
+/// client is compatible.
+pub fn caesar_semver_version() -> String {
+    env!("CARGO_PKG_VERSION").to_owned()
 }
 
 /// Return Z3's version.
@@ -44,7 +50,7 @@ where
         shellwords::join(&args_strs)
     };
     writeln!(w, "Command: {}", command)?;
-    writeln!(w, "Caesar version: {}", self_version_info())?;
+    writeln!(w, "Caesar version: {}", caesar_version_info())?;
 
     write!(w, "Build: {}", built_info::BUILT_TIME_UTC)?;
     if let Some(ci_platform) = built_info::CI_PLATFORM {

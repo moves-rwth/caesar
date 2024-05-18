@@ -20,7 +20,7 @@ export class ConfigCategory {
     private parent: ConfigCategory | null;
 
 
-    constructor(name: string, parent: ConfigCategory | null,) {
+    constructor(name: string, parent: ConfigCategory | null) {
         this.name = name;
         this.parent = parent;
     }

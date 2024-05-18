@@ -17,6 +17,7 @@ export const enum ConfigurationConstants {
     userBinaryOption = "userBinary",
     sourceCodeOption = "source-code",
     args = "args",
+    automaticVerification = "automaticVerification",
     sliceVerify = "sliceVerify",
     timeout = "timeout",
     explainVc = "explainVc"

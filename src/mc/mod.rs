@@ -30,7 +30,7 @@ use crate::{
     },
     procs::proc_verify::verify_proc,
     tyctx::TyCtx,
-    version::self_version_info,
+    version::caesar_version_info,
 };
 
 use self::{
@@ -151,7 +151,7 @@ pub fn proc_to_model(
     metadata.description = Some(
         format!(
             "Created by the Caesar deductive verifier ({}).",
-            self_version_info()
+            caesar_version_info()
         )
         .into_boxed_str(),
     );
