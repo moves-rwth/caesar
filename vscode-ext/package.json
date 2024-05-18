@@ -60,7 +60,7 @@
       },
       {
         "command": "caesar.checkUpdate",
-        "title": "Caesar: Check for Update"
+        "title": "Caesar: Check for Updates"
       },
       {
         "command": "caesar.uninstall",
@@ -262,7 +262,7 @@
     "got": "^11.8.6",
     "octokit": "^4.0.2",
     "semver": "^7.6.2",
-    "tar": "^7.1.0",
+    "tar": "^6.2.1",
     "vscode-languageclient": "^9.0.1"
   }
 }
