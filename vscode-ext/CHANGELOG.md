@@ -1,9 +1,3 @@
 # Change Log
 
-All notable changes to the "caesar" extension will be documented in this file.
-
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
-
-## [Unreleased]
-
-- Initial release
+On Github, we have a list of all of [Caesar's releases](https://github.com/moves-rwth/caesar/releases) along with binaries.

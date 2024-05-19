@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as  tar from 'tar';
-import { ExtensionContext, commands, window } from 'vscode';
+import { ExtensionContext, Uri, commands, env, window } from 'vscode';
 import { Octokit } from '@octokit/rest';
 import * as AdmZip from 'adm-zip';
 import got from 'got';
@@ -21,7 +21,7 @@ export class ServerInstaller {
         this.installRoot = path.join(context.globalStoragePath, "caesar-download");
 
         commands.registerCommand('caesar.checkUpdate', async () => {
-            await this.checkForUpdateOrInstall(false);
+            await this.checkForUpdateOrInstall(true);
         });
 
         commands.registerCommand('caesar.uninstall', async () => {
@@ -39,7 +39,12 @@ export class ServerInstaller {
             if (lastCheck && now - lastCheck < CHECK_INTERVAL) {
                 return false;
             }
-            await this.checkForUpdateOrInstall(true);
+            try {
+                await this.checkForUpdateOrInstall(false);
+            } catch (error) {
+                console.log(error);
+                return true;
+            }
             await this.context.globalState.update('lastDependencyCheck', now);
             return true;
         }
@@ -52,8 +57,7 @@ export class ServerInstaller {
             await fs.access(binaryPath, fs.constants.X_OK);
             return binaryPath;
         } catch (err) {
-            await this.context.globalState.update('lastDependencyCheck', undefined);
-            await this.context.globalState.update("installedVersion", undefined);
+            await this.uninstall(false);
             return null;
         }
     }
@@ -71,6 +75,18 @@ export class ServerInstaller {
 
         const prerelease: boolean = InstallerConfig.get("nightly");
         const release = await this.getLatestReleaseAsset("moves-rwth", "caesar", prerelease, assetFilter);
+
+        if (release === null) {
+            if (notifyNoNewVersion) {
+                void window.showInformationMessage(`There is no Caesar binary for your platform available. Refer to our installation instructions for other options`, "Go to installation instructions").then(async (button) => {
+                    if (button === "Go to installation instructions") {
+                        await env.openExternal(Uri.parse("https://www.caesarverifier.org/docs/getting-started/installation"));
+                    }
+                });
+            }
+            return;
+        }
+
         const currentVersion = this.context.globalState.get("installedVersion");
         if (currentVersion === hashRelease(release)) {
             if (notifyNoNewVersion) {
@@ -79,28 +95,26 @@ export class ServerInstaller {
             return;
         }
         const isInstalled = (await this.getServerExecutable()) !== null;
-        const message = isInstalled ? `New version of Caesar available: ${release.releaseName} (${release.date})` : `Caesar is not installed. Do you want to install Caesar (${release.releaseName}, ${release.date})?`;
+        const message = isInstalled ? `New version of Caesar available: ${release.releaseName} (${release.date})` : `Do you want to install Caesar (${release.releaseName}, ${release.date})?`;
         const button = isInstalled ? "Update" : "Install";
         const selected = await window.showInformationMessage(message, button);
         if (selected === button) {
-            await this.downloadAsset(release);
+            await this.installAsset(release);
         }
     }
 
     public async uninstall(notifyUninstalled: boolean) {
-        if (notifyUninstalled) {
-            if ((await this.getServerExecutable()) === null) {
-                return;
-            }
-        }
         await this.verifier.client.stop();
         await fs.rm(this.installRoot, { recursive: true, force: true, maxRetries: 5 });
+        await this.context.globalState.update('lastDependencyCheck', undefined);
+        await this.context.globalState.update("installedVersion", undefined);
+        await this.verifier.walkthrough.setBinaryInstalled(false);
         if (notifyUninstalled) {
             void window.showInformationMessage("Removed Caesar binary.");
         }
     }
 
-    private async downloadAsset(release: ReleaseAsset) {
+    private async installAsset(release: ReleaseAsset) {
         await this.uninstall(false);
         await fs.mkdir(this.installRoot, { recursive: true });
         const response = await got.get(release.url, {
@@ -137,10 +151,11 @@ export class ServerInstaller {
         }
 
         await this.context.globalState.update("installedVersion", hashRelease(release));
+        await this.verifier.client.start(false);
         void window.showInformationMessage(`Caesar (${release.releaseName}, ${release.date}) installed successfully.`);
     }
 
-    async getLatestReleaseAsset(owner: string, repo: string, prerelease: boolean, assetNameIncludes: string): Promise<ReleaseAsset> {
+    async getLatestReleaseAsset(owner: string, repo: string, prerelease: boolean, assetNameIncludes: string): Promise<ReleaseAsset | null> {
         const currentSemver = getExtensionVersion(this.context);
 
         const octokit = new Octokit();
@@ -154,12 +169,18 @@ export class ServerInstaller {
             const releases = response.data;
 
             for (const release of releases) {
-                if (release.draft || (release.prerelease && !prerelease)) {
+                if (release.draft) {
                     continue;
-                }
-                const releaseSemver = semver.parse(release.tag_name);
-                if (!releaseSemver || !isPatchCompatible(currentSemver, releaseSemver)) {
-                    continue;
+                } else if (release.prerelease) {
+                    if (!prerelease) {
+                        continue;
+                    }
+                } else {
+                    const releaseSemver = semver.parse(release.tag_name);
+                    if (!releaseSemver || !isPatchCompatible(currentSemver, releaseSemver)) {
+                        console.log(`${releaseSemver?.toString()} incompatible with current extension version ${currentSemver.toString()}`);
+                        continue;
+                    }
                 }
 
                 for (const asset of release.assets) {
@@ -184,7 +205,7 @@ export class ServerInstaller {
         } catch (error: any) {
             throw new Error(`Failed to fetch releases or process assets: ${error}`);
         }
-        throw new Error(`Could not find any compatible release for this platform`);
+        return null;
     }
 }
 

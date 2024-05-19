@@ -3,11 +3,12 @@
   "displayName": "Caesar Verifier",
   "description": "The quantitative deductive verifier Caesar for VSCode",
   "publisher": "rwth-moves",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "preview": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/moves-rwth/caesar.git"
+    "url": "https://github.com/moves-rwth/caesar.git",
+    "directory": "vscode-ext"
   },
   "homepage": "https://www.caesarverifier.org/",
   "qna": "https://github.com/moves-rwth/caesar/discussions/categories/q-a",
@@ -65,6 +66,10 @@
       {
         "command": "caesar.uninstall",
         "title": "Caesar: Uninstall Caesar"
+      },
+      {
+        "command": "caesar.openWalkthrough",
+        "title": "Caesar: Show Getting Started"
       }
     ],
     "languages": [
@@ -227,6 +232,73 @@
           "light": "#00000097",
           "highContrast": "#e3e3e3"
         }
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "caesar.welcome",
+        "title": "Get Started with Caesar",
+        "description": "Learn about Caesar and the Caesar Verifier for VSCode extension. You can always find more information in the [Caesar Documentation](https://www.caesarverifier.org/docs/).",
+        "steps": [
+          {
+            "id": "install",
+            "title": "Download Caesar Server",
+            "description": "You'll need to install the Caesar server. You can find more information in the [Installation Guide](https://www.caesarverifier.org/docs/getting-started/installation).\n[Automatically Install Caesar](command:caesar.checkUpdate)",
+            "media": {
+              "markdown": "walkthrough/installation.md"
+            },
+            "completionEvents": [
+              "onContext:caesarverifier.installedBinary"
+            ]
+          },
+          {
+            "id": "openHeyVl",
+            "title": "Create a HeyVL file",
+            "description": "[Open](command:toSide:workbench.action.files.openFile) or [create](command:toSide:workbench.action.files.newUntitledFile?%7B%22languageId%22%3A%22heyvl%22%7D) a HeyVL file - make sure to save it as \".heyvl\".\n[Create HeyVL File](command:toSide:workbench.action.files.newUntitledFile?%7B%22languageId%22%3A%22heyvl%22%7D)",
+            "completionEvents": [
+              "onContext:caesarverifier.openedHeyVl"
+            ],
+            "media": {
+              "markdown": "walkthrough/heyvl-examples.md"
+            }
+          },
+          {
+            "id": "verifyHeyvl",
+            "title": "Verify a HeyVL file",
+            "description": "Verify your first HeyVL file with Caesar. It will be verified whenever you save the file.",
+            "completionEvents": [
+              "onContext:caesarverifier.verifiedHeyVl"
+            ],
+            "media": {
+              "image": "images/verified-demo.png",
+              "altText": "Demo"
+            }
+          },
+          {
+            "id": "explainvc",
+            "title": "Explain Verification Conditions",
+            "description": "Show computed verification conditions via the \"Explain Verification Condition Generation\" command. Leave empty lines between code to show the computations. Run again to disable.\n[Explain Verification Conditions](command:caesar.explainVc)",
+            "completionEvents": [
+              "onContext:caesarverifier.explainedVc"
+            ],
+            "media": {
+              "image": "images/vc-demo.png",
+              "altText": "Demo"
+            }
+          },
+          {
+            "id": "learnmore",
+            "title": "Learn More",
+            "description": "Veni, vidi, vici! Caesar's documentation is available online. If you have any questions, don't hesitate to contact us via the links in the documentation.\n[Open Documentation](https://www.caesarverifier.org/docs/)",
+            "completionEvents": [
+              "onLink:https://www.caesarverifier.org/docs/"
+            ],
+            "media": {
+              "image": "images/icon.png",
+              "altText": "Caesar Logo"
+            }
+          }
+        ]
       }
     ]
   },

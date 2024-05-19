@@ -9,7 +9,7 @@ You can find more information about Caesar and HeyVL on the website: https://www
 
 On the website, you can also download the Caesar command-line binary for more advanced use cases that are not included in this VSCode extension.
 
-\!\[feature X\]\(images/feature-x.png\)
+![Caesar Verifier](images/vc-demo.png)
 
 ## Features
 
@@ -18,6 +18,8 @@ On the website, you can also download the Caesar command-line binary for more ad
  * Verify HeyVL files on file save or on command.
  * Verification errors and successes are shown in the gutter via icons.
  * Diagnostics such as errors or warnings are shown in the code and in the "Problems" menu in VSCode.
+ * Inline explanations of computed verification conditions.
+ * Automatic installation and updating of Caesar.
 
 ## Requirements
 
@@ -29,7 +31,6 @@ We provide binaries for MacOS (ARM and x86-64), Windows (x86-64), and Debian/Lin
 ## Extension Settings
 
 You can find Caesar's settings in the settings menu in the "Caesar" section.
-Importantly, you will need to configure how the Caesar binary is started.
 
 ## Known Issues
 
@@ -39,7 +40,3 @@ If you encounter any issues, [feel free to open an issue](https://github.com/mov
 ## Release Notes
 
 On Github, we have a list of all of [Caesar's releases](https://github.com/moves-rwth/caesar/releases) along with binaries.
-
-### 0.0.1
-
-Initial release.

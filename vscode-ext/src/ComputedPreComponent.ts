@@ -4,8 +4,11 @@ import { InlineGhostTextViewConfig } from "./Configuration";
 import { ServerStatus } from "./CaesarClient";
 import { DocumentMap, Verifier } from "./Verifier";
 import { ConfigurationConstants } from "./constants";
+import { WalkthroughComponent } from "./WalkthroughComponent";
 
 export class ComputedPreComponent {
+
+    private walkthroughComponent: WalkthroughComponent;
 
     private enabled: boolean;
     private computedPres: DocumentMap<[Range, boolean, [string, string][]][]>;
@@ -13,6 +16,8 @@ export class ComputedPreComponent {
     private decorationType: TextEditorDecorationType;
 
     constructor(verifier: Verifier) {
+        this.walkthroughComponent = verifier.walkthrough;
+
         // create decoration
         const backgroundColor = new vscode.ThemeColor('caesar.inlineGhostBackgroundColor');
         const color = new vscode.ThemeColor('caesar.inlineGhostForegroundColor');
@@ -71,6 +76,8 @@ export class ComputedPreComponent {
     }
 
     render() {
+        let adddedLines = false;
+
         for (const [document_id, expr_expls] of this.computedPres.entries()) {
             for (const editor of vscode.window.visibleTextEditors) {
                 if (editor.document.uri.toString() !== document_id.uri) {
@@ -128,7 +135,12 @@ export class ComputedPreComponent {
                 }
 
                 editor.setDecorations(this.decorationType, decorations);
+                adddedLines = adddedLines || decorations.length > 0;
             }
+        }
+
+        if (adddedLines) {
+            void this.walkthroughComponent.setExplainedVc(true);
         }
     }
 }

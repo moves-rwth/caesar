@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import { ServerInstaller } from "./ServerInstaller";
 import * as semver from 'semver';
 import { isPatchCompatible } from "./version";
+import { WalkthroughComponent } from "./WalkthroughComponent";
 
 export enum ServerStatus {
     Stopped,
@@ -38,6 +39,7 @@ export interface ComputedPreNotification {
 
 export class CaesarClient {
     private outputChannel: OutputChannel;
+    private walkthrough: WalkthroughComponent;
     private installer: ServerInstaller;
     private client: LanguageClient | null = null;
     private context: ExtensionContext;
@@ -46,8 +48,9 @@ export class CaesarClient {
     private computedPreListeners = new Array<(update: ComputedPreNotification) => void>();
     private needsRestart = false;
 
-    constructor(context: ExtensionContext, outputChannel: OutputChannel, installer: ServerInstaller) {
+    constructor(context: ExtensionContext, outputChannel: OutputChannel, walkthrough: WalkthroughComponent, installer: ServerInstaller) {
         this.context = context;
+        this.walkthrough = walkthrough;
         this.installer = installer;
         this.outputChannel = outputChannel;
 
@@ -65,10 +68,12 @@ export class CaesarClient {
         });
 
         vscode.commands.registerCommand('caesar.verify', async () => {
+            await this.start(true);
             const openEditor = vscode.window.activeTextEditor;
             if (openEditor) {
-                await this.start(true);
                 await this.verify(openEditor.document);
+            } else {
+                void vscode.window.showErrorMessage("There is no active text editor");
             }
         });
 
@@ -89,9 +94,9 @@ export class CaesarClient {
                 } else {
                     await ServerConfig.setWorkspace(key, setting);
                 }
+                await this.restart();
                 const openEditor = vscode.window.activeTextEditor;
                 if (openEditor) {
-                    await this.start(false);
                     await this.verify(openEditor.document);
                 }
             };
@@ -207,17 +212,19 @@ export class CaesarClient {
                     serverExecutable = pathRes;
                 } else {
                     if (recommendInstallation) {
-                        await this.installer.checkForUpdateOrInstall(false);
+                        await this.installer.checkForUpdateOrInstall(true);
                         pathRes = await this.installer.getServerExecutable();
                     }
                     if (!pathRes) {
-                        void vscode.window.showErrorMessage("You must install a Caesar binary for the extension to work. Either re-try the download, or change the settings to use another installation method.", "Re-try installation", "Open settings").then(async (command) => {
-                            if (command === "Open settings") {
-                                await vscode.commands.executeCommand('workbench.action.openSettings', 'caesar.server');
-                            } else if (command === "Re-try installation") {
-                                void this.installer.checkForUpdateOrInstall(false);
-                            }
-                        });
+                        if (recommendInstallation) {
+                            void vscode.window.showErrorMessage("The Caesar server binary is required. Either re-try the download, or change the settings to use another installation method.", "Re-try installation", "Open settings").then(async (command) => {
+                                if (command === "Open settings") {
+                                    await vscode.commands.executeCommand('workbench.action.openSettings', 'caesar.server');
+                                } else if (command === "Re-try installation") {
+                                    void this.installer.checkForUpdateOrInstall(true);
+                                }
+                            });
+                        }
                         return null;
                     } else {
                         serverExecutable = pathRes;
@@ -330,10 +337,11 @@ export class CaesarClient {
             });;
             console.error(error);
             this.client = null;
+            return;
         }
 
         try {
-            await this.client!.start();
+            await this.client.start();
         } catch (error) {
             if (!(error instanceof Error)) { throw error; }
             console.error("Failed to start Caesar", error);
@@ -343,6 +351,7 @@ export class CaesarClient {
             this.notifyStatusUpdate(ServerStatus.FailedToStart);
         }
         this.notifyStatusUpdate(ServerStatus.Ready);
+        await this.walkthrough.setBinaryInstalled(true);
     }
 
     async restart() {
@@ -370,6 +379,10 @@ export class CaesarClient {
         if (!this.client?.isRunning()) {
             return;
         }
+        if (document.languageId !== 'heyvl') {
+            void vscode.window.showErrorMessage("Caesar can only verify HeyVL files");
+            return;
+        }
         const documentItem = {
             uri: document.uri.toString(),
             languageId: document.languageId,
@@ -380,6 +393,7 @@ export class CaesarClient {
         try {
             await this.client.sendRequest('custom/verify', { text_document: documentItem });
             this.notifyStatusUpdate(ServerStatus.Finished);
+            await this.walkthrough.setVerifiedHeyVL(true);
         } catch (error) {
             if (!(error instanceof ResponseError)) { throw error; }
             void vscode.window.showErrorMessage(`Verification had an error: ${error.message}`);

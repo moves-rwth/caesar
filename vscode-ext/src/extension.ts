@@ -9,9 +9,8 @@ import { ConfigurationConstants } from './constants';
 // Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
 	const verifier = new Verifier(context);
-	const justChecked = await verifier.installer.regularlyCheckForUpdatesIfEnabled();
+	void verifier.installer.regularlyCheckForUpdatesIfEnabled();
 	if (ServerConfig.get(ConfigurationConstants.autoStartServer)) {
-		const recommendInstallation = !justChecked;
-		await verifier.start(recommendInstallation);
+		await verifier.start(false);
 	}
 }

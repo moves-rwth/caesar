@@ -6,6 +6,7 @@ import { GutterStatusComponent } from "./GutterStatusComponent";
 import { ComputedPreComponent } from "./ComputedPreComponent";
 import * as vscode from 'vscode';
 import { ServerInstaller } from "./ServerInstaller";
+import { WalkthroughComponent } from "./WalkthroughComponent";
 
 export class DocumentMap<T> {
     private map = new Map<string, [TextDocumentIdentifier, T]>();
@@ -31,6 +32,7 @@ export class Verifier {
 
     public context: ExtensionContext;
     public outputChannel: OutputChannel;
+    public walkthrough: WalkthroughComponent;
     public installer: ServerInstaller;
     public client: CaesarClient;
     private statusBar: StatusBarComponent;
@@ -40,8 +42,9 @@ export class Verifier {
     constructor(context: ExtensionContext) {
         this.context = context;
         this.outputChannel = vscode.window.createOutputChannel("Caesar", "text");
+        this.walkthrough = new WalkthroughComponent(context);
         this.installer = new ServerInstaller(context, this);
-        this.client = new CaesarClient(context, this.outputChannel, this.installer);
+        this.client = new CaesarClient(context, this.outputChannel, this.walkthrough, this.installer);
         this.statusBar = new StatusBarComponent(this);
         this.gutterStatus = new GutterStatusComponent(this);
         this.displayComputedPre = new ComputedPreComponent(this);
