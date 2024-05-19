@@ -31,6 +31,11 @@ function HomepageHeader() {
               </Link>
               <Link
                 className="button button--primary"
+                to="https://marketplace.visualstudio.com/items?itemName=rwth-moves.caesar">
+                VSCode Extension
+              </Link>
+              <Link
+                className="button button--primary"
                 to="/docs/">
                 Docs
               </Link>

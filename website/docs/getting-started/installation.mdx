@@ -5,7 +5,9 @@ sidebar_position: 1
 
 # Installing Caesar
 
-You can download a pre-built Caesar binary or Docker image, or manually build Caesar locally.
+Caesar can be used through our VSCode extension and as a command-line application.
+The required Caesar binary can be downloaded automatically by the VSCode extension.
+You can also [download binaries manually](#download-binaries), [pull a Docker image](#download-docker), or [build locally from source](#build-source).
 
 ```mdx-code-block
 import CodeBlock from '@theme/CodeBlock';
@@ -14,15 +16,42 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 ```
 
-```mdx-code-block
-import TOCInline from '@theme/TOCInline';
+## Option A: Download Caesar Verifier for VSCode (Recommended)
 
-<TOCInline toc={toc} />
-```
+<Link to="https://marketplace.visualstudio.com/items?itemName=rwth-moves.caesar">
+  <img src="/img/vc-demo.png" style={{"float": "right", "maxWidth": "350px"}} className="item shadow--tl" />
+</Link>
 
-## Download Pre-Built Releases (Recommended)
+Our *Caesar Verifier for VSCode* extension is the recommended way to install Caesar.
+The extension can automatically download and update the pre-built releases of Caesar.
 
-### Option 1: Pre-Built Binary
+The extension is available in the VSCode and VSCodium extension marketplaces and can be installed by searching for *Caesar Verifier*.
+
+<Link class="button button--primary" to="https://marketplace.visualstudio.com/items?itemName=rwth-moves.caesar">Go to Caesar Verifier on VSCode Marketplace</Link>
+
+<br /><br />
+
+**Features:**
+ * Syntax highlighting and language configuration for HeyVL.
+ * Snippets for HeyVL.
+ * Verify HeyVL files on file save or on command.
+ * Verification errors and successes are shown in the gutter via icons.
+ * Diagnostics such as errors or warnings are shown in the code and in the "Problems" menu in VSCode.
+ * Inline explanations of computed verification conditions.
+ * Automatic installation and updating of Caesar.
+
+**Installation:**
+After installing the extension in VSCode, a getting started page will open from where you can install the Caesar binaries (open manually with `Caesar: Open Getting Started` command).
+
+<div style={{"clear": "both"}} />
+
+<div style={{ paddingTop: "3em" }} />
+
+## Options B: Download Pre-Built Releases
+
+If you do not want to use the automatic installation from our VSCode extension, you can download Caesar manually.
+
+### Option B.1: Pre-Built Binary {#download-binaries}
 
 1. Go to the [latest stable release on GitHub](https://github.com/moves-rwth/caesar/releases/latest) (or [latest nightly release](https://github.com/moves-rwth/caesar/releases/nightly)) and download the release for your operating system.
 
@@ -44,7 +73,7 @@ import TOCInline from '@theme/TOCInline';
 
 <div style={{ paddingTop: "1em" }} />
 
-### Option 2: Docker Image
+### Option B.2: Docker Image {#download-docker}
 
 We also provide a [Docker](https://docs.docker.com/get-docker/) image ([multi-platform](https://docs.docker.com/build/building/multi-platform/) targeting `linux/amd64` and `linux/arm64`).
 
@@ -62,9 +91,9 @@ docker run -it -v $PWD/programs:/root/caesar/programs/ ghcr.io/moves-rwth/caesar
 
 <div style={{ paddingTop: "3em" }} />
 
-## Build From Source
+## Options C: Build From Source {#build-source}
 
-### Option 3: Compile Binary
+### Option C.1: Compile Binary
 
 #### Installing Dependencies
 
@@ -137,7 +166,7 @@ tests/zeroconf.heyvl::zeroconf: Verified.
 
 <div style={{ paddingTop: "1em" }} />
 
-### Option 4: Build Docker Image
+### Option C.2: Build Docker Image
 
 We also support building a Docker image.
 This does not require installing dependencies and will build and package the `caesar` binary in a Docker image.
