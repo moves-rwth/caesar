@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkcaesar_website=self.webpackChunkcaesar_website||[]).push([[5457],{2379:e=>{e.exports=JSON.parse('{"label":"releases","permalink":"/blog/tags/releases","allTagsPath":"/blog/tags","count":1}')}}]);
