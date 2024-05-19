@@ -5,8 +5,8 @@ use ariadne::ReportKind;
 
 use crate::{
     ast::{
-        DeclKind, Diagnostic, Expr, Files, Ident, Label, Param, SourceFilePath, Span, Spanned,
-        Stmt, Symbol,
+        DeclKind, Diagnostic, Direction, Expr, Files, Ident, Label, Param, SourceFilePath, Span,
+        Spanned, Stmt, Symbol,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -30,7 +30,7 @@ pub enum AnnotationError {
     NotOnWhile(Span, Ident, Stmt),
     WrongArgument(Span, Expr, String),
     NotTerminator(Span, Ident),
-    CalculusEncodingMismatch(Span, Ident, Ident),
+    CalculusEncodingMismatch(Direction, Span, Ident, Ident),
     UnknownAnnotation(Span, Ident),
 }
 
@@ -72,11 +72,11 @@ impl AnnotationError {
                         "There must not be any statements after this annotated statement (and the annotated statement must not be nested in a block).",
                     ))
             }
-            AnnotationError::CalculusEncodingMismatch(span, calculus_name, encoding_name ) => {
+            AnnotationError::CalculusEncodingMismatch(direction, span, calculus_name, encoding_name ) => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "The '{}' calculus does not support the '{}' encoding.",
-                        calculus_name.name, encoding_name.name
+                        "In {}s, the '{}' calculus does not support the '{}' encoding.",
+                        direction.prefix("proc"), calculus_name.name, encoding_name.name
                     ))
                     .with_label(Label::new(span).with_message(
                         "The calculus, proof rule, and direction are incompatible.",

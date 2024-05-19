@@ -221,6 +221,7 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                                 .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,
                         ) {
                             return Err(AnnotationError::CalculusEncodingMismatch(
+                                self.direction.unwrap(),
                                 s.span,
                                 calculus.name,
                                 anno_ref.name(),
