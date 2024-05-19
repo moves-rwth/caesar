@@ -21,8 +21,7 @@ const config = {
   organizationName: 'moves-rwth', // Usually your GitHub org/user name.
   projectName: 'caesar', // Usually your repo name.
 
-  // unfortunately that detection seems to be broken for assets, so we just set it to warn for now.
-  onBrokenLinks: 'warn',
+  onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
 
   // Even if you don't use internalization, you can use this field to set useful
