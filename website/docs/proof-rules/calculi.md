@@ -44,7 +44,7 @@ A valid proof rule would be [ω-invariants](./omega-invariants.md).
 @wp
 proc main() -> () {
     var x: UInt
-    @induction(x)
+    @invariant(x)
     while 1 <= x {
         x = x - 1
     }

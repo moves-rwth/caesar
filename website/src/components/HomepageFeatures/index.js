@@ -138,17 +138,17 @@ post [true]` }
             <CodeBlock language='heyvl'>{`domain Exponentials {
     func exp(base: UReal, exponent: UInt): EUReal
 
-    axiom exp_base forall base: UReal. 
+    axiom exp_base forall base: UReal.
       exp(base, 0) == 1
-    axiom exp_step forall base: UReal, exponent: UInt. 
+    axiom exp_step forall base: UReal, exponent: UInt.
       exp(base, exponent + 1) == base * exp(base, exponent)
 }
 
 domain List {
     func len(l: List): UInt
-    func pop(l: List): List 
+    func pop(l: List): List
 
-    axiom list_len forall l: List. 
+    axiom list_len forall l: List.
       len(pop(l)) == len(l) - 1
 }`}
             </CodeBlock>
