@@ -9,7 +9,7 @@ You can find more information about Caesar and HeyVL on the website: https://www
 
 On the website, you can also download the Caesar command-line binary for more advanced use cases that are not included in this VSCode extension.
 
-![Caesar Verifier](images/vc-demo.png)
+![Caesar Verifier](vscode-ext/images/vc-demo.png)
 
 ## Features
 
