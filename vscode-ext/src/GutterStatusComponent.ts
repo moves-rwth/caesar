@@ -1,6 +1,6 @@
 import { Range } from "vscode";
 import * as vscode from 'vscode';
-import { GutterInformationViewConfig } from "./Configuration";
+import { GutterInformationViewConfig } from "./Config";
 import { ServerStatus, VerifyResult } from "./CaesarClient";
 import { DocumentMap, Verifier } from "./Verifier";
 import { ConfigurationConstants } from "./constants";
@@ -27,7 +27,7 @@ export class GutterStatusComponent {
 
         // subscribe to config changes
         verifier.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
-            if (e.affectsConfiguration(GutterInformationViewConfig.getFullPath(ConfigurationConstants.showGutterIcons))) {
+            if (GutterInformationViewConfig.isAffected(e)) {
                 this.enabled = GutterInformationViewConfig.get(ConfigurationConstants.showGutterIcons);
                 this.render();
             }

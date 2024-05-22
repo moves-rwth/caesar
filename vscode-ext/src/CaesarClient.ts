@@ -3,7 +3,7 @@ import { Executable, LanguageClient, ServerOptions } from "vscode-languageclient
 import { ExtensionContext, OutputChannel, Range, TextDocument } from "vscode";
 import * as vscode from "vscode";
 import { ConfigurationConstants } from "./constants";
-import Configuration, { ServerConfig } from "./Configuration";
+import { CaesarConfig, ServerConfig } from "./Config";
 import * as path from "path";
 import * as fs from 'fs/promises';
 import { ServerInstaller } from "./ServerInstaller";
@@ -90,9 +90,11 @@ export class CaesarClient {
                 const key = ConfigurationConstants.explainVc;
                 const explainVc: string = ServerConfig.get(key);
                 if (explainVc === setting) {
-                    await ServerConfig.setWorkspace(key, "no");
+                    await ServerConfig.update(key, "no");
+                    void vscode.window.showInformationMessage("Explanation of verification conditions disabled.");
                 } else {
-                    await ServerConfig.setWorkspace(key, setting);
+                    await ServerConfig.update(key, setting);
+                    void vscode.window.showInformationMessage("VC explanations enabled. This will slow down verification! Run command again to disable.");
                 }
                 await this.restart();
                 const openEditor = vscode.window.activeTextEditor;
@@ -106,7 +108,7 @@ export class CaesarClient {
         vscode.commands.registerCommand('caesar.explainCoreVc', explainToggleCommandHandler("core"));
 
         this.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
-            if (e.affectsConfiguration(ServerConfig.getFullPath())) {
+            if (ServerConfig.isAffected(e)) {
                 this.needsRestart = true;
             }
         }));
@@ -170,7 +172,7 @@ export class CaesarClient {
         }));
 
         // listen to onDidSaveTextDocument events
-        const autoVerify: string = Configuration.get(ConfigurationConstants.automaticVerification);
+        const autoVerify: string = CaesarConfig.get(ConfigurationConstants.automaticVerification);
         if (autoVerify === "onsave") {
             context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
                 if (document.languageId !== "heyvl") {

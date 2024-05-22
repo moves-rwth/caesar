@@ -1,6 +1,6 @@
 import { MarkdownString, Range, TextEditorDecorationType } from "vscode";
 import * as vscode from 'vscode';
-import { InlineGhostTextViewConfig } from "./Configuration";
+import { InlineGhostTextViewConfig } from "./Config";
 import { ServerStatus } from "./CaesarClient";
 import { DocumentMap, Verifier } from "./Verifier";
 import { ConfigurationConstants } from "./constants";
@@ -36,7 +36,7 @@ export class ComputedPreComponent {
 
         // subscribe to config changes
         verifier.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
-            if (e.affectsConfiguration(InlineGhostTextViewConfig.getFullPath(ConfigurationConstants.showInlineGhostText))) {
+            if (InlineGhostTextViewConfig.isAffected(e)) {
                 this.enabled = InlineGhostTextViewConfig.get(ConfigurationConstants.showInlineGhostText);
                 this.render();
             }

@@ -2,7 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { Verifier } from './Verifier';
-import { ServerConfig } from './Configuration';
+import { ServerConfig } from './Config';
 import { ConfigurationConstants } from './constants';
 
 // This method is called when your extension is activated
