@@ -64,7 +64,7 @@ export class ComputedPreComponent {
 
         // clear all information when a new verification task is started
         verifier.client.onStatusUpdate((status) => {
-            if (status === ServerStatus.Verifying) {
+            if (status !== ServerStatus.Finished) {
                 for (const [_document, results] of this.computedPres.entries()) {
                     results.length = 0;
                 }
