@@ -35,7 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        
+
         - build: linux-x86
           os: ubuntu-latest
           rust: stable
@@ -136,16 +136,16 @@ jobs:
       shell: bash
       if: matrix.os == 'windows-latest'
       run: |
-        7z a "$ARCHIVE.zip" "$ARCHIVE/*"
+        7z a "$ARCHIVE.zip" "./$ARCHIVE/*"
         echo "ASSET=$ARCHIVE.zip" >> $GITHUB_ENV
-      
+
     - name: Build archive (Unix)
       shell: bash
       if: matrix.os != 'windows-latest'
       run: |
         tar czf "$ARCHIVE.tar.gz" "$ARCHIVE"
         echo "ASSET=$ARCHIVE.tar.gz" >> $GITHUB_ENV
-        
+
     - name: Upload Release Files
       uses: softprops/action-gh-release@v2
       with:
