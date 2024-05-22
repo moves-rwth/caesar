@@ -154,7 +154,7 @@ export class ServerInstaller {
         });
     }
 
-    private async installAssetWithProgress(release: ReleaseAsset, progress: Progress<{ increment: number, message: string }>) {
+    private async installAssetWithProgress(release: ReleaseAsset, progress: Progress<{ increment: number, message?: string }>) {
         this.verifier.logger.info(`Installer: downloading ${release.releaseName} (${release.url})`);
         progress.report({ increment: 0, message: "Cleaning up old installation..." });
 
@@ -203,12 +203,17 @@ export class ServerInstaller {
         progress.report({ increment: 25, message: "Starting server..." });
 
         await this.context.globalState.update("installedVersion", hashRelease(release));
-        await this.verifier.client.start(false);
+        const success = await this.verifier.client.start(false);
 
-        this.verifier.logger.info(`Installer: server started.`);
-        progress.report({ increment: 100, message: `Successfully installed ${release.releaseName}` });
-        // the progress message disappears after completion
-        void window.showInformationMessage(`Successfully installed Caesar ${release.releaseName}`);
+        if (success) {
+            this.verifier.logger.info(`Installer: server started.`);
+            progress.report({ increment: 100, message: `Successfully installed ${release.releaseName}` });
+            // the progress message disappears after completion
+            void window.showInformationMessage(`Successfully installed Caesar ${release.releaseName}`);
+        } else {
+            progress.report({ increment: 100 });
+            void this.verifier.logger.showErrorMessage("Caesar failed to install");
+        }
     }
 
     async getLatestReleaseAsset(prerelease: boolean, assetNameIncludes: string): Promise<ReleaseAsset | null> {

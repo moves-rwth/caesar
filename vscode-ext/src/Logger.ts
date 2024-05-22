@@ -27,4 +27,15 @@ export default class Logger {
     public info(message: string, ...data: any[]) {
         this.printTimedMessage("Info", message, data);
     }
+
+    public show() {
+        this.outputChannel.show();
+    }
+
+    public async showErrorMessage(message: string) {
+        const button = await window.showErrorMessage(message, "Show Output");
+        if (button === "Show Output") {
+            this.show();
+        }
+    }
 }

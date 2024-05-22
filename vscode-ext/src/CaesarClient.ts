@@ -1,6 +1,6 @@
 import { LanguageClientOptions, ResponseError, TextDocumentIdentifier, VersionedTextDocumentIdentifier } from "vscode-languageclient";
 import { Executable, LanguageClient, ServerOptions } from "vscode-languageclient/node";
-import { ExtensionContext, OutputChannel, Range, TextDocument } from "vscode";
+import { ExtensionContext, Range, TextDocument } from "vscode";
 import * as vscode from "vscode";
 import { ConfigurationConstants } from "./constants";
 import { CaesarConfig, ServerConfig } from "./Config";
@@ -10,6 +10,7 @@ import { ServerInstaller } from "./ServerInstaller";
 import * as semver from 'semver';
 import { isPatchCompatible } from "./version";
 import { WalkthroughComponent } from "./WalkthroughComponent";
+import Logger from "./Logger";
 
 export enum ServerStatus {
     Stopped,
@@ -38,7 +39,7 @@ export interface ComputedPreNotification {
 
 
 export class CaesarClient {
-    private outputChannel: OutputChannel;
+    private logger: Logger;
     private walkthrough: WalkthroughComponent;
     private installer: ServerInstaller;
     private client: LanguageClient | null = null;
@@ -48,11 +49,11 @@ export class CaesarClient {
     private computedPreListeners = new Array<(update: ComputedPreNotification) => void>();
     private needsRestart = false;
 
-    constructor(context: ExtensionContext, outputChannel: OutputChannel, walkthrough: WalkthroughComponent, installer: ServerInstaller) {
+    constructor(context: ExtensionContext, logger: Logger, walkthrough: WalkthroughComponent, installer: ServerInstaller) {
         this.context = context;
         this.walkthrough = walkthrough;
         this.installer = installer;
-        this.outputChannel = outputChannel;
+        this.logger = logger;
 
         // listen to commands
         vscode.commands.registerCommand('caesar.restartServer', async () => {
@@ -141,7 +142,7 @@ export class CaesarClient {
                 fileEvents: vscode.workspace.createFileSystemWatcher('**/*.heyvl')
             },
             initializationOptions,
-            outputChannel: this.outputChannel,
+            outputChannel: this.logger.outputChannel,
         };
 
         const client = new LanguageClient(
@@ -312,12 +313,12 @@ export class CaesarClient {
         };
     }
 
-    async start(recommendInstallation: boolean) {
+    async start(recommendInstallation: boolean): Promise<boolean> {
         if (this.client?.isRunning()) {
             if (this.needsRestart) {
                 await this.stop();
             } else {
-                return;
+                return true;
             }
         }
 
@@ -328,31 +329,29 @@ export class CaesarClient {
             this.client = await this.createClient(recommendInstallation);
             if (this.client === null) {
                 this.notifyStatusUpdate(ServerStatus.FailedToStart);
-                return;
+                return false;
             }
         } catch (error) {
             if (!(error instanceof Error)) { throw error; }
             this.notifyStatusUpdate(ServerStatus.FailedToStart);
-            void vscode.window.showErrorMessage(`Failed to initialize Caesar: ${error.message})`, "Show Output").then(() => {
-                this.outputChannel.show();
-            });;
-            console.error(error);
+            this.logger.error("Failed to initialize Caesar.", error);
+            void this.logger.showErrorMessage(`Failed to initialize Caesar: ${error.message})`);
             this.client = null;
-            return;
+            return false;
         }
 
         try {
             await this.client.start();
         } catch (error) {
             if (!(error instanceof Error)) { throw error; }
-            console.error("Failed to start Caesar", error);
-            void vscode.window.showErrorMessage(`Failed to start Caesar: ${error.message}`, "Show Output").then(() => {
-                this.outputChannel.show();
-            });
+            this.logger.error("Failed to initialize Caesar.", error);
+            void this.logger.showErrorMessage(`Failed to start Caesar: ${error.message})`);
             this.notifyStatusUpdate(ServerStatus.FailedToStart);
+            return false;
         }
         this.notifyStatusUpdate(ServerStatus.Ready);
         await this.walkthrough.setBinaryInstalled(true);
+        return true;
     }
 
     async restart() {
