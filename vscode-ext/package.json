@@ -253,7 +253,7 @@
           {
             "id": "openHeyVl",
             "title": "Create a HeyVL file",
-            "description": "[Open](command:toSide:workbench.action.files.openFile) or [create](command:toSide:workbench.action.files.newUntitledFile?%7B%22languageId%22%3A%22heyvl%22%7D) a HeyVL file - make sure to save it as \".heyvl\".\n[Create HeyVL File](command:toSide:workbench.action.files.newUntitledFile?%7B%22languageId%22%3A%22heyvl%22%7D)",
+            "description": "[Open](command:toSide:workbench.action.files.openFile) or [create](command:caesar.openExampleFileBeside) a HeyVL file - make sure to save it as \".heyvl\".\n[Create HeyVL File](command:caesar.openExampleFileBeside)",
             "completionEvents": [
               "onContext:caesarverifier.openedHeyVl"
             ],
