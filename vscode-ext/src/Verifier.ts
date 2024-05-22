@@ -31,7 +31,7 @@ export class DocumentMap<T> {
 export class Verifier {
 
     public context: ExtensionContext;
-    public outputChannel: Logger;
+    public logger: Logger;
     public walkthrough: WalkthroughComponent;
     public installer: ServerInstaller;
     public client: CaesarClient;
@@ -41,10 +41,10 @@ export class Verifier {
 
     constructor(context: ExtensionContext) {
         this.context = context;
-        this.outputChannel = new Logger();
+        this.logger = new Logger();
         this.walkthrough = new WalkthroughComponent(context);
         this.installer = new ServerInstaller(context, this);
-        this.client = new CaesarClient(context, this.outputChannel.outputChannel, this.walkthrough, this.installer);
+        this.client = new CaesarClient(context, this.logger.outputChannel, this.walkthrough, this.installer);
         this.statusBar = new StatusBarComponent(this);
         this.gutterStatus = new GutterStatusComponent(this);
         this.displayComputedPre = new ComputedPreComponent(this);

@@ -34,7 +34,7 @@ export class ServerInstaller {
                 // walkthroughs or markdown links, command errors are not shown
                 // to the user. so we need to do it manually.
                 void window.showErrorMessage(`Failed to check for Caesar updates: ${err.message}`);
-                this.verifier.outputChannel.error("Installer: failed to check for updates!", err);
+                this.verifier.logger.error("Installer: failed to check for updates!", err);
             }
         });
 
@@ -53,7 +53,7 @@ export class ServerInstaller {
                 return false;
             }
             try {
-                this.verifier.outputChannel.info("Installer: checking for updates");
+                this.verifier.logger.info("Installer: checking for updates");
                 await this.checkForUpdateOrInstall(false);
             } catch (error) {
                 console.log(error);
@@ -76,7 +76,7 @@ export class ServerInstaller {
             return binaryPath;
         } catch (err) {
             if (!(err instanceof Error)) { throw err; }
-            this.verifier.outputChannel.info(`Failed to access server executable at ${binaryPath}: ${err.message}`);
+            this.verifier.logger.info(`Failed to access server executable at ${binaryPath}: ${err.message}`);
             await this.uninstall(false);
             return null;
         }
@@ -97,7 +97,7 @@ export class ServerInstaller {
         const release = await this.getLatestReleaseAsset(prerelease, assetFilter);
 
         if (release === null) {
-            this.verifier.outputChannel.info("Installer: No binary available for platform");
+            this.verifier.logger.info("Installer: No binary available for platform");
             if (notifyNoNewVersion) {
                 void window.showInformationMessage(`There is no Caesar binary for your platform available. Refer to our installation instructions for other options`, "Go to installation instructions").then(async (button) => {
                     if (button === "Go to installation instructions") {
@@ -110,13 +110,13 @@ export class ServerInstaller {
 
         const currentVersion: string | undefined = this.context.globalState.get("installedVersion");
         if (currentVersion === hashRelease(release)) {
-            this.verifier.outputChannel.info(`Installer: Current version ${currentVersion} is up to date with ${release.releaseName}`);
+            this.verifier.logger.info(`Installer: Current version ${currentVersion} is up to date with ${release.releaseName}`);
             if (notifyNoNewVersion) {
                 void window.showInformationMessage(`No new version of Caesar available. You're up to date with ${release.releaseName} (${release.date}).`);
             }
             return;
         }
-        this.verifier.outputChannel.info(`Installer: Current version ${currentVersion} can be updated to new version ${release.releaseName}`);
+        this.verifier.logger.info(`Installer: Current version ${currentVersion} can be updated to new version ${release.releaseName}`);
         const isInstalled = (await this.getServerExecutable()) !== null;
         const message = isInstalled ? `New version of Caesar available: ${release.releaseName} (${release.date})` : `Do you want to install Caesar (${release.releaseName}, ${release.date})?`;
         const button = isInstalled ? "Update" : "Install";
@@ -127,7 +127,7 @@ export class ServerInstaller {
     }
 
     public async uninstall(notifyUninstalled: boolean) {
-        this.verifier.outputChannel.info("Installer: uninstalling Caesar binary");
+        this.verifier.logger.info("Installer: uninstalling Caesar binary");
         await this.verifier.client.stop();
         await fs.rm(this.installRoot, { recursive: true, force: true, maxRetries: 5 });
         await this.context.globalState.update('lastDependencyCheck', undefined);
@@ -149,7 +149,7 @@ export class ServerInstaller {
     }
 
     private async installAssetWithProgress(release: ReleaseAsset, progress: Progress<{ increment: number, message: string }>) {
-        this.verifier.outputChannel.info(`Installer: downloading ${release.releaseName} (${release.url})`);
+        this.verifier.logger.info(`Installer: downloading ${release.releaseName} (${release.url})`);
         progress.report({ increment: 0, message: "Cleaning up old installation..." });
 
         await this.uninstall(false);
@@ -169,7 +169,7 @@ export class ServerInstaller {
         const data = response.rawBody;
         await fs.writeFile(assetPath, new Uint8Array(data));
 
-        this.verifier.outputChannel.info(`Installer: downloaded release. extracting ${assetPath}`);
+        this.verifier.logger.info(`Installer: downloaded release. extracting ${assetPath}`);
         progress.report({ increment: 40, message: "Unpacking..." });
 
         if (release.extension === "zip") {
@@ -193,13 +193,13 @@ export class ServerInstaller {
             throw new Error("unknown ending");
         }
 
-        this.verifier.outputChannel.info(`Installer: extraction done, starting server`);
+        this.verifier.logger.info(`Installer: extraction done, starting server`);
         progress.report({ increment: 25, message: "Starting server..." });
 
         await this.context.globalState.update("installedVersion", hashRelease(release));
         await this.verifier.client.start(false);
 
-        this.verifier.outputChannel.info(`Installer: server started.`);
+        this.verifier.logger.info(`Installer: server started.`);
         progress.report({ increment: 100, message: `Successfully installed ${release.releaseName}` });
         // the progress message disappears after completion
         void window.showInformationMessage(`Successfully installed Caesar ${release.releaseName}`);
@@ -223,13 +223,13 @@ export class ServerInstaller {
                     continue;
                 } else if (release.prerelease) {
                     if (!prerelease) {
-                        this.verifier.outputChannel.info(`Installer: skipping pre-release ${release.name} (${release.published_at})`);
+                        this.verifier.logger.info(`Installer: skipping pre-release ${release.name} (${release.published_at})`);
                         continue;
                     }
                 } else {
                     const releaseSemver = semver.parse(release.tag_name);
                     if (!releaseSemver || !isPatchCompatible(currentSemver, releaseSemver)) {
-                        this.verifier.outputChannel.info(`Installer: ${releaseSemver?.toString()} incompatible with current extension version ${currentSemver.toString()}`);
+                        this.verifier.logger.info(`Installer: ${releaseSemver?.toString()} incompatible with current extension version ${currentSemver.toString()}`);
                         continue;
                     }
                 }
