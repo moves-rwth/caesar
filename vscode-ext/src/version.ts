@@ -45,3 +45,17 @@ export function getPlatformAssetFilter(): string | null {
             return null;
     }
 }
+
+export function getPlatformAssetExecutableName(): string | null {
+    const platform = os.platform();
+    switch (platform) {
+        case "linux":
+        case "darwin":
+            return "caesar";
+        case "win32":
+            return "caesar.exe";
+        default:
+            console.log(`Unsupported platform: ${platform}`);
+            return null;
+    }
+}

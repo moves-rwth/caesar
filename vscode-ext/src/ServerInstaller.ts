@@ -8,7 +8,7 @@ import got from 'got';
 import { InstallerConfig } from './Config';
 import { Verifier } from './Verifier';
 import * as semver from 'semver';
-import { getExtensionVersion, getPlatformAssetFilter, isPatchCompatible } from './version';
+import { getExtensionVersion, getPlatformAssetExecutableName, getPlatformAssetFilter, isPatchCompatible } from './version';
 
 export class ServerInstaller {
     private context: ExtensionContext;
@@ -61,7 +61,11 @@ export class ServerInstaller {
     }
 
     public async getServerExecutable(): Promise<string | null> {
-        const binaryPath = path.join(this.installRoot, "caesar");
+        const binaryName = getPlatformAssetExecutableName();
+        if (binaryName === null) {
+            return null;
+        }
+        const binaryPath = path.join(this.installRoot, binaryName);
         try {
             await fs.access(binaryPath, fs.constants.X_OK);
             return binaryPath;
