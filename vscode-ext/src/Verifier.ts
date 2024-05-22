@@ -1,5 +1,5 @@
 import { TextDocumentIdentifier } from "vscode-languageclient";
-import { ExtensionContext, OutputChannel } from "vscode";
+import { ExtensionContext, LogOutputChannel } from "vscode";
 import { CaesarClient } from "./CaesarClient";
 import { StatusBarComponent } from "./StatusBarComponent";
 import { GutterStatusComponent } from "./GutterStatusComponent";
@@ -31,7 +31,7 @@ export class DocumentMap<T> {
 export class Verifier {
 
     public context: ExtensionContext;
-    public outputChannel: OutputChannel;
+    public outputChannel: LogOutputChannel;
     public walkthrough: WalkthroughComponent;
     public installer: ServerInstaller;
     public client: CaesarClient;
@@ -41,7 +41,7 @@ export class Verifier {
 
     constructor(context: ExtensionContext) {
         this.context = context;
-        this.outputChannel = vscode.window.createOutputChannel("Caesar", "text");
+        this.outputChannel = vscode.window.createOutputChannel("Caesar", { log: true });
         this.walkthrough = new WalkthroughComponent(context);
         this.installer = new ServerInstaller(context, this);
         this.client = new CaesarClient(context, this.outputChannel, this.walkthrough, this.installer);
