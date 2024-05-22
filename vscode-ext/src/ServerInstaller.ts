@@ -144,7 +144,13 @@ export class ServerInstaller {
             title: "Installing Caesar",
             cancellable: false
         }, async (progress) => {
-            await this.installAssetWithProgress(release, progress);
+            try {
+                await this.installAssetWithProgress(release, progress);
+            } catch (err) {
+                // make the progress disappear on error
+                progress.report({ increment: 100 });
+                throw err;
+            }
         });
     }
 
