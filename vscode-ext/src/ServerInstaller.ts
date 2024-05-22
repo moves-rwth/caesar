@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as  tar from 'tar';
-import { ExtensionContext, Uri, commands, env, window } from 'vscode';
+import { ExtensionContext, Progress, ProgressLocation, Uri, commands, env, window } from 'vscode';
 import { Octokit } from '@octokit/rest';
 import * as AdmZip from 'adm-zip';
 import got from 'got';
@@ -139,9 +139,23 @@ export class ServerInstaller {
     }
 
     private async installAsset(release: ReleaseAsset) {
+        await window.withProgress({
+            location: ProgressLocation.Notification,
+            title: "Installing Caesar",
+            cancellable: false
+        }, async (progress) => {
+            await this.installAssetWithProgress(release, progress);
+        });
+    }
+
+    private async installAssetWithProgress(release: ReleaseAsset, progress: Progress<{ increment: number, message: string }>) {
         this.verifier.outputChannel.info(`Installer: downloading ${release.releaseName} (${release.url})`);
+        progress.report({ increment: 0, message: "Cleaning up old installation..." });
 
         await this.uninstall(false);
+
+        progress.report({ increment: 25, message: "Downloading..." });
+
         await fs.mkdir(this.installRoot, { recursive: true });
         // TODO: this will load the file first completely into memory
         const response = await got.get(release.url, {
@@ -156,6 +170,8 @@ export class ServerInstaller {
         await fs.writeFile(assetPath, new Uint8Array(data));
 
         this.verifier.outputChannel.info(`Installer: downloaded release. extracting ${assetPath}`);
+        progress.report({ increment: 40, message: "Unpacking..." });
+
         if (release.extension === "zip") {
             const zip = new AdmZip(assetPath);
             await new Promise<void>((resolve, reject) =>
@@ -178,12 +194,15 @@ export class ServerInstaller {
         }
 
         this.verifier.outputChannel.info(`Installer: extraction done, starting server`);
+        progress.report({ increment: 25, message: "Starting server..." });
 
         await this.context.globalState.update("installedVersion", hashRelease(release));
         await this.verifier.client.start(false);
-        void window.showInformationMessage(`Caesar (${release.releaseName}, ${release.date}) installed successfully.`);
 
         this.verifier.outputChannel.info(`Installer: server started.`);
+        progress.report({ increment: 100, message: `Successfully installed ${release.releaseName}` });
+        // the progress message disappears after completion
+        void window.showInformationMessage(`Successfully installed Caesar ${release.releaseName}`);
     }
 
     async getLatestReleaseAsset(prerelease: boolean, assetNameIncludes: string): Promise<ReleaseAsset | null> {
