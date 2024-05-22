@@ -44,7 +44,7 @@ export class Verifier {
         this.logger = new Logger();
         this.walkthrough = new WalkthroughComponent(context);
         this.installer = new ServerInstaller(context, this);
-        this.client = new CaesarClient(context, this.logger.outputChannel, this.walkthrough, this.installer);
+        this.client = new CaesarClient(context, this.logger, this.walkthrough, this.installer);
         this.statusBar = new StatusBarComponent(this);
         this.gutterStatus = new GutterStatusComponent(this);
         this.displayComputedPre = new ComputedPreComponent(this);
