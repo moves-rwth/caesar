@@ -11,6 +11,13 @@ On the website, you can also download the Caesar command-line binary for more ad
 
 ![Caesar Verifier](vscode-ext/images/vc-demo.png)
 
+## Getting Started Walkthrough
+
+The extension will open a walkthrough on first startup to guide you through the installation.
+
+If this does not happen for you after installation, you can open the guide with the command `Caesar: Show Getting Started`.
+The command palette can be opened with Shift + Command + P (Mac) / Ctrl + Shift + P (Windows/Linux).
+
 ## Features
 
  * Syntax highlighting and language configuration for HeyVL.
