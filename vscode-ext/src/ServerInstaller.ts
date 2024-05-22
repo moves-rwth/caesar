@@ -11,6 +11,11 @@ import * as semver from 'semver';
 import { getExtensionVersion, getPlatformAssetExecutableName, getPlatformAssetFilter, isPatchCompatible } from './version';
 
 export class ServerInstaller {
+    readonly CAESAR_GITHUB_USER = "moves-rwth";
+    readonly CAESAR_GITHUB_REPO = "caesar";
+    readonly GLOBAL_STORAGE_DIR = "caesar-download";
+    readonly CHECK_INTERVAL_MILLIS = 24 * 60 * 60 * 1000; // 24 hours
+
     private context: ExtensionContext;
     private verifier: Verifier;
     private installRoot: string;
@@ -18,7 +23,7 @@ export class ServerInstaller {
     public constructor(context: ExtensionContext, verifier: Verifier) {
         this.context = context;
         this.verifier = verifier;
-        this.installRoot = path.join(context.globalStoragePath, "caesar-download");
+        this.installRoot = path.join(context.globalStoragePath, this.GLOBAL_STORAGE_DIR);
 
         commands.registerCommand('caesar.checkUpdate', async () => {
             try {
@@ -41,11 +46,10 @@ export class ServerInstaller {
     public async regularlyCheckForUpdatesIfEnabled(): Promise<boolean> {
         const enabled: boolean = InstallerConfig.get("autoCheck");
         if (enabled) {
-            const CHECK_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
             const lastCheck = this.context.globalState.get<number>('lastDependencyCheck');
             const now = Date.now();
             // Check if it's time to perform another check
-            if (lastCheck && now - lastCheck < CHECK_INTERVAL) {
+            if (lastCheck && now - lastCheck < this.CHECK_INTERVAL_MILLIS) {
                 return false;
             }
             try {
@@ -90,7 +94,7 @@ export class ServerInstaller {
         }
 
         const prerelease: boolean = InstallerConfig.get("nightly");
-        const release = await this.getLatestReleaseAsset("moves-rwth", "caesar", prerelease, assetFilter);
+        const release = await this.getLatestReleaseAsset(prerelease, assetFilter);
 
         if (release === null) {
             this.verifier.outputChannel.info("Installer: No binary available for platform");
@@ -182,15 +186,15 @@ export class ServerInstaller {
         this.verifier.outputChannel.info(`Installer: server started.`);
     }
 
-    async getLatestReleaseAsset(owner: string, repo: string, prerelease: boolean, assetNameIncludes: string): Promise<ReleaseAsset | null> {
+    async getLatestReleaseAsset(prerelease: boolean, assetNameIncludes: string): Promise<ReleaseAsset | null> {
         const currentSemver = getExtensionVersion(this.context);
 
         const octokit = new Octokit();
 
         try {
             const response = await octokit.repos.listReleases({
-                owner: owner,
-                repo: repo,
+                owner: this.CAESAR_GITHUB_USER,
+                repo: this.CAESAR_GITHUB_REPO,
             });
 
             const releases = response.data;
