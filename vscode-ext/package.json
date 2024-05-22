@@ -3,7 +3,7 @@
   "displayName": "Caesar Verifier",
   "description": "The quantitative deductive verifier Caesar for VSCode",
   "publisher": "rwth-moves",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "repository": {
     "type": "git",
     "url": "https://github.com/moves-rwth/caesar.git",
@@ -329,7 +329,7 @@
   },
   "dependencies": {
     "@octokit/rest": "^20.1.1",
-    "adm-zip": "^0.5.12",
+    "adm-zip": "github:cthackers/adm-zip#d3f5d7b71c48a1d0bec71362df308c3167c542d7",
     "got": "^11.8.6",
     "octokit": "^4.0.2",
     "semver": "^7.6.2",
