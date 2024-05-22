@@ -53,6 +53,7 @@ export class ServerInstaller {
                 return false;
             }
             try {
+                this.verifier.outputChannel.info("Installer: checking for updates");
                 await this.checkForUpdateOrInstall(false);
             } catch (error) {
                 console.log(error);
@@ -82,7 +83,6 @@ export class ServerInstaller {
     }
 
     public async checkForUpdateOrInstall(notifyNoNewVersion: boolean) {
-        this.verifier.outputChannel.info("Installer: checking for updates");
         const assetFilter = getPlatformAssetFilter();
         if (assetFilter === null) {
             void window.showErrorMessage("We do not provide Caesar binaries for your platform. Please provide your own binary or compile from source. Change the `caesar.server.installationOptions` setting accordingly.", "Open settings").then(async (command) => {

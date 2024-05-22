@@ -142,7 +142,6 @@ export class CaesarClient {
             },
             initializationOptions,
             outputChannel: this.outputChannel,
-
         };
 
         const client = new LanguageClient(
