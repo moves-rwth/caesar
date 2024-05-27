@@ -19,3 +19,6 @@ jobs:
     with:
       git_ref: ${{ github.ref_name }}
       version: ${{ github.ref_name }}
+    secrets:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OPEN_VSX_PAT: ${{ secrets.OPEN_VSX_PAT }}

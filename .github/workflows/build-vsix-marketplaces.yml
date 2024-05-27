@@ -10,6 +10,13 @@ on:
       version:
         required: true
         type: string
+    secrets:
+      VSCE_PAT:
+        description: "Token for publishing to the VSCode Marketplace"
+        required: true
+      OPEN_VSX_PAT:
+        description: "Token for publishing to the Open VSX Registry"
+        required: true
 
 env:
   EXTENSION_DIRECTORY: ./vscode-ext
