@@ -115,15 +115,13 @@ export class CaesarClient {
         }));
 
         // listen to onDidSaveTextDocument events
-        const autoVerify: string = CaesarConfig.get(ConfigurationConstants.automaticVerification);
-        if (autoVerify === "onsave") {
-            context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
-                if (document.languageId !== "heyvl") {
-                    return;
-                }
-                void this.verify(document);
-            }));
-        }
+        this.context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
+            if (document.languageId !== "heyvl" && CaesarConfig.get(ConfigurationConstants.automaticVerification) !== "onsave") {
+                return;
+            }
+            void this.verify(document);
+        }));
+
     }
 
     private async createClient(recommendInstallation: boolean): Promise<LanguageClient | null> {
