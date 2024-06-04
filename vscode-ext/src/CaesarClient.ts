@@ -113,6 +113,15 @@ export class CaesarClient {
                 this.needsRestart = true;
             }
         }));
+
+        // listen to onDidSaveTextDocument events
+        this.context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
+            if (document.languageId !== "heyvl" && CaesarConfig.get(ConfigurationConstants.automaticVerification) !== "onsave") {
+                return;
+            }
+            void this.verify(document);
+        }));
+
     }
 
     private async createClient(recommendInstallation: boolean): Promise<LanguageClient | null> {
@@ -171,16 +180,7 @@ export class CaesarClient {
             }
         }));
 
-        // listen to onDidSaveTextDocument events
-        const autoVerify: string = CaesarConfig.get(ConfigurationConstants.automaticVerification);
-        if (autoVerify === "onsave") {
-            context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
-                if (document.languageId !== "heyvl") {
-                    return;
-                }
-                void this.verify(document);
-            }));
-        }
+
 
         // check server version
         context.subscriptions.push(client.onNotification("custom/caesarReady", (event) => {
