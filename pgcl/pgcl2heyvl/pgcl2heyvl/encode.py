@@ -729,6 +729,8 @@ def _encode_expr(expr: Expr) -> HeyExpr:
             Binop.LEQ: "<=",
             Binop.LT: "<",
             Binop.EQ: "==",
+            Binop.GT: ">",
+            Binop.GEQ: ">=",
             Binop.PLUS: "+",
             Binop.MINUS: "-",
             Binop.TIMES: "*",
