@@ -140,8 +140,7 @@ impl<'ctx> SliceSolver<'ctx> {
 
         let (prover, universally_bound) = (&mut self.prover, &self.universally_bound);
 
-        // TODO: this is unsound if there are uninterpreted functions!
-        warn!("The --slice-verify option is unsound if uninterpreted functions are used. This is not checked at the moment. Be careful!");
+        tracing::warn!("The --slice-verify option is unsound if uninterpreted functions are used.");
 
         let mut exists_forall_solver = prover.to_exists_forall(universally_bound);
         exists_forall_solver.add_assumption(&inactive_formula);
