@@ -116,6 +116,20 @@ if x + 1 == 2 {
 }
 ```
 
+## While Loops
+
+HeyVL supports while loops that run a block of code while a condition evaluates to true.
+```heyvl
+var cont: Bool = true
+while cont {
+    cont = flip(0.5)
+}
+```
+
+However, for verification while loops need to be annotated with [proof rules](../proof-rules/), otherwise Caesar will show an error.
+These proof rule annotations also implicitly specify whether the loop has least or greatest fixpoint semantics.
+This choice can be made explicit with the [calculus annotations](../proof-rules/calculi.md) on procedures, which we recommend you use.
+
 ## Deprecated Statements
 
 Caesar supports some HeyVL statements that are not part of the HeyVL language [published in our OOPSLA '23 paper](../publications.md#oopsla-23).
