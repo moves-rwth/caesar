@@ -116,7 +116,7 @@ export class CaesarClient {
 
         // listen to onDidSaveTextDocument events
         this.context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
-            if (document.languageId !== "heyvl" && CaesarConfig.get(ConfigurationConstants.automaticVerification) !== "onsave") {
+            if (document.languageId !== "heyvl" || CaesarConfig.get(ConfigurationConstants.automaticVerification) !== "onsave") {
                 return;
             }
             void this.verify(document);
