@@ -2,12 +2,81 @@
 description: HeyVL's expressions evaluate to a value in a state.
 sidebar_position: 3
 ---
+
 # Expressions
 
-For now, expressions are sparsely documented.
-We refer to [`src/front/parser/grammar.lalrpop`](https://github.com/moves-rwth/caesar/blob/main/src/front/parser/grammar.lalrpop) for now for an exhaustive grammar for the complete language.
-In [our paper on Caesar (cf. Section 2)](https://arxiv.org/pdf/2309.07781.pdf#page=5), we give a formal semantics for *HeyLo*, our logic for reasoning about expected values.
+HeyVL expressions can be used inside [specifications](./procs.md) and [statements](./statements.md) and evaluate to values in some program state.
+
+## Expression Syntax
+
+The syntax of expressions (`Expr`) consists of the following parts:
+
+* [Quantifiers](#quantifiers):
+  * `inf Ident: Type, Ident: Type. Expr`
+  * `sup Ident: Type, Ident: Type. Expr`
+  * `forall Ident: Type, Ident: Type. Expr`
+  * `exists Ident: Type, Ident: Type. Expr`
+  * Quantifier annotations such as [triggers](#triggers) are also allowed, e.g. `forall Ident: Type @trigger(Expr). Expr`
+* Boolean Operators (returning [type `Bool`](../stdlib/booleans.md)):
+  * Logical And: `Expr && Expr`
+  * Logical Or: `Expr || Expr`
+  * Equals: `Expr == Expr`
+  * Less Than: `Expr <= Expr`
+  * Not Equals: `Expr != Expr`
+  * Greater Or Equals: `Expr >= Expr`
+  * Greater: `Expr > Expr`
+* Binary Lattice and Heyting Algebra Operators (on types [`Bool`](../stdlib/) and [`EUReal`](../stdlib/numbers.md#eureal)):
+  * Binary Minimum/Infimum: `Expr ⊓ Expr` or `Expr \cap Expr`
+  * Binary Maximum/Supremum: `Expr ⊔ Expr` or `Expr \cup Expr`
+  * Implication: `Expr → Expr` or `Expr ==> Expr`
+  * Coimplication: `Expr ← Expr` or `Expr <== Expr` <small>(note that this is **not** just a flipped version of the implication `→`, but rather its lattice-theoretic dual!)</small>
+  * Comparison: `Expr ↘ Expr`
+  * Cocomparison: `Expr ↖ Expr`
+* Arithmetical Operators (c.f. [number types](../stdlib/numbers.md)):
+  * Addition: `Expr + Expr`
+  * Subtraction/Monus: `Expr - Expr`
+  * Multiplication: `Expr * Expr`
+  * Division: `Expr / Expr`
+  * Modulo: `Expr % Expr`
+* Other Expressions:
+  * [Let Expressions](#let-expressions): `let(Ident, Expr, Expr)`
+  * [If-Then-Else Expressions](#if-then-else): `ite(Expr, Expr, Expr)`
+  * [Function Calls](domains.md): `Ident(Expr, ..., Expr)`
+  * Negation: `!Expr`
+  * Conegation: `~Expr`
+  * Embed: `?Expr` (usually written with parentheses: `?(Expr)`)
+  * Iverson: `[Expr]`
+  * Parentheses: `(Expr)`
+* Literals:
+  * String Literals: text enclosed by `"` characters (regular expression: `"[^"]*"`). <small>Note that Caesar does not support a proper `String` type yet.</small>
+  * Integers: given by regular expression `[0-9]+` (default type: `UInt`)
+  * Decimals: given by regular expression `[0-9]+\.[0-9]+` (default type: `UReal`)
+  * Boolean Constants: `true` and `false`
+* Identifiers (`Ident`): Names of things, from the language of the regular expression `[_a-zA-Z][_a-zA-Z0-9']*`.
+
+Types (`Type`) are types from Caesar's [standard library](../stdlib/) and user-defined types from [domains](domains.md).
+
+The above list is presented roughly in order of operator precedence.
+Note that we plan to change some operator precedences, so when in doubt, use more parentheses to guarantee the correct interpretation.
+
+The most precise grammar specification can be found in Caesar's source code ([`src/front/parser/grammar.lalrpop`](https://github.com/moves-rwth/caesar/blob/main/src/front/parser/grammar.lalrpop)).
+
+## Semantics and Under-Specified Expressions
+
+In [our paper on HeyVL (cf. Section 2)](https://arxiv.org/pdf/2309.07781.pdf#page=5), we give a formal semantics for *HeyLo*, our logic for reasoning about expected values.
+HeyLo includes operators such as `==>`, `<==`, `!`, `~`, `?(e)`, and more.
 Caesar's expressions are a superset of HeyLo.
+In particular, the paper explains in detail the lattice and Heyting algebra operators that Caesar supports.
+
+Note that some operations are not fully specified (*under-specified*).
+The division and remainder operators (`Expr / Expr` and `Expr % Expr`) are not fully defined for all values.
+Caesar translates these operators directly to SMT, where the SMT solver may assign arbitrary interpretations to e.g. divisions by zero.
+You can find more information in the [Z3 documentation on division](https://microsoft.github.io/z3guide/docs/theories/Arithmetic/#division).
+
+The `-` operator is always fully defined in Caesar.
+On unsigned types such as `UInt`, it corresponds to *monus*, i.e. truncating subtraction that is always at least `0`.
+On signed types such as `Int`, it corresponds to the usual subtraction.
+
 
 ## If-Then-Else
 
@@ -20,7 +89,7 @@ The first parameter is the Boolean expression.
 If it evaluates to `true`, the result of evaluating the second expression is returned.
 Otherwise, the third expression is evaluated.
 
-## Let
+## Let Expressions
 
 `let` expressions enable the declaration of local variables within an expression.
 For example:
@@ -43,7 +112,7 @@ forall x: Int, y: UInt. x == y || x != y
 
 ### Triggers
 
-We also support *triggers* for quantifiers via annotations.
+We also support *triggers* for the Boolean quantifiers via annotations.
 They are *patterns* that will instruct the SMT solver to instantiate quantifiers if the pattern is found in the current list of terms it maintains.
 For example:
 ```heyvl
@@ -56,3 +125,26 @@ forall list: []Int @trigger(len(list), len(list)). len(list) >= 0
 ```
 
 For more information on how triggers/patterns work in general, see the [Z3 User Guide](https://microsoft.github.io/z3guide/docs/logic/Quantifiers/#patterns) and the [Dafny documentation](https://dafny.org/latest/DafnyRef/DafnyRef#sec-trigger).
+
+## SMT Theories and Incompleteness {#incompleteness}
+
+Expressions are the main reason for *incompleteness* of Caesar, i.e. instances Caesar is unable to decide whether a HeyVL program verifies or not.
+Caesar's incompleteness comes from incompleteness of the underlying SMT solver which is used to prove or disprove verification.
+
+At the moment, Caesar's translation of HeyVL verification problems is rather direct: most expressions are translated as one would intuitively expect.
+If operators have a direct correspondence in [SMT-LIB](https://smt-lib.org/), then we translate directly to those.
+Otherwise, usually only additional simple case distinctions are introduced.
+We have some more explanations in [Section 5 of our paper on HeyVL](https://arxiv.org/pdf/2309.07781#page=23).
+
+As a consequence, it is usually pretty simple to predict which [SMT-LIB theories](https://smt-lib.org/theories.shtml) will be used for the SMT query done by Caesar.
+Also refer to the [Z3 documentation on arithmetic theories](https://microsoft.github.io/z3guide/docs/theories/Arithmetic/), since a lot of Caesar's reasoning will need arithmetic.
+
+Here are some rules of thumb for (in-)completeness:
+ * Linear integer and real arithmetic (QF_LRA, QF_LIRA) is decidable.
+ * Nonlinear integer arithmetic (QF_NIA) is undecidable.
+ * Nonlinear real arithmetic (QF_NRA) is decidable for algebraic reals.
+ * Quantifiers usually introduce undecidability, although there are [a bunch of strategies and fragments in Z3 that allow decidability](https://microsoft.github.io/z3guide/docs/logic/Quantifiers#model-based-quantifier-instantiation).
+   * In particular, restrictive [quantifier triggers](#triggers) can help e-matching prove many instances.
+ * HeyVL's [quantitative quantifiers](#quantifiers) (`inf` and `sup`) currently have a very naive default encoding that is problematic for Z3.  If the quantitative quantifiers cannot be eliminated by Caesar's quantifier elimination (QE) procedure, then they are often a cause of nontermination of Caesar.
+   * Quantitative quantifiers also come from the semantics of [`havoc` and `cohavoc`](./statements.md#havoc). However, for e.g. the [induction-based proof rules](../proof-rules/induction.md), the HeyVL encodings fall into a fragment where Caesar's QE applies and the generated quantifiers are eliminated.
+ * In practice, the SMT solver can often *prove* correctness, but it often has problems with *refutations* (i.e. providing counter-examples).

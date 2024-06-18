@@ -12,6 +12,9 @@ The domain block contains a list of functions and axioms defined on this domain.
 Every domain type supports the binary operators `==` and `!=`.
 All other operations must be encoded using functions and axioms.
 
+Note that axioms with quantifiers quickly introduce *incompleteness* of Caesar, making it unable to prove or disprove verification.
+Read the documentation section on [SMT Theories and Incompletness](./expressions.md#incompleteness) for more information.
+
 ## Example: Exponentials of ½
 
 HeyVL does not support exponentiation expressions natively.
