@@ -13,8 +13,8 @@ use z3::{Config, Context};
 
 use crate::{
     ast::{
-        util::remove_casts, visit::VisitorMut, BinOpKind, Block, DeclKind, Diagnostic, Direction,
-        Expr, ExprBuilder, Files, ProcDecl, Span, Stmt, StmtKind, TyKind,
+        util::remove_casts, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Diagnostic,
+        Direction, Expr, ExprBuilder, Files, ProcDecl, Span, Stmt, StmtKind, TyKind,
     },
     intrinsic::annotations::AnnotationKind,
     opt::unfolder::Unfolder,
@@ -124,6 +124,10 @@ impl IntoIterator for VcExplanation {
     }
 }
 
+/// Explain an expression with substitutions. This will add the expression
+/// itself and the expression with applied substitutions to the explanations.
+/// Finally, simplifications are applied (then the modified expression should be
+/// added to explanations by the caller).
 pub(super) fn explain_subst(vcgen: &mut Vcgen, span: Span, expr: &mut Expr) {
     if let Some(explanation) = &mut vcgen.explanation {
         // first add the original expression with substitutions
@@ -177,8 +181,9 @@ pub fn explain_decl_vc(
         let proc = decl_ref.borrow();
         let body = proc.body.borrow();
         if let Some(ref body) = *body {
-            let post = extract_post(&proc);
-            return Ok(Some(explain_raw_vc(tcx, body, post)?));
+            let post = fold_spec(&proc, proc.ensures());
+            let res = explain_raw_vc(tcx, body, post)?;
+            return Ok(Some(res));
         }
     }
     Ok(None)
@@ -200,11 +205,30 @@ fn explain_park_induction(
     Ok(invariant.clone())
 }
 
-/// Extract the post from a [`ProcDecl`].
-fn extract_post(proc: &ProcDecl) -> Expr {
+/// To explain a proc call, we just return the pre with the parameters
+/// substituted.
+pub(super) fn explain_proc_call(
+    decl_ref: &DeclRef<ProcDecl>,
+    args: &[Expr],
+    builder: &ExprBuilder,
+) -> Expr {
+    let decl = decl_ref.borrow();
+    return builder.subst(
+        fold_spec(&decl, decl.requires()),
+        decl.inputs
+            .node
+            .iter()
+            .zip(args)
+            .map(|(param, arg)| (param.name, arg.clone())),
+    );
+}
+
+/// Fold a list of specification parts (either requires or ensures) into a
+/// single expression depending on the proc direction.
+fn fold_spec<'a>(proc: &'a ProcDecl, spec: impl IntoIterator<Item = &'a Expr>) -> Expr {
     let expr_builder = ExprBuilder::new(Span::dummy_span());
     let bin_op = proc.direction.map(BinOpKind::Inf, BinOpKind::Sup);
-    proc.ensures()
+    spec.into_iter()
         .cloned()
         .reduce(|acc, e| expr_builder.binary(bin_op, Some(TyKind::EUReal), acc, e))
         .unwrap_or_else(|| match proc.direction {

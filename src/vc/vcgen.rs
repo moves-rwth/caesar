@@ -14,7 +14,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::explain::{explain_annotated_while, explain_subst, VcExplanation};
+use super::explain::{explain_annotated_while, explain_proc_call, explain_subst, VcExplanation};
 
 pub struct Vcgen<'tcx> {
     pub(super) tcx: &'tcx TyCtx,
@@ -163,6 +163,8 @@ impl<'tcx> Vcgen<'tcx> {
                         return self.vcgen_stmt(inner_stmt, post);
                     }
                 }
+                // only if explanations are enabled, explain the while loop and
+                // return the invariant as the pre. otherwise, error.
                 if self.explanation.is_some() {
                     explain_annotated_while(self, stmt, &post)?
                 } else {
@@ -194,6 +196,13 @@ impl<'tcx> Vcgen<'tcx> {
             match self.tcx.get(*ident).as_deref() {
                 Some(DeclKind::ProcIntrin(proc_intrin)) => {
                     let mut res = proc_intrin.vcgen(builder, args, lhses, post);
+                    explain_subst(self, span, &mut res);
+                    return res;
+                }
+                // only if explanations are enabled, return a simple explanation
+                // for proc calls.
+                Some(DeclKind::ProcDecl(decl_ref)) if self.explanation.is_some() => {
+                    let mut res = explain_proc_call(decl_ref, args, &builder);
                     explain_subst(self, span, &mut res);
                     return res;
                 }
