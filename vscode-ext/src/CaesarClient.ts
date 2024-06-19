@@ -277,7 +277,7 @@ export class CaesarClient {
 
         const timeout: string = ServerConfig.get(ConfigurationConstants.timeout);
         // The timeout in args configuration overwrites the timeout configuration.
-        if (userArgs.indexOf("--timeout") !== -1) {
+        if (!userArgs.includes("--timeout")) {
             args.push("--timeout", timeout);
         }
 
