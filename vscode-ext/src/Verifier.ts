@@ -1,5 +1,5 @@
 import { TextDocumentIdentifier } from "vscode-languageclient";
-import { ExtensionContext } from "vscode";
+import { ExtensionContext, commands } from "vscode";
 import { CaesarClient } from "./CaesarClient";
 import { StatusBarComponent } from "./StatusBarComponent";
 import { GutterStatusComponent } from "./GutterStatusComponent";
@@ -42,7 +42,12 @@ export class Verifier {
 
     constructor(context: ExtensionContext) {
         this.context = context;
+
         this.logger = new Logger();
+        context.subscriptions.push(commands.registerCommand('caesar.showOutput', () => {
+            this.logger.show();
+        }));
+
         const version = getExtensionVersion(context);
         this.logger.info(`Starting Caesar for VSCode ${version.toString()}.`);
 

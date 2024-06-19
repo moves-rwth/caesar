@@ -83,10 +83,6 @@ export class CaesarClient {
             await this.copyCommand();
         });
 
-        vscode.commands.registerCommand('caesar.showOutput', () => {
-            this.client?.outputChannel.show();
-        });
-
         const explainToggleCommandHandler = (setting: string) => {
             return async () => {
                 const key = ConfigurationConstants.explainVc;

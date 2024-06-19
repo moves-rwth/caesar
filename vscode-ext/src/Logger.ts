@@ -33,8 +33,8 @@ export default class Logger {
     }
 
     public async showErrorMessage(message: string) {
-        const button = await window.showErrorMessage(message, "Show Output");
-        if (button === "Show Output") {
+        const button = await window.showErrorMessage(message, "Show Caesar Output");
+        if (button === "Show Caesar Output") {
             this.show();
         }
     }
