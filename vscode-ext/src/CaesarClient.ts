@@ -8,7 +8,7 @@ import * as path from "path";
 import * as fs from 'fs/promises';
 import { ServerInstaller } from "./ServerInstaller";
 import * as semver from 'semver';
-import { isPatchCompatible } from "./version";
+import { getExtensionVersion, isPatchCompatible } from "./version";
 import { WalkthroughComponent } from "./WalkthroughComponent";
 import Logger from "./Logger";
 
@@ -74,6 +74,7 @@ export class CaesarClient {
             if (openEditor) {
                 await this.verify(openEditor.document);
             } else {
+                this.logger.error("Client: verify requested, but there is no active text editor");
                 void vscode.window.showErrorMessage("There is no active text editor");
             }
         });
@@ -137,9 +138,9 @@ export class CaesarClient {
             debug: executable,
         };
 
+        const clientSemver = getExtensionVersion(this.context);
         const initializationOptions = {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            "vscodeExtensionVersion": context.extension.packageJSON["version"],
+            "vscodeExtensionVersion": clientSemver.toString(),
         };
         // Options to control the language client
         const clientOptions: LanguageClientOptions = {
@@ -163,10 +164,6 @@ export class CaesarClient {
 
         context.subscriptions.push(client);
 
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        const extensionVersion: string = context.extension.packageJSON.version;
-        client.info(`Starting Caesar for VSCode ${extensionVersion}.`);
-
         // set up listeners for our custom events
         context.subscriptions.push(client.onNotification("custom/verifyStatus", (params: VerifyStatusNotification) => {
             for (const listener of this.updateListeners) {
@@ -180,25 +177,24 @@ export class CaesarClient {
             }
         }));
 
-
-
         // check server version
         context.subscriptions.push(client.onNotification("custom/caesarReady", (event) => {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             const serverVersion: string = event["version"];
             const serverSemver = semver.parse(serverVersion);
-            const clientSemver = semver.parse(extensionVersion);
             if (!serverSemver || !clientSemver) {
                 return;
             }
             if (!isPatchCompatible(serverSemver, clientSemver)) {
-                void vscode.window.showWarningMessage(`Caesar for VSCode (${extensionVersion}) and Caesar server (${serverVersion}) have incompatible versions. You might see bugs. Consider updating both the extension and the server.`, "Update server").then(async (button) => {
+                void vscode.window.showWarningMessage(`Caesar for VSCode (${clientSemver.toString()}) and Caesar server (${serverVersion}) have incompatible versions. You might see bugs. Consider updating both the extension and the server.`, "Update server").then(async (button) => {
                     if (button === "Update server") {
                         await this.installer.checkForUpdateOrInstall(true);
                     }
                 });
             }
         }));
+
+        client.info(`Client: created language client and registered callbacks.`);
 
         return client;
     }
@@ -207,18 +203,21 @@ export class CaesarClient {
         let serverDirectory: string | undefined;
         let serverExecutable;
         const args: string[] = [];
-        switch (ServerConfig.get(ConfigurationConstants.installationOptions)) {
+        const installationChoice: string | undefined = ServerConfig.get(ConfigurationConstants.installationOptions);
+        switch (installationChoice) {
             case ConfigurationConstants.installerBinaryOption: {
                 let pathRes = await this.installer.getServerExecutable();
                 if (pathRes) {
                     serverExecutable = pathRes;
                 } else {
                     if (recommendInstallation) {
+                        this.logger.error("Client: server binary is not installed, recommending installation.");
                         await this.installer.checkForUpdateOrInstall(true);
                         pathRes = await this.installer.getServerExecutable();
                     }
                     if (!pathRes) {
                         if (recommendInstallation) {
+                            this.logger.error("Client: server binary is not installed, recommending installation again.");
                             void vscode.window.showErrorMessage("The Caesar server binary is required. Either re-try the download, or change the settings to use another installation method.", "Re-try installation", "Open settings").then(async (command) => {
                                 if (command === "Open settings") {
                                     await vscode.commands.executeCommand('workbench.action.openSettings', 'caesar.server');
@@ -227,6 +226,7 @@ export class CaesarClient {
                                 }
                             });
                         }
+                        this.logger.error("Client: server binary not installed, can not get executable.");
                         return null;
                     } else {
                         serverExecutable = pathRes;
@@ -238,6 +238,7 @@ export class CaesarClient {
             case ConfigurationConstants.userBinaryOption:
                 serverExecutable = ServerConfig.get(ConfigurationConstants.binaryPath);
                 if (serverExecutable === "") {
+                    this.logger.error("Client: binary path is not set.");
                     void vscode.window.showErrorMessage("Caesar: Binary path is not set. Please set the path in the settings.", "Open settings").then(async () => {
                         await vscode.commands.executeCommand('workbench.action.openSettings', 'caesar.server');
                     });
@@ -248,6 +249,7 @@ export class CaesarClient {
             case ConfigurationConstants.sourceCodeOption:
                 serverDirectory = ServerConfig.get(ConfigurationConstants.sourcePath);
                 if (serverDirectory === "" || serverDirectory === undefined) {
+                    this.logger.error("Client: source path is not set.");
                     void vscode.window.showErrorMessage("Caesar: Source path is not set. Please set the path in the settings.", "Open settings").then(async () => {
                         await vscode.commands.executeCommand('workbench.action.openSettings', 'caesar.server');
                     });
@@ -257,6 +259,7 @@ export class CaesarClient {
                     const cargoTomlPath = path.join(serverDirectory, "Cargo.toml");
                     await fs.access(cargoTomlPath, fs.constants.R_OK);
                 } catch (_error) {
+                    this.logger.error("Client: source path does not have a Cargo.toml.");
                     void vscode.window.showErrorMessage("Caesar: Cargo.toml file is not found in the path. Please check the path in the settings.");
                     throw new Error("Cargo.toml file is not found in the path");
                 }
@@ -264,6 +267,7 @@ export class CaesarClient {
                 args.push('run', '--', '--language-server');
                 break;
             default:
+                this.logger.error("Client: unknown installation choice config setting", installationChoice);
                 throw new Error(`Unknown config setting`);
         }
 
@@ -316,13 +320,14 @@ export class CaesarClient {
     async start(recommendInstallation: boolean): Promise<boolean> {
         if (this.client?.isRunning()) {
             if (this.needsRestart) {
+                this.logger.info("Client: Caesar server start requested, restarting first.");
                 await this.stop();
             } else {
                 return true;
             }
         }
 
-        console.log("Starting Caesar");
+        this.logger.info("Client: starting Caesar server.");
         this.notifyStatusUpdate(ServerStatus.Starting);
 
         try {
@@ -332,10 +337,10 @@ export class CaesarClient {
                 return false;
             }
         } catch (error) {
+            this.logger.error("Client: failed to initialize Caesar server:", error);
             if (!(error instanceof Error)) { throw error; }
             this.notifyStatusUpdate(ServerStatus.FailedToStart);
-            this.logger.error("Failed to initialize Caesar.", error);
-            void this.logger.showErrorMessage(`Failed to initialize Caesar: ${error.message})`);
+            void this.logger.showErrorMessage(`Failed to initialize Caesar server: ${error.message})`);
             this.client = null;
             return false;
         }
@@ -343,9 +348,9 @@ export class CaesarClient {
         try {
             await this.client.start();
         } catch (error) {
+            this.logger.error("Client: failed to start Caesar server:", error);
             if (!(error instanceof Error)) { throw error; }
-            this.logger.error("Failed to initialize Caesar.", error);
-            void this.logger.showErrorMessage(`Failed to start Caesar: ${error.message})`);
+            void this.logger.showErrorMessage(`Failed to start Caesar server: ${error.message})`);
             this.notifyStatusUpdate(ServerStatus.FailedToStart);
             return false;
         }
@@ -355,6 +360,7 @@ export class CaesarClient {
     }
 
     async restart() {
+        this.logger.info("Client: restarting.");
         await this.stop();
         await this.start(true);
     }
@@ -364,22 +370,24 @@ export class CaesarClient {
         if (!this.client?.isRunning()) {
             return;
         }
-        console.log("Stopping Caesar");
+        this.logger.info("Client: stopping Caesar server.");
         try {
             await this.client.stop();
             await this.client.dispose();
             this.client = null;
         } catch (error) {
-            console.error("Failed to stop Caesar", error);
+            this.logger.error("Client: failed to stop Caesar server:", error);
         };
         this.notifyStatusUpdate(ServerStatus.Stopped);
     }
 
     async verify(document: TextDocument) {
         if (!this.client?.isRunning()) {
+            this.logger.error("Client: requested to verify document, but server is not running.", document.uri);
             return;
         }
         if (document.languageId !== 'heyvl') {
+            this.logger.info("Client: requested to verify document, but it is not a HeyVL file:", document.languageId);
             void vscode.window.showErrorMessage("Caesar can only verify HeyVL files");
             return;
         }
@@ -389,12 +397,16 @@ export class CaesarClient {
             version: document.version,
             text: document.getText()
         };
+
+        this.logger.info("Client: verifying document.", document.uri);
         this.notifyStatusUpdate(ServerStatus.Verifying);
         try {
             await this.client.sendRequest('custom/verify', { text_document: documentItem });
             this.notifyStatusUpdate(ServerStatus.Finished);
+            this.logger.info("Client: completed verification.", document.uri);
             await this.walkthrough.setVerifiedHeyVL(true);
         } catch (error) {
+            this.logger.error("Client: verification had an error:", document.uri, error);
             if (!(error instanceof ResponseError)) { throw error; }
             void vscode.window.showErrorMessage(`Verification had an error: ${error.message}`);
             this.notifyStatusUpdate(ServerStatus.Ready);
@@ -404,6 +416,7 @@ export class CaesarClient {
     private async copyCommand() {
         const executable = await this.getExecutable(true);
         if (executable === null) {
+            void vscode.window.showErrorMessage("No Caesar server available.");
             return;
         }
         const command = '"' + executable.command.replace(/(["'$`\\])/g, '\\$1') + '"';

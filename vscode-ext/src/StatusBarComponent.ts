@@ -16,6 +16,7 @@ export class StatusBarComponent {
         this.view = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
         verifier.context.subscriptions.push(this.view);
         this.view.text = "Caesar";
+        this.view.command = "caesar.showOutput";
 
         this.view.tooltip = new vscode.MarkdownString(
             "[Restart Caesar](command:caesar.restartServer)\n\n" +

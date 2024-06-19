@@ -1,6 +1,7 @@
 import { parse, SemVer } from "semver";
 import { ExtensionContext } from "vscode";
 import * as os from 'os';
+import Logger from "./Logger";
 
 export function getExtensionVersion(context: ExtensionContext): SemVer {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
@@ -16,7 +17,7 @@ export function isPatchCompatible(a: SemVer, b: SemVer): boolean {
     return a.major === b.major && a.minor === b.minor;
 }
 
-export function getPlatformAssetFilter(): string | null {
+export function getPlatformAssetFilter(logger: Logger): string | null {
     const platform = os.platform();
     const arch = os.arch();
     switch (platform) {
@@ -41,7 +42,7 @@ export function getPlatformAssetFilter(): string | null {
                 return null;
             }
         default:
-            console.log(`Unsupported platform: ${platform}`);
+            logger.error(`Unsupported platform: ${platform}`);
             return null;
     }
 }

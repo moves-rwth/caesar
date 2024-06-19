@@ -7,6 +7,7 @@ import { ComputedPreComponent } from "./ComputedPreComponent";
 import { ServerInstaller } from "./ServerInstaller";
 import { WalkthroughComponent } from "./WalkthroughComponent";
 import Logger from "./Logger";
+import { getExtensionVersion } from "./version";
 
 export class DocumentMap<T> {
     private map = new Map<string, [TextDocumentIdentifier, T]>();
@@ -42,6 +43,9 @@ export class Verifier {
     constructor(context: ExtensionContext) {
         this.context = context;
         this.logger = new Logger();
+        const version = getExtensionVersion(context);
+        this.logger.info(`Starting Caesar for VSCode ${version.toString()}.`);
+
         this.walkthrough = new WalkthroughComponent(context);
         this.installer = new ServerInstaller(context, this);
         this.client = new CaesarClient(context, this.logger, this.walkthrough, this.installer);

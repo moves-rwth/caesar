@@ -29,12 +29,12 @@ export class ServerInstaller {
             try {
                 await this.checkForUpdateOrInstall(true);
             } catch (err) {
+                this.verifier.logger.error("Installer: failed to check for updates.", err);
                 if (!(err instanceof Error)) { throw err; }
                 // this command is invoked from a walkthrough. when called from
                 // walkthroughs or markdown links, command errors are not shown
                 // to the user. so we need to do it manually.
                 void window.showErrorMessage(`Failed to check for Caesar updates: ${err.message}`);
-                this.verifier.logger.error("Installer: failed to check for updates!", err);
             }
         });
 
@@ -53,10 +53,9 @@ export class ServerInstaller {
                 return false;
             }
             try {
-                this.verifier.logger.info("Installer: checking for updates");
                 await this.checkForUpdateOrInstall(false);
             } catch (error) {
-                console.log(error);
+                this.verifier.logger.error("Installer: Error while regularly checking for updates", error);
                 return true;
             }
             await this.context.globalState.update('lastDependencyCheck', now);
@@ -75,15 +74,17 @@ export class ServerInstaller {
             await fs.access(binaryPath, fs.constants.X_OK);
             return binaryPath;
         } catch (err) {
+            this.verifier.logger.info(`Installer: failed to access server executable at ${binaryPath}.`, err);
             if (!(err instanceof Error)) { throw err; }
-            this.verifier.logger.info(`Failed to access server executable at ${binaryPath}: ${err.message}`);
             await this.uninstall(false);
             return null;
         }
     }
 
     public async checkForUpdateOrInstall(notifyNoNewVersion: boolean) {
-        const assetFilter = getPlatformAssetFilter();
+        this.verifier.logger.info(`Installer: checking for updates (silent: ${!notifyNoNewVersion}).`);
+
+        const assetFilter = getPlatformAssetFilter(this.verifier.logger);
         if (assetFilter === null) {
             void window.showErrorMessage("We do not provide Caesar binaries for your platform. Please provide your own binary or compile from source. Change the `caesar.server.installationOptions` setting accordingly.", "Open settings").then(async (command) => {
                 if (command === "Open settings") {
@@ -110,13 +111,13 @@ export class ServerInstaller {
 
         const currentVersion: string | undefined = this.context.globalState.get("installedVersion");
         if (currentVersion === hashRelease(release)) {
-            this.verifier.logger.info(`Installer: Current version ${currentVersion} is up to date with ${release.releaseName}`);
+            this.verifier.logger.info(`Installer: Current version ${currentVersion} is up to date with ${release.releaseName}.`);
             if (notifyNoNewVersion) {
                 void window.showInformationMessage(`No new version of Caesar available. You're up to date with ${release.releaseName} (${release.date}).`);
             }
             return;
         }
-        this.verifier.logger.info(`Installer: Current version ${currentVersion} can be updated to new version ${release.releaseName}`);
+        this.verifier.logger.info(`Installer: Current version ${currentVersion} can be updated to new version ${release.releaseName}.`);
         const isInstalled = (await this.getServerExecutable()) !== null;
         const message = isInstalled ? `New version of Caesar available: ${release.releaseName} (${release.date})` : `Do you want to install Caesar (${release.releaseName}, ${release.date})?`;
         const button = isInstalled ? "Update" : "Install";
@@ -147,6 +148,7 @@ export class ServerInstaller {
             try {
                 await this.installAssetWithProgress(release, progress);
             } catch (err) {
+                this.verifier.logger.error("Installer: error during asset installation.", err);
                 // make the progress disappear on error
                 progress.report({ increment: 100 });
                 throw err;
@@ -155,11 +157,10 @@ export class ServerInstaller {
     }
 
     private async installAssetWithProgress(release: ReleaseAsset, progress: Progress<{ increment: number, message?: string }>) {
-        this.verifier.logger.info(`Installer: downloading ${release.releaseName} (${release.url})`);
         progress.report({ increment: 0, message: "Cleaning up old installation..." });
-
         await this.uninstall(false);
 
+        this.verifier.logger.info(`Installer: downloading ${release.releaseName} (${release.url})`);
         progress.report({ increment: 25, message: "Downloading..." });
 
         await fs.mkdir(this.installRoot, { recursive: true });
@@ -199,7 +200,7 @@ export class ServerInstaller {
             throw new Error("unknown ending");
         }
 
-        this.verifier.logger.info(`Installer: extraction done, starting server`);
+        this.verifier.logger.info(`Installer: extraction done, starting server.`);
         progress.report({ increment: 25, message: "Starting server..." });
 
         await this.context.globalState.update("installedVersion", hashRelease(release));
@@ -211,6 +212,7 @@ export class ServerInstaller {
             // the progress message disappears after completion
             void window.showInformationMessage(`Successfully installed Caesar ${release.releaseName}`);
         } else {
+            this.verifier.logger.error("Installer: failed to start server after installation.");
             progress.report({ increment: 100 });
             void this.verifier.logger.showErrorMessage("Caesar failed to install");
         }
@@ -265,6 +267,7 @@ export class ServerInstaller {
                 }
             }
         } catch (error: any) {
+            this.verifier.logger.error(`Installer: failed to fetch releases or process assets.`, error);
             throw new Error(`Failed to fetch releases or process assets: ${error}`);
         }
         return null;
