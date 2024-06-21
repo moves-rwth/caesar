@@ -23,9 +23,10 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingEnvironment, EncodingGenerated};
-
-use super::util::*;
+use super::{
+    util::{encode_unroll, hey_const, intrinsic_param, lit_u128, two_args},
+    Encoding, EncodingEnvironment, EncodingGenerated,
+};
 
 pub struct UnrollAnnotation(AnnotationDecl);
 
@@ -78,9 +79,7 @@ impl Encoding for UnrollAnnotation {
         _call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), ResolveError> {
-        let [k, invariant] = mut_two_args(args);
-        resolve.visit_expr(k)?;
-        resolve.visit_expr(invariant)
+        resolve.visit_exprs(args)
     }
 
     fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {

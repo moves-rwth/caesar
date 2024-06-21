@@ -241,14 +241,6 @@ pub fn one_arg(args: &[Expr]) -> [&Expr; 1] {
     }
 }
 
-pub fn mut_one_arg(args: &mut [Expr]) -> [&mut Expr; 1] {
-    if let [a] = args {
-        [a]
-    } else {
-        unreachable!()
-    }
-}
-
 pub fn two_args(args: &[Expr]) -> [&Expr; 2] {
     if let [a, b] = args {
         [a, b]
@@ -257,23 +249,7 @@ pub fn two_args(args: &[Expr]) -> [&Expr; 2] {
     }
 }
 
-pub fn mut_two_args(args: &mut [Expr]) -> [&mut Expr; 2] {
-    if let [ref mut a, ref mut b] = args {
-        [a, b]
-    } else {
-        unreachable!()
-    }
-}
-
 pub fn three_args(args: &[Expr]) -> [&Expr; 3] {
-    if let [a, b, c] = args {
-        [a, b, c]
-    } else {
-        unreachable!()
-    }
-}
-
-pub fn mut_three_args(args: &mut [Expr]) -> [&mut Expr; 3] {
     if let [a, b, c] = args {
         [a, b, c]
     } else {

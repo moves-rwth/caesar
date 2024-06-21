@@ -80,7 +80,7 @@ pub trait VisitorMut: Sized {
         walk_expr(self, e)
     }
 
-    fn visit_exprs(&mut self, es: &mut Vec<Expr>) -> Result<(), Self::Err> {
+    fn visit_exprs(&mut self, es: &mut [Expr]) -> Result<(), Self::Err> {
         for e in es {
             self.visit_expr(e)?;
         }

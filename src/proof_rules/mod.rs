@@ -61,14 +61,6 @@ pub struct EncodingEnvironment {
 pub trait Encoding: fmt::Debug {
     fn name(&self) -> Ident;
 
-    /// Typecheck the arguments of the annotation call
-    fn tycheck(
-        &self,
-        tycheck: &mut Tycheck<'_>,
-        call_span: Span,
-        args: &mut [Expr],
-    ) -> Result<(), TycheckError>;
-
     /// Resolve the arguments of the annotation call
     fn resolve(
         &self,
@@ -76,6 +68,14 @@ pub trait Encoding: fmt::Debug {
         call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), ResolveError>;
+
+    /// Typecheck the arguments of the annotation call
+    fn tycheck(
+        &self,
+        tycheck: &mut Tycheck<'_>,
+        call_span: Span,
+        args: &mut [Expr],
+    ) -> Result<(), TycheckError>;
 
     /// Transform the annotated loop into a sequence of statements and declarations
     fn transform(

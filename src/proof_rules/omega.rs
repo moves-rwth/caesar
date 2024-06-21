@@ -24,9 +24,10 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingEnvironment, EncodingGenerated};
-
-use super::util::*;
+use super::{
+    util::{encode_iter, hey_const, intrinsic_param, two_args},
+    Encoding, EncodingEnvironment, EncodingGenerated,
+};
 
 pub struct OmegaInvAnnotation(AnnotationDecl);
 
@@ -64,6 +65,32 @@ impl Encoding for OmegaInvAnnotation {
         self.0.name
     }
 
+    fn resolve(
+        &self,
+        resolve: &mut Resolve<'_>,
+        call_span: Span,
+        args: &mut [Expr],
+    ) -> Result<(), ResolveError> {
+        let mut args_iter = args.iter_mut();
+        if let Some(free_var) = args_iter.next() {
+            if let ExprKind::Var(var_ref) = &free_var.kind {
+                let var_decl = VarDecl {
+                    name: *var_ref,
+                    ty: TyKind::UInt,
+                    kind: VarKind::Mut,
+                    init: None,
+                    span: call_span,
+                    created_from: None,
+                };
+                // Declare the free variable to be used in the omega invariant
+                resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;
+            } else {
+                return Err(ResolveError::NotIdent(free_var.span));
+            }
+        }
+        resolve.visit_exprs(args_iter.into_slice())
+    }
+
     fn tycheck(
         &self,
         tycheck: &mut Tycheck<'_>,
@@ -72,28 +99,6 @@ impl Encoding for OmegaInvAnnotation {
     ) -> Result<(), TycheckError> {
         check_annotation_call(tycheck, call_span, &self.0, args)?;
         Ok(())
-    }
-
-    fn resolve(
-        &self,
-        resolve: &mut Resolve<'_>,
-        call_span: Span,
-        args: &mut [Expr],
-    ) -> Result<(), ResolveError> {
-        let [free_var, omega_inv] = mut_two_args(args);
-        if let ExprKind::Var(var_ref) = &free_var.kind {
-            let var_decl = VarDecl {
-                name: *var_ref,
-                ty: TyKind::UInt,
-                kind: VarKind::Mut,
-                init: None,
-                span: call_span,
-                created_from: None,
-            };
-            // Declare the free variable to be used in the omega invariant
-            resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;
-        }
-        resolve.visit_expr(omega_inv)
     }
 
     fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {

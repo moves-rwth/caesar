@@ -24,9 +24,10 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingEnvironment, EncodingGenerated};
-
-use super::util::*;
+use super::{
+    util::{encode_extend, encode_iter, intrinsic_param, lit_u128, one_arg, two_args},
+    Encoding, EncodingEnvironment, EncodingGenerated,
+};
 
 /// The "@induction" encoding is just syntactic sugar for 1-induction.
 pub struct InvariantAnnotation(pub AnnotationDecl);
@@ -80,8 +81,7 @@ impl Encoding for InvariantAnnotation {
         _call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), ResolveError> {
-        let [invariant] = mut_one_arg(args);
-        resolve.visit_expr(invariant)
+        resolve.visit_exprs(args)
     }
 
     fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
@@ -149,6 +149,15 @@ impl Encoding for KIndAnnotation {
         self.0.name
     }
 
+    fn resolve(
+        &self,
+        resolve: &mut Resolve<'_>,
+        _call_span: Span,
+        args: &mut [Expr],
+    ) -> Result<(), ResolveError> {
+        resolve.visit_exprs(args)
+    }
+
     fn tycheck(
         &self,
         tycheck: &mut Tycheck<'_>,
@@ -157,17 +166,6 @@ impl Encoding for KIndAnnotation {
     ) -> Result<(), TycheckError> {
         check_annotation_call(tycheck, call_span, &self.0, args)?;
         Ok(())
-    }
-
-    fn resolve(
-        &self,
-        resolve: &mut Resolve<'_>,
-        _call_span: Span,
-        args: &mut [Expr],
-    ) -> Result<(), ResolveError> {
-        let [k, invariant] = mut_two_args(args);
-        resolve.visit_expr(k)?;
-        resolve.visit_expr(invariant)
     }
 
     fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
