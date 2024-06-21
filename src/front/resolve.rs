@@ -82,7 +82,7 @@ impl ResolveError {
                 .with_message(format!("Name `{}` is not declared", ident))
                 .with_label(Label::new(ident.span).with_message("not declared")),
             ResolveError::NotIdent(span) => Diagnostic::new(ReportKind::Error, span)
-                .with_message(format!("Expression must be an identifier"))
+                .with_message("Expression must be an identifier")
                 .with_label(Label::new(span).with_message("found expression instead")),
         }
     }
