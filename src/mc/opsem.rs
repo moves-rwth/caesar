@@ -16,7 +16,9 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::{specs::SpecAutomaton, translate_expr, translate_ident, JaniConversionError};
+use super::{
+    is_constant, specs::SpecAutomaton, translate_expr, translate_ident, JaniConversionError,
+};
 
 /// Intermediate structure to build the JANI automaton for pGCL semantics with
 /// expected rewards.
@@ -86,7 +88,7 @@ fn translate_stmt(
         StmtKind::Var(decl_ref) => {
             let decl = decl_ref.borrow();
             match &decl.init {
-                Some(init) if !is_pure(init) => {
+                Some(init) if !is_constant(init) => {
                     translate_assign(automaton, span, translate_ident(decl.name), init, next)
                 }
                 Some(_) => Ok(next),
@@ -337,10 +339,6 @@ pub fn translate_block(
     next: Identifier,
 ) -> Result<Identifier, JaniConversionError> {
     translate_stmts(automaton, &block.node, next)
-}
-
-fn is_pure(expr: &Expr) -> bool {
-    !matches!(expr.kind, ExprKind::Call(_, _))
 }
 
 fn translate_assign(

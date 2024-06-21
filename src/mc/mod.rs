@@ -206,7 +206,7 @@ fn translate_variables(
             let decl = var_ref.borrow();
             let mut comment = None;
             let initial_value = if let Some(initial_expr) = &decl.init {
-                if matches!(initial_expr.kind, ExprKind::Lit(_)) {
+                if is_constant(initial_expr) {
                     Some(Box::new(translate_expr(initial_expr)?))
                 } else {
                     let builder = ExprBuilder::new(Span::dummy_span());
@@ -417,4 +417,13 @@ fn extract_embed(expr: &Expr) -> Option<Expr> {
         }));
     }
     None
+}
+
+/// Whether an expression is a constant value and can be evaluated without any
+/// other variables.
+///
+/// Right now, we just check directly that it is a literal. In the future, one
+/// could allow more complex (constant) expressions as well.
+fn is_constant(expr: &Expr) -> bool {
+    matches!(expr.kind, ExprKind::Lit(_))
 }
