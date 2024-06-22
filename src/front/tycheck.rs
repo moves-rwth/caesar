@@ -83,17 +83,17 @@ impl<'tcx> Tycheck<'tcx> {
         for (lhs, rhs_ty) in lhses.iter().zip(rhs_tys) {
             let lhs_decl_ref = self.get_var_decl(span, *lhs)?;
             let lhs_decl = lhs_decl_ref.borrow();
+            if !lhs_decl.kind.is_mutable() {
+                return Err(TycheckError::CannotAssign {
+                    span,
+                    lhs_decl: lhs_decl_ref.clone(),
+                });
+            }
             if &lhs_decl.ty != rhs_ty {
                 return Err(TycheckError::TypeMismatch {
                     span,
                     lhs: lhs_decl.ty.clone().into(),
                     rhs: rhs_ty.clone().into(),
-                });
-            }
-            if !lhs_decl.kind.is_mutable() {
-                return Err(TycheckError::CannotAssign {
-                    span,
-                    lhs_decl: lhs_decl_ref.clone(),
                 });
             }
         }
@@ -521,13 +521,13 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
                 if let Some(lhs) = lhs_singleton {
                     let lhs_decl_ref = self.get_var_decl(s.span, *lhs)?;
                     let lhs_decl = lhs_decl_ref.borrow();
-                    self.try_cast(s.span, &lhs_decl.ty, rhs)?;
                     if !lhs_decl.kind.is_mutable() {
                         return Err(TycheckError::CannotAssign {
                             span: s.span,
                             lhs_decl: lhs_decl_ref.clone(),
                         });
                     }
+                    self.try_cast(s.span, &lhs_decl.ty, rhs)?;
                 } else {
                     return Err(TycheckError::UnpackMismatch {
                         span: s.span,
