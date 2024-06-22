@@ -523,7 +523,7 @@ impl Diagnostic {
             .msg
             .clone()
             .unwrap_or_else(|| "(no message)".to_string());
-        let related_information = self
+        let mut related_information = self
             .0
             .labels
             .iter()
@@ -543,6 +543,15 @@ impl Diagnostic {
                 })
             })
             .collect::<Vec<_>>();
+        if let Some(note) = &self.0.note {
+            related_information.push(lsp_types::DiagnosticRelatedInformation {
+                location: lsp_types::Location {
+                    uri: document_id.uri.clone(),
+                    range,
+                },
+                message: format!("Note: {}", note),
+            })
+        }
         let diagnostic = lsp_types::Diagnostic {
             range,
             severity: Some(severity),
