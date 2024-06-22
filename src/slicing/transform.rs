@@ -242,6 +242,18 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 let slice_stmt = self.add_slice_stmt(s.span, effect);
                 self.mk_top_toggle(expr, *dir, slice_stmt)
             }
+            StmtKind::Tick(expr) => {
+                let effect = match self.direction {
+                    Direction::Down => SliceEffect::Concordant,
+                    Direction::Up => SliceEffect::Discordant,
+                };
+                if !self.selector.should_slice(effect) {
+                    return Ok(());
+                }
+                let slice_var = self.add_slice_stmt(s.span, effect);
+                // this will create a toggle with value 0 if disabled
+                self.mk_top_toggle(expr, Direction::Up, slice_var)
+            }
             StmtKind::Demonic(lhs, rhs) => {
                 let dir = self.direction;
                 let effect = match dir {

@@ -445,6 +445,11 @@ For the `co`-statements, the situation is also exactly reversed.
                 <td>Concordant</td>
                 <td>Discordant</td>
             </tr>
+            <tr>
+                <td><code>tick</code></td>
+                <td>Concordant</td>
+                <td>Discordant</td>
+            </tr>
         </tbody>
     </table>
     <div style={{clear: "both"}} />
