@@ -446,7 +446,7 @@ For the `co`-statements, the situation is also exactly reversed.
                 <td>Discordant</td>
             </tr>
             <tr>
-                <td><code>tick</code></td>
+                <td><code>tick</code>*</td>
                 <td>Concordant</td>
                 <td>Discordant</td>
             </tr>
@@ -456,6 +456,9 @@ For the `co`-statements, the situation is also exactly reversed.
 </>
 
 Note that Caesar only tries to slice `(co)assume` and `(co)assert` statements, but not `(co)havoc` nor `(co)validate`.
+
+*: `tick`/`reward` statements are currently not sliced by default.
+This must be enabled with the `--slice-ticks` command-line option.
 
 ## Implementation Details
 

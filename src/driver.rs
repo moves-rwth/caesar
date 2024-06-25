@@ -435,6 +435,7 @@ impl VerifyUnit {
         if !options.no_slice_error {
             selection |= SliceSelection::FAILURE_SELECTION;
         }
+        selection.slice_ticks = options.slice_ticks;
         if options.slice_verify {
             selection |= SliceSelection::VERIFIED_SELECTION;
         }

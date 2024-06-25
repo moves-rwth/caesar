@@ -149,7 +149,6 @@ impl<'ctx> SliceSolver<'ctx> {
         slice(
             &mut exists_forall_solver,
             &active_toggle_values,
-            false,
             true,
             limits_ref,
         )?;
@@ -180,13 +179,7 @@ impl<'ctx> SliceSolver<'ctx> {
         self.prover.add_assumption(&inactive_formula);
         self.prover.push();
 
-        slice(
-            &mut self.prover,
-            &active_toggle_values,
-            true,
-            false,
-            limits_ref,
-        )?;
+        slice(&mut self.prover, &active_toggle_values, false, limits_ref)?;
         let res = self.prover.check_proof();
         let slice_model = if let ProveResult::Counterexample(model) = &res {
             Some(SliceModel::extract_model(
@@ -205,7 +198,6 @@ impl<'ctx> SliceSolver<'ctx> {
 fn slice<'ctx>(
     prover: &mut Prover<'ctx>,
     active_slice_vars: &[Bool<'ctx>],
-    at_least_one: bool,
     continue_on_unknown: bool,
     limits_ref: &LimitsRef,
 ) -> Result<(), VerifyError> {
@@ -223,7 +215,18 @@ fn slice<'ctx>(
         prover.add_assumption(&at_most_n_true);
     };
 
-    let min_least_bound = if at_least_one { 1 } else { 0 };
+    // TODO: we could have min_least_bound set to 1 if we could conclude for
+    // sure that the program must verify (assuming the axioms are correct) when
+    // all sliceable statements are removed. however, this is sometimes not the
+    // case:
+    // - tick statements are not sliced by default (because slicing them by
+    //   default has adverse performance effects on some benchmarks :( )
+    // - if otherwise the program is partially sliced (this is currently not
+    //   supported anyways, but we'd like to have this in the future)
+    //
+    // the fix would be to track explicitly whether we can make that assumption
+    // that min_least_bound is 1.
+    let min_least_bound = 0;
     let mut minimize = PartialMinimizer::new(min_least_bound..=slice_vars.len());
 
     let mut first_acceptance = None;

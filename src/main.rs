@@ -185,6 +185,10 @@ pub struct Options {
     #[structopt(long)]
     pub no_slice_error: bool,
 
+    /// Enable slicing tick/reward statements during slicing for errors.
+    #[structopt(long)]
+    pub slice_ticks: bool,
+
     /// Slice if the program verifies to return a smaller, verifying program.
     /// This is not enabled by default.
     #[structopt(long)]

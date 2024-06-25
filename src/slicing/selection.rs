@@ -148,6 +148,7 @@ pub struct SliceSelection {
     discordant: bool,
     pub in_slice_verify_annotation: bool,
     pub in_slice_error_annotation: bool,
+    pub slice_ticks: bool,
     /// A success message is printed for a statement if it can be removed while
     /// the program still verifies.
     pub(super) success_message: Option<Symbol>,
@@ -168,6 +169,7 @@ impl SliceSelection {
         discordant: false,
         in_slice_verify_annotation: true,
         in_slice_error_annotation: false,
+        slice_ticks: false,
         success_message: None,
         failure_message: None,
     };
@@ -184,6 +186,7 @@ impl SliceSelection {
         discordant: true,
         in_slice_verify_annotation: false,
         in_slice_error_annotation: true,
+        slice_ticks: false,
         success_message: None,
         failure_message: None,
     };
@@ -209,6 +212,7 @@ impl BitOr for SliceSelection {
                 || rhs.in_slice_verify_annotation,
             in_slice_error_annotation: self.in_slice_error_annotation
                 || rhs.in_slice_error_annotation,
+            slice_ticks: self.slice_ticks || rhs.slice_ticks,
             success_message: self.success_message.or(rhs.success_message),
             failure_message: self.failure_message.or(rhs.failure_message),
         }
@@ -277,6 +281,11 @@ impl SelectionBuilder {
     /// this statement with the given [`SliceEffect`]?
     pub fn should_slice(&self, effect: SliceEffect) -> bool {
         self.filter.enables(&self.make_selection(effect))
+    }
+
+    /// Whether we want to slice tick statements.
+    pub fn should_slice_ticks(&self) -> bool {
+        self.filter.slice_ticks
     }
 
     /// Create a new slice selection from the current state and the given slice
