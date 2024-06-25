@@ -199,7 +199,7 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "caesar"
-version = "2.0.7"
+version = "2.0.8"
 dependencies = [
  "ariadne",
  "atty",
