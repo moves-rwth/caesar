@@ -63,6 +63,11 @@ impl SliceModel {
         })
     }
 
+    /// Return the number of statements in this model.
+    pub fn len(&self) -> usize {
+        self.stmts.len()
+    }
+
     /// Iterate over all [`Ident`]s for slice variables.
     pub fn iter_variables(&self) -> impl Iterator<Item = Ident> + '_ {
         self.stmts.iter().map(|(stmt, _res)| stmt.ident)

@@ -85,8 +85,9 @@ pub fn pretty_vc_value<'smt, 'ctx>(
         let slice_pre = pretty_eval_result(value)
             .append(Doc::line_())
             .append(Doc::text(format!(
-                "(slicing removed {} statements)",
-                num_sliced_stmts
+                "(slicing removed {}/{} assertions)",
+                num_sliced_stmts,
+                slice_model.len()
             )));
         lines.push(Doc::nil());
         lines.push(
