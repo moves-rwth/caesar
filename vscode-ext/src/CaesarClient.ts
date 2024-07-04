@@ -13,6 +13,7 @@ import { WalkthroughComponent } from "./WalkthroughComponent";
 import Logger from "./Logger";
 
 export enum ServerStatus {
+    NotStarted,
     Stopped,
     Starting,
     Ready,
