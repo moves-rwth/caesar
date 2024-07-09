@@ -31,6 +31,8 @@ pub enum AnnotationError {
     WrongArgument(Span, Expr, String),
     NotTerminator(Span, Ident),
     CalculusEncodingMismatch(Direction, Span, Ident, Ident),
+    CalculusCalculusMismatch(Span, Ident, Ident),
+    ProcDirectionMismatch(Direction, Direction, Span, Ident, Ident),
     UnknownAnnotation(Span, Ident),
 }
 
@@ -82,6 +84,26 @@ impl AnnotationError {
                         "The calculus, proof rule, and direction are incompatible.",
                     ))
             }
+            AnnotationError::CalculusCalculusMismatch(span,calling_calculus,called_calculus) => {
+                Diagnostic::new(ReportKind::Error, span)
+                    .with_message(format!(
+                        "The '{}' calculus does not match with the '{}' calculus .",
+                         calling_calculus.name, called_calculus.name
+                    ))
+                    .with_label(Label::new(span).with_message(
+                        "The calculus of the called procedure must match the calculus of the calling procedure.",
+                    ))
+            }
+            AnnotationError::ProcDirectionMismatch(calling_direction,called_direction,span, calling_proc,called_proc) => {
+                Diagnostic::new(ReportKind::Error, span)
+                    .with_message(format!(
+                        "The direction of '{} {}' does not match with the direction of the '{} {}'.",
+                         calling_direction.prefix("proc"), calling_proc.name, called_direction.prefix("proc"), called_proc.name
+                    ))
+                    .with_label(Label::new(span).with_message(
+                        "The direction of the called procedure must match the direction of the calling procedure.",
+                    ))
+            }
             AnnotationError::UnknownAnnotation(span, anno_name ) => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
@@ -96,13 +118,13 @@ impl AnnotationError {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Calculus {
     pub name: Ident,
     pub calculus_type: CalculusType,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 
 pub enum CalculusType {
     Wp,

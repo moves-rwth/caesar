@@ -17,13 +17,18 @@ mod util;
 #[cfg(test)]
 mod tests;
 
-use std::{any::Any, fmt, rc::Rc};
+use std::{
+    any::Any,
+    fmt,
+    ops::{Deref, DerefMut},
+    rc::Rc,
+};
 
 use crate::{
     ast::{
         visit::{walk_stmt, VisitorMut},
-        Block, DeclKind, DeclRef, Direction, Expr, Files, Ident, Param, ProcDecl, ProcSpec,
-        SourceFilePath, Span, Stmt, StmtKind,
+        Block, DeclKind, DeclRef, Direction, Expr, ExprKind, Files, Ident, Param, ProcDecl,
+        ProcSpec, SourceFilePath, Span, Stmt, StmtKind,
     },
     driver::{Item, SourceUnit},
     front::{
@@ -155,12 +160,51 @@ impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
 impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
     type Err = AnnotationError;
 
+    fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
+        if let ExprKind::Call(ref ident, _) = e.deref_mut().kind {
+            if let DeclKind::ProcDecl(proc_ref) = self.tcx.get(*ident).unwrap().as_ref() {
+                let proc_ref = proc_ref.clone(); // lose the reference to &mut self
+                let proc = proc_ref.borrow();
+
+                if let Some(context_direction) = &self.direction {
+                    if *context_direction != proc.direction {
+                        // Throw direction unsoundness mismatch error
+                        return Err(AnnotationError::ProcDirectionMismatch(
+                            *context_direction,
+                            proc.direction,
+                            e.span,
+                            self.current_proc_ident.unwrap(), // If there is a direction, there should be an ident as well
+                            proc.name,
+                        ));
+                    }
+                }
+
+                if let Some(context_calculus) = &self.calculus {
+                    if let Some(call_calculus_ident) = proc.calculus {
+                        if context_calculus.name != call_calculus_ident {
+                            // Throw mismatched calculus unsoundness error
+                            return Err(AnnotationError::CalculusCalculusMismatch(
+                                e.span,
+                                context_calculus.name,
+                                call_calculus_ident,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn visit_proc(&mut self, proc_ref: &mut DeclRef<ProcDecl>) -> Result<(), Self::Err> {
-        self.direction = Some(proc_ref.borrow().direction);
-        self.current_proc_ident = Some(proc_ref.borrow().name);
+        let proc_ref = proc_ref.clone(); // lose the reference to &mut self
+        let proc = proc_ref.borrow();
+
+        self.direction = Some(proc.direction);
+        self.current_proc_ident = Some(proc.name);
 
         // If the procedure has a calculus annotation, store it as the current calculus
-        if let Some(ident) = proc_ref.borrow().calculus.as_ref() {
+        if let Some(ident) = proc.calculus.as_ref() {
             match self.tcx.get(*ident) {
                 Some(decl) => {
                     if let DeclKind::AnnotationDecl(AnnotationKind::Calculus(calculus)) =
@@ -169,15 +213,10 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                         self.calculus = Some(calculus.clone());
                     }
                 }
-                None => {
-                    return Err(AnnotationError::UnknownAnnotation(
-                        proc_ref.borrow().span,
-                        *ident,
-                    ))
-                }
+                None => return Err(AnnotationError::UnknownAnnotation(proc.span, *ident)),
             }
         }
-        let proc = proc_ref.borrow_mut();
+
         let mut body = proc.body.borrow_mut();
         if let Some(ref mut block) = &mut *body {
             self.visit_block(block)?;
