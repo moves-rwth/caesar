@@ -312,8 +312,23 @@ mod test {
             @wp
             proc wp_proc() -> () {}
             @wp
-            proc wlp_proc() -> () {
+            proc main() -> () {
                 wp_proc() // this should be allowed
+            }
+        "#;
+        let res = verify_test(source).0.is_ok();
+        assert!(res);
+    }
+
+    #[test]
+    fn test_missing_calculus_call() {
+        let source = r#"
+            
+            proc default_proc() -> () {}
+
+            @wp
+            proc wp_proc() -> () {
+                default_proc() // this should be allowed
             }
         "#;
         let res = verify_test(source).0.is_ok();
