@@ -17,18 +17,13 @@ mod util;
 #[cfg(test)]
 mod tests;
 
-use std::{
-    any::Any,
-    fmt,
-    ops::{Deref, DerefMut},
-    rc::Rc,
-};
+use std::{any::Any, fmt, rc::Rc};
 
 use crate::{
     ast::{
         visit::{walk_stmt, VisitorMut},
-        Block, DeclKind, DeclRef, Direction, Expr, ExprKind, Files, Ident, Param, ProcDecl,
-        ProcSpec, SourceFilePath, Span, Stmt, StmtKind,
+        Block, DeclKind, DeclRef, Direction, Expr, Files, Ident, Param, ProcDecl, ProcSpec,
+        SourceFilePath, Span, Stmt, StmtKind,
     },
     driver::{Item, SourceUnit},
     front::{
@@ -133,14 +128,13 @@ pub fn init_encodings(files: &mut Files, tcx: &mut TyCtx) {
 }
 
 /// Walks the AST and transforms annotations into their desugared form
+/// Correct and sound usage of the annotations should be checked before by the [`GuardrailsVisitor`].
+/// Otherwise the transformation may fail or produce unsound results.
 pub struct EncCall<'tcx, 'sunit> {
     tcx: &'tcx mut TyCtx,
     source_units_buf: &'sunit mut Vec<Item<SourceUnit>>,
     direction: Option<Direction>,
-    terminator_annotation: Option<Ident>,
-    nesting_level: usize,
     current_proc_ident: Option<Ident>,
-    calculus: Option<Calculus>,
 }
 
 impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
@@ -149,10 +143,7 @@ impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
             tcx,
             source_units_buf,
             direction: Option::None,
-            terminator_annotation: None,
-            nesting_level: 0,
             current_proc_ident: None,
-            calculus: None,
         }
     }
 }
@@ -160,62 +151,13 @@ impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
 impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
     type Err = AnnotationError;
 
-    fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
-        if let ExprKind::Call(ref ident, _) = e.deref_mut().kind {
-            if let DeclKind::ProcDecl(proc_ref) = self.tcx.get(*ident).unwrap().as_ref() {
-                let proc_ref = proc_ref.clone(); // lose the reference to &mut self
-                let proc = proc_ref.borrow();
-
-                if let Some(context_direction) = &self.direction {
-                    if *context_direction != proc.direction {
-                        // Throw direction unsoundness mismatch error
-                        return Err(AnnotationError::ProcDirectionMismatch(
-                            *context_direction,
-                            proc.direction,
-                            e.span,
-                            self.current_proc_ident.unwrap(), // If there is a direction, there should be an ident as well
-                            proc.name,
-                        ));
-                    }
-                }
-
-                if let Some(context_calculus) = &self.calculus {
-                    if let Some(call_calculus_ident) = proc.calculus {
-                        if context_calculus.name != call_calculus_ident {
-                            // Throw mismatched calculus unsoundness error
-                            return Err(AnnotationError::CalculusCalculusMismatch(
-                                e.span,
-                                context_calculus.name,
-                                call_calculus_ident,
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
     fn visit_proc(&mut self, proc_ref: &mut DeclRef<ProcDecl>) -> Result<(), Self::Err> {
         let proc_ref = proc_ref.clone(); // lose the reference to &mut self
         let proc = proc_ref.borrow();
 
+        // Store the procedure information for encoding context
         self.direction = Some(proc.direction);
         self.current_proc_ident = Some(proc.name);
-
-        // If the procedure has a calculus annotation, store it as the current calculus
-        if let Some(ident) = proc.calculus.as_ref() {
-            match self.tcx.get(*ident) {
-                Some(decl) => {
-                    if let DeclKind::AnnotationDecl(AnnotationKind::Calculus(calculus)) =
-                        decl.as_ref()
-                    {
-                        self.calculus = Some(calculus.clone());
-                    }
-                }
-                None => return Err(AnnotationError::UnknownAnnotation(proc.span, *ident)),
-            }
-        }
 
         let mut body = proc.body.borrow_mut();
         if let Some(ref mut block) = &mut *body {
@@ -230,13 +172,13 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
             // If the statement is an annotation, transform it
             StmtKind::Annotation(annotation_span, ident, inputs, inner_stmt) => {
                 // First visit the statement that is annotated and handle inner annotations
-                self.nesting_level += 1;
                 self.visit_stmt(inner_stmt)?;
-                self.nesting_level -= 1;
 
                 if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
                     self.tcx.get(*ident).unwrap().as_ref()
                 {
+                    // This must be already be checked by the guardrails visitor
+                    // We check again just to be sure if it is disabled for some reason
                     if let StmtKind::While(_, _) = inner_stmt.node {
                     } else {
                         return Err(AnnotationError::NotOnWhile(
@@ -244,28 +186,6 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                             *ident,
                             inner_stmt.as_ref().clone(),
                         ));
-                    }
-
-                    // A terminator annotation can't be nested in a block
-                    if anno_ref.is_terminator() && self.nesting_level > 0 {
-                        return Err(AnnotationError::NotTerminator(s.span, anno_ref.name()));
-                    }
-
-                    // Check if the calculus annotation is compatible with the encoding annotation
-                    if let Some(calculus) = &self.calculus {
-                        // If calculus is not allowed, return an error
-                        if !anno_ref.is_calculus_allowed(
-                            calculus,
-                            self.direction
-                                .ok_or(AnnotationError::NotInProcedure(s.span, *ident))?,
-                        ) {
-                            return Err(AnnotationError::CalculusEncodingMismatch(
-                                self.direction.unwrap(),
-                                s.span,
-                                calculus.name,
-                                anno_ref.name(),
-                            ));
-                        };
                     }
 
                     let enc_env = EncodingEnvironment {
@@ -306,34 +226,9 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
 
                         self.source_units_buf.extend(items)
                     }
-
-                    // Check if the annotation is a terminator annotation and set the flag
-                    if anno_ref.is_terminator() {
-                        self.terminator_annotation = Some(anno_ref.name());
-                    }
                 }
             }
-            // If the statement is a block, increase the nesting level and walk the block
-            StmtKind::If(_, _, _)
-            | StmtKind::Angelic(_, _)
-            | StmtKind::Demonic(_, _)
-            | StmtKind::Seq(_) => {
-                if let Some(anno_name) = self.terminator_annotation {
-                    return Err(AnnotationError::NotTerminator(s.span, anno_name));
-                } else {
-                    self.nesting_level += 1;
-                    walk_stmt(self, s)?;
-                    self.nesting_level -= 1;
-                }
-            }
-            _ => {
-                // If there was a terminator annotation before, don't allow further statements
-                if let Some(anno_name) = self.terminator_annotation {
-                    return Err(AnnotationError::NotTerminator(s.span, anno_name));
-                } else {
-                    walk_stmt(self, s)?
-                }
-            }
+            _ => walk_stmt(self, s)?,
         }
         Ok(())
     }

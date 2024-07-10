@@ -41,6 +41,7 @@ use z3rro::{prover::ProveResult, util::ReasonUnknown};
 pub mod ast;
 mod driver;
 pub mod front;
+mod guardrails;
 pub mod intrinsic;
 pub mod mc;
 pub mod opt;
@@ -497,6 +498,11 @@ fn verify_files_main(
             Err(err) => Err(err)?,
             _ => (),
         }
+    }
+
+    // Check guardrails (check for sources of unsoundness)
+    for source_unit in &mut source_units {
+        source_unit.enter().check_guardrails(&mut tcx)?;
     }
 
     // Desugar encodings from source units. They might generate new source
