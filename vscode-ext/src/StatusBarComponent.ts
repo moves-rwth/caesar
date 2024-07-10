@@ -66,7 +66,7 @@ export class StatusBarComponent {
                     this.view.command = "caesar.startServer";
                     break;
                 case ServerStatus.Starting:
-                    this.view.text = "$(sync~spin) Starting Caesar...";
+                    this.view.text = "$(loading~spin) Starting Caesar...";
                     this.view.command = ""
                     break;
                 case ServerStatus.Ready:
@@ -91,9 +91,11 @@ export class StatusBarComponent {
     }
 
     private handleFinishedStatus() {
-        let returnString = "";
+        let tooltipString = new vscode.MarkdownString("");
+        tooltipString.supportThemeIcons = true;
+        tooltipString.supportHtml = true;
+
         let everythingVerified = true;
-        let openEditorCount = 0;
 
         let verified = 0;
         let failed = 0;
@@ -104,7 +106,6 @@ export class StatusBarComponent {
                 if (editor.document.languageId !== "heyvl") {
                     continue;
                 }
-                openEditorCount++;
 
                 if (editor.document.uri.toString() !== document_id.uri) {
                     continue;
@@ -115,6 +116,7 @@ export class StatusBarComponent {
                 unknown = 0;
 
                 for (const [_, result] of results) {
+
                     switch (result) {
                         case VerifyResult.Verified:
                             verified++;
@@ -132,7 +134,10 @@ export class StatusBarComponent {
                     everythingVerified = false;
                 }
 
-                returnString += `${vscode.Uri.parse(document_id.uri).path}: \n $(error) ${failed} $(question) ${unknown}\n---\n`;
+                tooltipString.appendMarkdown(`${vscode.Uri.parse(document_id.uri).path}: $(error) ${failed} $(question) ${unknown}`);
+                tooltipString.appendText("\n");
+                tooltipString.appendMarkdown("---");
+                tooltipString.appendText("\n");
             }
         }
 
@@ -140,8 +145,8 @@ export class StatusBarComponent {
             this.view.text = "$(pass) Verified!";
             this.view.tooltip = new vscode.MarkdownString("No errors found", true);
         } else {
-            this.view.text = `$(warning) Verification Errors $(error) ${failed} $(question) ${unknown}`;
-            this.view.tooltip = new vscode.MarkdownString(returnString.trim(), true);
+            this.view.text = "$(warning) Verification Errors";
+            this.view.tooltip = tooltipString;
         }
 
     }
