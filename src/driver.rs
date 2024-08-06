@@ -18,6 +18,7 @@ use crate::{
         resolve::Resolve,
         tycheck::Tycheck,
     },
+    guardrails::GuardrailsVisitor,
     mc::{self, JaniOptions},
     opt::{
         boolify::Boolify, egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder,
@@ -351,6 +352,16 @@ impl SourceUnit {
             }
         }
         Ok(())
+    }
+
+    /// Check guardrails by running the [`GuardrailsVisitor`] on the source unit.
+    pub fn check_guardrails(&mut self, tcx: &mut TyCtx) -> Result<(), VerifyError> {
+        let mut guardrail_visitor = GuardrailsVisitor::new(tcx);
+        let res = match self {
+            SourceUnit::Decl(decl) => guardrail_visitor.visit_decl(decl),
+            SourceUnit::Raw(block) => guardrail_visitor.visit_block(block),
+        };
+        Ok(res.map_err(|guardrail_err| guardrail_err.diagnostic())?)
     }
 
     /// Apply encodings from annotations.
