@@ -82,9 +82,9 @@ impl GuardrailError {
     }
 }
 
-/// Walks the AST and checks if the intent of the user results in a sound verification process and guards against falling into unsoundness
-/// Additionally it checks if the annotations are used correctly and throws errors if they are not
-/// This visitor should be used before the encoding annotations are applied to the AST, otherwise the annotations will be lost
+/// Walks the AST and checks if the intent of the user results in a sound verification process and guards against falling into unsoundness.
+/// Additionally it checks if the annotations are used correctly and throws errors if they are not.
+/// This visitor should be used before the encoding annotations are applied to the AST, otherwise the annotations will be lost.
 /// ---
 /// Unsoundness can be caused by multiple factors that need to be checked e.g. annotations, direction and calculus mismatches etc.
 
@@ -282,12 +282,17 @@ mod test {
         // this should produce an error
         let source = r#"
             proc main() -> () {
-                @invariant() // must be on a loop
+                @invariant(1) // must be on a loop
                 var x: UInt
             }
         "#;
-        let res = verify_test(source).0.is_err(); // should fail
-        assert!(res);
+        let res = verify_test(source).0; // should fail
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Error: The proof rule `invariant` must be used on a while loop."
+        );
     }
 
     #[test]

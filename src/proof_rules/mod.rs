@@ -127,13 +127,15 @@ pub fn init_encodings(files: &mut Files, tcx: &mut TyCtx) {
     tcx.declare(DeclKind::AnnotationDecl(ast));
 }
 
-/// Walks the AST and transforms annotations into their desugared form
+/// Walks the AST and transforms annotations into their desugared form.
 /// Correct and sound usage of the annotations should be checked before by the [`GuardrailsVisitor`].
 /// Otherwise the transformation may fail or produce unsound results.
 pub struct EncCall<'tcx, 'sunit> {
     tcx: &'tcx mut TyCtx,
     source_units_buf: &'sunit mut Vec<Item<SourceUnit>>,
     direction: Option<Direction>,
+    terminator_annotation: Option<Ident>,
+    nesting_level: usize,
     current_proc_ident: Option<Ident>,
 }
 
@@ -143,6 +145,8 @@ impl<'tcx, 'sunit> EncCall<'tcx, 'sunit> {
             tcx,
             source_units_buf,
             direction: Option::None,
+            terminator_annotation: None,
+            nesting_level: 0,
             current_proc_ident: None,
         }
     }
@@ -172,13 +176,15 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
             // If the statement is an annotation, transform it
             StmtKind::Annotation(annotation_span, ident, inputs, inner_stmt) => {
                 // First visit the statement that is annotated and handle inner annotations
+                self.nesting_level += 1;
                 self.visit_stmt(inner_stmt)?;
+                self.nesting_level -= 1;
 
                 if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
                     self.tcx.get(*ident).unwrap().as_ref()
                 {
-                    // This must be already be checked by the guardrails visitor
-                    // We check again just to be sure if it is disabled for some reason
+                    // Guardrails visitor already checked if the annotation is used appropriately (i.e. on a while loop).
+                    // But check again just to be sure if it is disabled for some reason
                     if let StmtKind::While(_, _) = inner_stmt.node {
                     } else {
                         return Err(AnnotationError::NotOnWhile(
@@ -186,6 +192,11 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
                             *ident,
                             inner_stmt.as_ref().clone(),
                         ));
+                    }
+
+                    // A terminator annotation can't be nested in a block
+                    if anno_ref.is_terminator() && self.nesting_level > 0 {
+                        return Err(AnnotationError::NotTerminator(s.span, anno_ref.name()));
                     }
 
                     let enc_env = EncodingEnvironment {
@@ -226,9 +237,35 @@ impl<'tcx, 'sunit> VisitorMut for EncCall<'tcx, 'sunit> {
 
                         self.source_units_buf.extend(items)
                     }
+
+                    // Check if the annotation is a terminator annotation and set the flag
+                    if anno_ref.is_terminator() {
+                        self.terminator_annotation = Some(anno_ref.name());
+                    }
                 }
             }
-            _ => walk_stmt(self, s)?,
+
+            // If the statement is a block, increase the nesting level and walk the block
+            StmtKind::If(_, _, _)
+            | StmtKind::Angelic(_, _)
+            | StmtKind::Demonic(_, _)
+            | StmtKind::Seq(_) => {
+                if let Some(anno_name) = self.terminator_annotation {
+                    return Err(AnnotationError::NotTerminator(s.span, anno_name));
+                } else {
+                    self.nesting_level += 1;
+                    walk_stmt(self, s)?;
+                    self.nesting_level -= 1;
+                }
+            }
+            _ => {
+                // If there was a terminator annotation before, don't allow further statements
+                if let Some(anno_name) = self.terminator_annotation {
+                    return Err(AnnotationError::NotTerminator(s.span, anno_name));
+                } else {
+                    walk_stmt(self, s)?
+                }
+            }
         }
         Ok(())
     }
