@@ -22,6 +22,11 @@ Adding `--raw` indicates that input files consist only of a sequence [HeyVL stat
 Set a timeout of 60 seconds using `--timeout 60`.
 Set a memory limit of 16000 megabytes with `--mem 16000`.
 
+**Slicing:**
+[Caesar's slicing](./slicing.md) is controlled by the following flags:
+* With the `--no-slice-error` flag, Caesar will not do slicing to obtain better error messages (error slicing enabled by default).
+* With the `--slice-verify` flag, Caesar will do slicing for verification (this is not enabled by default).
+
 **Print tracing messages:**
 Caesar uses the [`tracing` library](https://github.com/tokio-rs/tracing) to print (debugging) information during its operation.
 Set the `RUST_LOG` environment variable to specify a filter, e.g. `export RUST_LOG="caesar=debug"` or `export RUST_LOG="caesar::smt=trace"`.
