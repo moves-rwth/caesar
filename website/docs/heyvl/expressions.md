@@ -61,6 +61,7 @@ Note that we plan to change some operator precedences, so when in doubt, use mor
 
 The most precise grammar specification can be found in Caesar's source code ([`src/front/parser/grammar.lalrpop`](https://github.com/moves-rwth/caesar/blob/main/src/front/parser/grammar.lalrpop)).
 
+
 ## Semantics and Under-Specified Expressions
 
 In [our paper on HeyVL (cf. Section 2)](https://arxiv.org/pdf/2309.07781.pdf#page=5), we give a formal semantics for *HeyLo*, our logic for reasoning about expected values.
@@ -76,7 +77,6 @@ You can find more information in the [Z3 documentation on division](https://micr
 The `-` operator is always fully defined in Caesar.
 On unsigned types such as `UInt`, it corresponds to *monus*, i.e. truncating subtraction that is always at least `0`.
 On signed types such as `Int`, it corresponds to the usual subtraction.
-
 
 ## If-Then-Else
 
@@ -126,9 +126,25 @@ forall list: []Int @trigger(len(list), len(list)). len(list) >= 0
 
 For more information on how triggers/patterns work in general, see the [Z3 User Guide](https://microsoft.github.io/z3guide/docs/logic/Quantifiers/#patterns) and the [Dafny documentation](https://dafny.org/latest/DafnyRef/DafnyRef#sec-trigger).
 
+
+## Relative Completeness
+
+Caesar's expression syntax is based on [the expressive assertion language for probabilistic verification by Batz et al](https://dl.acm.org/doi/10.1145/3434320).
+In theory, *expressiveness* means that for many programs and properties, we know that we can express *all* pre-expectations and invariants in the expression syntax when a post-expectation is written in that syntax.
+
+Formally, we have that the [weakest pre-expectation calculus](../proof-rules/calculi.md) `wp` is *relatively complete* with respect to this language, which means that `wp[P](post)` is effectively constructible for all programs `P` and expectations `post` in their syntax.
+
+Their syntax includes enough constructs to specify many interesting properties, such as termination probabilities or the distribution over final states, even including stuff like harmonic numbers.
+See [the paper's Section 12 for more details](https://dl.acm.org/doi/pdf/10.1145/3434320#page=26).
+
+Of course, this does not mean that all of these verification problems are decidable.
+It just means that in theory, the undecidable part is *only* in the final inequality check `pre <= wp[P](post)` instead of the computation of `wp[P](post)`.
+[The section on SMT theories and incompleteness](#incompleteness) specifies which of these inequalities are actually decidable with Caesar.
+
+
 ## SMT Theories and Incompleteness {#incompleteness}
 
-Expressions are the main reason for *incompleteness* of Caesar, i.e. instances Caesar is unable to decide whether a HeyVL program verifies or not.
+Expressions are the main reason for *incompleteness* of Caesar, i.e. instances Caesar is unable to decide whether a given HeyVL program verifies or not.
 Caesar's incompleteness comes from incompleteness of the underlying SMT solver which is used to prove or disprove verification.
 
 At the moment, Caesar's translation of HeyVL verification problems is rather direct: most expressions are translated as one would intuitively expect.
