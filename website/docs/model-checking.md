@@ -40,11 +40,24 @@ proc geo_mc(init_c: UInt) -> (c: UInt, cont: Bool)
 }
 ```
 
+### Generating JANI Files
+
 To export JANI files for the model checker, simply run Caesar with the `--jani-dir DIR` option to instruct it to save all translateable (co)procs to `.jani` files in the directory `DIR`:
 
 ```bash
 caesar example.heyvl --jani-dir DIR
 ```
+
+The output JANI files will have the following structure that you can use:
+ * Properties:
+   * `reward`: This is the expected value of the verification conditions (cf. [Statements](./heyvl/statements.md)).
+   * `diverge_prob`: The probability of not reaching the end of the (co)proc.
+   * `can_diverge`: Boolean property whether the program has a path that does not reach the end of the (co)proc.[^5]
+ * Constants:
+   * One constant for each input variable of the (co)proc (constant has same name as variable).
+
+
+### Model Checking with Storm
 
 We use the probabilistic model checker [Storm](https://www.stormchecker.org).
 Running Storm on the produced file gives us the optimal value.[^1]
@@ -60,6 +73,14 @@ Part of the output:
 Model checking property "reward": R[exp]{"reward"}min=? [C] ...
 Result (for initial states): 2097151/2097152 (approx. 0.9999995232)
 ```
+
+:::info Infinite-State Programs
+
+Model checkers usually work with finite-state models, therefore programs with an infinite state space often just lead to nontermination of the model checker.
+ * **Bounded model checking:** Since [PR #521](https://github.com/moves-rwth/storm/pull/521) (nightly only), Storm can be used with a state limit so that the model generation will just stop at some number of states. Use the `--build:state number <limit>` command-line flag.
+ * **Parametric models:** If the program has input variables, [Storm's parametric model checking](https://www.stormchecker.org/documentation/usage/running-storm-on-parametric-models.html) may be of interest.
+
+:::
 
 :::note
 
