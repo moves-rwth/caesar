@@ -12,7 +12,27 @@ The necessary terminator is usually clear from the context.
 
 Just like all others of Caesar's proof rules, loop unrolling can be used as a proof rule for verification.
 But it also often used in *bounded model checking* not to *prove*, but to *refute* specifications.
-See the [*Bounded Model Checking* section](#bounded-model-checking) below for details.
+See the [*Bounded Model Checking* section](#bounded-model-checking) below for details on the use of this proof rule for refutations.
+
+:::info Terminology *"Bounded Model Checking"*
+
+The term *bounded model checking* in this document refers to Caesar's proof rule of unrolling as applied to refutations.
+It supports all of the symbolic reasoning that you know from Caesar.
+
+But there is also *(probabilistic) model checking*, which usually refers to tools and techniques that construct a (finite) state space explicitly and then analyze the program.
+These allow both proofs and verification.
+All of this is unfortunately standard terminology.
+
+:::
+
+
+:::note Using Probabilistic Model Checkers Instead
+
+Sometimes, using a *probabilistic model checker* such as [Storm](https://www.stormchecker.org/) is an alternative to Caesar's loop unrolling.
+[Caesar's support for model checking](../model-checking.md) can translate (executable) HeyVL programs to the [JANI format](https://jani-spec.org/), which can be used as an input to Storm.
+This may be an option if you do not need the power of Caesar's deductive verification, but want to build the state space explicitly.
+
+:::
 
 ## Usage
 
