@@ -31,6 +31,7 @@ Set the `RUST_LOG` environment variable to specify a filter, e.g. `export RUST_L
 * With the `--print-core` flag, Caesar prints the HeyVL code after parsing, type-checking, and desugaring.
 * With the `--print-theorem` flag, Caesar prints the theorem that is encoded into SMT.
 * With the `--print-smt` flag, Caesar prints the SMT-LIB query for each verification task. You can also use `--smt-dir DIR` with a directory `DIR` to have Caesar write the SMT-LIB queries to files in `DIR`.
+  * If [`raco read`](https://docs.racket-lang.org/raco/read.html) is installed, Caesar will auto-format the SMT-LIB code with it. This is very useful as Z3's default formatting is really confusing sometimes.
 
 **More topics:**
 
