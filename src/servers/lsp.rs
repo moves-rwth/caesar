@@ -129,7 +129,7 @@ impl LspServer {
                             })
                             .id;
                         drop(files);
-                        self.clear_diagnostics().map_err(VerifyError::ServerError)?;
+                        self.clear_all().map_err(VerifyError::ServerError)?;
                         let result = verify(self, &[file_id]);
                         let res = match &result {
                             Ok(_) => Response::new_ok(id, Value::Null),
@@ -297,11 +297,16 @@ impl LspServer {
         Ok(())
     }
 
-    fn clear_diagnostics(&mut self) -> Result<(), ServerError> {
+    fn clear_all(&mut self) -> Result<(), ServerError> {
         for diags in self.diagnostics.values_mut() {
             diags.clear();
         }
+        for explanations in self.vc_explanations.values_mut() {
+            explanations.clear();
+        }
+        self.statuses.clear();
         self.publish_diagnostics()?;
+        self.publish_verify_statuses()?;
         Ok(())
     }
 }
