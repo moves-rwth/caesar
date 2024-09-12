@@ -52,7 +52,7 @@ use crate::{
         vcgen::Vcgen,
     },
     version::write_detailed_version_info,
-    Options, VerifyError,
+    Options, SliceOptions, VerifyError,
 };
 
 use ariadne::ReportKind;
@@ -427,7 +427,7 @@ impl VerifyUnit {
     #[instrument(skip_all)]
     pub fn prepare_slicing(
         &mut self,
-        options: &Options,
+        options: &SliceOptions,
         tcx: &mut TyCtx,
         server: &mut dyn Server,
     ) -> Result<SliceStmts, VerifyError> {
@@ -436,6 +436,7 @@ impl VerifyUnit {
             selection |= SliceSelection::FAILURE_SELECTION;
         }
         selection.slice_ticks = options.slice_ticks;
+        selection.slice_sampling = options.slice_sampling;
         if options.slice_verify {
             selection |= SliceSelection::VERIFIED_SELECTION;
         }
@@ -650,7 +651,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
 
         let mut slice_solver = SliceSolver::new(slice_vars.clone(), translate, prover);
         let (result, mut slice_model) = slice_solver.slice_while_failing(limits_ref)?;
-        if matches!(result, ProveResult::Proof) && options.slice_verify {
+        if matches!(result, ProveResult::Proof) && options.slice_options.slice_verify {
             if translate.ctx.uninterpreteds().is_empty() {
                 slice_model = slice_solver.slice_while_verified(limits_ref)?;
             } else {

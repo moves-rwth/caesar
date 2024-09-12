@@ -205,18 +205,28 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
 
         // now handle the individual statements which we transform.
         match &mut s.node {
-            StmtKind::Assign(lhs, rhs) if lhs.len() == 1 && is_pure_expr(self.tcx, rhs) => {
+            StmtKind::Assign(lhs, rhs) if lhs.len() == 1 => {
                 let effect = SliceEffect::Ambiguous;
                 if !self.selector.should_slice(effect) {
                     return Ok(());
                 }
-
-                let slice_var = self.add_slice_stmt(s.span, effect);
-                let builder = ExprBuilder::new(rhs.span.variant(SpanVariant::Slicing));
-                let ty = rhs.ty.clone();
-                rhs.replace_with(|rhs| {
-                    builder.ite(ty, slice_var, rhs.clone(), builder.var(lhs[0], self.tcx))
-                });
+                if is_pure_expr(self.tcx, rhs) {
+                    let slice_var = self.add_slice_stmt(s.span, effect);
+                    let builder = ExprBuilder::new(rhs.span.variant(SpanVariant::Slicing));
+                    let ty = rhs.ty.clone();
+                    rhs.replace_with(|rhs| {
+                        builder.ite(ty, slice_var, rhs.clone(), builder.var(lhs[0], self.tcx))
+                    });
+                } else if self.selector.should_slice_sampling() {
+                    let span = s.span;
+                    let slice_var = self.add_slice_stmt(s.span, effect);
+                    let assignment = s.clone();
+                    s.node = StmtKind::If(
+                        slice_var,
+                        Spanned::new(span, vec![assignment]),
+                        Spanned::new(span, vec![]),
+                    );
+                }
             }
             StmtKind::Assume(dir, expr) => {
                 let effect = if self.direction == *dir {
@@ -358,6 +368,22 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 lhs.node.insert(0, generate_slice_stmt(lhs_slice_var));
                 rhs.node.insert(0, generate_slice_stmt(rhs_slice_var));
             }
+            /*
+            StmtKind::If(_, _, _) => {
+                let effect = SliceEffect::Ambiguous;
+                if !self.selector.should_slice(effect) {
+                    return Ok(());
+                }
+                let span = s.span;
+                let slice_var = self.add_slice_stmt(s.span, effect);
+                let ite = s.clone();
+                s.node = StmtKind::If(
+                    slice_var,
+                    Spanned::new(span, vec![ite]),
+                    Spanned::new(span, vec![]),
+                );
+            }
+            */
             StmtKind::Negate(dir) => match (self.direction, dir) {
                 (Direction::Down, Direction::Down) => self.direction = Direction::Up,
                 (Direction::Up, Direction::Up) => self.direction = Direction::Down,

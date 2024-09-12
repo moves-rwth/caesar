@@ -180,6 +180,12 @@ pub struct Options {
     #[structopt(long)]
     pub jani_skip_quant_pre: bool,
 
+    #[structopt(flatten)]
+    pub slice_options: SliceOptions,
+}
+
+#[derive(Debug, Default, StructOpt)]
+pub struct SliceOptions {
     /// Do not try to slice after an error occurs. Just return the first
     /// counterexample.
     #[structopt(long)]
@@ -188,6 +194,11 @@ pub struct Options {
     /// Enable slicing tick/reward statements during slicing for errors.
     #[structopt(long)]
     pub slice_ticks: bool,
+
+    /// Enable slicing sampling statements (must also be selected via
+    /// annotations).
+    #[structopt(long)]
+    pub slice_sampling: bool,
 
     /// Slice if the program verifies to return a smaller, verifying program.
     /// This is not enabled by default.
@@ -540,7 +551,7 @@ fn verify_files_main(
         }
 
         // 5. Prepare slicing
-        let slice_vars = verify_unit.prepare_slicing(options, &mut tcx, server)?;
+        let slice_vars = verify_unit.prepare_slicing(&options.slice_options, &mut tcx, server)?;
 
         // 6. Generating verification conditions.
         let mut vcgen = Vcgen::new(&tcx, options.explain_core_vc);

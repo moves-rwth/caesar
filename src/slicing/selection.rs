@@ -149,6 +149,9 @@ pub struct SliceSelection {
     pub in_slice_verify_annotation: bool,
     pub in_slice_error_annotation: bool,
     pub slice_ticks: bool,
+    /// Whether we should slice probabilistic sampling. This can be expensive
+    /// and is disabled by default.
+    pub slice_sampling: bool,
     /// A success message is printed for a statement if it can be removed while
     /// the program still verifies.
     pub(super) success_message: Option<Symbol>,
@@ -170,6 +173,7 @@ impl SliceSelection {
         in_slice_verify_annotation: true,
         in_slice_error_annotation: false,
         slice_ticks: false,
+        slice_sampling: false,
         success_message: None,
         failure_message: None,
     };
@@ -187,6 +191,7 @@ impl SliceSelection {
         in_slice_verify_annotation: false,
         in_slice_error_annotation: true,
         slice_ticks: false,
+        slice_sampling: false,
         success_message: None,
         failure_message: None,
     };
@@ -213,6 +218,7 @@ impl BitOr for SliceSelection {
             in_slice_error_annotation: self.in_slice_error_annotation
                 || rhs.in_slice_error_annotation,
             slice_ticks: self.slice_ticks || rhs.slice_ticks,
+            slice_sampling: self.slice_sampling || rhs.slice_sampling,
             success_message: self.success_message.or(rhs.success_message),
             failure_message: self.failure_message.or(rhs.failure_message),
         }
@@ -286,6 +292,11 @@ impl SelectionBuilder {
     /// Whether we want to slice tick statements.
     pub fn should_slice_ticks(&self) -> bool {
         self.filter.slice_ticks
+    }
+
+    /// Whether we want to slice tick statements.
+    pub fn should_slice_sampling(&self) -> bool {
+        self.filter.slice_sampling
     }
 
     /// Create a new slice selection from the current state and the given slice
