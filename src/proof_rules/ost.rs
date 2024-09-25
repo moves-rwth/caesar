@@ -92,7 +92,7 @@ impl Encoding for OSTAnnotation {
         resolve.visit_expr(post)
     }
 
-    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
+    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
         matches!(calculus.calculus_type, CalculusType::Wp) && direction == Direction::Down
     }
 
@@ -134,11 +134,11 @@ impl Encoding for OSTAnnotation {
         let (loop_guard, loop_body) = if let StmtKind::While(guard, body) = &inner_stmt.node {
             (guard, body)
         } else {
-            return Err(AnnotationError::NotOnWhile(
-                annotation_span,
-                self.name(),
-                inner_stmt.clone(),
-            ));
+            return Err(AnnotationError::NotOnWhile {
+                span: annotation_span,
+                annotation_name: self.name(),
+                annotated: inner_stmt.clone(),
+            });
         };
 
         // Get the "init_{}" versions of the variable identifiers and declare them

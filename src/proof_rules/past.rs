@@ -85,7 +85,7 @@ impl Encoding for PASTAnnotation {
         Ok(())
     }
 
-    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
+    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
         matches!(calculus.calculus_type, CalculusType::Ert) && direction == Direction::Up
     }
 
@@ -107,11 +107,11 @@ impl Encoding for PASTAnnotation {
         let k_val = lit_f64(k);
 
         if eps_val >= k_val {
-            return Err(AnnotationError::WrongArgument(
-                annotation_span,
-                eps.clone(),
-                String::from("eps must be smaller than k."),
-            ));
+            return Err(AnnotationError::WrongArgument {
+                span: annotation_span,
+                arg: eps.clone(),
+                message: String::from("eps must be smaller than k."),
+            });
         }
 
         // Collect modified variables for havoc (exclude the variables that are declared in the loop)
@@ -132,11 +132,11 @@ impl Encoding for PASTAnnotation {
         let (loop_guard, _) = if let StmtKind::While(guard, body) = &inner_stmt.node {
             (guard, body)
         } else {
-            return Err(AnnotationError::NotOnWhile(
-                annotation_span,
-                self.name(),
-                inner_stmt.clone(),
-            ));
+            return Err(AnnotationError::NotOnWhile {
+                span: annotation_span,
+                annotation_name: self.name(),
+                annotated: inner_stmt.clone(),
+            });
         };
 
         // Get the "init_{}" versions of the variable identifiers and declare them

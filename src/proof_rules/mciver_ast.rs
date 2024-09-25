@@ -119,7 +119,7 @@ impl Encoding for ASTAnnotation {
         Ok(())
     }
 
-    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
+    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
         matches!(calculus.calculus_type, CalculusType::Wp) && direction == Direction::Down
     }
 
@@ -141,21 +141,21 @@ impl Encoding for ASTAnnotation {
         let (loop_guard, loop_body) = if let StmtKind::While(guard, body) = &inner_stmt.node {
             (guard, body)
         } else {
-            return Err(AnnotationError::NotOnWhile(
-                annotation_span,
-                self.name(),
-                inner_stmt.clone(),
-            ));
+            return Err(AnnotationError::NotOnWhile {
+                span: annotation_span,
+                annotation_name: self.name(),
+                annotated: inner_stmt.clone(),
+            });
         };
 
         let free_var = if let ExprKind::Var(var_ref) = &free_var.kind {
             *var_ref
         } else {
-            return Err(AnnotationError::WrongArgument(
-                annotation_span,
-                free_var.clone(),
-                String::from("This argument must be a single variable expression."),
-            ));
+            return Err(AnnotationError::WrongArgument {
+                span: annotation_span,
+                arg: free_var.clone(),
+                message: String::from("This argument must be a single variable expression."),
+            });
         };
 
         // Collect modified variables (exclude the variables that are declared in the loop)

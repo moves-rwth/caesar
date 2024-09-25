@@ -1,11 +1,16 @@
 //! Replacement of calls to procedures by their specification.
 
+use std::ops::DerefMut;
+
+use ariadne::ReportKind;
+
 use crate::{
     ast::{
         util::FreeVariableCollector,
         visit::{walk_stmt, VisitorMut},
-        Block, DeclKind, DeclRef, Expr, ExprData, ExprKind, Ident, Param, ProcSpec, Shared, Span,
-        SpanVariant, Spanned, Stmt, StmtKind, Symbol, VarDecl, VarKind,
+        Block, DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprData, ExprKind, Ident, Label,
+        Param, ProcSpec, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind, Symbol, VarDecl,
+        VarKind,
     },
     slicing::{wrap_with_error_message, wrap_with_success_message},
     tyctx::TyCtx,
@@ -13,16 +18,79 @@ use crate::{
 
 pub struct SpecCall<'tcx> {
     tcx: &'tcx mut TyCtx,
+    direction: Direction,
+    proc_name: String,
 }
 
 impl<'tcx> SpecCall<'tcx> {
-    pub fn new(tcx: &'tcx mut TyCtx) -> Self {
-        SpecCall { tcx }
+    pub fn new(tcx: &'tcx mut TyCtx, direction: Direction, proc_name: String) -> Self {
+        SpecCall {
+            tcx,
+            direction,
+            proc_name,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum SpecCallError {
+    ProcDirectionMismatch {
+        calling_direction: Direction,
+        called_direction: Direction,
+        span: Span,
+        calling_proc: String,
+        called_proc: Ident,
+    },
+}
+
+impl SpecCallError {
+    pub fn diagnostic(&self) -> Diagnostic {
+        match self {
+            SpecCallError::ProcDirectionMismatch {
+                calling_direction,
+                called_direction,
+                span,
+                calling_proc,
+                called_proc,
+            } => Diagnostic::new(ReportKind::Error, *span)
+                .with_message(format!(
+                    "The direction of '{} {}' does not match with the direction of the '{} {}'.",
+                    calling_direction.prefix("proc"),
+                    calling_proc,
+                    called_direction.prefix("proc"),
+                    called_proc.name
+                ))
+                .with_label(Label::new(*span).with_message(
+                    "The direction of the called procedure must match the direction of the calling procedure.",
+                )),
+        }
     }
 }
 
 impl<'tcx> VisitorMut for SpecCall<'tcx> {
-    type Err = ();
+    type Err = SpecCallError;
+
+    fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
+        if let ExprKind::Call(ref ident, _) = e.deref_mut().kind {
+            if let DeclKind::ProcDecl(proc_ref) = self.tcx.get(*ident).unwrap().as_ref() {
+                let proc_ref = proc_ref.clone(); // lose the reference to &mut self
+                let proc = proc_ref.borrow();
+                let context_direction = &self.direction;
+
+                if *context_direction != proc.direction {
+                    // Throw direction unsoundness mismatch error
+                    return Err(SpecCallError::ProcDirectionMismatch {
+                        calling_direction: *context_direction,
+                        called_direction: proc.direction,
+                        span: e.span,
+                        calling_proc: self.proc_name.clone(), // If there is a direction, there should be an ident as well
+                        called_proc: proc.name,
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
 
     fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
         match &mut s.node {
@@ -45,6 +113,8 @@ impl<'tcx> VisitorMut for SpecCall<'tcx> {
                 }
             }
             StmtKind::Assign(lhses, rhs) => {
+                // Visit the right-hand side first to ensure that the procedure call is valid.
+                self.visit_expr(rhs)?;
                 if let Some(block) = self.encode_assign(s.span, lhses, rhs) {
                     s.span = block.span;
                     s.node = StmtKind::Seq(block.node);
@@ -232,5 +302,25 @@ mod test {
         "#;
         let res = verify_test(source).0.unwrap();
         assert_eq!(res, false);
+    }
+
+    #[test]
+    fn test_proc_direction_mismatch() {
+        // this should produce an error
+        let source = r#"
+            
+            coproc test1() -> () {}
+            
+            proc test2() -> () {
+                test1() // a coproc is being called from a proc
+            }
+        "#;
+        let res = verify_test(source).0;
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Error: The direction of 'proc <builtin>::test2' does not match with the direction of the 'coproc test1'."
+        );
     }
 }

@@ -41,7 +41,6 @@ use z3rro::{prover::ProveResult, util::ReasonUnknown};
 pub mod ast;
 mod driver;
 pub mod front;
-mod guardrails;
 pub mod intrinsic;
 pub mod mc;
 pub mod opt;
@@ -500,11 +499,6 @@ fn verify_files_main(
         }
     }
 
-    // Check guardrails (check for sources of unsoundness)
-    for source_unit in &mut source_units {
-        source_unit.enter().check_guardrails(&mut tcx)?;
-    }
-
     // Desugar encodings from source units. They might generate new source
     // units (for side conditions).
     let mut source_units_buf = vec![];
@@ -538,7 +532,7 @@ fn verify_files_main(
         let (name, mut verify_unit) = verify_unit.enter_with_name();
 
         // 4. Desugaring: transforming spec calls to procs
-        verify_unit.desugar_spec_calls(&mut tcx).unwrap();
+        verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
 
         // print HeyVL core after desugaring if requested
         if options.print_core {

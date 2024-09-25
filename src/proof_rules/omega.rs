@@ -101,7 +101,7 @@ impl Encoding for OmegaInvAnnotation {
         Ok(())
     }
 
-    fn is_calculus_allowed(&self, calculus: &Calculus, direction: Direction) -> bool {
+    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
         matches!(
             (&calculus.calculus_type, direction),
             (CalculusType::Wp | CalculusType::Ert, Direction::Down)
@@ -125,11 +125,11 @@ impl Encoding for OmegaInvAnnotation {
         let omega_var = if let ExprKind::Var(var_ref) = &free_var.kind {
             *var_ref
         } else {
-            return Err(AnnotationError::WrongArgument(
-                annotation_span,
-                free_var.clone(),
-                String::from("This argument must be a single variable expression."),
-            ));
+            return Err(AnnotationError::WrongArgument {
+                span: annotation_span,
+                arg: free_var.clone(),
+                message: String::from("This argument must be a single variable expression."),
+            });
         };
 
         let builder = ExprBuilder::new(annotation_span);
