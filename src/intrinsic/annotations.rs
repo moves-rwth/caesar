@@ -133,7 +133,7 @@ impl AnnotationUnsoundnessError {
             AnnotationUnsoundnessError::CalculusCallMismatch{span,context_calculus,call_calculus} => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "Cannot call '{}' proc from  '{}' proc.",
+                        "Cannot call '{}' proc from '{}' proc.",
                          call_calculus.name, context_calculus.name
                     ))
                     .with_label(Label::new(span).with_message(

@@ -654,7 +654,7 @@ fn test_calculus_mismatch() {
     let err = res.unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Error: The 'wlp' calculus does not match with the 'wp' calculus."
+        "Error: Cannot call 'wp' proc from 'wlp' proc."
     );
 }
 
