@@ -169,7 +169,7 @@
         },
         "caesar.server.autoStartServer": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Specifies whether to automatically start the server when the extension is activated.",
           "order": 8
         },

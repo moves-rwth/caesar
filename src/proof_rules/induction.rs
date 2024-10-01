@@ -4,6 +4,7 @@
 //!
 //! - `k`: the number of times the loop will be extended
 //! - `invariant`: the invariant of the loop
+//!
 //! `@invariant` is a syntactic sugar for 1-induction and it is equivalent to `@k-induction(1, expr)`.
 
 use std::{any::Any, fmt};
