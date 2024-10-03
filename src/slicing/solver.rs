@@ -295,7 +295,13 @@ fn slice<'ctx>(
                 // this as a tighter upper bound instead of just `mid`.
                 let num_actually_true = slice_vars
                     .iter()
-                    .filter(|var| model.eval(var.0, true).unwrap().as_bool().unwrap_or(true))
+                    .filter(|var| {
+                        // evaluate a value in the model without model completion
+                        let symbolic: Bool<'ctx> = model.eval(var.0, false).unwrap();
+                        // if it is a concrete value in the model, use it.
+                        // otherwise it is irrelevant and we set it to false.
+                        symbolic.as_bool().unwrap_or(false)
+                    })
                     .count();
                 assert!(num_actually_true <= mid);
                 if num_actually_true != mid {
