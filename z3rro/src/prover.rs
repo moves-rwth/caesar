@@ -120,6 +120,11 @@ impl<'ctx> Prover<'ctx> {
         self.solver.get_model()
     }
 
+    /// Retrieve the UNSAT core. See [`Solver::get_unsat_core()`].
+    pub fn get_unsat_core(&self) -> Vec<Bool<'ctx>> {
+        self.solver.get_unsat_core()
+    }
+
     /// See [`Solver::get_reason_unknown`].
     pub fn get_reason_unknown(&self) -> Option<ReasonUnknown> {
         self.solver

@@ -124,9 +124,10 @@ impl<'ctx> SliceSolver<'ctx> {
         self.prover.check_proof()
     } */
 
-    /// Minimize the number of statements while the program still verifies.
+    /// Minimize the number of statements while the program still verifies using
+    /// an exists-forall encoding.
     #[instrument(level = "info", skip_all)]
-    pub fn slice_while_verified(
+    pub fn exists_verified_slice(
         &mut self,
         limits_ref: &LimitsRef,
     ) -> Result<Option<SliceModel>, VerifyError> {
@@ -156,6 +157,40 @@ impl<'ctx> SliceSolver<'ctx> {
             let model = InstrumentedModel::new(exists_forall_solver.get_model().unwrap());
             let slice_model =
                 SliceModel::extract_model(SliceMode::Verify, &self.slice_stmts, selection, &model);
+            Ok(Some(slice_model))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get a "slice while verified" from the SMT solver's unsat core.
+    #[instrument(level = "info", skip_all)]
+    pub fn verified_slice_core(
+        &mut self,
+        limits_ref: &LimitsRef,
+    ) -> Result<Option<SliceModel>, VerifyError> {
+        assert_eq!(self.prover.level(), 2);
+        self.prover.pop();
+        self.prover.pop();
+        self.prover.push();
+
+        let selection = SliceSelection::VERIFIED_SELECTION;
+        let (inactive_formula, active_toggle_values) = self.translate_selection(&selection);
+
+        if let Some(timeout) = limits_ref.time_left() {
+            self.prover.set_timeout(timeout);
+        }
+
+        self.prover.add_assumption(&inactive_formula);
+        let res = self.prover.check_proof_assuming(&active_toggle_values);
+
+        if let ProveResult::Proof = res {
+            let slice_model = SliceModel::extract_enabled(
+                SliceMode::Verify,
+                &self.slice_stmts,
+                selection,
+                self.prover.get_unsat_core(),
+            );
             Ok(Some(slice_model))
         } else {
             Ok(None)
@@ -260,7 +295,7 @@ fn slice<'ctx>(
                 // this as a tighter upper bound instead of just `mid`.
                 let num_actually_true = slice_vars
                     .iter()
-                    .filter(|var| model.eval(var.0, true).unwrap().as_bool().unwrap())
+                    .filter(|var| model.eval(var.0, true).unwrap().as_bool().unwrap_or(true))
                     .count();
                 assert!(num_actually_true <= mid);
                 if num_actually_true != mid {

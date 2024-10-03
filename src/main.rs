@@ -5,10 +5,12 @@
 
 use std::{
     collections::HashMap,
+    fmt::Display,
     io,
     ops::DerefMut,
     path::PathBuf,
     process::ExitCode,
+    str::FromStr,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -204,6 +206,49 @@ pub struct SliceOptions {
     /// This is not enabled by default.
     #[structopt(long)]
     pub slice_verify: bool,
+
+    /// If slicing for correctness is enabled, slice via these methods. If none
+    /// is given, the best method is chosen automatically.
+    #[structopt(long, possible_values = SliceVerifyMethod::variants())]
+    pub slice_verify_via: Option<SliceVerifyMethod>,
+}
+
+#[derive(Debug)]
+pub enum SliceVerifyMethod {
+    /// Slice for correctness by encoding a direct exists-forall query into the
+    /// SMT solver and then run the minimization algorithm. This approach does
+    /// not support uninterpreted functions.
+    ExistsForall,
+    /// Slice for correctness using unsat cores. This approach currently does
+    /// not try to minimize the result.
+    UnsatCore,
+}
+
+impl SliceVerifyMethod {
+    fn variants() -> &'static [&'static str] {
+        &["exists-forall", "unsat-core"]
+    }
+}
+
+impl FromStr for SliceVerifyMethod {
+    type Err = InvalidSliceVerifyMethod;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "exists-forall" => Ok(Self::ExistsForall),
+            "unsat-core" => Ok(Self::UnsatCore),
+            _ => Err(InvalidSliceVerifyMethod),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct InvalidSliceVerifyMethod;
+
+impl Display for InvalidSliceVerifyMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Invalid slice verify method")
+    }
 }
 
 #[tokio::main]

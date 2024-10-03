@@ -1,3 +1,5 @@
+use std::{collections::HashSet, iter::FromIterator};
+
 use itertools::Itertools;
 use lsp_types::DiagnosticTag;
 use z3::ast::Bool;
@@ -46,6 +48,24 @@ impl SliceModel {
             // model. otherwise we'd get "extra definitions" for the filtered ones
             // in the model output
             .filter(|(stmt, _var)| selection.enables(&stmt.selection))
+            .collect_vec();
+        SliceModel { mode, stmts }
+    }
+
+    pub(super) fn extract_enabled<'ctx>(
+        mode: SliceMode,
+        slice_vars: &[(SliceStmt, Bool<'ctx>)],
+        selection: SliceSelection,
+        enabled: Vec<Bool<'ctx>>,
+    ) -> SliceModel {
+        let enabled: HashSet<Bool<'ctx>> = HashSet::from_iter(enabled);
+        let stmts = slice_vars
+            .iter()
+            .filter(|(stmt, _var)| selection.enables(&stmt.selection))
+            .map(|(slice_stmt, var)| {
+                let status = Ok(enabled.contains(var));
+                (slice_stmt.clone(), status)
+            })
             .collect_vec();
         SliceModel { mode, stmts }
     }
