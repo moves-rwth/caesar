@@ -106,7 +106,7 @@ impl<'a, W: std::io::Write> std::io::Write for PrefixWriter<'a, W> {
                 self.writer.write_all(self.prefix)?;
             }
             self.writer.write_all(line)?;
-            self.line_start = line.ends_with(&[b'\n']);
+            self.line_start = line.ends_with(b"\n");
         }
         Ok(buf.len())
     }

@@ -263,7 +263,7 @@ impl Dist {
 
     /// Create a new hypergeometric distribution with the given parameters.
     fn hyper(population: u128, successes: u128, draws: u128, builder: ExprBuilder) -> Dist {
-        let k = 0.max(draws + successes - population)..=draws.min(successes);
+        let k = (draws + successes).saturating_sub(population)..=draws.min(successes);
         let dist = k.map(|k| {
             (
                 binomial(successes, k) * binomial(population - successes, draws - k),
