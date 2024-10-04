@@ -188,11 +188,11 @@ impl Encoding for KIndAnnotation {
         let k_val: u128 = lit_u128(k);
 
         if k_val == 0 {
-            return Err(AnnotationError::WrongArgument(
-                enc_env.call_span,
-                k.clone(),
-                String::from("k must be greater than 0."),
-            ));
+            return Err(AnnotationError::WrongArgument {
+                span: enc_env.call_span,
+                arg: k.clone(),
+                message: String::from("k must be greater than 0."),
+            });
         }
 
         transform_k_induction(tcx, inner_stmt, enc_env, k_val, invariant)
