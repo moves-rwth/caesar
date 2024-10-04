@@ -185,8 +185,17 @@ impl Encoding for KIndAnnotation {
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
         let [k, invariant] = two_args(args);
-        let k: u128 = lit_u128(k);
-        transform_k_induction(tcx, inner_stmt, enc_env, k, invariant)
+        let k_val: u128 = lit_u128(k);
+
+        if k_val == 0 {
+            return Err(AnnotationError::WrongArgument(
+                enc_env.call_span,
+                k.clone(),
+                String::from("k must be greater than 0."),
+            ));
+        }
+
+        transform_k_induction(tcx, inner_stmt, enc_env, k_val, invariant)
     }
 
     fn is_terminator(&self) -> bool {
