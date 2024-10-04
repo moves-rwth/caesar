@@ -26,83 +26,131 @@ pub struct AnnotationDecl {
 
 #[derive(Debug)]
 pub enum AnnotationError {
-    NotInProcedure(Span, Ident),
-    NotOnWhile(Span, Ident, Stmt),
-    WrongArgument(Span, Expr, String),
-    NotTerminator(Span, Ident),
-    CalculusEncodingMismatch(Direction, Span, Ident, Ident),
-    UnknownAnnotation(Span, Ident),
+    NotInProcedure {
+        span: Span,
+        annotation_name: Ident,
+    },
+    NotOnWhile {
+        span: Span,
+        annotation_name: Ident,
+        annotated: Stmt,
+    },
+    WrongArgument {
+        span: Span,
+        arg: Expr,
+        message: String,
+    },
+    UnknownAnnotation {
+        span: Span,
+        annotation_name: Ident,
+    },
+}
+
+#[derive(Debug)]
+pub enum AnnotationUnsoundnessError {
+    NotTerminator {
+        span: Span,
+        enc_name: Ident,
+    },
+    CalculusEncodingMismatch {
+        direction: Direction,
+        span: Span,
+        calculus_name: Ident,
+        enc_name: Ident,
+    },
+    CalculusCallMismatch {
+        span: Span,
+        context_calculus: Ident,
+        call_calculus: Ident,
+    },
 }
 
 impl AnnotationError {
     pub fn diagnostic(self) -> Diagnostic {
         match self {
-            AnnotationError::NotInProcedure(span, annotation) => {
-                Diagnostic::new(ReportKind::Error, span)
-                    .with_message(format!(
-                        "The annotation `{}` can only be used inside a procedure.",
-                        annotation
-                    ))
-                    .with_label(
-                        Label::new(annotation.span).with_message("here"),
-                    )
-            }
-            AnnotationError::NotOnWhile(span, annotation, annotated) => {
-                Diagnostic::new(ReportKind::Error, span)
-                    .with_message(format!(
-                        "The proof rule `{}` must be used on a while loop.",
-                        annotation
-                    ))
-                    .with_label(
-                        Label::new(annotated.span).with_message("This should be a while statement"),
-                    )
-            }
-            AnnotationError::WrongArgument(span, arg, message) => {
+            AnnotationError::NotInProcedure {
+                span,
+                annotation_name,
+            } => Diagnostic::new(ReportKind::Error, span)
+                .with_message(format!(
+                    "The annotation `{}` can only be used inside a procedure.",
+                    annotation_name
+                ))
+                .with_label(Label::new(annotation_name.span).with_message("here")),
+            AnnotationError::NotOnWhile {
+                span,
+                annotation_name,
+                annotated,
+            } => Diagnostic::new(ReportKind::Error, span)
+                .with_message(format!(
+                    "The proof rule `{}` must be used on a while loop.",
+                    annotation_name
+                ))
+                .with_label(
+                    Label::new(annotated.span).with_message("This should be a while statement"),
+                ),
+            AnnotationError::WrongArgument { span, arg, message } => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(message)
                     .with_label(Label::new(arg.span).with_message("here"))
             }
-            AnnotationError::NotTerminator(span, encoding_name) => {
+            AnnotationError::UnknownAnnotation {
+                span,
+                annotation_name,
+            } => Diagnostic::new(ReportKind::Error, span)
+                .with_message(format!(
+                    "The '{}' annotation is unknown.",
+                    annotation_name.name
+                ))
+                .with_label(Label::new(span).with_message("This annotation is not defined.")),
+        }
+    }
+}
+
+impl AnnotationUnsoundnessError {
+    pub fn diagnostic(self) -> Diagnostic {
+        match self {
+            AnnotationUnsoundnessError::NotTerminator{span, enc_name} => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
                         "The '{}' annotation must annotate the last statement of the program.",
-                        encoding_name.name
+                        enc_name.name
                     ))
                     .with_label(Label::new(span).with_message(
                         "There must not be any statements after this annotated statement (and the annotated statement must not be nested in a block).",
                     ))
             }
-            AnnotationError::CalculusEncodingMismatch(direction, span, calculus_name, encoding_name ) => {
+            AnnotationUnsoundnessError::CalculusEncodingMismatch{direction, span, calculus_name, enc_name } => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
                         "In {}s, the '{}' calculus does not support the '{}' encoding.",
-                        direction.prefix("proc"), calculus_name.name, encoding_name.name
+                        direction.prefix("proc"), calculus_name.name, enc_name.name
                     ))
                     .with_label(Label::new(span).with_message(
                         "The calculus, proof rule, and direction are incompatible.",
                     ))
             }
-            AnnotationError::UnknownAnnotation(span, anno_name ) => {
+            AnnotationUnsoundnessError::CalculusCallMismatch{span,context_calculus,call_calculus} => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "The '{}' annotation is unknown.",
-                        anno_name.name
+                        "Cannot call '{}' proc from '{}' proc.",
+                         call_calculus.name, context_calculus.name
                     ))
                     .with_label(Label::new(span).with_message(
-                        "This annotation is not defined.",
+                        "The calculus of the called procedure must match the calculus of the calling procedure.",
                     ))
             }
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Calculus {
     pub name: Ident,
     pub calculus_type: CalculusType,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 
 pub enum CalculusType {
     Wp,

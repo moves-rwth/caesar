@@ -588,7 +588,7 @@ fn verify_files_main(
         let (name, mut verify_unit) = verify_unit.enter_with_name();
 
         // 4. Desugaring: transforming spec calls to procs
-        verify_unit.desugar_spec_calls(&mut tcx).unwrap();
+        verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
 
         // print HeyVL core after desugaring if requested
         if options.print_core {

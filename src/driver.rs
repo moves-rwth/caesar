@@ -29,7 +29,7 @@ use crate::{
         proc_verify::{to_direction_lower_bounds, verify_proc},
         SpecCall,
     },
-    proof_rules::EncCall,
+    proof_rules::EncodingVisitor,
     resource_limits::{LimitError, LimitsRef},
     servers::Server,
     slicing::{
@@ -360,10 +360,10 @@ impl SourceUnit {
         tcx: &mut TyCtx,
         source_units_buf: &mut Vec<Item<SourceUnit>>,
     ) -> Result<(), VerifyError> {
-        let mut enc_call = EncCall::new(tcx, source_units_buf);
+        let mut encoding_visitor = EncodingVisitor::new(tcx, source_units_buf);
         let res = match self {
-            SourceUnit::Decl(decl) => enc_call.visit_decl(decl),
-            SourceUnit::Raw(block) => enc_call.visit_block(block),
+            SourceUnit::Decl(decl) => encoding_visitor.visit_decl(decl),
+            SourceUnit::Raw(block) => encoding_visitor.visit_block(block),
         };
         Ok(res.map_err(|ann_err| ann_err.diagnostic())?)
     }
@@ -416,11 +416,12 @@ pub struct VerifyUnit {
 impl VerifyUnit {
     /// Desugar assignments with procedure calls.
     #[instrument(skip(self, tcx))]
-    pub fn desugar_spec_calls(&mut self, tcx: &mut TyCtx) -> Result<(), ()> {
-        let mut spec_call = SpecCall::new(tcx);
-        // TODO: give direction to spec_call so that it can check that only
-        // valid directions are called
-        spec_call.visit_block(&mut self.block)
+    pub fn desugar_spec_calls(&mut self, tcx: &mut TyCtx, name: String) -> Result<(), VerifyError> {
+        // Pass the context direction to the SpecCall so that it can check direction compatibility with called procedures
+        let mut spec_call = SpecCall::new(tcx, self.direction, name);
+        let res = spec_call.visit_block(&mut self.block);
+
+        Ok(res.map_err(|ann_err| ann_err.diagnostic())?)
     }
 
     /// Prepare the code for slicing.
