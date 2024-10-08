@@ -71,6 +71,11 @@ fn main() {
             config.add_search_path(test_file);
         }
 
+        // The default shell is bash, which is not available on Windows.
+        if cfg!(target_os = "windows") {
+            config.shell = "cmd.exe".to_string();
+        }
+
         config
             .constants
             .insert("caesar".to_owned(), CAESAR_PATH.to_owned());
