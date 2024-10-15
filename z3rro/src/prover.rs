@@ -2,10 +2,7 @@
 
 use std::{fmt::Display, time::Duration};
 
-use z3::{
-    ast::{forall_const, Ast, Bool, Dynamic},
-    Context, Model, SatResult, Solver,
-};
+use z3::{ast::{forall_const, Ast, Bool, Dynamic}, Context, Model, Params, SatResult, Solver};
 
 use crate::{
     model::InstrumentedModel,
@@ -67,6 +64,13 @@ impl<'ctx> Prover<'ctx> {
 
     pub fn set_timeout(&mut self, duration: Duration) {
         set_solver_timeout(&self.solver, duration);
+    }
+    
+    pub fn enforce_ematching(&mut self) {
+        let mut params = Params::new(self.solver.get_context());
+        params.set_bool("auto-config", false);
+        params.set_bool("smt.mbqi", false);
+        self.solver.set_params(&params);
     }
 
     /// Add an assumption to this prover.
