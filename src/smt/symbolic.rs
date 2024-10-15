@@ -6,13 +6,7 @@ use z3::{
     ast::{Bool, Dynamic, Int, Real},
     Sort,
 };
-use z3rro::{
-    eureal,
-    model::{InstrumentedModel, SmtEval, SmtEvalError},
-    scope::{SmtFresh, SmtScope},
-    util::PrettyRational,
-    EUReal, List, SmtInvariant, UInt, UReal,
-};
+use z3rro::{eureal, model::{InstrumentedModel, SmtEval, SmtEvalError}, scope::{SmtFresh, SmtScope}, util::PrettyRational, EUReal, Fuel, List, SmtInvariant, UInt, UReal};
 
 use crate::ast::{Ident, TyKind};
 
@@ -34,6 +28,7 @@ pub enum Symbolic<'ctx> {
     UReal(UReal<'ctx>),
     EUReal(EUReal<'ctx>),
     List(List<'ctx>),
+    Fuel(Fuel<'ctx>),
     Uninterpreted(Dynamic<'ctx>),
 }
 
@@ -116,6 +111,13 @@ impl<'ctx> Symbolic<'ctx> {
         }
     }
 
+    pub fn into_fuel(self) -> Option<Fuel<'ctx>> {
+        match self {
+            Symbolic::Fuel(v) => Some(v),
+            _ => None,
+        }
+    }
+
     pub fn into_uninterpreted(self) -> Option<Dynamic<'ctx>> {
         match self {
             Symbolic::Uninterpreted(v) => Some(v),
@@ -134,6 +136,7 @@ impl<'ctx> Symbolic<'ctx> {
             Symbolic::UReal(v) => Dynamic::from(v.into_real()),
             Symbolic::EUReal(v) => ctx.super_eureal().to_datatype(&v).as_dynamic(),
             Symbolic::List(v) => v.as_dynamic(),
+            Symbolic::Fuel(v) => v.as_dynamic(),
             Symbolic::Uninterpreted(v) => v,
         }
     }
@@ -151,6 +154,7 @@ impl<'ctx> Symbolic<'ctx> {
                 .map(|v| Box::new(PrettyRational(Cow::Owned(v))) as Box<dyn Display>),
             Symbolic::EUReal(v) => v.eval(model).map(|v| Box::new(v) as Box<dyn Display>),
             Symbolic::List(_) => Err(SmtEvalError::ParseError), // TODO
+            Symbolic::Fuel(_) => Err(SmtEvalError::ParseError), // TODO
             Symbolic::Uninterpreted(_) => Err(SmtEvalError::ParseError), // TODO
         }
     }
@@ -166,6 +170,7 @@ impl<'ctx> SmtInvariant<'ctx> for Symbolic<'ctx> {
             Symbolic::UReal(v) => v.smt_invariant(),
             Symbolic::EUReal(v) => v.smt_invariant(),
             Symbolic::List(v) => v.smt_invariant(),
+            Symbolic::Fuel(v) => v.smt_invariant(),
             Symbolic::Uninterpreted(v) => v.smt_invariant(),
         }
     }
@@ -261,6 +266,13 @@ impl<'ctx> ScopeSymbolic<'ctx> {
         let mut scope = SmtScope::new();
         let value = List::fresh(&factory, &mut scope, &ident.name.to_owned());
         ScopeSymbolic::new(Symbolic::List(value), scope)
+    }
+
+    pub fn fresh_fuel(ctx: &SmtCtx<'ctx>) -> Self {
+        let factory = ctx.fuel_factory();
+        let mut scope = SmtScope::new();
+        let value = Fuel::fresh(&factory, &mut scope, "fuel");
+        ScopeSymbolic::new(Symbolic::Fuel(value), scope)
     }
 
     pub fn fresh_uninterpreted(ctx: &SmtCtx<'ctx>, ident: Ident, sort: &Sort<'ctx>) -> Self {

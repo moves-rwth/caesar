@@ -2,18 +2,19 @@
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use z3::{ast::Bool, Context, Sort};
-use z3rro::{eureal::EURealSuperFactory, EUReal, Factory, ListFactory, SmtInvariant};
-
-use crate::{
-    ast::{
-        BinOpKind, DeclRef, DomainDecl, DomainSpec, ExprBuilder, Ident, QuantOpKind, SpanVariant,
-        TyKind,
-    },
-    tyctx::TyCtx,
+use z3::ast::Ast;
+use z3::{ast::Bool, Context, Pattern, Sort};
+use z3rro::{
+    eureal::EURealSuperFactory, EUReal, Factory, FuelFactory, ListFactory, SmtEq, SmtInvariant,
 };
 
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
+use crate::ast::Expr;
+use crate::smt::translate_exprs::FuelContext;
+use crate::{
+    ast::{DeclRef, DomainDecl, DomainSpec, ExprBuilder, Ident, SpanVariant, TyKind},
+    tyctx::TyCtx,
+};
 
 pub mod pretty_model;
 pub mod symbolic;
@@ -25,6 +26,7 @@ pub struct SmtCtx<'ctx> {
     ctx: &'ctx Context,
     tcx: &'ctx TyCtx,
     eureal: EURealSuperFactory<'ctx>,
+    fuel: Rc<FuelFactory<'ctx>>,
     lists: RefCell<HashMap<TyKind, Rc<ListFactory<'ctx>>>>,
     uninterpreteds: Uninterpreteds<'ctx>,
 }
@@ -35,6 +37,7 @@ impl<'ctx> SmtCtx<'ctx> {
             ctx,
             tcx,
             eureal: EURealSuperFactory::new(ctx),
+            fuel: FuelFactory::new(ctx),
             lists: RefCell::new(HashMap::new()),
             uninterpreteds: Uninterpreteds::new(ctx),
         };
@@ -55,12 +58,17 @@ impl<'ctx> SmtCtx<'ctx> {
             for spec in &decl.body {
                 if let DomainSpec::Function(func_ref) = &spec {
                     let func = func_ref.borrow();
-                    let domain: Vec<Sort<'_>> = func
-                        .inputs
-                        .node
-                        .iter()
-                        .map(|param| ty_to_sort(self, &param.ty))
-                        .collect();
+
+                    // For function definitions we constrain the number
+                    // of quantifier installations through a fuel parameter.
+                    // The fuel parameter is automatically added as the first parameter.
+                    let mut domain = vec![self.fuel_factory().sort().clone()];
+                    domain.extend(
+                        func.inputs
+                            .node
+                            .iter()
+                            .map(|param| ty_to_sort(self, &param.ty)),
+                    );
                     let domain: Vec<&Sort<'_>> = domain.iter().collect();
                     let range = ty_to_sort(self, &func.output);
                     self.uninterpreteds.add_function(func.name, &domain, &range);
@@ -86,7 +94,6 @@ impl<'ctx> SmtCtx<'ctx> {
                         let func = func_ref.borrow();
                         let body = func.body.borrow();
 
-                        // we'll need the function applied to its arguments
                         let span = func.span.variant(SpanVariant::VC);
                         let builder = ExprBuilder::new(span);
                         let app = builder.call(
@@ -100,7 +107,7 @@ impl<'ctx> SmtCtx<'ctx> {
 
                         // if there's an smt invariant for the return value type, add it
                         {
-                            translate.push();
+                            translate.push(FuelContext::Constraint);
                             let app_z3 = translate.t_symbolic(&app);
                             if let Some(invariant) = app_z3.smt_invariant() {
                                 axioms.push((
@@ -113,19 +120,31 @@ impl<'ctx> SmtCtx<'ctx> {
 
                         // create the axiom for the definition if there is a body
                         if let Some(body) = &*body {
-                            axioms.push((
-                                func.name, // TODO: create a new name for the axiom
-                                translate.t_bool(&builder.quant(
-                                    QuantOpKind::Forall,
-                                    func.inputs.node.iter().map(|param| param.name),
-                                    builder.binary(
-                                        BinOpKind::Eq,
-                                        Some(TyKind::Bool),
-                                        app,
-                                        body.clone(),
+                            let mut add_defining_axiom = |name: Ident, lhs: &Expr, rhs: &Expr| {
+                                translate.push(FuelContext::Declaration);
+                                let symbolic_lhs = translate.t_symbolic(&lhs).into_dynamic(self);
+
+                                translate.set_local_fuel_context(FuelContext::Constraint);
+                                let symbolic_rhs = translate.t_symbolic(rhs).into_dynamic(self);
+
+                                axioms.push((
+                                    name, // TODO: create a new name for the axiom
+                                    translate.local_scope().forall(
+                                        &[&Pattern::new(
+                                            self.ctx,
+                                            &[&symbolic_lhs as &dyn Ast<'ctx>],
+                                        )],
+                                        &symbolic_lhs.smt_eq(&symbolic_rhs),
                                     ),
-                                )),
-                            ));
+                                ));
+                                translate.pop();
+                            };
+
+                            // Defining axiom
+                            add_defining_axiom(func.name, &app, body); // TODO: create a new name for the axiom
+
+                            // fuel synonym axiom
+                            add_defining_axiom(func.name, &app, &app); // TODO: create a new name for the axiom
                         }
                     }
                     DomainSpec::Axiom(axiom_ref) => {
@@ -176,6 +195,10 @@ impl<'ctx> SmtCtx<'ctx> {
         }
         let lists = self.lists.borrow();
         lists.get(element_ty).unwrap().clone()
+    }
+
+    fn fuel_factory(&self) -> Rc<FuelFactory<'ctx>> {
+        self.fuel.clone()
     }
 
     /// Get a reference to the smt ctx's uninterpreteds.

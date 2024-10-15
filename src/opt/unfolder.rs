@@ -39,7 +39,7 @@ use crate::{
     vc::subst::Subst,
 };
 
-use crate::smt::translate_exprs::TranslateExprs;
+use crate::smt::translate_exprs::{FuelContext, TranslateExprs};
 
 pub struct Unfolder<'smt, 'ctx> {
     limits_ref: LimitsRef,
@@ -239,7 +239,7 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                     quant_vars,
                     self.translate.ctx.tcx(),
                 );
-                let scope = self.translate.push();
+                let scope = self.translate.push(FuelContext::Default);
 
                 self.prover.push();
                 // we could also add the assumptions before the prover.push()

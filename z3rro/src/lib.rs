@@ -30,6 +30,8 @@ pub mod eureal;
 pub use eureal::EUReal;
 mod list;
 pub use list::{List, ListFactory};
+mod fuel;
+pub use fuel::{Fuel, FuelFactory};
 
 #[cfg(test)]
 mod test;

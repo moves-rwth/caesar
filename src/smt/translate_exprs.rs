@@ -5,6 +5,7 @@ use std::{
     collections::HashMap,
     convert::TryFrom,
     hash::{Hash, Hasher},
+    vec,
 };
 
 use ref_cast::RefCast;
@@ -28,7 +29,7 @@ use z3rro::{
         SmtPartialOrd,
     },
     scope::SmtScope,
-    List, SmtBranch, SmtEq, UInt, UReal,
+    Fuel, List, SmtBranch, SmtEq, UInt, UReal,
 };
 
 use super::{
@@ -45,6 +46,7 @@ pub struct TranslateExprs<'smt, 'ctx> {
     limits_stack: Vec<SmtScope<'ctx>>,
     locals: ScopeMap<Ident, ScopeSymbolic<'ctx>>,
     cache: TranslateCache<'ctx>,
+    fuel_stack: Vec<FuelEntry<'ctx>>,
 }
 
 impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
@@ -54,13 +56,15 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             limits_stack: vec![SmtScope::new()],
             locals: ScopeMap::new(),
             cache: TranslateCache::new(),
+            fuel_stack: vec![FuelEntry::new(FuelContext::Default)],
         }
     }
 
-    pub fn push(&mut self) -> &SmtScope<'ctx> {
+    pub fn push(&mut self, initial_fuel_context: FuelContext) -> &SmtScope<'ctx> {
         self.limits_stack.push(SmtScope::new());
         self.locals.push();
         self.cache.push();
+        self.fuel_stack.push(FuelEntry::new(initial_fuel_context));
         &self.limits_stack[self.limits_stack.len() - 2]
     }
 
@@ -68,13 +72,27 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         assert!(self.limits_stack.len() > 1);
         self.limits_stack.pop();
         self.locals.unchecked_pop();
+        self.fuel_stack.pop();
         self.cache.pop();
     }
 
     pub fn local_scope(&self) -> SmtScope<'ctx> {
         let mut scope = self.limits_stack.last().unwrap().clone();
         scope.extend(self.locals.local_iter().map(|(_ident, local)| &local.scope));
+        scope.extend(self.local_fuel_entry().quantifier_var.as_ref().map(|local| &local.scope));
         scope
+    }
+
+    fn local_fuel_entry(&self) -> &FuelEntry<'ctx> {
+        self.fuel_stack.last().unwrap()
+    }
+
+    fn local_fuel_entry_mut(&mut self) -> &mut FuelEntry<'ctx> {
+        self.fuel_stack.last_mut().unwrap()
+    }
+
+    pub fn set_local_fuel_context(&mut self, fuel_context: FuelContext) {
+        self.local_fuel_entry_mut().context = fuel_context;
     }
 
     pub fn local_idents<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
@@ -593,17 +611,21 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     fn t_call(&mut self, name: Ident, args: &[Expr]) -> Symbolic<'ctx> {
         match self.ctx.tcx().get(name).as_deref() {
             Some(DeclKind::FuncDecl(func)) => {
-                let args: Vec<Dynamic<'_>> = args
-                    .iter()
-                    .map(|arg| self.t_symbolic(arg).into_dynamic(self.ctx))
-                    .collect();
-                let args: Vec<&dyn Ast<'ctx>> = args
-                    .iter()
-                    .map(|ast| {
-                        let a: &dyn Ast<'ctx> = ast;
-                        a
-                    })
-                    .collect();
+                let fuel_arg: Dynamic<'ctx> = match self.local_fuel_entry().context {
+                    FuelContext::Declaration => {
+                        let fuel_var = self.get_quantified_fuel();
+                        Fuel::succ(fuel_var).as_dynamic()
+                    }
+                    FuelContext::Constraint => self.get_quantified_fuel().as_dynamic(),
+                    FuelContext::Default => Fuel::new(self.ctx.fuel_factory(), 1).as_dynamic(),
+                };
+                let mut args_vec = vec![fuel_arg];
+                args_vec.extend(
+                    args.iter()
+                        .map(|arg| self.t_symbolic(arg).into_dynamic(self.ctx)),
+                );
+                let args: Vec<&dyn Ast<'ctx>> =
+                    args_vec.iter().map(|d| d as &dyn Ast<'ctx>).collect();
                 let res_dynamic = self.ctx.uninterpreteds().apply_function(name, &args);
                 Symbolic::from_dynamic(self.ctx, &func.borrow().output, &res_dynamic)
             }
@@ -656,6 +678,15 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         self.locals.insert(ident, local);
     }
 
+    fn get_quantified_fuel(&mut self) -> Fuel<'ctx> {
+        let ctx = self.ctx;
+        let scope_symbolic = self
+            .local_fuel_entry_mut()
+            .quantifier_var
+            .get_or_insert_with(|| ScopeSymbolic::fresh_fuel(ctx));
+        scope_symbolic.symbolic.clone().into_fuel().unwrap()
+    }
+
     /// Create a new scope with the given quantified variables.
     fn mk_scope(&mut self, quant_vars: &[QuantVar]) -> SmtScope<'ctx> {
         let mut bounds = SmtScope::new();
@@ -679,6 +710,27 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 Pattern::new(self.ctx.ctx, &terms_ref)
             })
             .collect()
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum FuelContext {
+    Declaration,
+    Constraint,
+    Default,
+}
+
+struct FuelEntry<'ctx> {
+    context: FuelContext,
+    quantifier_var: Option<ScopeSymbolic<'ctx>>,
+}
+
+impl<'ctx> FuelEntry<'ctx> {
+    fn new(context: FuelContext) -> Self {
+        Self {
+            context,
+            quantifier_var: None,
+        }
     }
 }
 
