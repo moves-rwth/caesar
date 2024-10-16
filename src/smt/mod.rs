@@ -118,33 +118,33 @@ impl<'ctx> SmtCtx<'ctx> {
                             translate.pop();
                         }
 
+                        let mut add_defining_axiom = |name: Ident, lhs: &Expr, rhs: &Expr| {
+                            translate.push(FuelContext::Declaration);
+                            let symbolic_lhs = translate.t_symbolic(&lhs).into_dynamic(self);
+
+                            translate.set_local_fuel_context(FuelContext::Constraint);
+                            let symbolic_rhs = translate.t_symbolic(rhs).into_dynamic(self);
+
+                            axioms.push((
+                                name, // TODO: create a new name for the axiom
+                                translate.local_scope().forall(
+                                    &[&Pattern::new(
+                                        self.ctx,
+                                        &[&symbolic_lhs as &dyn Ast<'ctx>],
+                                    )],
+                                    &symbolic_lhs.smt_eq(&symbolic_rhs),
+                                ),
+                            ));
+                            translate.pop();
+                        };
+
+                        // fuel synonym axiom
+                        add_defining_axiom(func.name, &app, &app); // TODO: create a new name for the axiom
+
                         // create the axiom for the definition if there is a body
                         if let Some(body) = &*body {
-                            let mut add_defining_axiom = |name: Ident, lhs: &Expr, rhs: &Expr| {
-                                translate.push(FuelContext::Declaration);
-                                let symbolic_lhs = translate.t_symbolic(&lhs).into_dynamic(self);
-
-                                translate.set_local_fuel_context(FuelContext::Constraint);
-                                let symbolic_rhs = translate.t_symbolic(rhs).into_dynamic(self);
-
-                                axioms.push((
-                                    name, // TODO: create a new name for the axiom
-                                    translate.local_scope().forall(
-                                        &[&Pattern::new(
-                                            self.ctx,
-                                            &[&symbolic_lhs as &dyn Ast<'ctx>],
-                                        )],
-                                        &symbolic_lhs.smt_eq(&symbolic_rhs),
-                                    ),
-                                ));
-                                translate.pop();
-                            };
-
                             // Defining axiom
                             add_defining_axiom(func.name, &app, body); // TODO: create a new name for the axiom
-
-                            // fuel synonym axiom
-                            add_defining_axiom(func.name, &app, &app); // TODO: create a new name for the axiom
                         }
                     }
                     DomainSpec::Axiom(axiom_ref) => {
