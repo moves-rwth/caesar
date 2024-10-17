@@ -1,0 +1,11 @@
+// RUN: @caesar --limited-functions --force-ematching @file
+// CHECK: Verified
+
+domain Dom {
+    // Dummy function to test code generation for for functions with nested quantifiers.
+    func alwaysFalse(n: UInt): Bool = forall i: UInt . alwaysFalse(i) != alwaysFalse(n)
+}
+
+proc main(n: UInt) -> () {
+    assert ?(!alwaysFalse(n))
+}

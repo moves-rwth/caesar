@@ -1,7 +1,7 @@
 //! Encodings of declarations, definitions, and expressions into SMT.
 
+use itertools::Itertools;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
-
 use z3::ast::Ast;
 use z3::{ast::Bool, Context, Pattern, Sort};
 use z3rro::{
@@ -9,7 +9,7 @@ use z3rro::{
 };
 
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
-use crate::ast::Expr;
+use crate::ast::{DeclKind, Expr, FuncDecl};
 use crate::smt::translate_exprs::FuelContext;
 use crate::{
     ast::{DeclRef, DomainDecl, DomainSpec, ExprBuilder, Ident, SpanVariant, TyKind},
@@ -29,10 +29,11 @@ pub struct SmtCtx<'ctx> {
     fuel: Rc<FuelFactory<'ctx>>,
     lists: RefCell<HashMap<TyKind, Rc<ListFactory<'ctx>>>>,
     uninterpreteds: Uninterpreteds<'ctx>,
+    use_limited_functions: bool,
 }
 
 impl<'ctx> SmtCtx<'ctx> {
-    pub fn new(ctx: &'ctx Context, tcx: &'ctx TyCtx) -> Self {
+    pub fn new(ctx: &'ctx Context, tcx: &'ctx TyCtx, use_limited_fuctions: bool) -> Self {
         let mut res = SmtCtx {
             ctx,
             tcx,
@@ -40,6 +41,7 @@ impl<'ctx> SmtCtx<'ctx> {
             fuel: FuelFactory::new(ctx),
             lists: RefCell::new(HashMap::new()),
             uninterpreteds: Uninterpreteds::new(ctx),
+            use_limited_functions: use_limited_fuctions,
         };
         let domains: Vec<_> = tcx.domains_owned();
         res.declare_domains(domains.as_slice());
@@ -59,10 +61,14 @@ impl<'ctx> SmtCtx<'ctx> {
                 if let DomainSpec::Function(func_ref) = &spec {
                     let func = func_ref.borrow();
 
-                    // For function definitions we constrain the number
-                    // of quantifier installations through a fuel parameter.
-                    // The fuel parameter is automatically added as the first parameter.
-                    let mut domain = vec![self.fuel_factory().sort().clone()];
+                    let mut domain = if self.is_limited_function_decl(&*func) {
+                        // For function definitions we constrain the number
+                        // of quantifier installations through a fuel parameter.
+                        // The fuel parameter is automatically added as the first parameter.
+                        vec![self.fuel_factory().sort().clone()]
+                    } else {
+                        vec![]
+                    };
                     domain.extend(
                         func.inputs
                             .node
@@ -107,7 +113,8 @@ impl<'ctx> SmtCtx<'ctx> {
 
                         // if there's an smt invariant for the return value type, add it
                         {
-                            translate.push(FuelContext::Constraint);
+                            translate.push();
+                            translate.set_local_fuel_context(FuelContext::Body);
                             let app_z3 = translate.t_symbolic(&app);
                             if let Some(invariant) = app_z3.smt_invariant() {
                                 axioms.push((
@@ -119,27 +126,33 @@ impl<'ctx> SmtCtx<'ctx> {
                         }
 
                         let mut add_defining_axiom = |name: Ident, lhs: &Expr, rhs: &Expr| {
-                            translate.push(FuelContext::Declaration);
+                            translate.push();
+                            translate.set_local_fuel_context(FuelContext::Head);
                             let symbolic_lhs = translate.t_symbolic(&lhs).into_dynamic(self);
 
-                            translate.set_local_fuel_context(FuelContext::Constraint);
+                            translate.set_local_fuel_context(FuelContext::Body);
                             let symbolic_rhs = translate.t_symbolic(rhs).into_dynamic(self);
+
+                            println!("lhs: {:?}\nrhs: {:?}", symbolic_lhs, symbolic_rhs);
+                            println!(
+                                "local scope bounds {:?}",
+                                translate.local_scope().get_bounds().collect_vec()
+                            );
 
                             axioms.push((
                                 name, // TODO: create a new name for the axiom
                                 translate.local_scope().forall(
-                                    &[&Pattern::new(
-                                        self.ctx,
-                                        &[&symbolic_lhs as &dyn Ast<'ctx>],
-                                    )],
+                                    &[&Pattern::new(self.ctx, &[&symbolic_lhs as &dyn Ast<'ctx>])],
                                     &symbolic_lhs.smt_eq(&symbolic_rhs),
                                 ),
                             ));
                             translate.pop();
                         };
 
-                        // fuel synonym axiom
-                        add_defining_axiom(func.name, &app, &app); // TODO: create a new name for the axiom
+                        if self.is_limited_function_decl(&*func) {
+                            // fuel synonym axiom
+                            add_defining_axiom(func.name, &app, &app); // TODO: create a new name for the axiom
+                        }
 
                         // create the axiom for the definition if there is a body
                         if let Some(body) = &*body {
@@ -205,6 +218,23 @@ impl<'ctx> SmtCtx<'ctx> {
     #[must_use]
     pub fn uninterpreteds(&self) -> &Uninterpreteds<'ctx> {
         &self.uninterpreteds
+    }
+
+    pub fn is_limited_function(&self, ident: Ident) -> bool {
+        if !self.use_limited_functions {
+            return false;
+        }
+        self.tcx
+            .get(ident)
+            .filter(|decl| match decl.as_ref() {
+                DeclKind::FuncDecl(func) => self.is_limited_function_decl(&func.borrow()),
+                _ => false,
+            })
+            .is_some()
+    }
+
+    pub fn is_limited_function_decl(&self, func: &FuncDecl) -> bool {
+        self.use_limited_functions && func.body.borrow().is_some()
     }
 }
 

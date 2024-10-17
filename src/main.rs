@@ -158,6 +158,15 @@ pub struct OptimizationOptions {
     /// the current solver state.
     #[arg(long)]
     pub no_simplify: bool,
+
+    /// Limit the number of times a function declaration can be recursively instantiated.
+    #[arg(long)]
+    pub limited_functions: bool,
+
+    /// Force the SMT solver to only use emaching for quantifier instantiation, disabling mbqi.
+    #[arg(long)]
+    pub force_ematching: bool,
+
 }
 
 #[derive(Debug, Default, Args)]
@@ -698,7 +707,7 @@ fn verify_files_main(
 
         // 11. Translate to Z3
         let ctx = mk_z3_ctx(options);
-        let smt_ctx = SmtCtx::new(&ctx, &tcx);
+        let smt_ctx = SmtCtx::new(&ctx, &tcx, options.limited_functions);
         let mut translate = TranslateExprs::new(&smt_ctx);
         let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
 

@@ -161,7 +161,7 @@ pub(super) fn explain_subst(vcgen: &mut Vcgen, span: Span, expr: &mut Expr) {
 
         // finally, run the unfolder for more detailed simplifications
         let ctx = Context::new(&Config::default());
-        let smt_ctx = SmtCtx::new(&ctx, vcgen.tcx);
+        let smt_ctx = SmtCtx::new(&ctx, vcgen.tcx, false);
         let deadline = Instant::now() + Duration::from_millis(1);
         let mut unfolder = Unfolder::new(LimitsRef::new(Some(deadline)), &smt_ctx);
         let _ = unfolder.visit_expr(expr);
