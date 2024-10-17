@@ -209,24 +209,34 @@ pub struct SliceOptions {
 
     /// If slicing for correctness is enabled, slice via these methods. If none
     /// is given, the best method is chosen automatically.
-    #[structopt(long, possible_values = SliceVerifyMethod::variants())]
-    pub slice_verify_via: Option<SliceVerifyMethod>,
+    #[structopt(long, possible_values = SliceVerifyMethod::variants(), default_value = "core")]
+    pub slice_verify_via: SliceVerifyMethod,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SliceVerifyMethod {
+    /// Slice for correctness using unsat cores. This approach does not minimize
+    /// the result. However, it is applicable all the time and has a very small
+    /// overhead. All other methods are much slower or not always applicable.
+    #[default]
+    UnsatCore,
+    /// Slice by doing a search for minimal unsatisfiable subsets. The result
+    /// might not be globally optimal - the method returns the first slice from
+    /// which nothing can be removed without making the program not verify anymore.
+    MinimalUnsatSubset,
+    /// Slice by doing a search for the smallest unsatisfiable subset. This will
+    /// enumerate all minimal unsat subsets and return the globally smallest one.
+    SmallestUnsatSubset,
     /// Slice for correctness by encoding a direct exists-forall query into the
     /// SMT solver and then run the minimization algorithm. This approach does
-    /// not support uninterpreted functions.
+    /// not support using uninterpreted functions. This approach is usually not
+    /// good.
     ExistsForall,
-    /// Slice for correctness using unsat cores. This approach currently does
-    /// not try to minimize the result.
-    UnsatCore,
 }
 
 impl SliceVerifyMethod {
-    fn variants() -> &'static [&'static str] {
-        &["exists-forall", "unsat-core"]
+    const fn variants() -> &'static [&'static str] {
+        &["core", "mus", "sus", "exists-forall"]
     }
 }
 
@@ -235,8 +245,10 @@ impl FromStr for SliceVerifyMethod {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "core" => Ok(Self::UnsatCore),
+            "mus" => Ok(Self::MinimalUnsatSubset),
+            "sus" => Ok(Self::SmallestUnsatSubset),
             "exists-forall" => Ok(Self::ExistsForall),
-            "unsat-core" => Ok(Self::UnsatCore),
             _ => Err(InvalidSliceVerifyMethod),
         }
     }

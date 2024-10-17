@@ -1,4 +1,11 @@
-use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
+use std::{
+    collections::HashSet,
+    iter::FromIterator,
+    ops::{RangeFrom, RangeInclusive, RangeToInclusive},
+};
+
+use tracing::instrument;
+use z3::{ast::Bool, Context, SatResult, Solver};
 
 /// A result of a test during the partial minimization. Either we accept all
 /// values from this value upwards, we reject all values from this value
@@ -134,5 +141,128 @@ fn iter_range_from_mid(range: RangeInclusive<usize>) -> Box<dyn Iterator<Item = 
     } else {
         let mid = (start + end) / 2;
         Box::new((mid..=end).chain(start..end))
+    }
+}
+
+/// Tracks a set of subsets that were not yet explored. This is used for the
+/// minimal unsatisfiable subset slicing method.
+pub struct SubsetExploration<'ctx> {
+    solver: Solver<'ctx>,
+    variables: HashSet<Bool<'ctx>>,
+}
+
+impl<'ctx> SubsetExploration<'ctx> {
+    pub fn new(ctx: &'ctx Context, variables: impl IntoIterator<Item = Bool<'ctx>>) -> Self {
+        SubsetExploration {
+            solver: Solver::new(ctx),
+            variables: HashSet::from_iter(variables),
+        }
+    }
+
+    /// Return the set of variables that we're exploring subsets of.
+    pub fn variables(&self) -> &HashSet<Bool<'ctx>> {
+        &self.variables
+    }
+
+    /// Return the next unexplored set. Returns `None` if there is no unexplored
+    /// set left.
+    pub fn next_set(&mut self) -> Option<HashSet<Bool<'ctx>>> {
+        match self.solver.check() {
+            SatResult::Unsat => None,
+            SatResult::Unknown => None,
+            SatResult::Sat => {
+                let model = self.solver.get_model().unwrap();
+                Some(HashSet::from_iter(
+                    self.variables
+                        .iter()
+                        .filter(|variable| match model.eval(*variable, false) {
+                            // if variable is not set, default to true
+                            Some(value) => value.as_bool().unwrap_or(true),
+                            None => true,
+                        })
+                        .cloned(),
+                ))
+            }
+        }
+    }
+
+    /// Block this set, we do not want to see it again.
+    pub fn block_this(&mut self, set: &HashSet<Bool<'ctx>>) {
+        let assignments: Vec<_> = self
+            .variables
+            .iter()
+            .map(|var| {
+                if set.contains(var) {
+                    var.clone()
+                } else {
+                    var.not()
+                }
+            })
+            .collect();
+        let constraint = Bool::and(self.solver.get_context(), &assignments);
+        self.solver.assert(&constraint.not());
+    }
+
+    /// "Block down" - all values at this point or lower are considered not unsat.
+    fn block_down(&mut self, from_point: &HashSet<Bool<'ctx>>) {
+        // we add a constraint that says the next set must have any variable set
+        // to true not in the given `from_point`.
+        let complement: Vec<_> = self.variables.difference(from_point).collect();
+        let constraint = Bool::or(self.solver.get_context(), &complement);
+        self.solver.assert(&constraint);
+    }
+
+    /// "Block up" - the next sets must not contain at least one of the given values.
+    fn block_up(&mut self, from_point: &HashSet<Bool<'ctx>>) {
+        // we add a constraint that says the next set must have any variable set
+        // to true not in the given `from_point`.
+        let negated: Vec<_> = from_point.iter().map(|var| var.not()).collect();
+        let constraint = Bool::or(self.solver.get_context(), &negated);
+        self.solver.assert(&constraint);
+    }
+
+    /// Shrink this set with the given shrinking function. If the shrinking
+    /// function returns `Some`, we will shrink to this set. Then, we'll block
+    /// upwards.
+    #[instrument(level = "trace", skip_all, fields(seed.len = seed.len(), ret.len))]
+    pub fn shrink_block_up(
+        &mut self,
+        seed: HashSet<Bool<'ctx>>,
+        mut get_shrunk_core: impl FnMut(&HashSet<Bool<'ctx>>) -> Option<HashSet<Bool<'ctx>>>,
+    ) -> HashSet<Bool<'ctx>> {
+        let mut current = seed.clone();
+        for var in seed {
+            if !current.remove(&var) {
+                continue;
+            }
+            if let Some(shrunk_set) = get_shrunk_core(&current) {
+                debug_assert!(shrunk_set.is_subset(&current));
+                current = shrunk_set;
+            } else {
+                current.insert(var);
+            }
+        }
+        self.block_up(&current);
+        tracing::Span::current().record("ret.len", current.len());
+        current
+    }
+
+    /// Grow this set with the given function that checks the set. Then, we
+    /// block downwards from this grown set.
+    #[instrument(level = "trace", skip_all, fields(seed.len = seed.len(), ret.len))]
+    pub fn grow_block_down(
+        &mut self,
+        seed: HashSet<Bool<'ctx>>,
+        mut check_grow: impl FnMut(&HashSet<Bool<'ctx>>) -> bool,
+    ) -> HashSet<Bool<'ctx>> {
+        let mut current = seed.clone();
+        for var in self.variables.difference(&seed) {
+            if check_grow(&current) {
+                current.insert(var.clone());
+            }
+        }
+        self.block_down(&current);
+        tracing::Span::current().record("ret.len", current.len());
+        current
     }
 }

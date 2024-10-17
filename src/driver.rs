@@ -35,7 +35,7 @@ use crate::{
     slicing::{
         model::SliceModel,
         selection::SliceSelection,
-        solver::SliceSolver,
+        solver::{SliceSolveOptions, SliceSolver},
         transform::{SliceStmts, StmtSliceVisitor},
     },
     smt::{
@@ -651,25 +651,41 @@ impl<'ctx> SmtVcUnit<'ctx> {
         let smtlib = get_smtlib(options, &prover);
 
         let mut slice_solver = SliceSolver::new(slice_vars.clone(), translate, prover);
-        let (result, mut slice_model) = slice_solver.slice_while_failing(limits_ref)?;
+        let failing_slice_options = SliceSolveOptions {
+            globally_optimal: true,
+            continue_on_unknown: false,
+        };
+        let (result, mut slice_model) =
+            slice_solver.slice_while_failing(&failing_slice_options, limits_ref)?;
         if matches!(result, ProveResult::Proof) && options.slice_options.slice_verify {
             match options.slice_options.slice_verify_via {
-                Some(SliceVerifyMethod::ExistsForall) => {
+                SliceVerifyMethod::UnsatCore => {
+                    slice_model = slice_solver.verified_slice_unsat_core(limits_ref)?;
+                }
+                SliceVerifyMethod::MinimalUnsatSubset => {
+                    let slice_options = SliceSolveOptions {
+                        globally_optimal: false,
+                        continue_on_unknown: true,
+                    };
+                    slice_model = slice_solver.verified_slice_mus(&slice_options, limits_ref)?;
+                }
+                SliceVerifyMethod::SmallestUnsatSubset => {
+                    let slice_options = SliceSolveOptions {
+                        globally_optimal: true,
+                        continue_on_unknown: true,
+                    };
+                    slice_model = slice_solver.verified_slice_mus(&slice_options, limits_ref)?;
+                }
+                SliceVerifyMethod::ExistsForall => {
+                    let slice_options = SliceSolveOptions {
+                        globally_optimal: false,
+                        continue_on_unknown: false,
+                    };
                     if translate.ctx.uninterpreteds().is_empty() {
-                        slice_model = slice_solver.exists_verified_slice(limits_ref)?;
+                        slice_model =
+                            slice_solver.exists_verified_slice(&slice_options, limits_ref)?;
                     } else {
                         tracing::warn!("There are uninterpreted sorts, functions, or axioms present. Slicing for correctness is disabled because it does not support them.");
-                    }
-                }
-                Some(SliceVerifyMethod::UnsatCore) => {
-                    slice_model = slice_solver.verified_slice_core(limits_ref)?;
-                }
-                None => {
-                    if translate.ctx.uninterpreteds().is_empty() {
-                        slice_model = slice_solver.exists_verified_slice(limits_ref)?;
-                    } else {
-                        tracing::warn!("There are uninterpreted sorts, functions, or axioms present. Slicing for correctness will only use unsat cores and will yield nonoptimal results.");
-                        slice_model = slice_solver.verified_slice_core(limits_ref)?;
                     }
                 }
             }
