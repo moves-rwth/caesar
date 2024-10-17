@@ -493,20 +493,35 @@ That means we can just set constraints on the number of enabled statements in th
 We do *not* need to re-generate verification conditions, nor do we re-do our optimizations.
 This allows us to take advantage of the abilities of modern SMT solvers to try a lot of Boolean combinations very quickly.
 
+#### Solving for Minimal Error Slices
+
 When we [slice for errors](#slicing-for-errors), we can generate a nice exists-exists query that looks for a counter-example to verification with an assignment to the enabled variables.
 It is of the form
 ```
 exists slice_1,...,slice_n: exists initial_state: vc[S](\infty) != \infty
 ```
 
-[Slicing for correctness](#slicing-for-correctness) unfortunately generates a quantifier alternation.
-We ask the SMT solver to find an assignment to the slice variables such that *for all* initial states the program verifies:
+After building these new verification queries, we minimize the number of enabled statements by iteratively asking the SMT solver for a counter-example with a smaller number of enabled slice variables.
+We do a kind of binary search that takes into account the possibility of an "unknown" result from the SMT solver.
+
+#### Slicing for Minimal Correctness Slices
+
+[Slicing for correctness](#slicing-for-correctness) is a bit more complicated, since we are theoretically asking for anan assignment to the slice variables such that *for all* initial states the program verifies:
 ```
 exists slice_1,...,slice_n: forall initial_state: vc[S](\infty) == \infty
 ```
 
-After building these new verification queries for slicing, we minimize the number of enabled statements by iteratively asking the SMT solver for a solution with a smaller number of enabled slice variables.
-We do a kind of binary search that takes into account the possibility of an "unknown" result from the SMT solver.
+We have implemented a couple of different algorithms to tackle this problem.
+You can switch between them using the `--slice-verify-via [METHOD]` option.
+
+ 1. **Unsat Core (`core`):** Use the result from Z3's unsat core. The result is not minimized, and is therefore often not optimal. But this method is fast. It is the default method when slicing for verification is enabled.
+ 2. **Minimal Unsat Subset (`mus`):** Uses an algorithm to find a *minimal* unsatisfiable subset of the slice variables, i.e. one where no variable can be removed without the problem becoming SAT (or unknown).
+ 3. **Smallest Unsat Subset (`sus`):** Iterates over *all* minimal unsat subsets to find the globally smallest one. This is usually slow, but it finds the optimal solution.
+ 4. **Exists-Forall Encoding (`exists-forall`):** The last encoding is a very direct one. We directly translate the problem to SMT via the exists-forall formulation from above and then let Z3 solve the problem on its own. This usually does not work in practice, but is theoretically the most direct.
+
+Note that the `mus` and `sus` implementations continue operation when an "unknown" result is obtained from the SMT solver.
+This means that we only solve for optimal solutions modulo unknown.
+There might be better solutions that the SMT solver just cannot prove.
 
 As far as we could tell, using e.g. Z3's built-in optimizer for these tasks is often infeasible as it is restricted to a (not particularly well-defined) fragment of input formulas and _may return unsound results_ on other inputs.
 It also seems to be designed to find actually optimal results, whereas we are also happy with a "good" result if some timeout expires.
