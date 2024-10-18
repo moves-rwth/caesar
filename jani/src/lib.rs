@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 /// An identifier.
 ///
 /// Must not contain line breaks.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Identifier(pub String);
 
 /// Parse a JANI model from a `&str`.
