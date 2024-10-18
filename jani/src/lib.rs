@@ -10,7 +10,7 @@ pub mod models;
 pub mod properties;
 pub mod types;
 
-use std::io::Read;
+use std::{fmt::Display, io::Read};
 
 use models::Model;
 use serde::{Deserialize, Serialize};
@@ -20,6 +20,12 @@ use serde::{Deserialize, Serialize};
 /// Must not contain line breaks.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Identifier(pub String);
+
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 /// Parse a JANI model from a `&str`.
 pub fn from_str(s: &str) -> serde_json::Result<Model> {

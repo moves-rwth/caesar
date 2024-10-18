@@ -1,5 +1,7 @@
 //! Expressions in JANI.
 
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 
 use crate::Identifier;
@@ -18,6 +20,15 @@ pub enum MathConstant {
     Pi,
 }
 
+impl Display for MathConstant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MathConstant::EulersNumber => write!(f, "e"),
+            MathConstant::Pi => write!(f, "π"),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum ConstantValue {
@@ -33,6 +44,16 @@ pub enum ConstantValue {
 impl ConstantValue {
     pub fn from_f64(value: f64) -> ConstantValue {
         ConstantValue::Number(serde_json::Number::from_f64(value).unwrap())
+    }
+}
+
+impl Display for ConstantValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConstantValue::Number(n) => write!(f, "{}", n),
+            ConstantValue::Boolean(b) => write!(f, "{}", b),
+            ConstantValue::MathConstant(c) => write!(f, "{}", c),
+        }
     }
 }
 
