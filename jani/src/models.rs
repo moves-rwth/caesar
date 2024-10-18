@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{exprs::Expression, properties::Property, types::Type, Identifier};
 
 /// An element of a [`Composition`].
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct CompositionElement {
     /// The name of the automaton.
@@ -22,7 +22,7 @@ pub struct CompositionElement {
 }
 
 /// Synchronisations in a [`Composition`].
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct CompositionSync {
     /// A list of action names or null, same length as `elements` of the
@@ -38,7 +38,7 @@ pub struct CompositionSync {
 }
 
 /// Automata composition.
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Composition {
     /// The automata in the composition.
     pub elements: Vec<CompositionElement>,
@@ -51,7 +51,7 @@ pub struct Composition {
 }
 
 /// Metadata about the [`Model`].
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Metadata {
     /// Information about the version of this model (e.g. the date when it was
     /// last modified).
@@ -72,7 +72,7 @@ pub struct Metadata {
 }
 
 /// The type of model. Influences which features can be used.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[serde(rename_all = "kebab-case")]
 pub enum ModelType {
     /// LTS: a labelled transition system (or Kripke structure or finite state
@@ -103,7 +103,7 @@ pub enum ModelType {
 }
 
 /// Certain features to enable for the model.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub enum ModelFeature {
     /// Support for array types.
@@ -134,7 +134,7 @@ pub enum ModelFeature {
 }
 
 /// A variable declaration.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct VariableDeclaration {
     /// Names starting with "x-" will not be defined and are available for internal use.
@@ -166,7 +166,7 @@ pub struct VariableDeclaration {
     pub comment: Option<Box<str>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct ConstantDeclaration {
     /// The constant's name, unique among all constants and variables.
@@ -186,14 +186,14 @@ pub struct ConstantDeclaration {
 }
 
 /// Actions of a [`Model`].
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModelAction {
     pub name: Identifier,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<Box<str>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CommentedExpression {
     pub exp: Expression,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -209,7 +209,7 @@ impl From<Expression> for CommentedExpression {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Model {
     pub jani_version: NonZeroUsize,
@@ -253,7 +253,7 @@ impl Model {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct TransientValue {
     #[serde(rename = "ref")]
@@ -263,7 +263,7 @@ pub struct TransientValue {
     pub comment: Option<Box<str>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Location {
     pub name: Identifier,
@@ -273,7 +273,7 @@ pub struct Location {
     pub transient_values: Option<Vec<TransientValue>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Assignment {
     #[serde(rename = "ref")]
@@ -285,7 +285,7 @@ pub struct Assignment {
     pub comment: Option<Box<str>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Destination {
     pub location: Identifier,
@@ -297,7 +297,7 @@ pub struct Destination {
     pub comment: Option<Box<str>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Edge {
     pub location: Identifier,
@@ -312,7 +312,7 @@ pub struct Edge {
     pub comment: Option<Box<str>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Automaton {
     pub name: Identifier,

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{exprs::Expression, Identifier};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct PropertyInterval {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -19,7 +19,7 @@ pub struct PropertyInterval {
 
 pub type RewardAccumulation = Vec<Reward>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[serde(rename_all = "kebab-case")]
 pub enum Reward {
     Steps,
@@ -28,7 +28,7 @@ pub enum Reward {
     Exit,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum FilterFun {
     Min,
@@ -46,7 +46,7 @@ pub enum FilterFun {
     Values,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "op", rename = "filter")]
 pub struct FilterExpression {
     pub fun: FilterFun,
@@ -54,7 +54,7 @@ pub struct FilterExpression {
     pub states: Box<PropertyExpression>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum Quantifier {
     #[serde(rename = "Pmin")]
     Pmin,
@@ -66,13 +66,13 @@ pub enum Quantifier {
     Exists,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct QuantifiedExpression {
     pub op: Quantifier,
     pub exp: Box<PropertyExpression>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum UntilExpressionKind {
     #[serde(rename = "U")]
     Until,
@@ -82,7 +82,7 @@ pub enum UntilExpressionKind {
     Release,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct RewardBound {
     pub exp: Expression,
@@ -90,7 +90,7 @@ pub struct RewardBound {
     pub bounds: PropertyInterval,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct UntilExpression {
     pub op: UntilExpressionKind,
@@ -104,7 +104,7 @@ pub struct UntilExpression {
     pub reward_bounds: Option<Vec<RewardBound>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum UnaryPathExpressionKind {
     #[serde(rename = "F")]
     Finally,
@@ -112,7 +112,7 @@ pub enum UnaryPathExpressionKind {
     Globally,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct UnaryPathExpression {
     pub op: UnaryPathExpressionKind,
@@ -125,13 +125,13 @@ pub struct UnaryPathExpression {
     pub reward_bounds: Option<Vec<RewardBound>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ExpectedValueKind {
     Emin,
     Emax,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RewardInstant {
     pub exp: Expression,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -139,7 +139,7 @@ pub struct RewardInstant {
     pub instant: Expression,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct ExpectedValueExpression {
     pub op: ExpectedValueKind,
@@ -156,7 +156,7 @@ pub struct ExpectedValueExpression {
     pub reward_instants: Option<Vec<RewardInstant>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[serde(tag = "op", rename_all = "kebab-case")]
 pub enum StatePredicate {
     Initial,
@@ -164,7 +164,7 @@ pub enum StatePredicate {
     Timelock,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum PropertyExpression {
     Expression(Expression),
@@ -177,7 +177,7 @@ pub enum PropertyExpression {
     Predicate(StatePredicate),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Property {
     pub name: Identifier,
     pub expression: PropertyExpression,
