@@ -1,8 +1,8 @@
 //! Translation of Caesar expressions to Z3 expressions.
 
 use itertools::Itertools;
+use once_cell::unsync::OnceCell;
 use ref_cast::RefCast;
-use std::cell::RefCell;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -78,9 +78,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     pub fn local_scope(&self) -> SmtScope<'ctx> {
         let mut scope = self.limits_stack.last().unwrap().clone();
         scope.extend(self.locals.local_iter().map(|(_ident, local)| &local.scope));
-        if let Some(qf) = self.fuel_context.quantified_fuel() {
-            scope.extend(qf.0.borrow().as_ref().map(|s| &s.scope));
-        }
+        scope.extend(self.fuel_context.quantified_fuel().and_then(|qf| qf.scope()));
         scope
     }
 
@@ -740,7 +738,7 @@ impl<'ctx> FuelContextInternal<'ctx> {
     }
 
     fn take_quantified_fuel(&mut self) -> Option<QuantifiedFuel<'ctx>> {
-        let do_take = |qf: &mut QuantifiedFuel<'ctx>| QuantifiedFuel::new(qf.0.replace(None));
+        let do_take = |qf: &mut QuantifiedFuel<'ctx>| QuantifiedFuel::new(qf.0.take());
         match self {
             FuelContextInternal::Head(qf) => Some(do_take(qf)),
             FuelContextInternal::Body(qf) => Some(do_take(qf)),
@@ -749,46 +747,28 @@ impl<'ctx> FuelContextInternal<'ctx> {
     }
 }
 
-/*struct FuelEntry<'ctx> {
-    context: FuelContext,
-    quantified_var: RefCell<Option<ScopeSymbolic<'ctx>>>,
-}
-
-impl<'ctx> FuelEntry<'ctx> {
-    fn new(context: FuelContext) -> Self {
-        Self {
-            context,
-            quantified_var: RefCell::new(None),
-        }
-    }
-
-    fn quantified_fuel_var(&self, ctx: &SmtCtx<'ctx>) -> Fuel<'ctx> {
-        self.quantified_var
-            .borrow_mut()
-            .get_or_insert_with(|| ScopeSymbolic::fresh_fuel(ctx))
-            .symbolic
-            .clone()
-            .into_fuel()
-            .unwrap()
-    }
-}*/
-
 #[derive(Default)]
-struct QuantifiedFuel<'ctx>(RefCell<Option<ScopeSymbolic<'ctx>>>);
+struct QuantifiedFuel<'ctx>(OnceCell<ScopeSymbolic<'ctx>>);
 
 impl<'ctx> QuantifiedFuel<'ctx> {
     fn new(value: Option<ScopeSymbolic<'ctx>>) -> Self {
-        Self(RefCell::new(value))
+        Self(match value {
+            Some(s) => OnceCell::with_value(s),
+            None => OnceCell::new(),
+        })
     }
 
     fn get(&self, ctx: &SmtCtx<'ctx>) -> Fuel<'ctx> {
         self.0
-            .borrow_mut()
-            .get_or_insert_with(|| ScopeSymbolic::fresh_fuel(ctx))
+            .get_or_init(|| ScopeSymbolic::fresh_fuel(ctx))
             .symbolic
             .clone()
             .into_fuel()
             .unwrap()
+    }
+
+    fn scope(&self) -> Option<&SmtScope<'ctx>> {
+        self.0.get().map(|s| &s.scope)
     }
 }
 
