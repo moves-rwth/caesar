@@ -535,7 +535,7 @@ impl QuantVcUnit {
         let _entered = span.enter();
         if !options.opt_options.strict {
             let ctx = Context::new(&Config::default());
-            let smt_ctx = SmtCtx::new(&ctx, tcx, options.limited_functions);
+            let smt_ctx = SmtCtx::new(&ctx, tcx, options.limited_functions, options.lit_wrap);
             let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
             unfolder.visit_expr(&mut self.expr)
         } else {

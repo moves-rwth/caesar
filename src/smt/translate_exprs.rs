@@ -3,6 +3,7 @@
 use itertools::Itertools;
 use once_cell::unsync::OnceCell;
 use ref_cast::RefCast;
+use std::collections::HashSet;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -48,6 +49,7 @@ pub struct TranslateExprs<'smt, 'ctx> {
     locals: ScopeMap<Ident, ScopeSymbolic<'ctx>>,
     cache: TranslateCache<'ctx>,
     fuel_context: FuelContextInternal<'ctx>,
+    constant_vars: HashSet<Ident>,
 }
 
 impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
@@ -58,6 +60,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             locals: ScopeMap::new(),
             cache: TranslateCache::new(),
             fuel_context: FuelContextInternal::Call,
+            constant_vars: HashSet::new(),
         }
     }
 
@@ -78,11 +81,15 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     pub fn local_scope(&self) -> SmtScope<'ctx> {
         let mut scope = self.limits_stack.last().unwrap().clone();
         scope.extend(self.locals.local_iter().map(|(_ident, local)| &local.scope));
-        scope.extend(self.fuel_context.quantified_fuel().and_then(|qf| qf.scope()));
+        scope.extend(
+            self.fuel_context
+                .quantified_fuel()
+                .and_then(|qf| qf.scope()),
+        );
         scope
     }
 
-    pub fn set_local_fuel_context(&mut self, fuel_context: FuelContext) {
+    pub fn set_fuel_context(&mut self, fuel_context: FuelContext) {
         self.fuel_context = match fuel_context {
             FuelContext::Head => FuelContextInternal::Head(
                 self.fuel_context.take_quantified_fuel().unwrap_or_default(),
@@ -92,6 +99,14 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ),
             FuelContext::Call => FuelContextInternal::Call,
         };
+    }
+
+    pub fn add_constant_var(&mut self, var: Ident) {
+        self.constant_vars.insert(var);
+    }
+
+    pub fn clear_constant_vars(&mut self) {
+        self.constant_vars.clear();
     }
 
     pub fn local_idents<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
@@ -128,7 +143,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         }
 
         let res = match &expr.kind {
-            ExprKind::Var(ident) => self.get_local(*ident).symbolic.clone().into_bool().unwrap(),
+            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_bool().unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).clone().into_bool().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);
@@ -206,7 +221,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             }
             ExprKind::Subst(_, _, _) => panic!("illegal exprkind"),
             ExprKind::Lit(lit) => match lit.node {
-                LitKind::Bool(value) => Bool::from_bool(self.ctx.ctx, value),
+                LitKind::Bool(value) => self
+                    .ctx
+                    .lit(&TyKind::Bool)
+                    .wrap(self.ctx, Bool::from_bool(self.ctx.ctx, value)),
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
         };
@@ -226,7 +244,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         }
 
         let res = match &expr.kind {
-            ExprKind::Var(ident) => self.get_local(*ident).symbolic.clone().into_int().unwrap(),
+            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_int().unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_int().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);
@@ -280,7 +298,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         }
 
         let res = match &expr.kind {
-            ExprKind::Var(ident) => self.get_local(*ident).symbolic.clone().into_uint().unwrap(),
+            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_uint().unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_uint().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);
@@ -309,7 +327,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Lit(lit) => match lit.node {
                 LitKind::UInt(value) => {
                     // TODO: actually handle u128s
-                    UInt::from_u64(self.ctx.ctx, u64::try_from(value).unwrap())
+                    self.ctx.lit(&TyKind::UInt).wrap(
+                        self.ctx,
+                        UInt::from_u64(self.ctx.ctx, u64::try_from(value).unwrap()),
+                    )
                 }
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
@@ -331,7 +352,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         }
 
         let res = match &expr.kind {
-            ExprKind::Var(ident) => self.get_local(*ident).symbolic.clone().into_real().unwrap(),
+            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_real().unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_real().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);
@@ -394,9 +415,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
 
         let res = match &expr.kind {
             ExprKind::Var(ident) => self
-                .get_local(*ident)
-                .symbolic
-                .clone()
+                .get_maybe_const_local(*ident)
                 .into_ureal()
                 .unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_ureal().unwrap(),
@@ -432,9 +451,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(lit) => match &lit.node {
-                LitKind::Frac(frac) => {
-                    UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac))
-                }
+                LitKind::Frac(frac) => self.ctx.lit(&TyKind::UReal).wrap(
+                    self.ctx,
+                    UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac)),
+                ),
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
         };
@@ -449,9 +469,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     pub fn t_eureal(&mut self, expr: &Expr) -> EUReal<'ctx> {
         match &expr.kind {
             ExprKind::Var(ident) => self
-                .get_local(*ident)
-                .symbolic
-                .clone()
+                .get_maybe_const_local(*ident)
                 .into_eureal()
                 .unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_eureal().unwrap(),
@@ -517,14 +535,17 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 }
             }
             ExprKind::Subst(_, _, _) => panic!("illegal exprkind"),
-            ExprKind::Lit(lit) => match &lit.node {
-                LitKind::Infinity => EUReal::infinity(self.ctx.eureal()),
-                LitKind::Frac(frac) => EUReal::from_ureal(
-                    self.ctx.eureal(),
-                    &UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac)),
-                ),
-                _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
-            },
+            ExprKind::Lit(lit) => {
+                let eureal = match &lit.node {
+                    LitKind::Infinity => EUReal::infinity(self.ctx.eureal()),
+                    LitKind::Frac(frac) => EUReal::from_ureal(
+                        self.ctx.eureal(),
+                        &UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac)),
+                    ),
+                    _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
+                };
+                self.ctx.lit(&TyKind::EUReal).wrap(self.ctx, eureal)
+            }
         }
     }
 
@@ -538,9 +559,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
 
         let res = match &expr.kind {
             ExprKind::Var(ident) => self
-                .get_local(*ident)
-                .symbolic
-                .clone()
+                .get_maybe_const_local(*ident)
                 .into_uninterpreted()
                 .unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_uninterpreted().unwrap(),
@@ -583,7 +602,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         }
 
         let res = match &expr.kind {
-            ExprKind::Var(ident) => self.get_local(*ident).symbolic.clone().into_list().unwrap(),
+            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_list().unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_list().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);
@@ -651,35 +670,50 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         self.locals.get(&ident).unwrap()
     }
 
-    fn init_local(&mut self, ident: Ident) {
+    fn get_local_ty(&self, ident: Ident) -> TyKind {
         let decl = self
             .ctx
             .tcx()
             .get(ident)
             .unwrap_or_else(|| panic!("{} is not declared", ident));
-        let local = match decl.as_ref() {
-            DeclKind::VarDecl(var_ref) => match &var_ref.borrow().ty {
-                TyKind::Bool => ScopeSymbolic::fresh_bool(self.ctx, ident),
-                TyKind::Int => ScopeSymbolic::fresh_int(self.ctx, ident),
-                TyKind::UInt => ScopeSymbolic::fresh_uint(self.ctx, ident),
-                TyKind::Real => ScopeSymbolic::fresh_real(self.ctx, ident),
-                TyKind::UReal => ScopeSymbolic::fresh_ureal(self.ctx, ident),
-                TyKind::EUReal => ScopeSymbolic::fresh_eureal(self.ctx, ident),
-                TyKind::Domain(domain) => {
-                    let domain_name = domain.borrow().name;
-                    let domain_sort = self.ctx.uninterpreteds().get_sort(domain_name).unwrap();
-                    ScopeSymbolic::fresh_uninterpreted(self.ctx, ident, domain_sort)
-                }
-                TyKind::Tuple(_) => todo!(),
-                TyKind::List(element_ty) => ScopeSymbolic::fresh_list(self.ctx, ident, element_ty),
-                TyKind::String => unreachable!(),
-                TyKind::SpecTy => unreachable!(),
-                TyKind::Unresolved(_) => unreachable!(),
-                TyKind::None => unreachable!(),
-            },
+        match decl.as_ref() {
+            DeclKind::VarDecl(var_ref) => var_ref.borrow().ty.clone(),
             _ => panic!("variable is not declared"),
+        }
+    }
+
+    fn init_local(&mut self, ident: Ident) {
+        let local = match &self.get_local_ty(ident) {
+            TyKind::Bool => ScopeSymbolic::fresh_bool(self.ctx, ident),
+            TyKind::Int => ScopeSymbolic::fresh_int(self.ctx, ident),
+            TyKind::UInt => ScopeSymbolic::fresh_uint(self.ctx, ident),
+            TyKind::Real => ScopeSymbolic::fresh_real(self.ctx, ident),
+            TyKind::UReal => ScopeSymbolic::fresh_ureal(self.ctx, ident),
+            TyKind::EUReal => ScopeSymbolic::fresh_eureal(self.ctx, ident),
+            TyKind::Domain(domain) => {
+                let domain_name = domain.borrow().name;
+                let domain_sort = self.ctx.uninterpreteds().get_sort(domain_name).unwrap();
+                ScopeSymbolic::fresh_uninterpreted(self.ctx, ident, domain_sort)
+            }
+            TyKind::Tuple(_) => todo!(),
+            TyKind::List(element_ty) => ScopeSymbolic::fresh_list(self.ctx, ident, element_ty),
+            TyKind::String => unreachable!(),
+            TyKind::SpecTy => unreachable!(),
+            TyKind::Unresolved(_) => unreachable!(),
+            TyKind::None => unreachable!(),
         };
         self.locals.insert(ident, local);
+    }
+
+    fn get_maybe_const_local(&mut self, ident: Ident) -> Symbolic<'ctx> {
+        let local = self.get_local(ident).symbolic.clone();
+        if self.constant_vars.contains(&ident) {
+            // TODO: Maybe remember the ty with the local?
+            let ty = self.get_local_ty(ident);
+            self.ctx.lit(&ty).wrap(self.ctx, local)
+        } else {
+            local
+        }
     }
 
     /// Create a new scope with the given quantified variables.

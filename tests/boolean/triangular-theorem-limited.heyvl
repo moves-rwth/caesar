@@ -1,0 +1,24 @@
+// RUN: @caesar --limited-functions --force-ematching @file
+
+domain Sum {
+    func sum(n: UInt): UInt = ite(n == 0, 0, n + sum(n-1))
+}
+
+proc gauss(n: UInt) -> ()
+    pre ?(true)
+    post ?(sum(n) == n*(n+1)/2)
+{
+    if n == 0 {
+    } else {
+        gauss(n-1) // sum(n-1) == ite(n == 0, 0, (n-1) + sum(n-2))
+        // use sum(n) == ite(n == 0, 0, n + sum(n-1))
+        //            == n + sum(n-1)
+        //            == n + (n-1)*n/2
+        //            == n*(n+1)/2
+    }
+}
+
+proc main() -> () {
+    var r: UInt = sum(10)
+    assert ?(r == 55)
+}

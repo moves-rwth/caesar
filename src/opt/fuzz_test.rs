@@ -198,7 +198,7 @@ fn prove_equiv(expr: Expr, optimized: Expr, tcx: &TyCtx) -> TestCaseResult {
         optimized.clone(),
     );
     let ctx = z3::Context::new(&z3::Config::new());
-    let smt_ctx = SmtCtx::new(&ctx, tcx);
+    let smt_ctx = SmtCtx::new(&ctx, tcx, false, false);
     let mut translate = TranslateExprs::new(&smt_ctx);
     let eq_expr_z3 = translate.t_bool(&eq_expr);
     let mut prover = Prover::new(&ctx);

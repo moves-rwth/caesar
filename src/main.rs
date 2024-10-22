@@ -167,6 +167,10 @@ pub struct OptimizationOptions {
     #[arg(long)]
     pub force_ematching: bool,
 
+    /// Do not count applications to constant values towards the instantiation count
+    /// when using `limited-functions`.
+    #[arg(long)]
+    pub lit_wrap: bool,
 }
 
 #[derive(Debug, Default, Args)]
@@ -707,7 +711,7 @@ fn verify_files_main(
 
         // 11. Translate to Z3
         let ctx = mk_z3_ctx(options);
-        let smt_ctx = SmtCtx::new(&ctx, &tcx, options.limited_functions);
+        let smt_ctx = SmtCtx::new(&ctx, &tcx, options.limited_functions, options.lit_wrap);
         let mut translate = TranslateExprs::new(&smt_ctx);
         let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
 

@@ -1,12 +1,18 @@
 //! Enums to represent all of our supported SMT types.
 
+use std::convert::TryFrom;
 use std::{borrow::Cow, fmt::Display};
-
 use z3::{
     ast::{Bool, Dynamic, Int, Real},
     Sort,
 };
-use z3rro::{eureal, model::{InstrumentedModel, SmtEval, SmtEvalError}, scope::{SmtFresh, SmtScope}, util::PrettyRational, EUReal, Fuel, List, SmtInvariant, UInt, UReal};
+use z3rro::{
+    eureal,
+    model::{InstrumentedModel, SmtEval, SmtEvalError},
+    scope::{SmtFresh, SmtScope},
+    util::PrettyRational,
+    EUReal, Fuel, List, SmtInvariant, UInt, UReal,
+};
 
 use crate::ast::{Ident, TyKind};
 
@@ -175,6 +181,36 @@ impl<'ctx> SmtInvariant<'ctx> for Symbolic<'ctx> {
         }
     }
 }
+
+macro_rules! impl_into_try_from_symbolic {
+    ($ast:ident, $symbolic:ident, $into_ast:ident) => {
+        impl<'ctx> From<$ast<'ctx>> for Symbolic<'ctx> {
+            fn from(value: $ast<'ctx>) -> Self {
+                Symbolic::$symbolic(value)
+            }
+        }
+
+        impl<'ctx> TryFrom<Symbolic<'ctx>> for $ast<'ctx> {
+            type Error = std::string::String;
+
+            fn try_from(value: Symbolic<'ctx>) -> Result<Self, Self::Error> {
+                value
+                    .$into_ast()
+                    .ok_or_else(|| format!("Symbolic is not of requested type: {:?}", stringify!($symbolic)))
+            }
+        }
+    };
+}
+
+impl_into_try_from_symbolic!(Bool, Bool, into_bool);
+impl_into_try_from_symbolic!(Int, Int, into_int);
+impl_into_try_from_symbolic!(UInt, UInt, into_uint);
+impl_into_try_from_symbolic!(Real, Real, into_real);
+impl_into_try_from_symbolic!(UReal, UReal, into_ureal);
+impl_into_try_from_symbolic!(EUReal, EUReal, into_eureal);
+impl_into_try_from_symbolic!(List, List, into_list);
+impl_into_try_from_symbolic!(Dynamic, Uninterpreted, into_uninterpreted);
+
 
 #[derive(Debug)]
 pub enum SymbolicPair<'ctx> {
