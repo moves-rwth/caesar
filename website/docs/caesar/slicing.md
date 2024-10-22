@@ -223,15 +223,6 @@ Consider a program like `x = true; x = !x; assert ?(x)` for example.
 
 *Slicing for correctness* takes a HeyVL program and tries to remove as many statements from the *slice selection* as possible such that the resulting program verifies.
 
-:::danger
-
-The current implementation of slicing for correctness is **unsound** for programs that contain [uninterpreted functions](../heyvl/domains.md).
-This unsoundness also follows for assumption slicing.
-Note that uninterpreted functions may also be generated internally for [quantitative quantifiers](../heyvl/expressions.md#quantifiers) if they are not eliminated by Caesar's quantifier elimination procedure.
-If you enable `--slice-verify`, you must currently **check yourself** that you do not use uninterpreted functions.
-
-:::
-
 ### Assumption Slicing
 
 *Assumption slicing* selects all `assume`-like statements as candidates to remove from the program and slices so that the resulting program verifies.
@@ -259,7 +250,10 @@ program.heyvl::assumes: Verified.
 ```
 
 As is the case in [assertion slicing](#assertion-slicing), the minimal set of assumptions is not necessarily unique.
-We also do not search for assumptions which are included in no minimal set of assumptions, instead for just one minimal set from which we cannot remove an assumption without the program not verifying.
+See the [*Solving for Correctness Slices* section](#solving-for-correctness-slices) for the different algorithms that Caesar supports and which guarantess are given about optimality of slices.
+The default algorithm used is `core`, which is fast, but does not guarantee a minimal slice.
+To find minimal slices, we recommend using `mus` (command-line option `--slice-verify-via mus`).
+The smallest slice can be searched for via the `sus` algorithm.
 
 ### General Slicing for Correctness
 
@@ -524,4 +518,4 @@ This means that we only solve for optimal solutions modulo unknown.
 There might be better solutions that the SMT solver just cannot prove.
 
 As far as we could tell, using e.g. Z3's built-in optimizer for these tasks is often infeasible as it is restricted to a (not particularly well-defined) fragment of input formulas and _may return unsound results_ on other inputs.
-It also seems to be designed to find actually optimal results, whereas we are also happy with a "good" result if some timeout expires.
+It also seems to be designed to find actually optimal results, whereas we are also often happy with just a "good" result.
