@@ -108,6 +108,12 @@ impl<'ctx> SliceSolver<'ctx> {
             &inactive_toggle_values,
         );
 
+        debug!(
+            active = active_toggle_values.len(),
+            inactive = inactive_toggle_values.len(),
+            "translated slice selection"
+        );
+
         (inactive_formula, active_toggle_values)
     }
 
