@@ -23,18 +23,17 @@ impl<'ctx> LitDecl<'ctx> {
         // identity function
         let func = FuncDef::new(lit_name, &[&x], &x);
 
-        let decl = Self {
+        Self {
             _ctx: ctx,
             arg_sort,
             func,
-        };
-        decl
+        }
     }
 
     /// Wrap a value in a `Lit` marker.
     pub fn apply_call(&self, arg: &Dynamic<'ctx>) -> Dynamic<'ctx> {
         assert_eq!(self.arg_sort, arg.get_sort());
-        self.func.apply_call(&[&arg]).try_into().unwrap()
+        self.func.apply_call(&[arg])
     }
 
     pub fn arg_sort(&self) -> &Sort<'ctx> {

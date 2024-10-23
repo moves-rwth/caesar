@@ -73,7 +73,7 @@ impl<'ctx> SmtCtx<'ctx> {
                 if let DomainSpec::Function(func_ref) = &spec {
                     let func = func_ref.borrow();
 
-                    let mut domain = if self.is_limited_function_decl(&*func) {
+                    let mut domain = if self.is_limited_function_decl(&func) {
                         // For function definitions we constrain the number
                         // of quantifier installations through a fuel parameter.
                         // The fuel parameter is automatically added as the first parameter.
@@ -141,7 +141,7 @@ impl<'ctx> SmtCtx<'ctx> {
                         let mut add_defining_axiom = |name: Ident, lhs: &Expr, rhs: &Expr| {
                             translate.push();
                             translate.set_fuel_context(FuelContext::Head);
-                            let symbolic_lhs = translate.t_symbolic(&lhs).into_dynamic(self);
+                            let symbolic_lhs = translate.t_symbolic(lhs).into_dynamic(self);
 
                             translate.set_fuel_context(FuelContext::Body);
                             let symbolic_rhs = translate.t_symbolic(rhs).into_dynamic(self);
@@ -157,7 +157,7 @@ impl<'ctx> SmtCtx<'ctx> {
                             translate.pop();
                         };
 
-                        if self.is_limited_function_decl(&*func) {
+                        if self.is_limited_function_decl(&func) {
                             // fuel synonym axiom
                             add_defining_axiom(func.name, &app, &app); // TODO: create a new name for the axiom
                         }
@@ -327,7 +327,7 @@ impl<'ctx> Lit<'ctx> {
             Lit::Enabled { decl, ty } => {
                 let arg_dynamic = arg.into().into_dynamic(ctx);
                 let call = decl.apply_call(&arg_dynamic);
-                Symbolic::from_dynamic(ctx, &ty, &call).try_into().unwrap()
+                Symbolic::from_dynamic(ctx, ty, &call).try_into().unwrap()
             }
         }
     }
