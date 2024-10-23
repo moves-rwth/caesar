@@ -39,7 +39,7 @@ use crate::{
     vc::subst::Subst,
 };
 
-use crate::smt::translate_exprs::{TranslateExprs};
+use crate::smt::translate_exprs::TranslateExprs;
 
 pub struct Unfolder<'smt, 'ctx> {
     limits_ref: LimitsRef,

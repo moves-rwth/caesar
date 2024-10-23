@@ -100,8 +100,12 @@ impl<'ctx> SmtInvariant<'ctx> for Fuel<'ctx> {
     }
 }
 
-impl <'ctx> SmtFresh<'ctx> for Fuel<'ctx> {
-    fn allocate<'a>(factory: &Factory<'ctx, Self>, alloc: &mut SmtAlloc<'ctx, 'a>, prefix: &str) -> Self {
+impl<'ctx> SmtFresh<'ctx> for Fuel<'ctx> {
+    fn allocate<'a>(
+        factory: &Factory<'ctx, Self>,
+        alloc: &mut SmtAlloc<'ctx, 'a>,
+        prefix: &str,
+    ) -> Self {
         let datatype_factory = (factory.ctx, factory.sort.clone());
         Fuel {
             factory: factory.clone(),

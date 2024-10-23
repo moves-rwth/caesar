@@ -414,10 +414,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         }
 
         let res = match &expr.kind {
-            ExprKind::Var(ident) => self
-                .get_maybe_const_local(*ident)
-                .into_ureal()
-                .unwrap(),
+            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_ureal().unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_ureal().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);
@@ -468,10 +465,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
 
     pub fn t_eureal(&mut self, expr: &Expr) -> EUReal<'ctx> {
         match &expr.kind {
-            ExprKind::Var(ident) => self
-                .get_maybe_const_local(*ident)
-                .into_eureal()
-                .unwrap(),
+            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_eureal().unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_eureal().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);

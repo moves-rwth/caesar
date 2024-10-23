@@ -32,8 +32,7 @@ impl<'ctx> LitDecl<'ctx> {
     }
 
     /// Wrap a value in a `Lit` marker.
-    pub fn apply_call(&self, arg: &Dynamic<'ctx>) -> Dynamic<'ctx>
-    {
+    pub fn apply_call(&self, arg: &Dynamic<'ctx>) -> Dynamic<'ctx> {
         assert_eq!(self.arg_sort, arg.get_sort());
         self.func.apply_call(&[&arg]).try_into().unwrap()
     }

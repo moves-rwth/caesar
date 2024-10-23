@@ -194,9 +194,12 @@ macro_rules! impl_into_try_from_symbolic {
             type Error = std::string::String;
 
             fn try_from(value: Symbolic<'ctx>) -> Result<Self, Self::Error> {
-                value
-                    .$into_ast()
-                    .ok_or_else(|| format!("Symbolic is not of requested type: {:?}", stringify!($symbolic)))
+                value.$into_ast().ok_or_else(|| {
+                    format!(
+                        "Symbolic is not of requested type: {:?}",
+                        stringify!($symbolic)
+                    )
+                })
             }
         }
     };
@@ -210,7 +213,6 @@ impl_into_try_from_symbolic!(UReal, UReal, into_ureal);
 impl_into_try_from_symbolic!(EUReal, EUReal, into_eureal);
 impl_into_try_from_symbolic!(List, List, into_list);
 impl_into_try_from_symbolic!(Dynamic, Uninterpreted, into_uninterpreted);
-
 
 #[derive(Debug)]
 pub enum SymbolicPair<'ctx> {
