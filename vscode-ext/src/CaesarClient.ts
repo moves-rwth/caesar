@@ -19,7 +19,6 @@ export enum ServerStatus {
     Ready,
     FailedToStart,
     Verifying,
-    Finished
 }
 
 export enum VerifyResult {
@@ -399,7 +398,7 @@ export class CaesarClient {
         this.notifyStatusUpdate(ServerStatus.Verifying);
         try {
             await this.client.sendRequest('custom/verify', { text_document: documentItem });
-            this.notifyStatusUpdate(ServerStatus.Finished);
+            this.notifyStatusUpdate(ServerStatus.Ready);
             this.logger.info("Client: completed verification.", document.uri);
             await this.walkthrough.setVerifiedHeyVL(true);
         } catch (error) {

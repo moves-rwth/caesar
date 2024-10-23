@@ -4,15 +4,16 @@ import { StatusBarViewConfig } from "./Config";
 import { ServerStatus, VerifyResult } from "./CaesarClient";
 import { DocumentMap, Verifier } from "./Verifier";
 import { ConfigurationConstants } from "./constants";
+import { TextDocumentIdentifier } from "vscode-languageclient";
 
 
-const runningTooltipBase =
+const runningTooltipMenu =
     new vscode.MarkdownString(
         "[Stop Caesar](command:caesar.stopServer)\n\n" +
         "[Restart Caesar](command:caesar.restartServer)"
         , true);
 
-const stoppedTooltipBase =
+const stoppedTooltipMenu =
     new vscode.MarkdownString(
         "[Start Caesar](command:caesar.startServer)", true);
 
@@ -22,8 +23,8 @@ export class StatusBarComponent {
     private verifyStatus: DocumentMap<[Range, VerifyResult][]> = new DocumentMap();
     private serverStatus: ServerStatus = ServerStatus.NotStarted;
     private view: StatusBarItem;
-    private tooltipBase: vscode.MarkdownString = stoppedTooltipBase;
-    private tooltipExtension: vscode.MarkdownString = new vscode.MarkdownString();
+    private tooltipMenuText: vscode.MarkdownString = stoppedTooltipMenu;
+    private tooltipStatusText: vscode.MarkdownString = new vscode.MarkdownString();
 
     constructor(verifier: Verifier) {
         // create the view
@@ -56,6 +57,19 @@ export class StatusBarComponent {
             this.render();
         });
 
+        verifier.context.subscriptions.push(vscode.workspace.onDidCloseTextDocument((document) => {
+            const documentIdentifier: TextDocumentIdentifier = { uri: document.uri.toString() };
+            this.verifyStatus.remove(documentIdentifier);
+            this.render();
+        }));
+
+        verifier.context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(() => {
+            this.render();
+        }));
+
+        verifier.context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(() => {
+            this.render();
+        }));
     }
 
     render() {
@@ -65,35 +79,30 @@ export class StatusBarComponent {
                 case ServerStatus.NotStarted:
                     this.view.text = "$(debug-start) Caesar Inactive";
                     this.view.command = "caesar.startServer";
-                    this.tooltipBase = stoppedTooltipBase;
+                    this.tooltipMenuText = stoppedTooltipMenu;
                     break;
                 case ServerStatus.Stopped:
                     this.view.text = "$(debug-start) Et tu, Brute?";
                     this.view.command = "caesar.startServer";
-                    this.tooltipBase = stoppedTooltipBase;
+                    this.tooltipMenuText = stoppedTooltipMenu;
                     break;
                 case ServerStatus.FailedToStart:
                     this.view.text = "$(warning) Failed to start Caesar";
                     this.view.command = "caesar.startServer";
-                    this.tooltipBase = stoppedTooltipBase;
+                    this.tooltipMenuText = stoppedTooltipMenu;
                     break;
                 case ServerStatus.Starting:
                     this.view.text = "$(loading~spin) Starting Caesar...";
-                    this.view.command = ""
+                    this.view.command = "caesar.showOutput"
                     break;
                 case ServerStatus.Ready:
-                    this.view.text = "$(thumbsup-filled) Caesar Ready";
+                    this.handleReadyStatus();
                     this.view.command = "caesar.showOutput";
-                    this.tooltipBase = runningTooltipBase;
+                    this.tooltipMenuText = runningTooltipMenu;
                     break;
                 case ServerStatus.Verifying:
                     this.view.text = "$(sync~spin) Verifying...";
-                    this.view.command = ""
-                    break;
-                case ServerStatus.Finished:
-                    this.tooltipBase = runningTooltipBase;
-                    this.handleFinishedStatus();
-                    this.view.command = "caesar.showOutput";
+                    this.view.command = "caesar.showOutput"
                     break;
             }
 
@@ -104,81 +113,91 @@ export class StatusBarComponent {
         }
     }
 
-    private extendedTooltip(extension: vscode.MarkdownString) {
-        return new vscode.MarkdownString(this.tooltipBase.value + "\n\n --- \n" + extension.value, true);
-    }
-
     private renderTooltip() {
-        if (this.tooltipExtension.value === "") {
-            this.view.tooltip = this.tooltipBase;
+        if (this.tooltipStatusText.value === "") {
+            this.view.tooltip = this.tooltipMenuText;
             this.view.tooltip.isTrusted = true;
             return;
         }
-        this.view.tooltip = this.extendedTooltip(this.tooltipExtension);
+        this.view.tooltip = new vscode.MarkdownString(this.tooltipMenuText.value + "\n\n --- \n" + this.tooltipStatusText.value, true);
         this.view.tooltip.isTrusted = true;
     }
 
-    private countResults(results: [Range, VerifyResult][]): [number, number, number] {
-        let verified = 0;
-        let failed = 0;
-        let unknown = 0;
 
-        for (const [_, result] of results) {
-            switch (result) {
-                case VerifyResult.Verified:
-                    verified++;
-                    break;
-                case VerifyResult.Failed:
-                    failed++;
-                    break;
-                case VerifyResult.Unknown:
-                    unknown++;
-                    break;
-            }
-        }
-
-        return [verified, failed, unknown];
-    }
-
-
-    private handleFinishedStatus() {
+    private handleReadyStatus() {
         let tooltipString = new vscode.MarkdownString("", true);
 
-        let everythingVerified = true;
+        let someError = false;
+        let someVerified = false;
 
-        for (const [document_id, results] of this.verifyStatus.entries()) {
-            for (const editor of vscode.window.visibleTextEditors) {
+        const editorsWithResults = vscode.window.visibleTextEditors.filter((editor) => {
+            return editor.document.languageId === "heyvl" // Only HeyVL files
+                && (this.verifyStatus.get({ uri: editor.document.uri.toString() }) ?? []).length !== 0; // And only files with results
+        });
 
-                if (editor.document.languageId !== "heyvl") {
-                    continue;
-                }
-
-                if (editor.document.uri.toString() !== document_id.uri) {
-                    continue;
-                }
-
-                let [verified, failed, unknown] = this.countResults(results);
-
-                if (failed > 0 || unknown > 0) {
-                    everythingVerified = false;
-                }
-
-                tooltipString.appendMarkdown(`${vscode.Uri.parse(document_id.uri).path}: $(error) ${failed} $(question) ${unknown}` + "\n\n --- \n");
-            }
+        if (editorsWithResults.length === 0) {
+            // No HeyVL files open or no results yet
+            this.view.text = "$(thumbsup-filled) Caesar Ready";
+            return;
         }
+
+        for (const editor of editorsWithResults) {
+            const document_id: TextDocumentIdentifier = { uri: editor.document.uri.toString() };
+
+            // The default will not be used because the filter above ensures that the document is in the map.
+            const results = this.verifyStatus.get(document_id) ?? [];
+
+            let verified = 0;
+            let failed = 0;
+            let unknown = 0;
+
+            for (const [_, result] of results) {
+                switch (result) {
+                    case VerifyResult.Verified:
+                        verified++;
+                        break;
+                    case VerifyResult.Failed:
+                        failed++;
+                        break;
+                    case VerifyResult.Unknown:
+                        unknown++;
+                        break;
+                }
+            }
+
+            if (failed > 0 || unknown > 0) {
+                someError = true;
+            }
+            if (verified > 0) {
+                someVerified = true;
+            }
+
+            tooltipString.appendMarkdown(`${vscode.Uri.parse(document_id.uri).path}: $(error) ${failed} $(question) ${unknown}` + "\n\n --- \n");
+        }
+
 
         // Remove the last newline and separator
         tooltipString.value.trimEnd();
 
-        if (everythingVerified) {
-            this.view.text = "$(pass) Verified!";
-            this.tooltipExtension = new vscode.MarkdownString("No errors found", true);
-        } else {
-            this.view.text = "$(warning) Verification Errors";
-            this.tooltipExtension = tooltipString;
-        }
 
+        if (!someError && someVerified) {
+            // No error and at least one verified implies everything is verified.
+            this.view.text = "$(pass) Verified!";
+            this.tooltipStatusText = new vscode.MarkdownString("No errors found", true);
+
+        } else if (someError) {
+            // At least one verified, but some errors
+            this.view.text = "$(warning) Verification Errors";
+            this.tooltipStatusText = tooltipString;
+        }
+        else if (!someError && !someVerified) {
+            // No error and no verified implies the file is either empty or there are syntax errors.
+            this.view.text = "$(error) Invalid File";
+            this.tooltipStatusText = new vscode.MarkdownString("Syntax error or empty file!", true);
+        }
     }
 
-
 }
+
+
+

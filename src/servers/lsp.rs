@@ -196,9 +196,22 @@ impl LspServer {
                 Ok(None)
             }
             "textDocument/didClose" => {
-                let _params: DidCloseTextDocumentParams =
+                let params: DidCloseTextDocumentParams =
                     notification.extract("textDocument/didClose")?;
-                // TODO: remove file?
+
+                let file_id = self
+                    .files
+                    .lock()
+                    .unwrap()
+                    .find_uri(params.text_document.clone())
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Could not find file id for document {:?}",
+                            params.text_document
+                        )
+                    })
+                    .id;
+                self.clear_file_information(&file_id)?;
                 Ok(None)
             }
             _ => Ok(Some(notification)),
