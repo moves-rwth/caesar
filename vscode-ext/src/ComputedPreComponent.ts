@@ -56,6 +56,12 @@ export class ComputedPreComponent {
             }
         }));
 
+        verifier.context.subscriptions.push(vscode.workspace.onDidCloseTextDocument((document) => {
+            const documentIdentifier = { uri: document.uri.toString() };
+            this.computedPres.remove(documentIdentifier);
+            this.render();
+        }));
+
         // listen to custom/computedPre notifications
         verifier.client.onComputedPre((update) => {
             this.computedPres.insert(update.document, update.pres);
@@ -64,13 +70,15 @@ export class ComputedPreComponent {
 
         // clear all information when a new verification task is started
         verifier.client.onStatusUpdate((status) => {
-            if (status !== ServerStatus.Finished) {
+            if (status == ServerStatus.Verifying) {
                 for (const [_document, results] of this.computedPres.entries()) {
                     results.length = 0;
                 }
                 this.render();
             }
         });
+
+
 
         // TODO: listen to content changes to remove lines?
     }

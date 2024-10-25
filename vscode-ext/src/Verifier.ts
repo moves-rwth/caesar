@@ -27,6 +27,10 @@ export class DocumentMap<T> {
     public entries(): [TextDocumentIdentifier, T][] {
         return Array.from(this.map.values());
     }
+
+    public remove(document_id: TextDocumentIdentifier) {
+        this.map.delete(document_id.uri.toString());
+    }
 }
 
 export class Verifier {

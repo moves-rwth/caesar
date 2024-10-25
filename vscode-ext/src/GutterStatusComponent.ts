@@ -4,6 +4,7 @@ import { GutterInformationViewConfig } from "./Config";
 import { ServerStatus, VerifyResult } from "./CaesarClient";
 import { DocumentMap, Verifier } from "./Verifier";
 import { ConfigurationConstants } from "./constants";
+import { TextDocumentIdentifier } from "vscode-languageclient";
 
 export class GutterStatusComponent {
 
@@ -40,7 +41,7 @@ export class GutterStatusComponent {
 
         // listen to status and verify updates
         verifier.client.onStatusUpdate((status) => {
-            if (status !== ServerStatus.Finished) {
+            if (status == ServerStatus.Verifying) {
                 for (const [_document, results] of this.status.entries()) {
                     results.length = 0;
                 }
@@ -52,6 +53,12 @@ export class GutterStatusComponent {
             this.status.insert(document, results);
             this.render();
         });
+
+        verifier.context.subscriptions.push(vscode.workspace.onDidCloseTextDocument((document) => {
+            const documentIdentifier: TextDocumentIdentifier = { uri: document.uri.toString() };
+            this.status.remove(documentIdentifier);
+            this.render();
+        }));
     }
 
     render() {

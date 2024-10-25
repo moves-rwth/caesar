@@ -10,7 +10,7 @@ use std::{
 };
 
 use ariadne::{Cache, Report, ReportBuilder, ReportKind, Source};
-use lsp_types::{DiagnosticTag, VersionedTextDocumentIdentifier};
+use lsp_types::{DiagnosticTag, TextDocumentIdentifier, VersionedTextDocumentIdentifier};
 use pathdiff::diff_paths;
 
 use crate::pretty::{Doc, SimplePretty};
@@ -155,6 +155,13 @@ impl Files {
 
     pub fn find(&self, path: &SourceFilePath) -> Option<&Arc<StoredFile>> {
         self.files.iter().find(|file| &file.path == path)
+    }
+
+    pub fn find_uri(&self, document_id: TextDocumentIdentifier) -> Option<&Arc<StoredFile>> {
+        self.files.iter().find(|file| match &file.path {
+            SourceFilePath::Lsp(ident) => ident.uri == document_id.uri,
+            _ => false,
+        })
     }
 
     pub fn char_span(&self, span: Span) -> CharSpan {
