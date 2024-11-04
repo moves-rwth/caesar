@@ -36,6 +36,7 @@ use timing::DispatchBuilder;
 use tokio::task::JoinError;
 use tracing::{error, info, warn};
 
+use crate::smt::SmtCtxOptions;
 use vc::explain::VcExplanation;
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
@@ -711,7 +712,14 @@ fn verify_files_main(
 
         // 11. Translate to Z3
         let ctx = mk_z3_ctx(options);
-        let smt_ctx = SmtCtx::new(&ctx, &tcx, options.limited_functions, options.lit_wrap);
+        let smt_ctx = SmtCtx::new(
+            &ctx,
+            &tcx,
+            SmtCtxOptions {
+                use_limited_functions: options.limited_functions,
+                lit_wrap: options.lit_wrap,
+            },
+        );
         let mut translate = TranslateExprs::new(&smt_ctx);
         let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
 

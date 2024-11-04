@@ -11,6 +11,11 @@ use std::{
 use itertools::Itertools;
 use z3::{Config, Context};
 
+use super::{
+    subst::apply_subst,
+    vcgen::{unsupported_stmt_diagnostic, Vcgen},
+};
+use crate::smt::SmtCtxOptions;
 use crate::{
     ast::{
         util::remove_casts, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Diagnostic,
@@ -27,11 +32,6 @@ use crate::{
     resource_limits::LimitsRef,
     smt::SmtCtx,
     tyctx::TyCtx,
-};
-
-use super::{
-    subst::apply_subst,
-    vcgen::{unsupported_stmt_diagnostic, Vcgen},
 };
 
 /// Maintains a list of [`Expr`]s for successive simplification steps.
@@ -161,7 +161,7 @@ pub(super) fn explain_subst(vcgen: &mut Vcgen, span: Span, expr: &mut Expr) {
 
         // finally, run the unfolder for more detailed simplifications
         let ctx = Context::new(&Config::default());
-        let smt_ctx = SmtCtx::new(&ctx, vcgen.tcx, false, false);
+        let smt_ctx = SmtCtx::new(&ctx, vcgen.tcx, SmtCtxOptions::default());
         let deadline = Instant::now() + Duration::from_millis(1);
         let mut unfolder = Unfolder::new(LimitsRef::new(Some(deadline)), &smt_ctx);
         let _ = unfolder.visit_expr(expr);

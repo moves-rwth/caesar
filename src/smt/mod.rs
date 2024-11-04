@@ -25,6 +25,12 @@ mod symbols;
 pub mod translate_exprs;
 mod uninterpreted;
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub struct SmtCtxOptions {
+    pub use_limited_functions: bool,
+    pub lit_wrap: bool,
+}
+
 pub struct SmtCtx<'ctx> {
     ctx: &'ctx Context,
     tcx: &'ctx TyCtx,
@@ -38,12 +44,7 @@ pub struct SmtCtx<'ctx> {
 }
 
 impl<'ctx> SmtCtx<'ctx> {
-    pub fn new(
-        ctx: &'ctx Context,
-        tcx: &'ctx TyCtx,
-        use_limited_functions: bool,
-        lit_wrap: bool,
-    ) -> Self {
+    pub fn new(ctx: &'ctx Context, tcx: &'ctx TyCtx, options: SmtCtxOptions) -> Self {
         let mut res = SmtCtx {
             ctx,
             tcx,
@@ -52,8 +53,8 @@ impl<'ctx> SmtCtx<'ctx> {
             lists: RefCell::new(HashMap::new()),
             lits: RefCell::new(HashMap::new()),
             uninterpreteds: Uninterpreteds::new(ctx),
-            use_limited_functions,
-            lit_wrap,
+            use_limited_functions: options.use_limited_functions,
+            lit_wrap: options.lit_wrap,
         };
         let domains: Vec<_> = tcx.domains_owned();
         res.declare_domains(domains.as_slice());
