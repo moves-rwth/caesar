@@ -161,6 +161,7 @@ pub struct OptimizationOptions {
     pub no_simplify: bool,
 
     /// Limit the number of times a function declaration can be recursively instantiated.
+    /// Requires that MBQI is disabled with `force-ematching`.
     #[arg(long)]
     pub limited_functions: bool,
 

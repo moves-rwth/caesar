@@ -11,7 +11,8 @@ use z3rro::{
 };
 
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
-use crate::ast::{DeclKind, Expr, FuncDecl};
+use crate::ast::{DeclKind, FuncDecl};
+use crate::smt::limited::{build_func_domain, defining_axiom, fuel_synonym_axiom};
 use crate::smt::symbolic::Symbolic;
 use crate::smt::translate_exprs::FuelContext;
 use crate::{
@@ -19,6 +20,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
+mod limited;
 pub mod pretty_model;
 pub mod symbolic;
 mod symbols;
@@ -74,20 +76,7 @@ impl<'ctx> SmtCtx<'ctx> {
                 if let DomainSpec::Function(func_ref) = &spec {
                     let func = func_ref.borrow();
 
-                    let mut domain = if self.is_limited_function_decl(&func) {
-                        // For function definitions we constrain the number
-                        // of quantifier installations through a fuel parameter.
-                        // The fuel parameter is automatically added as the first parameter.
-                        vec![self.fuel_factory().sort().clone()]
-                    } else {
-                        vec![]
-                    };
-                    domain.extend(
-                        func.inputs
-                            .node
-                            .iter()
-                            .map(|param| ty_to_sort(self, &param.ty)),
-                    );
+                    let domain = build_func_domain(self, &func);
                     let domain: Vec<&Sort<'_>> = domain.iter().collect();
                     let range = ty_to_sort(self, &func.output);
                     self.uninterpreteds.add_function(func.name, &domain, &range);
@@ -139,34 +128,15 @@ impl<'ctx> SmtCtx<'ctx> {
                             translate.pop();
                         }
 
-                        let mut add_defining_axiom = |name: Ident, lhs: &Expr, rhs: &Expr| {
-                            translate.push();
-                            translate.set_fuel_context(FuelContext::Head);
-                            let symbolic_lhs = translate.t_symbolic(lhs).into_dynamic(self);
-
-                            translate.set_fuel_context(FuelContext::Body);
-                            let symbolic_rhs = translate.t_symbolic(rhs).into_dynamic(self);
-
-                            axioms.push((
-                                name,
-                                translate.local_scope().forall(
-                                    &[&Pattern::new(self.ctx, &[&symbolic_lhs as &dyn Ast<'ctx>])],
-                                    &symbolic_lhs.smt_eq(&symbolic_rhs),
-                                ),
-                            ));
-                            translate.set_fuel_context(FuelContext::Call);
-                            translate.pop();
-                        };
-
                         if self.is_limited_function_decl(&func) {
-                            // fuel synonym axiom
-                            add_defining_axiom(func.name, &app, &app); // TODO: create a new name for the axiom
+                            // TODO: create a new name for the axiom
+                            axioms.push((func.name, fuel_synonym_axiom(&mut translate, &app)));
                         }
 
                         // create the axiom for the definition if there is a body
                         if let Some(body) = &*body {
-                            // Defining axiom
-                            add_defining_axiom(func.name, &app, body); // TODO: create a new name for the axiom
+                            // TODO: create a new name for the axiom
+                            axioms.push((func.name, defining_axiom(&mut translate, &app, body)));
 
                             // Computing axiom
                             if self.lit_wrap {
@@ -281,7 +251,7 @@ impl<'ctx> SmtCtx<'ctx> {
     }
 }
 
-fn ty_to_sort<'ctx>(ctx: &SmtCtx<'ctx>, ty: &TyKind) -> Sort<'ctx> {
+pub fn ty_to_sort<'ctx>(ctx: &SmtCtx<'ctx>, ty: &TyKind) -> Sort<'ctx> {
     match ty {
         TyKind::Bool => Sort::bool(ctx.ctx()),
         TyKind::Int | TyKind::UInt => Sort::int(ctx.ctx()),
@@ -301,6 +271,7 @@ fn ty_to_sort<'ctx>(ctx: &SmtCtx<'ctx>, ty: &TyKind) -> Sort<'ctx> {
     }
 }
 
+/// A [LitDecl] wrapper providing a simpler and better typed interface.
 pub enum Lit<'ctx> {
     Disabled,
     Enabled { decl: LitDecl<'ctx>, ty: TyKind },
@@ -318,6 +289,8 @@ impl<'ctx> Lit<'ctx> {
         Self::Disabled
     }
 
+    /// Wrap a value in a `Lit` marker if the functionality is enabled. Otherwise, return the
+    /// argument directly.
     pub fn wrap<A>(&self, ctx: &SmtCtx<'ctx>, arg: A) -> A
     where
         A: Into<Symbolic<'ctx>> + TryFrom<Symbolic<'ctx>>,

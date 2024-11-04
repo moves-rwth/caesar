@@ -3,6 +3,13 @@ use std::fmt::Debug;
 use z3::ast::{Ast, Dynamic};
 use z3::{Context, Sort};
 
+/// Identity function that is used to mark constants values. They allow for axioms instantiation
+/// without consuming fuel. This allows the SMT to still compute the result of functions where the
+/// arguments are known, while limiting instantiation in other cases.
+///
+/// Conceptually the `Lit` function is generic over its argument. For encoding into SMT it must be
+/// monomorphized. A [LitDecl] instance represents a concrete monomorphization and is parameterised
+/// by the z3 sort of the argument/ return value.
 #[derive(Debug)]
 pub struct LitDecl<'ctx> {
     _ctx: &'ctx Context,
@@ -10,9 +17,6 @@ pub struct LitDecl<'ctx> {
     func: FuncDef<'ctx>,
 }
 
-/// Identity function that is used to mark constants values. They allow for axioms instantiation
-/// without consuming fuel. This allows the SMT to still compute the result of functions where the
-/// arguments are known, while limiting instantiation in other cases.
 impl<'ctx> LitDecl<'ctx> {
     pub fn new(ctx: &'ctx Context, arg_sort: Sort<'ctx>) -> Self {
         // TODO: How do we avoid clashes with user defined code?
