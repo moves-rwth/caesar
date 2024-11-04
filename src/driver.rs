@@ -67,6 +67,7 @@ use z3rro::{
     util::PrefixWriter,
 };
 
+use crate::smt::SmtCtxOptions;
 use tracing::{info_span, instrument, trace};
 
 /// Human-readable name for a source unit. Used for debugging and error messages.
@@ -511,7 +512,7 @@ impl QuantVcUnit {
         let _entered = span.enter();
         if !options.strict {
             let ctx = Context::new(&Config::default());
-            let smt_ctx = SmtCtx::new(&ctx, tcx, options.limited_functions, options.lit_wrap);
+            let smt_ctx = SmtCtx::new(&ctx, tcx, SmtCtxOptions::default());
             let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
             unfolder.visit_expr(&mut self.expr)
         } else {

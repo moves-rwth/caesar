@@ -275,6 +275,7 @@ fn negate_expr(expr: Expr) -> Expr {
 #[cfg(test)]
 mod test {
     use super::Unfolder;
+    use crate::smt::SmtCtxOptions;
     use crate::{
         ast::visit::VisitorMut, fuzz_expr_opt_test, opt::fuzz_test, resource_limits::LimitsRef,
         smt::SmtCtx,
@@ -285,7 +286,7 @@ mod test {
         fuzz_expr_opt_test!(|mut expr| {
             let tcx = fuzz_test::mk_tcx();
             let z3_ctx = z3::Context::new(&z3::Config::default());
-            let smt_ctx = SmtCtx::new(&z3_ctx, &tcx, false, false);
+            let smt_ctx = SmtCtx::new(&z3_ctx, &tcx, SmtCtxOptions::default());
             let limits_ref = LimitsRef::new(None);
             let mut unfolder = Unfolder::new(limits_ref, &smt_ctx);
             unfolder.visit_expr(&mut expr).unwrap();
