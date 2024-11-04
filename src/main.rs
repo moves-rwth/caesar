@@ -184,6 +184,7 @@ pub struct Options {
     pub jani_skip_quant_pre: bool,
 
     /// Limit the number of times a function declaration can be recursively instantiated.
+    /// Requires that MBQI is disabled with `force-ematching`.
     #[structopt(long)]
     pub limited_functions: bool,
 

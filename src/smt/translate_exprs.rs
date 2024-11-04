@@ -775,6 +775,11 @@ impl<'ctx> FuelContextInternal<'ctx> {
     }
 }
 
+/// Lazily initialised [ScopeSymbolic] of type [Fuel]. It is initialised when a limited function is
+/// encountered in context that requires a fresh quantified fuel variable ([FuelContext::Head],
+/// [FuelContext::Body]). It is discarded when the context changes back to [FuelContext::Call]
+/// (see [TranslateExprs::set_fuel_context]). The lazy initialisation ensures that the fuel variable
+/// is only added to the quantifier if it is actually used.
 #[derive(Default)]
 struct QuantifiedFuel<'ctx>(OnceCell<ScopeSymbolic<'ctx>>);
 
