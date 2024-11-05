@@ -3,14 +3,8 @@
 use itertools::Itertools;
 use once_cell::unsync::OnceCell;
 use ref_cast::RefCast;
-use std::collections::HashSet;
-use std::{
-    cmp::Ordering,
-    collections::HashMap,
-    convert::TryFrom,
-    hash::{Hash, Hasher},
-    vec,
-};
+use std::fmt::Debug;
+use std::{collections::HashMap, convert::TryFrom, vec};
 use z3::{
     ast::{Ast, Bool, Dynamic, Int, Real},
     Pattern,
@@ -24,6 +18,13 @@ use crate::{
     scope_map::ScopeMap,
 };
 
+use super::{
+    symbolic::{ScopeSymbolic, Symbolic, SymbolicPair},
+    SmtCtx,
+};
+use crate::ast::visit::VisitorMut;
+use crate::ast::{ExprData, PointerHashShared};
+use crate::smt::limited::{ConstantExprCollector, ConstantExprs};
 use z3rro::{
     eureal::EUReal,
     orders::{
@@ -32,11 +33,6 @@ use z3rro::{
     },
     scope::SmtScope,
     Fuel, List, SmtBranch, SmtEq, UInt, UReal,
-};
-
-use super::{
-    symbolic::{ScopeSymbolic, Symbolic, SymbolicPair},
-    SmtCtx,
 };
 
 /// Translates caesar expressions to Z3 formulas.
@@ -49,7 +45,7 @@ pub struct TranslateExprs<'smt, 'ctx> {
     locals: ScopeMap<Ident, ScopeSymbolic<'ctx>>,
     cache: TranslateCache<'ctx>,
     fuel_context: FuelContextInternal<'ctx>,
-    constant_vars: HashSet<Ident>,
+    constant_exprs: ConstantExprs,
 }
 
 impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
@@ -60,7 +56,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             locals: ScopeMap::new(),
             cache: TranslateCache::new(),
             fuel_context: FuelContextInternal::Call,
-            constant_vars: HashSet::new(),
+            constant_exprs: ConstantExprs::default(),
         }
     }
 
@@ -101,12 +97,31 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         };
     }
 
-    pub fn add_constant_var(&mut self, var: Ident) {
-        self.constant_vars.insert(var);
+    pub fn set_constant_exprs(&mut self, constant_vars: &[Ident], expr_to_analyse: &mut Expr) {
+        let mut collector = ConstantExprCollector::new(constant_vars);
+        collector.visit_expr(expr_to_analyse).unwrap();
+        self.constant_exprs = collector.into_constant_exprs();
     }
 
-    pub fn clear_constant_vars(&mut self) {
-        self.constant_vars.clear();
+    pub fn clear_constant_exprs(&mut self) {
+        self.constant_exprs = ConstantExprs::default();
+    }
+
+    fn wrap_if_constant<A>(&self, expr: &Expr, ast: A) -> A
+    where
+        A: Into<Symbolic<'ctx>> + TryFrom<Symbolic<'ctx>>,
+        <A as TryFrom<Symbolic<'ctx>>>::Error: Debug,
+    {
+        if self.constant_exprs.is_constant(expr) {
+            if let Some(ty) = expr.ty.as_ref() {
+                self.ctx.lit(ty).wrap(self.ctx, ast)
+            } else {
+                tracing::warn!("Unable to lit-wrap expr with unknown ty");
+                ast
+            }
+        } else {
+            ast
+        }
     }
 
     pub fn local_idents<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
@@ -143,7 +158,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         }
 
         let res = match &expr.kind {
-            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_bool().unwrap(),
+            ExprKind::Var(ident) => self.get_local(*ident).symbolic.clone().into_bool().unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).clone().into_bool().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);
@@ -232,7 +247,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         if is_expr_worth_caching(expr) {
             self.cache.insert(expr, Symbolic::Bool(res.clone()));
         }
-        res
+        self.wrap_if_constant(expr, res)
     }
 
     pub fn t_int(&mut self, expr: &Expr) -> Int<'ctx> {
@@ -244,7 +259,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         }
 
         let res = match &expr.kind {
-            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_int().unwrap(),
+            ExprKind::Var(ident) => self.get_local(*ident).symbolic.clone().into_int().unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_int().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);
@@ -286,7 +301,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::Int(res.clone()));
         }
-        res
+        self.wrap_if_constant(expr, res)
     }
 
     pub fn t_uint(&mut self, expr: &Expr) -> UInt<'ctx> {
@@ -298,7 +313,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         }
 
         let res = match &expr.kind {
-            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_uint().unwrap(),
+            ExprKind::Var(ident) => self.get_local(*ident).symbolic.clone().into_uint().unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_uint().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);
@@ -327,10 +342,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Lit(lit) => match lit.node {
                 LitKind::UInt(value) => {
                     // TODO: actually handle u128s
-                    self.ctx.lit(&TyKind::UInt).wrap(
-                        self.ctx,
-                        UInt::from_u64(self.ctx.ctx, u64::try_from(value).unwrap()),
-                    )
+                    UInt::from_u64(self.ctx.ctx, u64::try_from(value).unwrap())
                 }
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
@@ -340,7 +352,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::UInt(res.clone()));
         }
-        res
+
+        self.wrap_if_constant(expr, res)
     }
 
     pub fn t_real(&mut self, expr: &Expr) -> Real<'ctx> {
@@ -352,7 +365,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         }
 
         let res = match &expr.kind {
-            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_real().unwrap(),
+            ExprKind::Var(ident) => self.get_local(*ident).symbolic.clone().into_real().unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_real().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);
@@ -402,7 +415,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::Real(res.clone()));
         }
-        res
+        self.wrap_if_constant(expr, res)
     }
 
     pub fn t_ureal(&mut self, expr: &Expr) -> UReal<'ctx> {
@@ -414,7 +427,12 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         }
 
         let res = match &expr.kind {
-            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_ureal().unwrap(),
+            ExprKind::Var(ident) => self
+                .get_local(*ident)
+                .symbolic
+                .clone()
+                .into_ureal()
+                .unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_ureal().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);
@@ -448,10 +466,9 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(lit) => match &lit.node {
-                LitKind::Frac(frac) => self.ctx.lit(&TyKind::UReal).wrap(
-                    self.ctx,
-                    UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac)),
-                ),
+                LitKind::Frac(frac) => {
+                    UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac))
+                }
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
         };
@@ -460,12 +477,18 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::UReal(res.clone()));
         }
-        res
+
+        self.wrap_if_constant(expr, res)
     }
 
     pub fn t_eureal(&mut self, expr: &Expr) -> EUReal<'ctx> {
-        match &expr.kind {
-            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_eureal().unwrap(),
+        let res = match &expr.kind {
+            ExprKind::Var(ident) => self
+                .get_local(*ident)
+                .symbolic
+                .clone()
+                .into_eureal()
+                .unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_eureal().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);
@@ -538,9 +561,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                     ),
                     _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
                 };
-                self.ctx.lit(&TyKind::EUReal).wrap(self.ctx, eureal)
+                eureal
             }
-        }
+        };
+        self.wrap_if_constant(expr, res)
     }
 
     pub fn t_uninterpreted(&mut self, expr: &Expr) -> Dynamic<'ctx> {
@@ -553,7 +577,9 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
 
         let res = match &expr.kind {
             ExprKind::Var(ident) => self
-                .get_maybe_const_local(*ident)
+                .get_local(*ident)
+                .symbolic
+                .clone()
                 .into_uninterpreted()
                 .unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_uninterpreted().unwrap(),
@@ -584,7 +610,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             self.cache
                 .insert(expr, Symbolic::Uninterpreted(res.clone()));
         }
-        res
+        self.wrap_if_constant(expr, res)
     }
 
     pub fn t_list(&mut self, expr: &Expr) -> List<'ctx> {
@@ -596,7 +622,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         }
 
         let res = match &expr.kind {
-            ExprKind::Var(ident) => self.get_maybe_const_local(*ident).into_list().unwrap(),
+            ExprKind::Var(ident) => self.get_local(*ident).symbolic.clone().into_list().unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).into_list().unwrap(),
             ExprKind::Ite(cond, lhs, rhs) => {
                 let cond = self.t_bool(cond);
@@ -697,17 +723,6 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             TyKind::None => unreachable!(),
         };
         self.locals.insert(ident, local);
-    }
-
-    fn get_maybe_const_local(&mut self, ident: Ident) -> Symbolic<'ctx> {
-        let local = self.get_local(ident).symbolic.clone();
-        if self.constant_vars.contains(&ident) {
-            // TODO: Maybe remember the ty with the local?
-            let ty = self.get_local_ty(ident);
-            self.ctx.lit(&ty).wrap(self.ctx, local)
-        } else {
-            local
-        }
     }
 
     /// Create a new scope with the given quantified variables.
@@ -829,7 +844,7 @@ impl<'ctx> TranslateCache<'ctx> {
     }
 
     fn insert(&mut self, expr: &Expr, value: Symbolic<'ctx>) {
-        let cache_expr = CacheExpr(expr.clone());
+        let cache_expr = CacheExpr::new(expr.clone());
         self.cache.last_mut().unwrap().insert(cache_expr, value);
     }
 
@@ -838,31 +853,4 @@ impl<'ctx> TranslateCache<'ctx> {
     }
 }
 
-#[repr(transparent)]
-#[derive(RefCast)]
-struct CacheExpr(Expr);
-
-impl PartialEq for CacheExpr {
-    fn eq(&self, other: &Self) -> bool {
-        Shared::as_ptr(&self.0) == Shared::as_ptr(&other.0)
-    }
-}
-impl Eq for CacheExpr {}
-
-impl Ord for CacheExpr {
-    fn cmp(&self, other: &Self) -> Ordering {
-        Shared::as_ptr(&self.0).cmp(&Shared::as_ptr(&other.0))
-    }
-}
-
-impl PartialOrd for CacheExpr {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(Shared::as_ptr(&self.0).cmp(&Shared::as_ptr(&other.0)))
-    }
-}
-
-impl Hash for CacheExpr {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        Shared::as_ptr(&self.0).hash(state)
-    }
-}
+type CacheExpr = PointerHashShared<ExprData>;

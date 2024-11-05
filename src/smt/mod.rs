@@ -3,20 +3,18 @@
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
-use z3::ast::Ast;
-use z3::{ast::Bool, Context, Pattern, Sort};
-use z3rro::{
-    eureal::EURealSuperFactory, EUReal, Factory, FuelFactory, ListFactory, LitDecl, SmtEq,
-    SmtInvariant,
-};
+use z3::{ast::Bool, Context, Sort};
+use z3rro::{eureal::EURealSuperFactory, EUReal, Factory, FuelFactory, ListFactory, LitDecl};
 
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
 use crate::ast::{DeclKind, FuncDecl};
-use crate::smt::limited::{build_func_domain, defining_axiom, fuel_synonym_axiom};
+use crate::smt::limited::{
+    build_func_domain, computation_axiom, defining_axiom, fuel_synonym_axiom,
+    return_value_invariant,
+};
 use crate::smt::symbolic::Symbolic;
-use crate::smt::translate_exprs::FuelContext;
 use crate::{
-    ast::{DeclRef, DomainDecl, DomainSpec, ExprBuilder, Ident, SpanVariant, TyKind},
+    ast::{DeclRef, DomainDecl, DomainSpec, Ident, TyKind},
     tyctx::TyCtx,
 };
 
@@ -100,67 +98,26 @@ impl<'ctx> SmtCtx<'ctx> {
                 match &spec {
                     DomainSpec::Function(func_ref) => {
                         let func = func_ref.borrow();
-                        let body = func.body.borrow();
 
-                        let span = func.span.variant(SpanVariant::VC);
-                        let builder = ExprBuilder::new(span);
-                        let app = builder.call(
-                            func.name,
-                            func.inputs
-                                .node
-                                .iter()
-                                .map(|param| builder.var(param.name, self.tcx)),
-                            self.tcx,
+                        fn with_name<'ctx>(
+                            name: Ident,
+                        ) -> impl Fn(Bool<'ctx>) -> (Ident, Bool<'ctx>) {
+                            move |axiom: Bool<'ctx>| (name, axiom)
+                        }
+
+                        // TODO: create a new name for the axioms
+                        axioms.extend(
+                            return_value_invariant(&mut translate, &func).map(with_name(func.name)),
                         );
-
-                        // if there's an smt invariant for the return value type, add it
-                        {
-                            translate.push();
-                            translate.set_fuel_context(FuelContext::Body);
-                            let app_z3 = translate.t_symbolic(&app);
-                            if let Some(invariant) = app_z3.smt_invariant() {
-                                axioms.push((
-                                    func.name, // TODO: create a new name for the axiom
-                                    translate.local_scope().forall(&[], &invariant),
-                                ));
-                            }
-                            translate.set_fuel_context(FuelContext::Call);
-                            translate.pop();
-                        }
-
-                        if self.is_limited_function_decl(&func) {
-                            // TODO: create a new name for the axiom
-                            axioms.push((func.name, fuel_synonym_axiom(&mut translate, &app)));
-                        }
-
-                        // create the axiom for the definition if there is a body
-                        if let Some(body) = &*body {
-                            // TODO: create a new name for the axiom
-                            axioms.push((func.name, defining_axiom(&mut translate, &app, body)));
-
-                            // Computing axiom
-                            if self.lit_wrap {
-                                translate.push();
-                                translate.set_fuel_context(FuelContext::Body);
-                                for parm in &func.inputs.node {
-                                    translate.add_constant_var(parm.name);
-                                }
-
-                                let app_z3 = translate.t_symbolic(&app).into_dynamic(self);
-                                let body_z3 = translate.t_symbolic(body).into_dynamic(self);
-
-                                axioms.push((
-                                    func.name, // TODO: create a new name for the axiom
-                                    translate.local_scope().forall(
-                                        &[&Pattern::new(self.ctx, &[&app_z3 as &dyn Ast<'ctx>])],
-                                        &app_z3.smt_eq(&body_z3),
-                                    ),
-                                ));
-                                translate.clear_constant_vars();
-                                translate.set_fuel_context(FuelContext::Call);
-                                translate.pop();
-                            }
-                        }
+                        axioms.extend(
+                            defining_axiom(&mut translate, &func).map(with_name(func.name)),
+                        );
+                        axioms.extend(
+                            fuel_synonym_axiom(&mut translate, &func).map(with_name(func.name)),
+                        );
+                        axioms.extend(
+                            computation_axiom(&mut translate, &func).map(with_name(func.name)),
+                        );
                     }
                     DomainSpec::Axiom(axiom_ref) => {
                         let axiom = axiom_ref.borrow();

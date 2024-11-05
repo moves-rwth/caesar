@@ -1,3 +1,6 @@
+use ref_cast::RefCast;
+use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 use std::{
     fmt,
     ops::{Deref, DerefMut},
@@ -70,5 +73,46 @@ impl<T: ?Sized + fmt::Display> fmt::Display for Shared<T> {
 impl<T: ?Sized + fmt::Debug> fmt::Debug for Shared<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&**self, f)
+    }
+}
+
+/// [Shared] wrapper that provides pointer based [Eq] and [Hash] implementations.
+#[repr(transparent)]
+#[derive(RefCast)]
+pub struct PointerHashShared<T>(Shared<T>);
+
+impl<T> PointerHashShared<T> {
+    pub fn new(shared: Shared<T>) -> Self {
+        Self(shared)
+    }
+
+    pub fn into_shared(self) -> Shared<T> {
+        self.0
+    }
+}
+
+impl<T> PartialEq for PointerHashShared<T> {
+    fn eq(&self, other: &Self) -> bool {
+        Shared::as_ptr(&self.0) == Shared::as_ptr(&other.0)
+    }
+}
+
+impl<T> Eq for PointerHashShared<T> {}
+
+impl<T> Ord for PointerHashShared<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        Shared::as_ptr(&self.0).cmp(&Shared::as_ptr(&other.0))
+    }
+}
+
+impl<T> PartialOrd for PointerHashShared<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(Shared::as_ptr(&self.0).cmp(&Shared::as_ptr(&other.0)))
+    }
+}
+
+impl<T> Hash for PointerHashShared<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Shared::as_ptr(&self.0).hash(state)
     }
 }
