@@ -10,7 +10,7 @@ pub use serde_json::Number;
 
 /// Mathematical constants that cannot be expressed using numeric values and
 /// basic jani-model expressions.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MathConstant {
     /// Euler's number (the base of the natural logarithm); type real.
     #[serde(rename = "e")]
@@ -29,7 +29,7 @@ impl Display for MathConstant {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum ConstantValue {
     /// Numeric value; has type int if it is an integer and type real otherwise.
@@ -41,9 +41,30 @@ pub enum ConstantValue {
     MathConstant(MathConstant),
 }
 
-impl ConstantValue {
-    pub fn from_f64(value: f64) -> ConstantValue {
-        ConstantValue::Number(serde_json::Number::from_f64(value).unwrap())
+impl From<u64> for ConstantValue {
+    fn from(value: u64) -> Self {
+        ConstantValue::Number(value.into())
+    }
+}
+
+/// This error is emitted from the [`TryFrom<f64>`] implementation for
+/// [`ConstantValue`] if the value is not finie (e.g. NaN or infinity).
+#[derive(Debug)]
+pub struct NotFiniteNumberError;
+
+impl TryFrom<f64> for ConstantValue {
+    type Error = NotFiniteNumberError;
+
+    fn try_from(value: f64) -> Result<Self, Self::Error> {
+        serde_json::Number::from_f64(value)
+            .map(ConstantValue::Number)
+            .ok_or(NotFiniteNumberError)
+    }
+}
+
+impl From<bool> for ConstantValue {
+    fn from(value: bool) -> Self {
+        ConstantValue::Boolean(value)
     }
 }
 
@@ -63,7 +84,7 @@ impl Display for ConstantValue {
 /// `right`, or the type of `right` if that is assignable from the type of `left`
 /// (previously: the result type is the most specific type assignable from the
 /// types of then and else).
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(tag = "op", rename = "ite")]
 pub struct IteExpression {
     #[serde(rename = "if")]
@@ -75,7 +96,7 @@ pub struct IteExpression {
 }
 
 /// JANI operators with one operand.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOp {
     /// Negation: computes `¬exp`.
     #[serde(rename = "¬")]
@@ -94,14 +115,14 @@ pub enum UnaryOp {
 }
 
 /// JANI expressions with one operand.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct UnaryExpression {
     pub op: UnaryOp,
     pub exp: Expression,
 }
 
 /// JANI operators with two operands.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOp {
     #[serde(rename = "∨")]
     Or,
@@ -144,7 +165,7 @@ pub enum BinaryOp {
 }
 
 /// JANI expressions with two operands.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct BinaryExpression {
     pub op: BinaryOp,
     pub left: Expression,
@@ -153,7 +174,7 @@ pub struct BinaryExpression {
 
 /// Nondeterministic selection (needs
 /// [`super::models::ModelFeature::NondetSelection`]).
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(tag = "op", rename = "nondet")]
 pub struct NondetSelectionExpression {
     var: Identifier,
@@ -161,7 +182,7 @@ pub struct NondetSelectionExpression {
 }
 
 /// JANI expressions.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Expression {
     Constant(ConstantValue),
@@ -171,6 +192,18 @@ pub enum Expression {
     Binary(Box<BinaryExpression>),
     // TODO: DistributionSampling
     NondetSelection(Box<NondetSelectionExpression>),
+}
+
+impl From<ConstantValue> for Expression {
+    fn from(value: ConstantValue) -> Self {
+        Expression::Constant(value)
+    }
+}
+
+impl From<Identifier> for Expression {
+    fn from(id: Identifier) -> Self {
+        Expression::Identifier(id)
+    }
 }
 
 pub type LValue = Identifier;

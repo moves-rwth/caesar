@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::exprs::Expression;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum BasicType {
     /// Booleans, assignable from booleans only.
@@ -17,7 +17,7 @@ pub enum BasicType {
 
 /// Numeric if `base` is numeric; `lower_bound` or `upper_bound` must be
 /// present.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(tag = "kind", rename = "bounded", rename_all = "kebab-case")]
 pub struct BoundedType {
     pub base: BoundedTypeBase,
@@ -37,7 +37,7 @@ impl BoundedType {
 }
 
 /// Subset of [`BasicType`]s for [`BoundedType`]s.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum BoundedTypeBase {
     Int,
@@ -45,7 +45,7 @@ pub enum BoundedTypeBase {
 }
 
 /// Other types for specific kinds of models.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum OtherType {
     /// Numeric; only allowed for TA, PTA, STA, HA, PHA and SHA; assignable from int and bounded int.
@@ -60,7 +60,7 @@ pub enum OtherType {
 ///
 /// We represent types as an enum of other enums to simplify the serde
 /// implementations.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Type {
     BasicType(BasicType),

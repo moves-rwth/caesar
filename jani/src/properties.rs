@@ -19,7 +19,7 @@ pub struct PropertyInterval {
 
 pub type RewardAccumulation = Vec<Reward>;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Reward {
     Steps,
@@ -28,7 +28,7 @@ pub enum Reward {
     Exit,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum FilterFun {
     Min,
@@ -54,7 +54,7 @@ pub struct FilterExpression {
     pub states: Box<PropertyExpression>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Quantifier {
     #[serde(rename = "Pmin")]
     Pmin,
@@ -72,7 +72,7 @@ pub struct QuantifiedExpression {
     pub exp: Box<PropertyExpression>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UntilExpressionKind {
     #[serde(rename = "U")]
     Until,
@@ -104,7 +104,7 @@ pub struct UntilExpression {
     pub reward_bounds: Option<Vec<RewardBound>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryPathExpressionKind {
     #[serde(rename = "F")]
     Finally,
@@ -125,7 +125,7 @@ pub struct UnaryPathExpression {
     pub reward_bounds: Option<Vec<RewardBound>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExpectedValueKind {
     Emin,
     Emax,
@@ -156,7 +156,7 @@ pub struct ExpectedValueExpression {
     pub reward_instants: Option<Vec<RewardInstant>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(tag = "op", rename_all = "kebab-case")]
 pub enum StatePredicate {
     Initial,
