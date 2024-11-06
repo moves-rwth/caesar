@@ -222,7 +222,6 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 panic!("illegal cast to {:?} from {:?}", &expr.ty, &operand.ty)
             }
             ExprKind::Quant(quant_op, quant_vars, ann, operand) => {
-                self.push(); // avoid leaking any fresh quant_vars into the outside scope
                 let operand = self.t_bool(operand);
                 let scope = self.mk_scope(quant_vars);
                 let patterns: Vec<_> = self.t_triggers(&ann.triggers);
@@ -231,7 +230,6 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                     QuantOpKind::Forall | QuantOpKind::Inf => scope.forall(&patterns, &operand),
                     QuantOpKind::Exists | QuantOpKind::Sup => scope.exists(&patterns, &operand),
                 };
-                self.pop();
                 quant
             }
             ExprKind::Subst(_, _, _) => panic!("illegal exprkind"),
@@ -540,7 +538,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 }
             }
             ExprKind::Quant(quant_op, quant_vars, ann, operand) => {
-                let operand = self.t_eureal(operand); // probably leaking fresh quant_vars here
+                let operand = self.t_eureal(operand);
                 let scope = self.mk_scope(quant_vars);
                 let patterns: Vec<_> = self.t_triggers(&ann.triggers);
                 let patterns: Vec<_> = patterns.iter().collect();
@@ -727,10 +725,14 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
 
     /// Create a new scope with the given quantified variables.
     fn mk_scope(&mut self, quant_vars: &[QuantVar]) -> SmtScope<'ctx> {
+        // Hacky way to make `mk_scope` side effect free.
+        // Otherwise, the newly created variables with `get_local()` leak into the `local_scope()`
+        self.push();
         let mut bounds = SmtScope::new();
         for quant_var in quant_vars {
             bounds.append(&self.get_local(quant_var.name()).scope);
         }
+        self.pop();
         bounds
     }
 
