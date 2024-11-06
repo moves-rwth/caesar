@@ -39,12 +39,12 @@ pub fn build_func_domain<'a>(ctx: &SmtCtx<'a>, func: &FuncDecl) -> Vec<Sort<'a>>
     domain
 }
 
-/// Creates an axiom that can only be instantiated with a non-zero fuel parameter and decrements
-/// the available fuel in the body.
+/// Creates an axiom that should be read from left to right.
 /// It has the form:
 /// ```txt
-/// forall fuel: Fuel, <args...> . func_name(Succ(fuel), <args...>) = <body...> func_name(fuel, <args...>) <body...>
+/// forall <vars...> @trigger(lhs) . lhs == rhs
 /// ```
+/// Where fuel parameters in `lhs` must be non-zero and are decremented in `rhs`.
 fn translate_defining_axiom<'smt, 'ctx>(
     translate: &mut TranslateExprs<'smt, 'ctx>,
     lhs: &Expr,
@@ -88,8 +88,10 @@ fn build_call(tcx: &TyCtx, func: &FuncDecl) -> Expr {
 /// Creates the fuel synonym axiom that states that the result of the function is independent
 /// of the fuel parameter. It has the form:
 /// ```txt
-/// forall fuel: Fuel, <args...> . func_name(Succ(fuel), <args...>) = func_name(fuel, <args...>)
+/// forall fuel: Fuel, <args...> @trigger(func_name(Succ(fuel), <args...>)) . func_name(Succ(fuel), <args...>) = func_name(fuel, <args...>)
 /// ```
+///
+/// The axiom is only generated for limited functions.
 pub fn fuel_synonym_axiom<'smt, 'ctx>(
     translate: &mut TranslateExprs<'smt, 'ctx>,
     func: &FuncDecl,
@@ -104,9 +106,11 @@ pub fn fuel_synonym_axiom<'smt, 'ctx>(
 
 /// Creates the default defining axiom for a function. It has the form:
 /// ```txt
-/// forall fuel: Fuel, <args...> . func_name(Succ(fuel), <args...>) = <body>
+/// forall fuel: Fuel, <args...> @trigger(func_name(Succ(fuel), <args...>)) . func_name(Succ(fuel), <args...>) = <body>
 /// ```
 /// where only `fuel` is used as the fuel parameter in `<body>`.
+///
+/// The axiom is only generated for functions that have an immediate definition (body).
 pub fn defining_axiom<'smt, 'ctx>(
     translate: &mut TranslateExprs<'smt, 'ctx>,
     func: &FuncDecl,
@@ -126,8 +130,10 @@ pub fn defining_axiom<'smt, 'ctx>(
 ///
 /// It has the form:
 /// ```txt
-/// forall fuel: Fuel, <args...> . func_name(fuel, Lit(<args...>)) = <body>
+/// forall fuel: Fuel, <args...> @trigger(func_name(fuel, Lit(<args...>))) . func_name(fuel, Lit(<args...>)) = <body>
 /// ```
+///
+/// The is axiom only generated for limited functions and if the corresponding feature is enabled.
 pub fn computation_axiom<'smt, 'ctx>(
     translate: &mut TranslateExprs<'smt, 'ctx>,
     func: &FuncDecl,
@@ -179,6 +185,8 @@ pub fn computation_axiom<'smt, 'ctx>(
 }
 
 /// Invariant for the functions return value.
+///
+/// The axiom is only generated if the functions return type has an invariant.
 pub fn return_value_invariant<'smt, 'ctx>(
     translate: &mut TranslateExprs<'smt, 'ctx>,
     func: &FuncDecl,
@@ -220,11 +228,16 @@ impl ConstantExprs {
 /// Collects the maximal constant subexpressions of an expression.
 /// An expression is to be considered constant if it is a literal, a known constant variable, or
 /// all its children are constant. Maximality is in relation to the expression size. Meaning if an
-/// expression is reported as constant, none of its children are reported
+/// expression is reported as constant, none of its children are reported.
 ///
 /// # Example
 /// If `a` is a known constant variable then for the expression `a + 4 * b` this analysis will
 /// return only `a + 4`.
+///
+/// # Note
+/// Only reporting maximal subexpressions is an optimisation. The resulting constant information
+/// is forward to the SMT-solver (wrapping them in Lit-marker). Also, wrapping all the
+/// intermediate expressions severally degrades solver performance.
 #[derive(Default)]
 pub struct ConstantExprCollector {
     constant_exprs: ConstantExprs,
