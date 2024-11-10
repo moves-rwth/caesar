@@ -7,7 +7,7 @@ domain Nat {
     func Z(): Nat
     func S(N: Nat): Nat
 
-    // TODO: These Functions require "pattern matching", which currently can not be defined without explicit axioms??!
+    // Todo: These Functions require "pattern matching", which currently can not be defined without explicit axioms??!
     //       As a result these functions are currently not translated as limited functions.
     func plus(n: Nat, m: Nat): Nat
     axiom plus_rec forall n: Nat, m: Nat . plus(S(n), m) == S(plus(n, m))
