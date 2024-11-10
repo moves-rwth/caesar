@@ -1,0 +1,17 @@
+// RUN: @caesar --limited-functions --force-ematching --lit-wrap --no-simplify @file
+
+// Triangle example form the paper "Computing with an SMT solver" (Section 3) that requires computation
+
+domain T {
+    func Triangle(n: UInt): UInt = ite(n == 0, 0, n + Triangle(n - 1))
+}
+
+proc TriangleProperty(n: UInt) -> ()
+    post ?((3 <= n) ==> (2 * n <= Triangle(n)))
+{
+    if n <= 3 {
+        assert ?(Triangle(3) == 6); // the crucial property of the base case
+    } else {
+        TriangleProperty(n-1); // invoke the induction hypothesis
+    }
+}

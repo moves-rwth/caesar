@@ -1,0 +1,50 @@
+// RUN: @caesar --limited-functions --force-ematching --lit-wrap --no-simplify @file
+
+// Peano number example form the paper "Computing with an SMT solver" (Section 5) that tests the computation capabilities
+
+// Peano numbers
+domain Nat {
+    func Z(): Nat
+    func S(N: Nat): Nat
+
+    // TODO: These Functions require "pattern matching", which currently can not be defined without explicit axioms??!
+    //       As a result these functions are currently not translated as limited functions.
+    func plus(n: Nat, m: Nat): Nat
+    axiom plus_rec forall n: Nat, m: Nat . plus(S(n), m) == S(plus(n, m))
+    axiom plus_base forall m: Nat . plus(Z(), m) == m
+
+    func mult(n: Nat, m: Nat): Nat
+    axiom mult_rec forall n: Nat, m: Nat . mult(S(n), m) == plus(m, mult(n, m))
+    axiom mult_base forall m: Nat . mult(Z(), m) == Z()
+
+    axiom fac_rec forall n: Nat . factorial(S(n)) == mult(S(n), factorial(n))
+    axiom fac_base factorial(Z()) == S(Z())
+    func factorial(n: Nat): Nat
+
+    func toNat(n: UInt): Nat = ite(n == 0, Z(), S(toNat(n - 1)))
+}
+
+proc test_toNat() -> ()
+    post ?(toNat(4) == S(S(S(S(Z())))))
+{
+}
+
+proc test_plus() -> ()
+    post ?(plus(toNat(4), toNat(3)) == toNat(7))
+{
+}
+
+proc test_mult() -> ()
+    post ?(mult(toNat(4), toNat(3)) == toNat(12))
+{
+}
+
+proc test_factorial0() -> ()
+    post ?(factorial(toNat(3)) == toNat(6))
+{
+}
+
+proc test_factorial1() -> ()
+    post ?(factorial(toNat(5)) == mult(toNat(10), toNat(12)))
+{
+}
