@@ -1,0 +1,48 @@
+// RUN: @caesar --limited-functions --force-ematching @file
+
+// Sum examples from the paper "Reasoning about Comprehensions with First-Order SMT Solvers" (Section 3.4)
+
+domain Sum {
+    // Induction below axiom
+    func elementSum(lo: UInt, hi: UInt, a: []Int): Int = ite(lo < hi, select(a, lo) + elementSum(lo + 1, hi, a), 0)
+
+    /*axiom induction_below forall lo: UInt, hi: UInt, a: []Int @trigger(elementSum(lo, hi, a)) .
+        (lo < hi) ==> (elementSum(lo, hi, a) == select(a, lo) + elementSum(lo + 1, hi, a))
+    axiom induction_above forall lo: UInt, hi: UInt, a: []Int @trigger(elementSum(lo, hi, a)) .
+        (lo < hi) ==> (elementSum(lo, hi, a) == select(a, lo) + elementSum(lo, hi - 1, a))*/
+
+    //axiom empty forall lo: UInt, hi: UInt, a: []Int @trigger(elementSum(lo, hi, a)) . (hi <= lo) ==> (elementSum(lo, hi, a) == 0)
+
+    // Omitting triggers here is detrimental to the performance
+    axiom split_range forall lo: UInt, mid: UInt, hi: UInt, a: []Int @trigger(elementSum(lo, mid, a), elementSum(mid, hi, a)) @trigger(elementSum(lo, mid, a), elementSum(lo, hi, a)) @trigger(elementSum(lo, hi, a), elementSum(mid, hi, a)) .
+        (lo <= mid &&  mid <= hi) ==> (elementSum(lo, mid, a) + elementSum(mid, hi, a) == elementSum(lo, hi, a))
+
+    /*axiom unit forall lo: UInt, hi: UInt, a: []Int @trigger(elementSum(lo, hi, a)) .
+        (forall k: UInt . (lo <= k && k < hi) ==> (select(a, k) == 0)) ==> (elementSum(lo, hi, a) == 0)*/
+}
+
+proc Sum1(a: []Int) -> (s: Int)
+    post ?(s == elementSum(0, len(a), a))
+{
+    s = 0;
+
+    var n: UInt = 0;
+    @invariant(?(n <= len(a) && s == elementSum(0, n, a)))
+    while (n < len(a)) {
+        s = s + select(a, n);
+        n = n + 1;
+    }
+}
+
+proc Sum2(a: []Int) -> (s: Int)
+    post ?(s == elementSum(0, len(a), a))
+{
+    s = 0;
+
+    var n: UInt = len(a);
+    @invariant(?(n <= len(a) && s == elementSum(n, len(a), a)))
+    while (1 <= n) {
+        s = s + select(a, n - 1);
+        n = n - 1;
+    }
+}

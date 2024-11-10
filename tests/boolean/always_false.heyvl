@@ -2,7 +2,8 @@
 // CHECK: Verified
 
 domain Dom {
-    // Dummy function to test code generation for for functions with nested quantifiers.
+    // Dummy function to test code generation for functions with nested quantifiers.
+    // Just a complicated way of writing `false`.
     func alwaysFalse(n: UInt): Bool = forall i: UInt . alwaysFalse(i) != alwaysFalse(n)
 }
 

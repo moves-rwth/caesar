@@ -9,7 +9,7 @@ use z3rro::{eureal::EURealSuperFactory, EUReal, Factory, FuelFactory, ListFactor
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
 use crate::ast::{DeclKind, FuncDecl};
 use crate::smt::limited::{
-    build_func_domain, computation_axiom, defining_axiom, fuel_synonym_axiom,
+    build_func_domain, computation_axiom, defining_axiom, free_axiom, fuel_synonym_axiom,
     return_value_invariant,
 };
 use crate::smt::symbolic::Symbolic;
@@ -121,7 +121,7 @@ impl<'ctx> SmtCtx<'ctx> {
                     }
                     DomainSpec::Axiom(axiom_ref) => {
                         let axiom = axiom_ref.borrow();
-                        axioms.push((axiom.name, translate.t_bool(&axiom.axiom)));
+                        axioms.push((axiom.name, free_axiom(&mut translate, &axiom)));
                     }
                 }
             }
