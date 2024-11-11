@@ -10,6 +10,14 @@ use z3::{Context, Sort};
 /// Conceptually the `Lit` function is generic over its argument. For encoding into SMT it must be
 /// monomorphized. A [LitDecl] instance represents a concrete monomorphization and is parameterised
 /// by the z3 sort of the argument/ return value.
+///
+/// An equivalent rust function would look like the following:
+/// ```
+/// # #[allow(non_snake_case)]
+/// fn Lit<S>(x: S) -> S {
+///     x
+/// }
+/// ```
 #[derive(Debug)]
 pub struct LitDecl<'ctx> {
     _ctx: &'ctx Context,
@@ -19,11 +27,9 @@ pub struct LitDecl<'ctx> {
 
 impl<'ctx> LitDecl<'ctx> {
     pub fn new(ctx: &'ctx Context, arg_sort: Sort<'ctx>) -> Self {
-        // TODO: How do we avoid clashes with user defined code?
+        // Clashes with user defined code are avoided by `[` and `]` in the name
         let lit_name = format!("Lit[{}]", &arg_sort);
         let x = Dynamic::fresh_const(ctx, "x", &arg_sort);
-        // TODO: FuncDef uses an RecFuncDecl internally. This seems a bit overkill for this use-case.
-        //       A FuncInterp would probably suffice, but there is no way of constructing it.
         // identity function
         let func = FuncDef::new(lit_name, &[&x], &x);
 

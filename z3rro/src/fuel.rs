@@ -14,12 +14,12 @@ pub struct FuelFactory<'ctx> {
 
 impl<'ctx> FuelFactory<'ctx> {
     pub fn new(ctx: &'ctx Context) -> Rc<Self> {
-        // TODO: How do we avoid clashes with user defined code?
-        let datatype = DatatypeBuilder::new(ctx, "Fuel")
-            .variant("Zero", vec![])
+        // Clashes with user defined code are avoided by `$` in names
+        let datatype = DatatypeBuilder::new(ctx, "$Fuel")
+            .variant("$Z", vec![])
             .variant(
-                "Succ",
-                vec![("f", DatatypeAccessor::Datatype(Symbol::from("Fuel")))],
+                "$S",
+                vec![("f", DatatypeAccessor::Datatype(Symbol::from("$Fuel")))],
             )
             .finish();
 
