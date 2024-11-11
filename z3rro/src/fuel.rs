@@ -43,10 +43,10 @@ impl<'ctx> FuelFactory<'ctx> {
 
 /// Datatype representing peano numbers. Used to control how often quantifiers are instantiated.
 /// Equivalent to the rust type:
-/// ```no_run
+/// ```
 /// enum Fuel {
 ///      Zero,
-///      Succ(Fuel)
+///      Succ(Box<Fuel>)
 /// }
 /// ```
 #[derive(Debug, Clone)]
