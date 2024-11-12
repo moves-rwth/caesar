@@ -56,44 +56,6 @@ fn create_call_scope<'smt, 'ctx>(
     scope
 }
 
-/// Creates an axiom that should be read from left to right.
-/// It has the form:
-/// ```txt
-/// forall <vars...> @trigger(lhs) . lhs == rhs
-/// ```
-/// Where fuel parameters in `lhs` must be non-zero and are decremented in `rhs`.
-fn translate_defining_axiom<'smt, 'ctx>(
-    translate: &mut TranslateExprs<'smt, 'ctx>,
-    func: &FuncDecl,
-    lhs: &Expr,
-    rhs: &Expr,
-) -> Bool<'ctx> {
-    translate.set_fuel_context(FuelContext::head());
-
-    let symbolic_lhs = translate.t_symbolic(lhs).into_dynamic(translate.ctx);
-
-    // reuse same fuel in body
-    let quantified_fuel = translate
-        .fuel_context_mut()
-        .take_quantified_fuel()
-        .unwrap_or_default();
-    translate.set_fuel_context(FuelContext::body_with_fuel(quantified_fuel));
-    let symbolic_rhs = translate.t_symbolic(rhs).into_dynamic(translate.ctx);
-
-    let scope = create_call_scope(translate, func);
-    let axiom = scope.forall(
-        &[&Pattern::new(
-            translate.ctx.ctx,
-            &[&symbolic_lhs as &dyn Ast<'ctx>],
-        )],
-        &symbolic_lhs.smt_eq(&symbolic_rhs),
-    );
-
-    translate.set_fuel_context(FuelContext::Call); // reset to default
-
-    axiom
-}
-
 /// Creates a call to the function.
 fn build_call(tcx: &TyCtx, func: &FuncDecl) -> Expr {
     let span = func.span.variant(SpanVariant::VC);
@@ -121,7 +83,30 @@ pub fn fuel_synonym_axiom<'smt, 'ctx>(
 ) -> Option<Bool<'ctx>> {
     if translate.ctx.is_limited_function_decl(func) {
         let app = build_call(translate.ctx.tcx, func);
-        Some(translate_defining_axiom(translate, func, &app, &app))
+
+        translate.set_fuel_context(FuelContext::head());
+        let symbolic_head_app = translate.t_symbolic(&app).into_dynamic(translate.ctx);
+
+        // reuse same fuel in body
+        let quantified_fuel = translate
+            .fuel_context_mut()
+            .take_quantified_fuel()
+            .unwrap_or_default();
+        translate.set_fuel_context(FuelContext::body_with_fuel(quantified_fuel));
+        let symbolic_body_app = translate.t_symbolic(&app).into_dynamic(translate.ctx);
+
+        let scope = create_call_scope(translate, func);
+        let axiom = scope.forall(
+            &[&Pattern::new(
+                translate.ctx.ctx,
+                &[&symbolic_head_app as &dyn Ast<'ctx>],
+            )],
+            &symbolic_head_app.smt_eq(&symbolic_body_app),
+        );
+
+        translate.set_fuel_context(FuelContext::Call); // reset to default
+
+        Some(axiom)
     } else {
         None
     }
@@ -129,9 +114,9 @@ pub fn fuel_synonym_axiom<'smt, 'ctx>(
 
 /// Creates the default defining axiom for a function. It has the form:
 /// ```txt
-/// forall fuel: Fuel, <args...> @trigger(func_name(Succ(fuel), <args...>)) . func_name(Succ(fuel), <args...>) = <body>
+/// forall fuel: Fuel, <args...> @trigger(func_name(Succ(fuel), <args...>)) . func_name(fuel, <args...>) = <body>
 /// ```
-/// where only `fuel` is used as the fuel parameter in `<body>`.
+/// The trigger requires a non-zero fuel value to match. The axiom itself has no such requirement.
 ///
 /// The axiom is only generated for functions that have an immediate definition (body).
 pub fn defining_axiom<'smt, 'ctx>(
@@ -140,7 +125,31 @@ pub fn defining_axiom<'smt, 'ctx>(
 ) -> Option<Bool<'ctx>> {
     func.body.borrow().as_ref().map(|body| {
         let app = build_call(translate.ctx.tcx, func);
-        translate_defining_axiom(translate, func, &app, body)
+
+        translate.set_fuel_context(FuelContext::head());
+        let app_pattern = translate.t_symbolic(&app).into_dynamic(translate.ctx);
+
+        // reuse same fuel in body
+        let quantified_fuel = translate
+            .fuel_context_mut()
+            .take_quantified_fuel()
+            .unwrap_or_default();
+        translate.set_fuel_context(FuelContext::body_with_fuel(quantified_fuel));
+        let symbolic_app = translate.t_symbolic(&app).into_dynamic(translate.ctx);
+        let symbolic_body = translate.t_symbolic(body).into_dynamic(translate.ctx);
+
+        let scope = create_call_scope(translate, func);
+        let axiom = scope.forall(
+            &[&Pattern::new(
+                translate.ctx.ctx,
+                &[&app_pattern as &dyn Ast<'ctx>],
+            )],
+            &symbolic_app.smt_eq(&symbolic_body),
+        );
+
+        translate.set_fuel_context(FuelContext::Call); // reset to default
+
+        axiom
     })
 }
 
@@ -230,12 +239,13 @@ pub fn return_value_invariant<'smt, 'ctx>(
 /// Translates an arbitrary user defined axiom, that might contain references to limited functions.
 /// If the axiom contains a limited function, the whole axiom is wrapped in a `forall`
 /// quantifying over the fuel.
+///
+/// For the usual case that the axiom starts with a `forall` the `forall fuel: Fuel` is merged with
+/// the `forall` of the axiom. Additionally, any provided triggers require a non-zero fuel value.
 pub fn free_axiom<'smt, 'ctx>(
     translate: &mut TranslateExprs<'smt, 'ctx>,
     axiom_decl: &AxiomDecl,
 ) -> Bool<'ctx> {
-    translate.set_fuel_context(FuelContext::body());
-
     let axiom = match &axiom_decl.axiom.kind {
         // Optimisation: If the axiom starts with a forall -> merge the `forall fuel: Fuel` with
         //               the `forall` of the axiom.
@@ -249,15 +259,24 @@ pub fn free_axiom<'smt, 'ctx>(
             operand,
         ) => {
             // TODO: duplicate logic from TranslateExpression::t_bool
-            let operand = translate.t_bool(operand);
+            translate.set_fuel_context(FuelContext::head());
             let patterns: Vec<_> = translate.t_triggers(&ann.triggers);
             let patterns: Vec<_> = patterns.iter().collect();
+
+            let quantified_fuel = translate
+                .fuel_context_mut()
+                .take_quantified_fuel()
+                .unwrap_or_default();
+            translate.set_fuel_context(FuelContext::body_with_fuel(quantified_fuel));
+            let operand = translate.t_bool(operand);
 
             let mut scope = translate.mk_scope(quant_vars);
             scope.extend(translate.fuel_context().quantified_fuel_scope());
             scope.forall(&patterns, &operand)
         }
         _ => {
+            translate.set_fuel_context(FuelContext::body());
+
             let mut axiom = translate.t_bool(&axiom_decl.axiom);
             if let Some(fuel_scope) = translate.fuel_context().quantified_fuel_scope() {
                 axiom = fuel_scope.forall(&[], &axiom);
