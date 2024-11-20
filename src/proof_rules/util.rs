@@ -210,9 +210,10 @@ pub fn generate_proc(
     tcx: &TyCtx,
 ) -> DeclKind {
     // construct the name of the new procedure by appending the proc name to the base proc name
-    let ident = Ident::with_dummy_span(Symbol::intern(
-        format!("{}_{}", base_proc_ident.name, proc_info.name).as_str(),
-    ));
+    let ident = Ident::with_dummy_file_span(
+        Symbol::intern(format!("{}_{}", base_proc_ident.name, proc_info.name).as_str()),
+        span.file,
+    );
     // get a fresh ident to avoid name conflicts
     let name = tcx.fresh_ident(ident, ident.span.variant(SpanVariant::Encoding));
 
