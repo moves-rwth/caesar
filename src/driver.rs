@@ -5,6 +5,7 @@ use std::{
     fs::{create_dir_all, File},
     io::Write,
     ops::{Deref, DerefMut},
+    path::PathBuf,
 };
 
 use crate::{
@@ -71,7 +72,10 @@ use tracing::{info_span, instrument, trace};
 
 /// Human-readable name for a source unit. Used for debugging and error messages.
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct SourceUnitName(String);
+pub struct SourceUnitName {
+    short_path: String,
+    decl_name: Option<String>,
+}
 
 impl SourceUnitName {
     fn new_raw(source_file_path: &SourceFilePath) -> SourceUnitName {
@@ -80,22 +84,42 @@ impl SourceUnitName {
             .unwrap()
             .to_string_lossy()
             .to_string();
-        SourceUnitName(short_path)
+        SourceUnitName {
+            short_path,
+            decl_name: None,
+        }
     }
 
     fn new_decl(source_file_path: &SourceFilePath, decl: &DeclKind) -> SourceUnitName {
-        let short_path = source_file_path
-            .relative_to_cwd()
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
-        SourceUnitName(format!("{}::{}", short_path, decl.name().name))
+        let mut res = Self::new_raw(source_file_path);
+        res.decl_name = Some(decl.name().name.to_string());
+        res
+    }
+
+    /// Create a filne name for this source unit with the given file extension.
+    ///
+    /// This is used to create e.g. SMT-LIB output files for debugging. It is
+    /// not necessarily related to the actual file name of the source unit.
+    pub fn to_file_name(&self, extension: &str) -> PathBuf {
+        let file_name = match &self.decl_name {
+            Some(decl_name) => {
+                // On Windows, `:` is not allowed in paths. Use `__` instead.
+                let sep = if cfg!(windows) { "__" } else { "::" };
+                format!("{}{}{}.{}", &self.short_path, sep, decl_name, extension)
+            }
+            None => format!("{}.{}", &self.short_path, extension),
+        };
+        PathBuf::from(file_name)
     }
 }
 
 impl fmt::Display for SourceUnitName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
+        if let Some(decl_name) = &self.decl_name {
+            write!(f, "{}::{}", &self.short_path, decl_name)
+        } else {
+            write!(f, "{}", &self.short_path)
+        }
     }
 }
 
@@ -893,7 +917,7 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
                 println!("\n; --- Solver SMT-LIB ---\n{}\n", smtlib);
             }
             if let Some(smt_dir) = &options.smt_dir {
-                let file_path = smt_dir.join(format!("{}.smt2", name));
+                let file_path = smt_dir.join(name.to_file_name("smt2"));
                 create_dir_all(file_path.parent().unwrap())?;
                 let mut file = File::create(&file_path)?;
                 let mut comment_writer = PrefixWriter::new("; ".as_bytes(), &mut file);
