@@ -290,20 +290,20 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                         Spanned::new(span, StmtKind::Assume(Direction::Down, assume_expr))
                     }
                     Direction::Up => {
-                        // coassert ite(slice_var, top, bot)
-                        let assert_expr = builder.ite(
+                        // coassert ite(slice_var, bot, top)
+                        let coassert_expr = builder.ite(
                             Some(spec_ty.clone()),
                             slice_var.clone(),
-                            builder.top_lit(&spec_ty),
                             builder.bot_lit(&spec_ty),
+                            builder.top_lit(&spec_ty),
                         );
-                        Spanned::new(span, StmtKind::Assert(Direction::Up, assert_expr))
+                        Spanned::new(span, StmtKind::Assert(Direction::Up, coassert_expr))
                     }
                 };
 
                 // create the slice statements
-                let lhs_slice_var = self.add_slice_stmt(s.span, effect);
-                let rhs_slice_var = self.add_slice_stmt(s.span, effect);
+                let lhs_slice_var = self.add_slice_stmt(lhs.span, effect);
+                let rhs_slice_var = self.add_slice_stmt(rhs.span, effect);
 
                 // at least one of the two statements must always be enabled
                 self.slice_stmts.constraints.push(builder.binary(
@@ -332,30 +332,30 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
 
                 let generate_slice_stmt = |slice_var: Expr| match dir {
                     Direction::Down => {
-                        // assert ite(slice_var, bot, top)
-                        let assume_expr = builder.ite(
-                            Some(spec_ty.clone()),
-                            slice_var.clone(),
-                            builder.top_lit(&spec_ty),
-                            builder.bot_lit(&spec_ty),
-                        );
-                        Spanned::new(span, StmtKind::Assert(Direction::Down, assume_expr))
-                    }
-                    Direction::Up => {
-                        // coassume ite(slice_var, top, bot)
+                        // assert ite(slice_var, top, bot)
                         let assert_expr = builder.ite(
                             Some(spec_ty.clone()),
                             slice_var.clone(),
                             builder.top_lit(&spec_ty),
                             builder.bot_lit(&spec_ty),
                         );
-                        Spanned::new(span, StmtKind::Assume(Direction::Up, assert_expr))
+                        Spanned::new(span, StmtKind::Assert(Direction::Down, assert_expr))
+                    }
+                    Direction::Up => {
+                        // coassume ite(slice_var, bot, top)
+                        let coassume_expr = builder.ite(
+                            Some(spec_ty.clone()),
+                            slice_var.clone(),
+                            builder.bot_lit(&spec_ty),
+                            builder.top_lit(&spec_ty),
+                        );
+                        Spanned::new(span, StmtKind::Assume(Direction::Up, coassume_expr))
                     }
                 };
 
                 // create the slice statements
-                let lhs_slice_var = self.add_slice_stmt(s.span, effect);
-                let rhs_slice_var = self.add_slice_stmt(s.span, effect);
+                let lhs_slice_var = self.add_slice_stmt(lhs.span, effect);
+                let rhs_slice_var = self.add_slice_stmt(rhs.span, effect);
 
                 // at least one of the two statements must always be enabled
                 self.slice_stmts.constraints.push(builder.binary(
