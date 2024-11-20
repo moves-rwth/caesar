@@ -676,7 +676,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
 
         let mut slice_solver = SliceSolver::new(slice_vars.clone(), translate, prover);
         let failing_slice_options = SliceSolveOptions {
-            globally_optimal: true,
+            globally_optimal: !options.slice_options.slice_error_first,
             continue_on_unknown: false,
         };
         let (result, mut slice_model) =

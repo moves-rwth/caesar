@@ -187,10 +187,14 @@ pub struct Options {
 
 #[derive(Debug, Default, StructOpt)]
 pub struct SliceOptions {
-    /// Do not try to slice after an error occurs. Just return the first
-    /// counterexample.
+    /// Do not try to slice when an error occurs.
     #[structopt(long)]
     pub no_slice_error: bool,
+
+    /// Do not try to minimize the error slice and just return the first
+    /// counterexample.
+    #[structopt(long)]
+    pub slice_error_first: bool,
 
     /// Enable slicing tick/reward statements during slicing for errors.
     #[structopt(long)]
@@ -597,13 +601,13 @@ fn verify_files_main(
         // 4. Desugaring: transforming spec calls to procs
         verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
 
+        // 5. Prepare slicing
+        let slice_vars = verify_unit.prepare_slicing(&options.slice_options, &mut tcx, server)?;
+
         // print HeyVL core after desugaring if requested
         if options.print_core {
             println!("{}: HeyVL core query:\n{}\n", name, *verify_unit);
         }
-
-        // 5. Prepare slicing
-        let slice_vars = verify_unit.prepare_slicing(&options.slice_options, &mut tcx, server)?;
 
         // 6. Generating verification conditions.
         let mut vcgen = Vcgen::new(&tcx, options.explain_core_vc);
