@@ -27,7 +27,6 @@ use crate::{
 use ast::{Diagnostic, FileId};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
-use procs::add_default_specs;
 use proof_rules::init_encodings;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
 use servers::{CliServer, LspServer, Server, ServerError};
@@ -466,8 +465,6 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
     source_unit.enter().resolve(&mut resolve)?;
 
     // 3. Type checking
-    add_default_specs(&mut tcx);
-
     let mut tycheck = Tycheck::new(&mut tcx);
 
     let mut entered = source_unit.enter();
@@ -535,8 +532,6 @@ fn verify_files_main(
     }
 
     // 3. Type checking
-    add_default_specs(&mut tcx);
-
     let mut tycheck = Tycheck::new(&mut tcx);
     for source_unit in &mut source_units {
         let mut source_unit = source_unit.enter();
