@@ -149,7 +149,7 @@ impl Files {
     }
 
     pub fn get(&self, file_id: FileId) -> Option<&Arc<StoredFile>> {
-        assert_ne!(file_id.0, 0);
+        assert_ne!(file_id, FileId::DUMMY);
         self.files.get((file_id.0 - 1) as usize)
     }
 
