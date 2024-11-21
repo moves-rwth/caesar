@@ -3,7 +3,7 @@ use std::{collections::HashSet, time::Duration};
 use tracing::{debug, info, info_span, instrument, warn};
 use z3::{
     ast::{Bool, Dynamic},
-    SatResult,
+    Model, SatResult,
 };
 use z3rro::{
     model::InstrumentedModel,
@@ -73,6 +73,9 @@ impl<'ctx> SliceSolver<'ctx> {
             .collect();
 
         // add the constraints to the solver
+        // TODO: for exists-forall, we must add the constraints to the
+        // existential bound, otherwise we get a slice as a result that doesn't
+        // satisfy the constraints.
         for slice_constraint in &slice_vars.constraints {
             prover.add_assumption(&translate.t_bool(slice_constraint));
         }
@@ -171,7 +174,7 @@ impl<'ctx> SliceSolver<'ctx> {
         if exists_forall_solver.check_sat() == SatResult::Sat {
             let model = InstrumentedModel::new(exists_forall_solver.get_model().unwrap());
             let slice_model =
-                SliceModel::extract_model(SliceMode::Verify, &self.slice_stmts, selection, &model);
+                SliceModel::from_model(SliceMode::Verify, &self.slice_stmts, selection, &model);
             Ok(Some(slice_model))
         } else {
             Ok(None)
@@ -199,17 +202,19 @@ impl<'ctx> SliceSolver<'ctx> {
         self.prover.add_assumption(&inactive_formula);
         let res = self.prover.check_proof_assuming(&active_toggle_values);
 
+        let mut slice_searcher = SliceModelSearch::new(active_toggle_values.clone());
         if let ProveResult::Proof = res {
-            let slice_model = SliceModel::extract_enabled(
+            slice_searcher.found_active(self.prover.get_unsat_core());
+        }
+
+        Ok(slice_searcher.finish().map(|minimal_unsat| {
+            SliceModel::from_enabled(
                 SliceMode::Verify,
                 &self.slice_stmts,
-                selection,
-                self.prover.get_unsat_core(),
-            );
-            Ok(Some(slice_model))
-        } else {
-            Ok(None)
-        }
+                selection.clone(),
+                minimal_unsat,
+            )
+        }))
     }
 
     /// Get a "slice while verified" from a minimal unsatisfiable subset
@@ -234,38 +239,33 @@ impl<'ctx> SliceSolver<'ctx> {
         self.prover.add_assumption(&inactive_formula);
 
         // TODO: re-use the unsat core from the proof instead of starting fresh
-        let mut optimum_so_far: Option<SliceModel> = None;
+        let mut slice_searcher = SliceModelSearch::new(active_toggle_values.clone());
         let mut subset_explorer =
             SubsetExploration::new(self.prover.solver().get_context(), active_toggle_values);
         while let Some(extremal_set) =
             slice_next_extremal_set(&mut subset_explorer, &mut self.prover, options, limits_ref)?
         {
             if let ExtremalSet::MinimalUnsat(minimal_unsat) = extremal_set {
-                debug!(enabled = minimal_unsat.len(), "found minimal unsat subset");
-
                 let minimal_unsat: Vec<_> = minimal_unsat.into_iter().collect();
-                let slice_model = SliceModel::extract_enabled(
-                    SliceMode::Verify,
-                    &self.slice_stmts,
-                    selection.clone(),
-                    minimal_unsat,
-                );
+                slice_searcher.found_active(minimal_unsat);
+
+                // stop at the first nontrivial result if requested
                 if !options.globally_optimal {
-                    return Ok(Some(slice_model));
-                }
-                if let Some(ref mut inner_optimum_so_far) = &mut optimum_so_far {
-                    if inner_optimum_so_far.count_sliced_stmts() > slice_model.count_sliced_stmts()
-                    {
-                        *inner_optimum_so_far = slice_model;
-                    }
-                } else {
-                    optimum_so_far = Some(slice_model);
+                    break;
                 }
             } else {
                 // continue
             }
         }
-        Ok(optimum_so_far)
+
+        Ok(slice_searcher.finish().map(|minimal_unsat| {
+            SliceModel::from_enabled(
+                SliceMode::Verify,
+                &self.slice_stmts,
+                selection.clone(),
+                minimal_unsat,
+            )
+        }))
     }
 
     /// Minimize the number of statements while the program is rejected with a counterexample.
@@ -292,16 +292,90 @@ impl<'ctx> SliceSolver<'ctx> {
         slice_sat_binary_search(&mut self.prover, &active_toggle_values, options, limits_ref)?;
         let res = self.prover.check_proof();
         let slice_model = if let ProveResult::Counterexample(model) = &res {
-            Some(SliceModel::extract_model(
-                SliceMode::Error,
-                &self.slice_stmts,
-                selection,
-                model,
-            ))
+            let slice_model =
+                SliceModel::from_model(SliceMode::Error, &self.slice_stmts, selection, model);
+            Some(slice_model)
         } else {
             None
         };
         Ok((res, slice_model))
+    }
+}
+
+/// A structure to keep track of some information during the slice search.
+struct SliceModelSearch<'ctx> {
+    active_slice_vars: Vec<Bool<'ctx>>,
+    first_accepted: Option<usize>,
+    num_slices_accepted: usize,
+    optimum_so_far: Option<Vec<Bool<'ctx>>>,
+}
+
+impl<'ctx> SliceModelSearch<'ctx> {
+    fn new(active_slice_vars: Vec<Bool<'ctx>>) -> Self {
+        SliceModelSearch {
+            active_slice_vars,
+            first_accepted: None,
+            num_slices_accepted: 0,
+            optimum_so_far: None,
+        }
+    }
+
+    fn found_model(&mut self, model: Model<'ctx>) -> usize {
+        let slice_vars: Vec<_> = self
+            .active_slice_vars
+            .iter()
+            .filter(move |var| {
+                // evaluate a value in the model without model completion
+                let symbolic: Bool<'ctx> = model.eval(*var, false).unwrap();
+                // if it is a concrete value in the model, use it.
+                // otherwise it is irrelevant and we set it to false.
+                symbolic.as_bool().unwrap_or(false)
+            })
+            .cloned()
+            .collect();
+        self.found_active(slice_vars)
+    }
+
+    fn found_active(&mut self, slice_vars: Vec<Bool<'ctx>>) -> usize {
+        let slice_vars_len = slice_vars.len();
+
+        debug!(
+            slice_size = slice_vars_len,
+            removed_statements = self.active_slice_vars.len() - slice_vars_len,
+            "found a slice"
+        );
+
+        self.num_slices_accepted += 1;
+
+        if self.first_accepted.is_none() {
+            self.first_accepted = Some(slice_vars_len);
+        }
+
+        if let Some(ref mut optimum_so_far) = &mut self.optimum_so_far {
+            if optimum_so_far.len() > slice_vars_len {
+                *optimum_so_far = slice_vars;
+            }
+        } else {
+            self.optimum_so_far = Some(slice_vars);
+        }
+
+        slice_vars_len
+    }
+
+    fn finish(self) -> Option<Vec<Bool<'ctx>>> {
+        if let Some(slice_model) = self.optimum_so_far {
+            info!(
+                slice_size = slice_model.len(),
+                removed_statements = self.active_slice_vars.len() - slice_model.len(),
+                from_first_model = self.first_accepted.map(|x| x - slice_model.len()),
+                found_slices = self.num_slices_accepted,
+                "slicing successful"
+            );
+            Some(slice_model)
+        } else {
+            info!("no slice accepted");
+            None
+        }
     }
 }
 
@@ -342,9 +416,8 @@ fn slice_sat_binary_search<'ctx>(
     let min_least_bound = 0;
     let mut minimize = PartialMinimizer::new(min_least_bound..=slice_vars.len());
 
-    let mut first_acceptance = None;
-
-    let mut cur_solver_n: Option<usize> = None;
+    let mut cur_solver_n = None;
+    let mut slice_searcher = SliceModelSearch::new(active_slice_vars.to_vec());
     while let Some(n) = minimize.next_trial() {
         cur_solver_n = Some(n);
         limits_ref.check_limits()?;
@@ -369,18 +442,8 @@ fn slice_sat_binary_search<'ctx>(
         match res {
             SatResult::Sat => {
                 let model = prover.get_model().unwrap();
-                // how many variables are actually true in the model? we can use
-                // this as a tighter upper bound instead of just `mid`.
-                let num_actually_true = slice_vars
-                    .iter()
-                    .filter(|var| {
-                        // evaluate a value in the model without model completion
-                        let symbolic: Bool<'ctx> = model.eval(var.0, false).unwrap();
-                        // if it is a concrete value in the model, use it.
-                        // otherwise it is irrelevant and we set it to false.
-                        symbolic.as_bool().unwrap_or(false)
-                    })
-                    .count();
+                let num_actually_true = slice_searcher.found_model(model);
+
                 assert!(num_actually_true <= n);
                 if num_actually_true != n {
                     debug!(
@@ -389,10 +452,8 @@ fn slice_sat_binary_search<'ctx>(
                         "obtained a better upper bound from model"
                     );
                 }
+
                 minimize.add_result(num_actually_true, PartialMinimizeResult::AcceptUpwards);
-                if first_acceptance.is_none() {
-                    first_acceptance = Some(num_actually_true);
-                }
 
                 // stop at the first nontrivial result if requested
                 if !options.globally_optimal && n < slice_vars.len() {
@@ -414,16 +475,8 @@ fn slice_sat_binary_search<'ctx>(
         }
     }
 
-    if let Some(min_accept) = minimize.min_accept() {
-        info!(
-            enabled = min_accept,
-            removed_statements = slice_vars.len() - min_accept,
-            from_first_model = first_acceptance.map(|x| x - min_accept),
-            "sat slicing successful"
-        );
-    } else {
-        info!("no sat slice");
-    }
+    // emit tracing info
+    slice_searcher.finish();
 
     let enabled = minimize
         .min_accept()

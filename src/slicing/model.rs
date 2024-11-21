@@ -32,7 +32,7 @@ pub enum SliceResult {
 }
 
 impl SliceModel {
-    pub(super) fn extract_model<'ctx>(
+    pub(super) fn from_model<'ctx>(
         mode: SliceMode,
         slice_vars: &[(SliceStmt, Bool<'ctx>)],
         selection: SliceSelection,
@@ -52,7 +52,7 @@ impl SliceModel {
         SliceModel { mode, stmts }
     }
 
-    pub(super) fn extract_enabled<'ctx>(
+    pub(super) fn from_enabled<'ctx>(
         mode: SliceMode,
         slice_vars: &[(SliceStmt, Bool<'ctx>)],
         selection: SliceSelection,
