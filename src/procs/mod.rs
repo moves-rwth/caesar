@@ -6,9 +6,3 @@ pub mod proc_verify;
 mod spec_call;
 
 pub use spec_call::SpecCall;
-
-use crate::{
-    ast::{DeclKind, Direction, ExprBuilder, ProcSpec, TyKind},
-    tyctx::TyCtx,
-};
-
