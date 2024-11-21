@@ -28,29 +28,29 @@ use super::{
     util::PartialMinimizer,
 };
 
+/// Configuration for the slice solver.
 #[derive(Debug)]
 pub struct SliceSolveOptions {
+    /// Should we search for the globally optimal slice?
     pub globally_optimal: bool,
+    /// Should we continue on "unknown" results from the solver or stop with an
+    /// error?
     pub continue_on_unknown: bool,
 }
 
-/// A structure that wraps the other SMT structures to do SMT-based program
-/// slicing by doing a binary search of upper bounds on the number of statements
-/// we're keeping in the program.
-pub struct SliceSolver<'ctx> {
-    prover: Prover<'ctx>,
-    slice_stmts: Vec<(SliceStmt, Bool<'ctx>)>,
-    universally_bound: Vec<Dynamic<'ctx>>,
+/// Extended version of [`SliceStmts`] with SMT variables attached.
+pub struct SmtSliceStmts<'ctx> {
+    pub(super) stmts: Vec<(SliceStmt, Bool<'ctx>)>,
+    constraints: Bool<'ctx>,
 }
 
-impl<'ctx> SliceSolver<'ctx> {
-    pub fn new<'smt>(
-        slice_vars: SliceStmts,
-        translate: &mut TranslateExprs<'smt, 'ctx>,
-        mut prover: Prover<'ctx>,
-    ) -> Self {
+impl<'ctx> SmtSliceStmts<'ctx> {
+    fn new<'smt>(slice_stmts: SliceStmts, translate: &mut TranslateExprs<'smt, 'ctx>) -> Self {
         let builder = ExprBuilder::new(Span::dummy_span());
-        let toggle_values: Vec<(SliceStmt, Bool<'_>)> = slice_vars
+
+        // retrieve the Bool SMT variable from the translator for each
+        // statement. they were already created when we translated the VC.
+        let stmts: Vec<(SliceStmt, Bool<'_>)> = slice_stmts
             .stmts
             .into_iter()
             .map(|stmt| {
@@ -59,69 +59,94 @@ impl<'ctx> SliceSolver<'ctx> {
             })
             .collect();
 
-        let universally_bound = translate
+        // translate the constraints to SMT
+        let constraints = Bool::and(
+            translate.ctx.ctx(),
+            &slice_stmts
+                .constraints
+                .iter()
+                .map(|constraint| translate.t_bool(constraint))
+                .collect::<Vec<_>>(),
+        );
+
+        SmtSliceStmts { stmts, constraints }
+    }
+
+    // collect all top-level variables, excluding those for slicing. they
+    // will be universally quantified for the exists-forall translation.
+    fn universally_bound<'smt>(
+        &self,
+        translate: &TranslateExprs<'smt, 'ctx>,
+    ) -> Vec<Dynamic<'ctx>> {
+        translate
             .local_scope()
             .get_bounds()
             .filter(|bound| {
                 if let Some(bound) = bound.as_bool() {
-                    toggle_values.iter().all(|(_, b)| b != &bound)
+                    self.stmts.iter().all(|(_, b)| b != &bound)
                 } else {
                     true
                 }
             })
             .cloned()
-            .collect();
+            .collect()
+    }
 
-        // add the constraints to the solver
-        // TODO: for exists-forall, we must add the constraints to the
-        // existential bound, otherwise we get a slice as a result that doesn't
-        // satisfy the constraints.
-        for slice_constraint in &slice_vars.constraints {
-            prover.add_assumption(&translate.t_bool(slice_constraint));
+    fn split_by_selection(&self, selection: &SliceSelection) -> (Vec<Bool<'ctx>>, Vec<Bool<'ctx>>) {
+        let mut active = vec![];
+        let mut inactive = vec![];
+        for (stmt, var) in &self.stmts {
+            if selection.enables(&stmt.selection) {
+                active.push(var.clone());
+            } else {
+                inactive.push(var.clone());
+            }
         }
+        (active, inactive)
+    }
+}
+
+/// A structure that wraps the other SMT structures to do SMT-based program
+/// slicing by doing a binary search of upper bounds on the number of statements
+/// we're keeping in the program.
+pub struct SliceSolver<'ctx> {
+    prover: Prover<'ctx>,
+    slice_stmts: SmtSliceStmts<'ctx>,
+    universally_bound: Vec<Dynamic<'ctx>>,
+}
+
+impl<'ctx> SliceSolver<'ctx> {
+    pub fn new<'smt>(
+        slice_stmts: SliceStmts,
+        translate: &mut TranslateExprs<'smt, 'ctx>,
+        mut prover: Prover<'ctx>,
+    ) -> Self {
+        let slice_stmts = SmtSliceStmts::new(slice_stmts, translate);
+        let universally_bound = slice_stmts.universally_bound(translate);
 
         prover.push();
         prover.push();
 
         SliceSolver {
             prover,
-            slice_stmts: toggle_values,
+            slice_stmts,
             universally_bound,
         }
     }
 
-    fn translate_selection(&self, selection: &SliceSelection) -> (Bool<'ctx>, Vec<Bool<'ctx>>) {
-        // collect Bool values for those variables we want to optimize
-        let active_toggle_values: Vec<_> = self
-            .slice_stmts
-            .iter()
-            .filter(|(stmt, _)| selection.enables(&stmt.selection))
-            .map(|(_, value)| value.clone())
-            .collect();
+    fn translate_selection(&self, selection: &SliceSelection) -> (Vec<Bool<'ctx>>, Bool<'ctx>) {
+        let (active, inactive) = self.slice_stmts.split_by_selection(selection);
 
-        // collect Bool values for those variables we do not want to optimize, which must be set to true.
-        let inactive_toggle_values: Vec<_> = self
-            .slice_stmts
-            .iter()
-            .filter(|(stmt, _)| !selection.enables(&stmt.selection))
-            .map(|(_, value)| value)
-            .collect();
-        let inactive_formula = Bool::and(
-            self.prover().solver().get_context(),
-            &inactive_toggle_values,
-        );
+        // inactive statements must be enabled in the slice
+        let inactive_formula = Bool::and(self.prover.solver().get_context(), &inactive);
 
         debug!(
-            active = active_toggle_values.len(),
-            inactive = inactive_toggle_values.len(),
+            active = active.len(),
+            inactive = inactive.len(),
             "translated slice selection"
         );
 
-        (inactive_formula, active_toggle_values)
-    }
-
-    pub fn prover(&self) -> &Prover<'ctx> {
-        &self.prover
+        (active, inactive_formula)
     }
 
     /*
@@ -155,12 +180,13 @@ impl<'ctx> SliceSolver<'ctx> {
         self.prover.push();
 
         let selection = SliceSelection::VERIFIED_SELECTION;
-        let (inactive_formula, active_toggle_values) = self.translate_selection(&selection);
+        let (active_toggle_values, inactive_formula) = self.translate_selection(&selection);
 
         let (prover, universally_bound) = (&mut self.prover, &self.universally_bound);
 
-        tracing::warn!("The --slice-verify option is unsound if uninterpreted functions are used.");
+        tracing::warn!("The --slice-verify option is unsound if uninterpreted functions are used."); // TODO
 
+        prover.add_assumption(&self.slice_stmts.constraints);
         let mut exists_forall_solver = prover.to_exists_forall(universally_bound);
         exists_forall_solver.add_assumption(&inactive_formula);
         exists_forall_solver.push();
@@ -193,12 +219,13 @@ impl<'ctx> SliceSolver<'ctx> {
         self.prover.push();
 
         let selection = SliceSelection::VERIFIED_SELECTION;
-        let (inactive_formula, active_toggle_values) = self.translate_selection(&selection);
+        let (active_toggle_values, inactive_formula) = self.translate_selection(&selection);
 
         if let Some(timeout) = limits_ref.time_left() {
             self.prover.set_timeout(timeout);
         }
 
+        self.prover.add_assumption(&self.slice_stmts.constraints);
         self.prover.add_assumption(&inactive_formula);
         let res = self.prover.check_proof_assuming(&active_toggle_values);
 
@@ -234,8 +261,9 @@ impl<'ctx> SliceSolver<'ctx> {
         self.prover.push();
 
         let selection = SliceSelection::VERIFIED_SELECTION;
-        let (inactive_formula, active_toggle_values) = self.translate_selection(&selection);
+        let (active_toggle_values, inactive_formula) = self.translate_selection(&selection);
 
+        self.prover.add_assumption(&self.slice_stmts.constraints);
         self.prover.add_assumption(&inactive_formula);
 
         // TODO: re-use the unsat core from the proof instead of starting fresh
@@ -284,8 +312,9 @@ impl<'ctx> SliceSolver<'ctx> {
         self.prover.push();
 
         let selection = SliceSelection::FAILURE_SELECTION;
-        let (inactive_formula, active_toggle_values) = self.translate_selection(&selection);
+        let (active_toggle_values, inactive_formula) = self.translate_selection(&selection);
 
+        self.prover.add_assumption(&self.slice_stmts.constraints);
         self.prover.add_assumption(&inactive_formula);
         self.prover.push();
 

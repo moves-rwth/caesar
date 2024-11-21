@@ -7,7 +7,7 @@ use z3rro::model::{InstrumentedModel, SmtEval, SmtEvalError};
 
 use crate::ast::{Diagnostic, Ident, Label, Span, Symbol};
 
-use super::{selection::SliceSelection, transform::SliceStmt};
+use super::{selection::SliceSelection, solver::SmtSliceStmts, transform::SliceStmt};
 
 /// Do we have a slice that verifies or that errors?
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -34,11 +34,12 @@ pub enum SliceResult {
 impl SliceModel {
     pub(super) fn from_model<'ctx>(
         mode: SliceMode,
-        slice_vars: &[(SliceStmt, Bool<'ctx>)],
+        slice_stmts: &SmtSliceStmts<'ctx>,
         selection: SliceSelection,
         model: &InstrumentedModel<'ctx>,
     ) -> SliceModel {
-        let stmts = slice_vars
+        let stmts = slice_stmts
+            .stmts
             .iter()
             .map(|(slice_stmt, var)| {
                 let status = model.atomically(|| var.eval(model));
@@ -54,12 +55,13 @@ impl SliceModel {
 
     pub(super) fn from_enabled<'ctx>(
         mode: SliceMode,
-        slice_vars: &[(SliceStmt, Bool<'ctx>)],
+        slice_stmts: &SmtSliceStmts<'ctx>,
         selection: SliceSelection,
         enabled: Vec<Bool<'ctx>>,
     ) -> SliceModel {
         let enabled: HashSet<Bool<'ctx>> = HashSet::from_iter(enabled);
-        let stmts = slice_vars
+        let stmts = slice_stmts
+            .stmts
             .iter()
             .filter(|(stmt, _var)| selection.enables(&stmt.selection))
             .map(|(slice_stmt, var)| {
