@@ -12,10 +12,7 @@ use crate::VerifyError;
 fn test_k_induction_transform() {
     let mut test_string = String::from(
         r#"
-            proc main() -> ()
-                pre ∞
-                post ∞
-            {
+            proc main() -> () {
                 var x: UInt
                 {
                     @error_msg("pre might not entail the invariant (pre ≰ I)")
@@ -54,10 +51,7 @@ fn test_k_induction_transform() {
 fn test_unroll_transform() {
     let mut test_string = String::from(
         r#"
-            proc main() -> ()
-                pre ∞
-                post ∞
-            {
+            proc main() -> () {
                 var x: UInt
                 {
                     if (1 <= x) {
@@ -90,10 +84,7 @@ fn test_unroll_transform() {
 fn test_omega_transform() {
     let mut test_string = String::from(
         r#"
-            proc main() -> ()
-                pre ∞
-                post ∞
-            {
+            proc main() -> () {
                 var x: UInt
                 {
                     cohavoc n
@@ -310,10 +301,7 @@ fn test_past_transform() {
 
                 }
             }
-            proc main() -> ()
-                pre ∞
-                post ∞
-            {
+            proc main() -> () {
                 var x: UInt
                 {  }
             }
@@ -380,10 +368,7 @@ fn test_ast_transform() {
             x = init_x
             x = (x - 1)
         }
-        proc main() -> ()
-            pre ∞
-            post ∞
-        {
+        proc main() -> () {
             var x: UInt
             {  }
         }
@@ -435,7 +420,7 @@ fn test_double_annotation() {
                 if prob_choice {
                     x = x - 2
                 } else {
-                    x = x + 2   
+                    x = x + 2
                 }
             } else {
                 x = x + 1
@@ -467,10 +452,7 @@ fn test_k_induction_nested_transform() {
 
     let mut test_string = String::from(
         r#"
-            proc main() -> ()
-                pre ∞
-                post ∞
-            {
+            proc main() -> () {
                 var x: UInt
                 var y: UInt
                 {
@@ -675,7 +657,7 @@ fn test_correct_calculus_call() {
 #[test]
 fn test_missing_calculus_call() {
     let source = r#"
-            
+
             proc default_proc() -> () {}
 
             @wp
