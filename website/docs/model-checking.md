@@ -5,6 +5,10 @@ description: Caesar can export models to the JANI format.
 
 # Model Checking
 
+```mdx-code-block
+import Link from '@docusaurus/Link';
+```
+
 Caesar has some support to export probabilistic programs written in (an executable fragment of) HeyVL to [the *jani-model* format](https://jani-spec.org/).
 The JANI project defines exchange formats for quantitative model checking problems (and more).
 
@@ -20,6 +24,11 @@ There are sure to be bugs and missing functionality.
 The encoding is sure to change in the near future.
 
 :::
+
+<small>
+  Note: Caesar should not be confused with the set of tools in the <Link to="https://cadp.inria.fr/">CADP toolbox</Link> by INRIA, which includes tools like CAESAR, CAESAR.ADT, or OPEN/CAESAR.
+  These also enable model checking of software, but are unrelated to this project.
+</small>
 
 ## Usage
 

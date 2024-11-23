@@ -87,11 +87,16 @@ const config = {
             label: 'Docs',
           },
           {
+            to: '/about',
+            position: 'left',
+            label: 'About',
+          },
+          {to: '/blog', label: 'News', position: 'left'},
+          {
             href: 'https://github.com/moves-rwth/caesar',
             label: 'GitHub',
             position: 'right',
           },
-          {to: '/blog', label: 'News', position: 'left'},
           {to: '/docs/publications', label: 'Publications', position: 'right'},
         ],
       },
@@ -114,8 +119,8 @@ const config = {
                 to: '/docs/stdlib',
               },
               {
-                label: 'pGCL',
-                to: '/docs/pgcl',
+                label: 'Proof Rules',
+                to: '/docs/proof-rules',
               },
             ],
           },
@@ -135,6 +140,10 @@ const config = {
           {
             title: 'More',
             items: [
+              {
+                label: 'About',
+                to: '/about',
+              },
               {
                 label: 'News',
                 to: '/blog',
