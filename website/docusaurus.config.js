@@ -8,7 +8,7 @@ const darkCodeTheme = require('prism-react-renderer/themes/nightOwl');
 const config = {
   title: 'Caesar',
   tagline: 'Verify probabilistic programs with Caesar, a deductive verifier built on the HeyVL intermediate verification language.',
-  favicon: 'img/laurel.svg',
+  favicon: 'img/laurel-square.svg',
 
   // Set the production url of your site here
   url: 'https://www.caesarverifier.org',
