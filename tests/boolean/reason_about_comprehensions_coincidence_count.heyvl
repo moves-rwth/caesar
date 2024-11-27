@@ -6,34 +6,53 @@ domain Count {
     // = sum { int i in (0 : m) :: count { int j in (0 : n) :: f [i] == g[j] } }
 
     // sum_induction_below
-    func sum(lo_s: UInt, hi_s: UInt, lo_c: UInt, hi_c: UInt, f: []Int, g: []Int): Int =
-        ite(lo_s < hi_s, sum(lo_s + 1, hi_s, lo_c, hi_c, f, g) + count(lo_c, hi_c, /* i */ lo_s, f, g), 0)
+    func sum(lo_s: UInt, hi_s: UInt, lo_c: UInt, hi_c: UInt, f: []Int, g: []Int): Int
+    func sum0(lo_s: UInt, hi_s: UInt, lo_c: UInt, hi_c: UInt, f: []Int, g: []Int): Int
 
-    axiom sum_unit forall lo_s: UInt, hi_s: UInt, lo_c: UInt, hi_c: UInt, f: []Int, g: []Int @trigger(sum(lo_s, hi_s, lo_c, hi_c, f, g)) .
-        (forall k: UInt . (lo_s <= k && k < hi_s) ==> (count(lo_c, hi_c, k, f, g) == 0)) ==> (sum(lo_s, hi_s, lo_c, hi_c, f, g) == 0)
+    axiom sum_synonym forall lo_s: UInt, hi_s: UInt, lo_c: UInt, hi_c: UInt, f: []Int, g: []Int @trigger(sum(lo_s, hi_s, lo_c, hi_c, f, g)) .
+        sum(lo_s, hi_s, lo_c, hi_c, f, g) == sum0(lo_s, hi_s, lo_c, hi_c, f, g)
+
+    axiom sum_unit forall lo_s: UInt, hi_s: UInt, lo_c: UInt, hi_c: UInt, f: []Int, g: []Int @trigger(sum0(lo_s, hi_s, lo_c, hi_c, f, g)) .
+        (forall k: UInt . (lo_s <= k && k < hi_s) ==> (count(lo_c, hi_c, k, f, g) == 0)) ==> (sum0(lo_s, hi_s, lo_c, hi_c, f, g) == 0)
+
+    axiom sum_induction_below forall lo_s: UInt, hi_s: UInt, lo_c: UInt, hi_c: UInt, f: []Int, g: []Int @trigger(sum(lo_s, hi_s, lo_c, hi_c, f, g)) .
+        sum0(lo_s, hi_s, lo_c, hi_c, f, g) == ite(lo_s < hi_s, sum0(lo_s + 1, hi_s, lo_c, hi_c, f, g) + count(lo_c, hi_c, /* i */ lo_s, f, g), 0)
+
+    axiom sum_induction_above forall lo_s: UInt, hi_s: UInt, lo_c: UInt, hi_c: UInt, f: []Int, g: []Int @trigger(sum(lo_s, hi_s, lo_c, hi_c, f, g)) .
+        sum0(lo_s, hi_s, lo_c, hi_c, f, g) == ite(lo_s < hi_s, sum0(lo_s, hi_s - 1, lo_c, hi_c, f, g) + count(lo_c, hi_c, /* i */ hi_s - 1, f, g), 0)
 
     axiom sum_split_range forall lo_s: UInt, mid_s: UInt, hi_s: UInt, lo_c: UInt, hi_c: UInt, f: []Int, g: []Int @trigger(sum(lo_s, mid_s, lo_c, hi_c, f, g), sum(mid_s, hi_s, lo_c, hi_c, f, g)) @trigger(sum(lo_s, mid_s, lo_c, hi_c, f, g), sum(lo_s, hi_s, lo_c, hi_c, f, g)) .
-            (lo_s <= mid_s && mid_s <= hi_s) ==> (sum(lo_s, mid_s, lo_c, hi_c, f, g) + sum(mid_s, hi_s, lo_c, hi_c, f, g) == sum(lo_s, hi_s, lo_c, hi_c, f, g))
+            (lo_s <= mid_s && mid_s <= hi_s) ==> (sum0(lo_s, mid_s, lo_c, hi_c, f, g) + sum0(mid_s, hi_s, lo_c, hi_c, f, g) == sum0(lo_s, hi_s, lo_c, hi_c, f, g))
 
-    axiom sum_same_term forall lo_s: UInt, hi_s: UInt, lo_c1: UInt, hi_c1: UInt, f1: []Int, g1: []Int, lo_c2: UInt, hi_c2: UInt, f2: []Int, g2: []Int @trigger(sum(lo_s, hi_s, lo_c1, hi_c1, f1, g1), sum(lo_s, hi_s, lo_c2, hi_c2, f2, g2)) .
-            (forall k: UInt . (lo_s <= k && k < hi_s) ==> (count(lo_c1, hi_c1, k, f1, g1) == count(lo_c2, hi_c2, k, f2, g2))) ==> (sum(lo_s, hi_s, lo_c1, hi_c1, f1, g1) == sum(lo_s, hi_s, lo_c2, hi_c2, f2, g2))
+    axiom sum_same_term forall lo_s: UInt, hi_s: UInt, lo_c1: UInt, hi_c1: UInt, f1: []Int, g1: []Int, lo_c2: UInt, hi_c2: UInt, f2: []Int, g2: []Int @trigger(sum(lo_s, hi_s, lo_c1, hi_c1, f1, g1), sum0(lo_s, hi_s, lo_c2, hi_c2, f2, g2)) .
+            (forall k: UInt . (lo_s <= k && k < hi_s) ==> (count(lo_c1, hi_c1, k, f1, g1) == count(lo_c2, hi_c2, k, f2, g2))) ==> (sum0(lo_s, hi_s, lo_c1, hi_c1, f1, g1) == sum0(lo_s, hi_s, lo_c2, hi_c2, f2, g2))
 
     // count_induction_below
-    func count(lo_c: UInt, hi_c: UInt, i: UInt, f: []Int, g: []Int): Int =
-        ite(lo_c < hi_c, count(lo_c + 1, hi_c, i, f, g) + ite(select(f, i) == select(g, lo_c), 1, 0), 0)
+    func count(lo_c: UInt, hi_c: UInt, i: UInt, f: []Int, g: []Int): Int
+    func count0(lo_c: UInt, hi_c: UInt, i: UInt, f: []Int, g: []Int): Int
 
-    axiom count_unit forall lo_c: UInt, hi_c: UInt, i : UInt, f: []Int, g: []Int @trigger(count(lo_c, hi_c, i, f, g)) .
-            (forall k: UInt . (lo_c <= k && k < hi_c && select(f, i) == select(g, k)) ==> (1 == 0)) ==> (count(lo_c, hi_c, i, f, g) == 0)
+    axiom count_synonym forall lo_c: UInt, hi_c: UInt, i : UInt, f: []Int, g: []Int @trigger(count(lo_c, hi_c, i, f, g)) .
+        count(lo_c, hi_c, i, f, g) == count0(lo_c, hi_c, i, f, g)
+
+    axiom count_unit forall lo_c: UInt, hi_c: UInt, i : UInt, f: []Int, g: []Int @trigger(count0(lo_c, hi_c, i, f, g)) .
+            (forall k: UInt . (lo_c <= k && k < hi_c && select(f, i) == select(g, k)) ==> (1 == 0)) ==> (count0(lo_c, hi_c, i, f, g) == 0)
+
+    axiom count_induction_below forall lo_c: UInt, hi_c: UInt, i : UInt, f: []Int, g: []Int @trigger(count0(lo_c, hi_c, i, f, g)) .
+        count0(lo_c, hi_c, i, f, g) == ite(lo_c < hi_c, count0(lo_c + 1, hi_c, i, f, g) + ite(select(f, i) == select(g, lo_c), 1, 0), 0)
+
+    axiom count_induction_above forall lo_c: UInt, hi_c: UInt, i : UInt, f: []Int, g: []Int @trigger(count(lo_c, hi_c, i, f, g)) .
+        count0(lo_c, hi_c, i, f, g) == ite(lo_c < hi_c, count0(lo_c, hi_c - 1, i, f, g) + ite(select(f, i) == select(g, hi_c - 1), 1, 0), 0)
 
     axiom count_split_range forall lo_c: UInt, mid_c: UInt, hi_c: UInt, i: UInt, f: []Int, g: []Int @trigger(count(lo_c, mid_c, i, f, g), count(mid_c, hi_c, i, f, g)) @trigger(count(lo_c, mid_c, i, f, g), count(lo_c, hi_c, i, f, g)) .
-            (lo_c <= mid_c && mid_c <= hi_c) ==> (count(lo_c, mid_c, i, f, g) + count(mid_c, hi_c, i, f, g) == count(lo_c, hi_c, i, f, g))
+            (lo_c <= mid_c && mid_c <= hi_c) ==> (count0(lo_c, mid_c, i, f, g) + count0(mid_c, hi_c, i, f, g) == count0(lo_c, hi_c, i, f, g))
 
-    axiom count_same_term forall lo_c: UInt, hi_c: UInt, i1: UInt, f1: []Int, g1: []Int, i2: UInt, f2: []Int, g2: []Int @trigger(count(lo_c, hi_c, i1, f1, g1), count(lo_c, hi_c, i2, f2, g2)) .
-            (forall k: UInt . (lo_c <= k && k < hi_c) ==> ((select(f1, i1) == select(g1, k)) == (select(f2, i2) == select(g2, k)))) ==> (count(lo_c, hi_c, i1, f1, g1) == count(lo_c, hi_c, i2, f2, g2))
+    axiom count_same_term forall lo_c: UInt, hi_c: UInt, i1: UInt, f1: []Int, g1: []Int, i2: UInt, f2: []Int, g2: []Int @trigger(count(lo_c, hi_c, i1, f1, g1), count0(lo_c, hi_c, i2, f2, g2)) .
+            (forall k: UInt . (lo_c <= k && k < hi_c) ==> ((select(f1, i1) == select(g1, k)) == (select(f2, i2) == select(g2, k)))) ==> (count0(lo_c, hi_c, i1, f1, g1) == count0(lo_c, hi_c, i2, f2, g2))
 }
 
+
 // todo: currently only the countTest below runs
-/*proc CoincidenceCount1(f: []Int, g: []Int) -> (ct: UInt)
+proc CoincidenceCount1(f: []Int, g: []Int) -> (ct: UInt)
     pre ?(forall i: UInt, j: UInt . (i < j && j < len(f)) ==> (select(f, i) < select(f, j))) // f is sorted list
     pre ?(forall i: UInt, j: UInt . (i < j && j < len(g)) ==> (select(g, i) < select(g, j))) // g is sorted list
     post ?(ct == sum(0, len(f), 0, len(g), f, g))
@@ -61,7 +80,7 @@ domain Count {
             }
         }
     }
-}*/
+}
 
 proc countTest() -> ()
 {
