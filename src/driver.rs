@@ -341,7 +341,7 @@ impl SourceUnit {
             SourceUnit::Raw(block) => {
                 let builder = ExprBuilder::new(Span::dummy_span());
                 let post = builder.top_lit(tcx.spec_ty());
-                explain_raw_vc(tcx, block, post).map(Some)
+                explain_raw_vc(tcx, block, post, Direction::Down).map(Some)
             }
         };
         match explanation {

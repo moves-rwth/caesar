@@ -19,7 +19,7 @@ use crate::{
     intrinsic::annotations::AnnotationKind,
     opt::unfolder::Unfolder,
     pretty::SimplePretty,
-    proof_rules::InvariantAnnotation,
+    proof_rules::{self, InvariantAnnotation, UnrollAnnotation},
     resource_limits::LimitsRef,
     smt::SmtCtx,
     tyctx::TyCtx,
@@ -164,6 +164,14 @@ pub(super) fn explain_annotated_while(
                 {
                     return explain_park_induction(vcgen, &args[0], body);
                 }
+
+                if anno_ref
+                    .as_any()
+                    .downcast_ref::<UnrollAnnotation>()
+                    .is_some()
+                {
+                    return explain_unroll(vcgen, body, args);
+                }
             }
         }
     }
@@ -182,7 +190,7 @@ pub fn explain_decl_vc(
         let body = proc.body.borrow();
         if let Some(ref body) = *body {
             let post = fold_spec(&proc, proc.ensures());
-            let res = explain_raw_vc(tcx, body, post)?;
+            let res = explain_raw_vc(tcx, body, post, proc.direction)?;
             return Ok(Some(res));
         }
     }
@@ -190,8 +198,13 @@ pub fn explain_decl_vc(
 }
 
 /// Explain verification condition generation of a [`Block`] given a post.
-pub fn explain_raw_vc(tcx: &TyCtx, block: &Block, post: Expr) -> Result<VcExplanation, Diagnostic> {
-    let mut vcgen = Vcgen::new(tcx, true);
+pub fn explain_raw_vc(
+    tcx: &TyCtx,
+    block: &Block,
+    post: Expr,
+    direction: Direction,
+) -> Result<VcExplanation, Diagnostic> {
+    let mut vcgen = Vcgen::new(tcx, true, direction);
     vcgen.vcgen_block(block, post)?;
     Ok(vcgen.explanation.unwrap())
 }
@@ -203,6 +216,23 @@ fn explain_park_induction(
 ) -> Result<Expr, Diagnostic> {
     let _inner_pre = vcgen.vcgen_block(body, invariant.clone());
     Ok(invariant.clone())
+}
+
+fn explain_unroll(vcgen: &mut Vcgen, body: &Block, args: &[Expr]) -> Result<Expr, Diagnostic> {
+    let k = proof_rules::lit_u128(&args[0]);
+    let terminator = &args[1];
+    // Generate the expressions inside the loop body
+    let _inner_pre = vcgen.vcgen_block(body, terminator.clone());
+
+    // Generate the expression for the unrolled loop
+    let mut temp_vcgen = Vcgen::new(vcgen.tcx, true, vcgen.direction);
+
+    let mut loop_iter = terminator.clone();
+    // Apply the loop body k times
+    for _ in 0..k {
+        loop_iter = temp_vcgen.vcgen_block(body, loop_iter)?;
+    }
+    Ok(loop_iter)
 }
 
 /// To explain a proc call, we just return the pre with the parameters
