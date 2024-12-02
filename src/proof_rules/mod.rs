@@ -55,10 +55,10 @@ pub struct EncodingGenerated {
 
 /// The environment information when the encoding annotation is called
 pub struct EncodingEnvironment {
-    base_proc_ident: Ident,
-    stmt_span: Span,
-    call_span: Span,
-    direction: Direction,
+    pub base_proc_ident: Ident,
+    pub stmt_span: Span,
+    pub call_span: Span,
+    pub direction: Direction,
 }
 
 /// The trait that all encoding annotations must implement

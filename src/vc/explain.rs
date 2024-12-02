@@ -14,12 +14,15 @@ use z3::{Config, Context};
 use crate::{
     ast::{
         util::remove_casts, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Diagnostic,
-        Direction, Expr, ExprBuilder, Files, ProcDecl, Span, Stmt, StmtKind, TyKind,
+        Direction, Expr, ExprBuilder, Files, Ident, ProcDecl, Span, Spanned, Stmt, StmtKind,
+        Symbol, TyKind,
     },
     intrinsic::annotations::AnnotationKind,
     opt::unfolder::Unfolder,
     pretty::SimplePretty,
-    proof_rules::{self, InvariantAnnotation, UnrollAnnotation},
+    proof_rules::{
+        self, encode_unroll, hey_const, EncodingEnvironment, InvariantAnnotation, UnrollAnnotation,
+    },
     resource_limits::LimitsRef,
     smt::SmtCtx,
     tyctx::TyCtx,
@@ -152,8 +155,8 @@ pub(super) fn explain_annotated_while(
     stmt: &Stmt,
     _post: &Expr,
 ) -> Result<Expr, Diagnostic> {
-    if let StmtKind::Annotation(_, ident, args, inner_stmt) = &stmt.node {
-        if let StmtKind::While(_cond, body) = &inner_stmt.node {
+    if let StmtKind::Annotation(anno_span, ident, args, inner_stmt) = &stmt.node {
+        if let StmtKind::While(_, body) = &inner_stmt.node {
             if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
                 vcgen.tcx.get(*ident).unwrap().as_ref()
             {
@@ -170,7 +173,13 @@ pub(super) fn explain_annotated_while(
                     .downcast_ref::<UnrollAnnotation>()
                     .is_some()
                 {
-                    return explain_unroll(vcgen, body, args);
+                    let enc_env = EncodingEnvironment {
+                        base_proc_ident: Ident::with_dummy_span(Symbol::intern("unroll_env")),
+                        stmt_span: stmt.span,
+                        call_span: *anno_span,
+                        direction: vcgen.direction,
+                    };
+                    return explain_unroll(vcgen, inner_stmt, args, &enc_env);
                 }
             }
         }
@@ -218,21 +227,34 @@ fn explain_park_induction(
     Ok(invariant.clone())
 }
 
-fn explain_unroll(vcgen: &mut Vcgen, body: &Block, args: &[Expr]) -> Result<Expr, Diagnostic> {
+fn explain_unroll(
+    vcgen: &mut Vcgen,
+    loop_stmt: &Stmt,
+    args: &[Expr],
+    enc_env: &EncodingEnvironment,
+) -> Result<Expr, Diagnostic> {
     let k = proof_rules::lit_u128(&args[0]);
     let terminator = &args[1];
+
     // Generate the expressions inside the loop body
-    let _inner_pre = vcgen.vcgen_block(body, terminator.clone());
-
-    // Generate the expression for the unrolled loop
-    let mut temp_vcgen = Vcgen::new(vcgen.tcx, true, vcgen.direction);
-
-    let mut loop_iter = terminator.clone();
-    // Apply the loop body k times
-    for _ in 0..k {
-        loop_iter = temp_vcgen.vcgen_block(body, loop_iter)?;
+    if let StmtKind::While(_d, body) = &loop_stmt.node {
+        let _inner_pre = vcgen.vcgen_block(body, terminator.clone());
     }
-    Ok(loop_iter)
+
+    let unrolled_stmts = encode_unroll(
+        enc_env,
+        loop_stmt,
+        k,
+        hey_const(enc_env, terminator, enc_env.direction, vcgen.tcx),
+    );
+
+    let unrolled_block = Spanned::new(enc_env.stmt_span, unrolled_stmts);
+
+    // Generate the expression for the unrolled loop use a temporary vcgen that will be discarded
+    let mut temp_vcgen = Vcgen::new(vcgen.tcx, false, vcgen.direction);
+
+    let return_expr = temp_vcgen.vcgen_block(&unrolled_block, terminator.clone())?;
+    Ok(return_expr)
 }
 
 /// To explain a proc call, we just return the pre with the parameters
