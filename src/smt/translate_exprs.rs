@@ -25,6 +25,7 @@ use super::{
 use crate::ast::visit::VisitorMut;
 use crate::ast::{ExprData, PointerHashShared};
 use crate::smt::limited::{ConstantExprCollector, ConstantExprs};
+use z3rro::scope::WEIGHT_DEFAULT;
 use z3rro::{
     eureal::EUReal,
     orders::{
@@ -227,7 +228,12 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 let patterns: Vec<_> = self.t_triggers(&ann.triggers);
                 let patterns: Vec<_> = patterns.iter().collect();
                 let quant = match quant_op.node {
-                    QuantOpKind::Forall | QuantOpKind::Inf => scope.forall(&patterns, &operand),
+                    QuantOpKind::Forall | QuantOpKind::Inf => scope.forall(
+                        format!("{:?}", quant_op.span),
+                        WEIGHT_DEFAULT,
+                        &patterns,
+                        &operand,
+                    ),
                     QuantOpKind::Exists | QuantOpKind::Sup => scope.exists(&patterns, &operand),
                 };
                 quant

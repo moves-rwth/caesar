@@ -13,6 +13,11 @@
 //! partial orders ([`orders::SmtPartialOrd`]) or bi-Gödel algebras
 //! ([`orders::SmtGodel`]).
 
+// clippy (correctly) tells us that we can sometimes elide lifetimes, but many
+// of these cases make the declarations way more clear than with implicit
+// lifetimes.
+#![allow(clippy::needless_lifetimes)]
+
 #[macro_use]
 pub mod util;
 pub mod interpreted;

@@ -2,12 +2,12 @@
 //! quantifiers. Types that implement [`SmtFresh::fresh`] support the creation
 //! of fresh instances in a surrounding scope.
 
-use z3::{
-    ast::{exists_const, forall_const, Ast, Bool, Datatype, Dynamic, Int, Real},
-    Context, Pattern,
-};
+use z3::{ast::{exists_const, quantifier_const, Ast, Bool, Datatype, Dynamic, Int, Real}, Context, Pattern, Symbol};
 
 use crate::{prover::Prover, Factory, SmtFactory, SmtInvariant};
+
+/// Default weight for quantifiers.
+pub const WEIGHT_DEFAULT: u32 = 1;
 
 /// An SmtScope can be used to construct a quantifier like `forall` or `exists`.
 /// The scope has a list of bound expressions (usually just variables) and a
@@ -77,12 +77,17 @@ impl<'ctx> SmtScope<'ctx> {
 
     /// Create a new universal quantifier around `body`, quantifying over all
     /// bound expressions in this solver.
-    pub fn forall(&self, patterns: &[&Pattern<'ctx>], body: &Bool<'ctx>) -> Bool<'ctx> {
+    pub fn forall(&self, qid: impl Into<Symbol>, weight: u32, patterns: &[&Pattern<'ctx>], body: &Bool<'ctx>) -> Bool<'ctx> {
         let ctx = body.get_ctx();
-        forall_const(
+        quantifier_const(
             ctx,
+            true,
+            weight,
+            qid,
+            "",
             &self.bounds_dyn(),
             patterns,
+            &[],
             &self.all_constraints(ctx).implies(body),
         )
     }

@@ -19,10 +19,14 @@ use crate::tyctx::TyCtx;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use std::convert::Infallible;
+use std::fmt::{Display, Formatter};
 use z3::ast::{Ast, Bool};
 use z3::{Pattern, Sort};
-use z3rro::scope::SmtScope;
+use z3rro::scope::{SmtScope, WEIGHT_DEFAULT};
 use z3rro::{SmtEq, SmtInvariant};
+
+/// (higher) weight that is used to deprioritize the computation axiom.
+const WEIGHT_COMP: u32 = 1;
 
 /// Builds the domain (parameter list) for `func`. If the limited function transformation is
 /// applicable a fuel parameter is implicitly added as the first parameter.
@@ -97,6 +101,8 @@ pub fn fuel_synonym_axiom<'smt, 'ctx>(
 
         let scope = create_call_scope(translate, func);
         let axiom = scope.forall(
+            format!("{}(fuel_synonym)", func.name),
+            WEIGHT_DEFAULT,
             &[&Pattern::new(
                 translate.ctx.ctx,
                 &[&symbolic_head_app as &dyn Ast<'ctx>],
@@ -140,6 +146,8 @@ pub fn defining_axiom<'smt, 'ctx>(
 
         let scope = create_call_scope(translate, func);
         let axiom = scope.forall(
+            format!("{}(definitional)", func.name),
+            WEIGHT_DEFAULT,
             &[&Pattern::new(
                 translate.ctx.ctx,
                 &[&app_pattern as &dyn Ast<'ctx>],
@@ -203,6 +211,8 @@ pub fn computation_axiom<'smt, 'ctx>(
 
     let scope = create_call_scope(translate, func);
     let axiom = scope.forall(
+        format!("{}(computation)", func.name),
+        WEIGHT_COMP,
         &[&Pattern::new(
             translate.ctx.ctx,
             &[&app_z3 as &dyn Ast<'ctx>],
@@ -228,7 +238,12 @@ pub fn return_value_invariant<'smt, 'ctx>(
     let app_z3 = translate.t_symbolic(&app);
     let axiom = app_z3.smt_invariant().map(|invariant| {
         let scope = create_call_scope(translate, func);
-        scope.forall(&[], &invariant)
+        scope.forall(
+            format!("{}(return_invariant)", func.name),
+            WEIGHT_DEFAULT,
+            &[],
+            &invariant,
+        )
     });
 
     translate.set_fuel_context(FuelContext::call());
