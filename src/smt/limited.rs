@@ -10,8 +10,8 @@
 
 use crate::ast::visit::{walk_expr, VisitorMut};
 use crate::ast::{
-    AxiomDecl, Expr, ExprBuilder, ExprData, ExprKind, FuncDecl, Ident, PointerHashShared,
-    QuantOpKind, QuantVar, SpanVariant, Spanned,
+    Expr, ExprBuilder, ExprData, ExprKind, FuncDecl, Ident, PointerHashShared, QuantVar,
+    SpanVariant,
 };
 use crate::smt::translate_exprs::{FuelContext, TranslateExprs};
 use crate::smt::{ty_to_sort, SmtCtx};
@@ -230,60 +230,6 @@ pub fn return_value_invariant<'smt, 'ctx>(
         let scope = create_call_scope(translate, func);
         scope.forall(&[], &invariant)
     });
-
-    translate.set_fuel_context(FuelContext::call());
-
-    axiom
-}
-
-/// Translates an arbitrary user defined axiom, that might contain references to limited functions.
-/// If the axiom contains a limited function, the whole axiom is wrapped in a `forall`
-/// quantifying over the fuel.
-///
-/// For the usual case that the axiom starts with a `forall` the `forall fuel: Fuel` is merged with
-/// the `forall` of the axiom. Additionally, any provided triggers require a non-zero fuel value.
-pub fn free_axiom<'smt, 'ctx>(
-    translate: &mut TranslateExprs<'smt, 'ctx>,
-    axiom_decl: &AxiomDecl,
-) -> Bool<'ctx> {
-    let axiom = match &axiom_decl.axiom.kind {
-        // Optimisation: If the axiom starts with a forall -> merge the `forall fuel: Fuel` with
-        //               the `forall` of the axiom.
-        ExprKind::Quant(
-            Spanned {
-                node: QuantOpKind::Forall,
-                ..
-            },
-            quant_vars,
-            ann,
-            operand,
-        ) => {
-            // TODO: duplicate logic from TranslateExpression::t_bool
-            translate.set_fuel_context(FuelContext::head());
-            let patterns: Vec<_> = translate.t_triggers(&ann.triggers);
-            let patterns: Vec<_> = patterns.iter().collect();
-
-            let quantified_fuel = translate
-                .fuel_context_mut()
-                .take_quantified_fuel()
-                .unwrap_or_default();
-            translate.set_fuel_context(FuelContext::body_with_fuel(quantified_fuel));
-            let operand = translate.t_bool(operand);
-
-            let mut scope = translate.mk_scope(quant_vars);
-            scope.extend(translate.fuel_context().quantified_fuel_scope());
-            scope.forall(&patterns, &operand)
-        }
-        _ => {
-            translate.set_fuel_context(FuelContext::body());
-
-            let mut axiom = translate.t_bool(&axiom_decl.axiom);
-            if let Some(fuel_scope) = translate.fuel_context().quantified_fuel_scope() {
-                axiom = fuel_scope.forall(&[], &axiom);
-            }
-            axiom
-        }
-    };
 
     translate.set_fuel_context(FuelContext::call());
 
