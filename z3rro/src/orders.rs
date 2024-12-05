@@ -14,12 +14,12 @@ use z3::{
     Pattern,
 };
 
-use crate::{scope::SmtAlloc, Factory, SmtFactory, SmtInvariant};
-use crate::scope::WEIGHT_DEFAULT;
 use super::{
     scope::{SmtFresh, SmtScope},
     SmtBranch,
 };
+use crate::scope::WEIGHT_DEFAULT;
+use crate::{scope::SmtAlloc, Factory, SmtFactory, SmtInvariant};
 
 /// The different ordering relations. It's like [`std::cmp::Ordering`], but with
 /// more options to allow for more specialization.
@@ -216,16 +216,31 @@ pub trait SmtCompleteLattice<'ctx>: SmtFresh<'ctx> + SmtLattice<'ctx> {
         let inf = Self::fresh(&factory, ctx, "extremum");
 
         // infimum is a lower bound to all self
-        let inf_is_lower_bound = &inf_vars.forall("inf_lower_bound", WEIGHT_DEFAULT, patterns, &inf.smt_le(self));
+        let inf_is_lower_bound = &inf_vars.forall(
+            "inf_lower_bound",
+            WEIGHT_DEFAULT,
+            patterns,
+            &inf.smt_le(self),
+        );
         ctx.add_constraint(inf_is_lower_bound);
 
         // `other_lb` is another lower bound to self...
         let mut inf_vars_and_other = inf_vars.clone();
         let other_lb = Self::fresh(&factory, &mut inf_vars_and_other, "bound");
-        let other_is_lb = inf_vars.forall("inf_other_lower_bound", WEIGHT_DEFAULT, patterns, &other_lb.smt_le(self));
+        let other_is_lb = inf_vars.forall(
+            "inf_other_lower_bound",
+            WEIGHT_DEFAULT,
+            patterns,
+            &other_lb.smt_le(self),
+        );
         // infimum is the greatest lower bound, i.e. `other_lb <= inf`
         let inf_glb = other_is_lb.implies(&other_lb.smt_le(&inf));
-        ctx.add_constraint(&inf_vars_and_other.forall("inf_greatest lower bound", WEIGHT_DEFAULT, &[], &inf_glb));
+        ctx.add_constraint(&inf_vars_and_other.forall(
+            "inf_greatest lower bound",
+            WEIGHT_DEFAULT,
+            &[],
+            &inf_glb,
+        ));
 
         inf
     }
