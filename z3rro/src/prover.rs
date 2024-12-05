@@ -4,7 +4,7 @@ use std::{fmt::Display, time::Duration};
 
 use z3::{
     ast::{forall_const, Ast, Bool, Dynamic},
-    Context, Model, SatResult, Solver,
+    Context, Model, Params, SatResult, Solver,
 };
 
 use crate::{
@@ -58,8 +58,10 @@ pub struct Prover<'ctx> {
 impl<'ctx> Prover<'ctx> {
     /// Create a new prover with the given [`Context`].
     pub fn new(ctx: &'ctx Context) -> Self {
+        let solver = Solver::new(ctx);
+        solver.set_params(&default_params(ctx));
         Prover {
-            solver: Solver::new(ctx),
+            solver,
             level: 0,
             min_level_with_provables: None,
         }
@@ -67,6 +69,13 @@ impl<'ctx> Prover<'ctx> {
 
     pub fn set_timeout(&mut self, duration: Duration) {
         set_solver_timeout(&self.solver, duration);
+    }
+
+    pub fn enforce_ematching(&mut self) {
+        let mut params = default_params(self.solver.get_context());
+        params.set_bool("auto-config", false);
+        params.set_bool("smt.mbqi", false);
+        self.solver.set_params(&params);
     }
 
     /// Add an assumption to this prover.
@@ -188,6 +197,13 @@ impl<'ctx> Prover<'ctx> {
     pub fn get_smtlib(&self) -> Smtlib {
         Smtlib::from_solver(&self.solver)
     }
+}
+
+fn default_params<'ctx>(ctx: &'ctx Context) -> Params<'ctx> {
+    let mut params = Params::new(ctx);
+    params.set_f64("smt.qi.eager_threshold", 1000.0);
+    params.set_f64("smt.qi.lazy_threshold", 2000.0);
+    params
 }
 
 #[cfg(test)]

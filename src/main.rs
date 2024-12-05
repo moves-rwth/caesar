@@ -36,6 +36,7 @@ use timing::DispatchBuilder;
 use tokio::task::JoinError;
 use tracing::{error, info, warn};
 
+use crate::smt::SmtCtxOptions;
 use structopt::StructOpt;
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
@@ -77,7 +78,7 @@ pub struct Options {
     pub no_qelim: bool,
 
     /// Time limit in seconds.
-    #[structopt(long, default_value = "300")]
+    #[structopt(long, default_value = "30")]
     pub timeout: u64,
 
     /// Memory usage limit in megabytes.
@@ -180,6 +181,20 @@ pub struct Options {
     /// pres (instead of failing with an error).
     #[structopt(long)]
     pub jani_skip_quant_pre: bool,
+
+    /// Limit the number of times a function declaration can be recursively instantiated.
+    /// Requires that MBQI is disabled with `force-ematching`.
+    #[structopt(long)]
+    pub limited_functions: bool,
+
+    /// Force the SMT solver to only use ematching for quantifier instantiation, disabling mbqi.
+    #[structopt(long)]
+    pub force_ematching: bool,
+
+    /// Do not count applications to constant values towards the instantiation count
+    /// when using `limited-functions`.
+    #[structopt(long)]
+    pub lit_wrap: bool,
 
     #[structopt(flatten)]
     pub slice_options: SliceOptions,
@@ -652,7 +667,14 @@ fn verify_files_main(
 
         // 11. Translate to Z3
         let ctx = mk_z3_ctx(options);
-        let smt_ctx = SmtCtx::new(&ctx, &tcx);
+        let smt_ctx = SmtCtx::new(
+            &ctx,
+            &tcx,
+            SmtCtxOptions {
+                use_limited_functions: options.limited_functions,
+                lit_wrap: options.lit_wrap,
+            },
+        );
         let mut translate = TranslateExprs::new(&smt_ctx);
         let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
 

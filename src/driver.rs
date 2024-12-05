@@ -68,6 +68,7 @@ use z3rro::{
     util::PrefixWriter,
 };
 
+use crate::smt::SmtCtxOptions;
 use tracing::{info_span, instrument, trace};
 
 /// Human-readable name for a source unit. Used for debugging and error messages.
@@ -535,7 +536,7 @@ impl QuantVcUnit {
         let _entered = span.enter();
         if !options.strict {
             let ctx = Context::new(&Config::default());
-            let smt_ctx = SmtCtx::new(&ctx, tcx);
+            let smt_ctx = SmtCtx::new(&ctx, tcx, SmtCtxOptions::default());
             let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
             unfolder.visit_expr(&mut self.expr)
         } else {
@@ -633,14 +634,19 @@ impl BoolVcUnit {
 
     /// Translate to SMT.
     pub fn into_smt_vc<'smt, 'ctx>(
-        self,
+        mut self,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> SmtVcUnit<'ctx> {
         let span = info_span!("translation to Z3");
         let _entered = span.enter();
+
+        translate.add_constant_exprs(&[], &mut self.vc);
+        let bool_vc = translate.t_bool(&self.vc);
+        translate.clear_constant_exprs();
+
         SmtVcUnit {
             quant_vc: self.quant_vc,
-            vc: translate.t_bool(&self.vc),
+            vc: bool_vc,
         }
     }
 }
@@ -671,7 +677,10 @@ impl<'ctx> SmtVcUnit<'ctx> {
         let span = info_span!("SAT check");
         let _entered = span.enter();
 
-        let prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc);
+        let mut prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc);
+        if options.force_ematching {
+            prover.enforce_ematching();
+        }
         let smtlib = get_smtlib(options, &prover);
 
         let mut slice_solver = SliceSolver::new(slice_vars.clone(), translate, prover);
@@ -745,6 +754,8 @@ fn mk_valid_query_prover<'smt, 'ctx>(
         prover.set_timeout(remaining);
     }
 
+    // add the definition of all used Lit marker functions
+    smt_translate.ctx.add_lit_axioms_to_prover(&mut prover);
     // add assumptions (from axioms and locals) to the prover
     smt_translate
         .ctx
