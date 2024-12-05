@@ -178,6 +178,8 @@ pub fn computation_axiom<'smt, 'ctx>(
     }
     assert!(func.body.borrow().is_some());
 
+    let mut app = build_call(translate.ctx.tcx, func);
+
     translate.set_fuel_context(FuelContext::body());
     {
         let constant_vars = func
@@ -187,13 +189,11 @@ pub fn computation_axiom<'smt, 'ctx>(
             .map(|param| param.name)
             .collect_vec();
 
-        translate.set_constant_exprs(
-            constant_vars.as_slice(),
-            func.body.borrow_mut().as_mut().unwrap(),
-        );
+        translate.add_constant_exprs(constant_vars.as_slice(), func.body.borrow_mut().as_mut().unwrap());
+        for arg in app.children_mut() {
+            translate.add_constant_exprs(constant_vars.as_slice(), arg);
+        }
     }
-
-    let app = build_call(translate.ctx.tcx, func);
 
     let body_ref = func.body.borrow();
     let body = body_ref.as_ref().unwrap();
@@ -253,6 +253,23 @@ impl ConstantExprs {
     fn remove(&mut self, expr: &Expr) -> bool {
         self.0.remove(&HashExpr::new(expr.clone()))
     }
+
+    pub fn extend(&mut self, other: Self) {
+        self.0.extend(other.0);
+    }
+}
+
+impl Display for ConstantExprs {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{")?;
+        for (i, expr) in self.0.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", expr.as_shared())?;
+        }
+        write!(f, "}}")
+    }
 }
 
 /// Collects the maximal constant subexpressions of an expression.
@@ -306,9 +323,10 @@ impl VisitorMut for ConstantExprCollector {
             ExprKind::Call(_, args) => {
                 if args.iter().all(|arg| self.is_constant(arg)) {
                     self.constant_exprs.insert(expr);
-                    for arg in args {
-                        self.constant_exprs.remove(arg);
-                    }
+                    // Do not remove arguments for calls. Otherwise, the computation axiom might
+                    // not match because we lifted the Lit marker too far.
+                    // Example: Lit(fac(5) == 125) does not let us compute fib(5)
+                    //          Lit(fac(Lit(5)) == 125) lets us do this.
                 }
             }
             ExprKind::Ite(cond, then, other) => {

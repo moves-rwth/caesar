@@ -78,7 +78,7 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Shared<T> {
 
 /// [Shared] wrapper that provides pointer based [Eq] and [Hash] implementations.
 #[repr(transparent)]
-#[derive(RefCast)]
+#[derive(RefCast, Clone)]
 pub struct PointerHashShared<T>(Shared<T>);
 
 impl<T> PointerHashShared<T> {
@@ -88,6 +88,10 @@ impl<T> PointerHashShared<T> {
 
     pub fn into_shared(self) -> Shared<T> {
         self.0
+    }
+
+    pub fn as_shared(&self) -> &Shared<T> {
+        &self.0
     }
 }
 
