@@ -197,7 +197,10 @@ pub fn computation_axiom<'smt, 'ctx>(
             .map(|param| param.name)
             .collect_vec();
 
-        translate.add_constant_exprs(constant_vars.as_slice(), func.body.borrow_mut().as_mut().unwrap());
+        translate.add_constant_exprs(
+            constant_vars.as_slice(),
+            func.body.borrow_mut().as_mut().unwrap(),
+        );
         for arg in app.children_mut() {
             translate.add_constant_exprs(constant_vars.as_slice(), arg);
         }

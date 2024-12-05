@@ -1,11 +1,5 @@
 //! Encodings of declarations, definitions, and expressions into SMT.
 
-use std::convert::{TryFrom, TryInto};
-use std::fmt::Debug;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
-use z3::{ast::Bool, Context, Sort};
-use z3rro::{eureal::EURealSuperFactory, EUReal, Factory, FuelFactory, ListFactory, LitDecl};
-use z3rro::prover::Prover;
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
 use crate::ast::{DeclKind, FuncDecl};
 use crate::smt::limited::{
@@ -17,6 +11,12 @@ use crate::{
     ast::{DeclRef, DomainDecl, DomainSpec, Ident, TyKind},
     tyctx::TyCtx,
 };
+use std::convert::{TryFrom, TryInto};
+use std::fmt::Debug;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use z3::{ast::Bool, Context, Sort};
+use z3rro::prover::Prover;
+use z3rro::{eureal::EURealSuperFactory, EUReal, Factory, FuelFactory, ListFactory, LitDecl};
 
 mod limited;
 pub mod pretty_model;
