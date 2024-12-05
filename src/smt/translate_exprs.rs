@@ -97,10 +97,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         &mut self.fuel_context
     }
 
-    pub fn set_constant_exprs(&mut self, constant_vars: &[Ident], expr_to_analyse: &mut Expr) {
+    pub fn add_constant_exprs(&mut self, constant_vars: &[Ident], expr_to_analyse: &mut Expr) {
         let mut collector = ConstantExprCollector::new(constant_vars);
         collector.visit_expr(expr_to_analyse).unwrap();
-        self.constant_exprs = collector.into_constant_exprs();
+        self.constant_exprs.extend(collector.into_constant_exprs());
     }
 
     pub fn clear_constant_exprs(&mut self) {

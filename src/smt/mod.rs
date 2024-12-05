@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use z3::{ast::Bool, Context, Sort};
 use z3rro::{eureal::EURealSuperFactory, EUReal, Factory, FuelFactory, ListFactory, LitDecl};
-
+use z3rro::prover::Prover;
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
 use crate::ast::{DeclKind, FuncDecl};
 use crate::smt::limited::{
@@ -190,6 +190,14 @@ impl<'ctx> SmtCtx<'ctx> {
         &self.uninterpreteds
     }
 
+    pub fn add_lit_axioms_to_prover(&self, prover: &mut Prover<'ctx>) {
+        for (_, lit) in self.lits.borrow().iter() {
+            if let Some(axiom) = lit.defining_axiom() {
+                prover.add_assumption(&axiom);
+            }
+        }
+    }
+
     pub fn is_limited_function(&self, ident: Ident) -> bool {
         if !self.use_limited_functions {
             return false;
@@ -260,6 +268,13 @@ impl<'ctx> Lit<'ctx> {
                 let call = decl.apply_call(&arg_dynamic);
                 Symbolic::from_dynamic(ctx, ty, &call).try_into().unwrap()
             }
+        }
+    }
+
+    fn defining_axiom(&self) -> Option<Bool<'ctx>> {
+        match self {
+            Lit::Disabled => None,
+            Lit::Enabled { decl, .. } => Some(decl.defining_axiom()),
         }
     }
 }

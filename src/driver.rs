@@ -610,14 +610,19 @@ impl BoolVcUnit {
 
     /// Translate to SMT.
     pub fn into_smt_vc<'smt, 'ctx>(
-        self,
+        mut self,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> SmtVcUnit<'ctx> {
         let span = info_span!("translation to Z3");
         let _entered = span.enter();
+
+        translate.add_constant_exprs(&[], &mut self.vc);
+        let bool_vc = translate.t_bool(&self.vc);
+        translate.clear_constant_exprs();
+
         SmtVcUnit {
             quant_vc: self.quant_vc,
-            vc: translate.t_bool(&self.vc),
+            vc: bool_vc,
         }
     }
 }
@@ -653,10 +658,6 @@ impl<'ctx> SmtVcUnit<'ctx> {
             prover.enforce_ematching();
         }
         let smtlib = get_smtlib(options, &prover);
-
-        if let Some(ref smtlib) = smtlib {
-            println!("; SMT LIB\n{}", smtlib.clone().into_string());
-        }
 
         let mut slice_solver = SliceSolver::new(slice_vars.clone(), translate, prover);
         let (result, mut slice_model) = slice_solver.slice_while_failing(limits_ref)?;
@@ -713,6 +714,8 @@ fn mk_valid_query_prover<'smt, 'ctx>(
         prover.set_timeout(remaining);
     }
 
+    // add the definition of all used Lit marker functions
+    smt_translate.ctx.add_lit_axioms_to_prover(&mut prover);
     // add assumptions (from axioms and locals) to the prover
     smt_translate
         .ctx
