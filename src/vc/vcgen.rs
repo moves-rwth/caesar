@@ -19,13 +19,15 @@ use super::explain::{explain_annotated_while, explain_proc_call, explain_subst, 
 pub struct Vcgen<'tcx> {
     pub(super) tcx: &'tcx TyCtx,
     pub explanation: Option<VcExplanation>,
+    pub direction: Direction,
 }
 
 impl<'tcx> Vcgen<'tcx> {
-    pub fn new(tcx: &'tcx TyCtx, explain: bool) -> Self {
+    pub fn new(tcx: &'tcx TyCtx, explain: bool, direction: Direction) -> Self {
         Vcgen {
             tcx,
             explanation: explain.then(VcExplanation::default),
+            direction,
         }
     }
 
