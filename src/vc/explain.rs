@@ -173,13 +173,7 @@ pub(super) fn explain_annotated_while(
                     .downcast_ref::<UnrollAnnotation>()
                     .is_some()
                 {
-                    let enc_env = EncodingEnvironment {
-                        base_proc_ident: Ident::with_dummy_span(Symbol::intern("unroll_env")),
-                        stmt_span: stmt.span,
-                        call_span: *anno_span,
-                        direction: vcgen.direction,
-                    };
-                    return explain_unroll(vcgen, inner_stmt, args, &enc_env);
+                    return explain_unroll(vcgen, inner_stmt, args, stmt.span, *anno_span);
                 }
             }
         }
@@ -231,29 +225,44 @@ fn explain_unroll(
     vcgen: &mut Vcgen,
     loop_stmt: &Stmt,
     args: &[Expr],
-    enc_env: &EncodingEnvironment,
+    stmt_span: Span,
+    call_span: Span,
 ) -> Result<Expr, Diagnostic> {
     let k = proof_rules::lit_u128(&args[0]);
     let terminator = &args[1];
 
-    // Generate the expressions inside the loop body
+    let enc_env = EncodingEnvironment {
+        // Use a "dummy" proc name since this name is not used during unrolling
+        base_proc_ident: Ident::with_dummy_span(Symbol::intern("unroll_env")),
+        // Span of the whole "annotation+annotated" statement
+        stmt_span,
+        // Span of only the annotation
+        call_span,
+        // VCGen keeps track of the direction of the current proc
+        direction: vcgen.direction,
+    };
+
+    // Generate the explanations for the loop body
     if let StmtKind::While(_d, body) = &loop_stmt.node {
+        // Vcgen stores explanations for each statement in the body
+        // The return value (pre-vc of the body) is unused since the loop will be unrolled
+        // We need the pre-vc of the k-times unrolled loop instead
         let _inner_pre = vcgen.vcgen_block(body, terminator.clone());
     }
 
     let unrolled_stmts = encode_unroll(
-        enc_env,
+        &enc_env,
         loop_stmt,
         k,
-        hey_const(enc_env, terminator, enc_env.direction, vcgen.tcx),
+        hey_const(&enc_env, terminator, enc_env.direction, vcgen.tcx),
     );
 
     let unrolled_block = Spanned::new(enc_env.stmt_span, unrolled_stmts);
 
-    // Generate the expression for the unrolled loop use a temporary vcgen that will be discarded
+    // Use a temporary vcgen that will be discarded to generate the pre-vc of the unrolled loop
     let mut temp_vcgen = Vcgen::new(vcgen.tcx, false, vcgen.direction);
-
     let return_expr = temp_vcgen.vcgen_block(&unrolled_block, terminator.clone())?;
+
     Ok(return_expr)
 }
 
@@ -265,14 +274,14 @@ pub(super) fn explain_proc_call(
     builder: &ExprBuilder,
 ) -> Expr {
     let decl = decl_ref.borrow();
-    return builder.subst(
+    builder.subst(
         fold_spec(&decl, decl.requires()),
         decl.inputs
             .node
             .iter()
             .zip(args)
             .map(|(param, arg)| (param.name, arg.clone())),
-    );
+    )
 }
 
 /// Fold a list of specification parts (either requires or ensures) into a
