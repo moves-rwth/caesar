@@ -73,6 +73,8 @@ fn main() {
 
         // The default shell is bash, which is not available on Windows.
         if cfg!(target_os = "windows") {
+            // does not actually execute the tests under windows as cmd requires the
+            // /C flag to execute a command. But there seems no way to specify that.
             config.shell = "cmd.exe".to_string();
         }
 
