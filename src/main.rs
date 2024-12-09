@@ -610,7 +610,7 @@ fn verify_files_main(
         }
 
         // 6. Generating verification conditions.
-        let mut vcgen = Vcgen::new(&tcx, options.explain_core_vc);
+        let mut vcgen = Vcgen::new(&tcx, options.explain_core_vc, verify_unit.direction);
         let mut vc_expr = verify_unit.vcgen(&mut vcgen)?;
         if let Some(explanation) = vcgen.explanation {
             server.add_vc_explanation(explanation)?;

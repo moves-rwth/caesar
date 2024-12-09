@@ -3,7 +3,7 @@
 mod induction;
 pub use induction::*;
 mod unroll;
-use unroll::*;
+pub use unroll::*;
 mod mciver_ast;
 use mciver_ast::*;
 mod omega;
@@ -13,6 +13,7 @@ use ost::*;
 mod past;
 use past::*;
 mod util;
+pub use util::*;
 
 #[cfg(test)]
 mod tests;
@@ -54,10 +55,10 @@ pub struct EncodingGenerated {
 
 /// The environment information when the encoding annotation is called
 pub struct EncodingEnvironment {
-    base_proc_ident: Ident,
-    stmt_span: Span,
-    call_span: Span,
-    direction: Direction,
+    pub base_proc_ident: Ident,
+    pub stmt_span: Span,
+    pub call_span: Span,
+    pub direction: Direction,
 }
 
 /// The trait that all encoding annotations must implement
@@ -284,7 +285,7 @@ impl<'tcx, 'sunit> VisitorMut for EncodingVisitor<'tcx, 'sunit> {
                     } else {
                         return Err(EncodingVisitorError::AnnotationError(
                             AnnotationError::NotOnWhile {
-                                span: s.span,
+                                span: *annotation_span,
                                 annotation_name: *ident,
                                 annotated: inner_stmt.as_ref().clone(),
                             },
