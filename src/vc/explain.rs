@@ -213,14 +213,14 @@ pub(super) fn explain_proc_call(
     builder: &ExprBuilder,
 ) -> Expr {
     let decl = decl_ref.borrow();
-    return builder.subst(
+    builder.subst(
         fold_spec(&decl, decl.requires()),
         decl.inputs
             .node
             .iter()
             .zip(args)
             .map(|(param, arg)| (param.name, arg.clone())),
-    );
+    )
 }
 
 /// Fold a list of specification parts (either requires or ensures) into a

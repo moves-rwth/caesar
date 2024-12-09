@@ -99,7 +99,7 @@ impl<'a, W> PrefixWriter<'a, W> {
     }
 }
 
-impl<'a, W: std::io::Write> std::io::Write for PrefixWriter<'a, W> {
+impl<W: std::io::Write> std::io::Write for PrefixWriter<'_, W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         for line in buf.split_inclusive(|c| *c == b'\n') {
             if self.line_start {
@@ -162,11 +162,11 @@ pub fn set_solver_timeout(solver: &Solver, duration: Duration) {
 #[derive(Debug)]
 pub struct PrettyRational<'a>(pub Cow<'a, BigRational>);
 
-impl<'a> PrettyRational<'a> {
+impl PrettyRational<'_> {
     const DECIMAL_EXPANSION_LIMIT: usize = 5;
 }
 
-impl<'a> Display for PrettyRational<'a> {
+impl Display for PrettyRational<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.0.is_negative() {
             write!(f, "-")?;

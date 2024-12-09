@@ -1,5 +1,5 @@
 ---
-title: Distinguished Artifact at OOPSLA '23 
+title: Distinguished Artifact at OOPSLA '23
 authors: phisch
 tags: [publications]
 ---

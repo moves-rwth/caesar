@@ -107,7 +107,7 @@ impl<'ctx> InstrumentedModel<'ctx> {
 
 /// The [`Display`] implementation simply defers to the underlying
 /// [`z3::Model`]'s implementation.
-impl<'ctx> Display for InstrumentedModel<'ctx> {
+impl Display for InstrumentedModel<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!("{}", &self.model))
     }

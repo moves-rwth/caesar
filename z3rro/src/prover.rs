@@ -21,7 +21,7 @@ pub enum ProveResult<'ctx> {
     Unknown(ReasonUnknown),
 }
 
-impl<'ctx> Display for ProveResult<'ctx> {
+impl Display for ProveResult<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ProveResult::Proof => f.write_str("Proof"),

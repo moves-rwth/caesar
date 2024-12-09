@@ -135,7 +135,7 @@ impl<'ctx> SmtScope<'ctx> {
 /// Restricted interface to [`SmtScope`] provided to [`SmtFresh::allocate`].
 pub struct SmtAlloc<'ctx, 'a>(&'a mut SmtScope<'ctx>);
 
-impl<'ctx, 'a> SmtAlloc<'ctx, 'a> {
+impl<'ctx> SmtAlloc<'ctx, '_> {
     /// Register a new variable in this allocator.
     pub fn register_var(&mut self, bound: &impl Ast<'ctx>) {
         self.0.add_bound(bound);
