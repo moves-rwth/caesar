@@ -6,7 +6,7 @@
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://www.caesarverifier.org/blog"/>
     <subtitle>Caesar Blog</subtitle>
-    <icon>https://www.caesarverifier.org/img/laurel.svg</icon>
+    <icon>https://www.caesarverifier.org/img/laurel-square.svg</icon>
     <entry>
         <title type="html"><![CDATA[Caesar 2.0: VSCode Extension, Slicing, and more!]]></title>
         <id>https://www.caesarverifier.org/blog/2024/05/20/caesar-2-0</id>
