@@ -261,7 +261,10 @@ fn explain_unroll(
 
     // Use a temporary vcgen that will be discarded to generate the pre-vc of the unrolled loop
     let mut temp_vcgen = Vcgen::new(vcgen.tcx, false, vcgen.direction);
-    let return_expr = temp_vcgen.vcgen_block(&unrolled_block, terminator.clone())?;
+    let mut return_expr = temp_vcgen.vcgen_block(&unrolled_block, terminator.clone())?;
+
+    // Apply substitutions and simplify the pre-vc of the unrolled loop
+    explain_subst(vcgen, stmt_span, &mut return_expr);
 
     Ok(return_expr)
 }
