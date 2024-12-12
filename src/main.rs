@@ -79,7 +79,7 @@ pub struct Options {
     pub no_qelim: bool,
 
     /// Time limit in seconds.
-    #[structopt(long, default_value = "30")]
+    #[structopt(long, default_value = "300")]
     pub timeout: u64,
 
     /// Memory usage limit in megabytes.
