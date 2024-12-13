@@ -640,7 +640,11 @@ impl BoolVcUnit {
         let span = info_span!("translation to Z3");
         let _entered = span.enter();
 
-        translate.add_constant_exprs(&[], &mut self.vc);
+        translate.add_constant_exprs(
+            translate.ctx.functions_with_def().as_slice(),
+            &[],
+            &mut self.vc,
+        );
         let bool_vc = translate.t_bool(&self.vc);
         translate.clear_constant_exprs();
 

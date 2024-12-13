@@ -197,12 +197,18 @@ pub fn computation_axiom<'smt, 'ctx>(
             .map(|param| param.name)
             .collect_vec();
 
+        let functions_with_def = translate.ctx.functions_with_def();
         translate.add_constant_exprs(
+            functions_with_def.as_slice(),
             constant_vars.as_slice(),
             func.body.borrow_mut().as_mut().unwrap(),
         );
         for arg in app.children_mut() {
-            translate.add_constant_exprs(constant_vars.as_slice(), arg);
+            translate.add_constant_exprs(
+                functions_with_def.as_slice(),
+                constant_vars.as_slice(),
+                arg,
+            );
         }
     }
 
@@ -303,17 +309,18 @@ impl Display for ConstantExprs {
 /// Only reporting maximal subexpressions is an optimisation. The resulting constant information
 /// is forward to the SMT-solver (wrapping them in Lit-marker). Also, wrapping all the
 /// intermediate expressions severally degrades solver performance.
-#[derive(Default)]
 pub struct ConstantExprCollector {
     constant_exprs: ConstantExprs,
     constant_vars: IndexSet<Ident>,
+    functions_with_def: IndexSet<Ident>,
 }
 
 impl ConstantExprCollector {
-    pub fn new(constant_vars: &[Ident]) -> Self {
+    pub fn new(functions_with_def: &[Ident], constant_vars: &[Ident]) -> Self {
         Self {
             constant_exprs: ConstantExprs::default(),
             constant_vars: constant_vars.iter().cloned().collect(),
+            functions_with_def: functions_with_def.iter().cloned().collect(),
         }
     }
 
@@ -338,8 +345,18 @@ impl VisitorMut for ConstantExprCollector {
                     self.constant_exprs.insert(expr);
                 }
             }
-            ExprKind::Call(_, args) => {
-                if args.iter().all(|arg| self.is_constant(arg)) {
+            ExprKind::Call(func, args) => {
+                // Function calls with only constant arguments are themselves constant.
+                // This is intuitively true but can cause some problems in practice if the function
+                // does not actually have a definition.
+                // E.g. probCollision() only defined as:
+                //     func probCollision(): UReal
+                //     axiom collisionProb probCollision() <= 1
+                // is trivially always constant but performing any kind of computation with
+                // it is hopeless.
+                if self.functions_with_def.contains(func)
+                    && args.iter().all(|arg| self.is_constant(arg))
+                {
                     self.constant_exprs.insert(expr);
                     // Do not remove arguments for calls. Otherwise, the computation axiom might
                     // not match because we lifted the Lit marker too far.

@@ -214,6 +214,15 @@ impl<'ctx> SmtCtx<'ctx> {
     pub fn is_limited_function_decl(&self, func: &FuncDecl) -> bool {
         self.use_limited_functions && func.body.borrow().is_some()
     }
+
+    pub fn functions_with_def(&self) -> Vec<Ident> {
+        self.tcx
+            .get_function_decls()
+            .values()
+            .filter(|func_decl| func_decl.borrow().body.borrow().is_some())
+            .map(|func_decl| func_decl.borrow().name)
+            .collect()
+    }
 }
 
 pub fn ty_to_sort<'ctx>(ctx: &SmtCtx<'ctx>, ty: &TyKind) -> Sort<'ctx> {
