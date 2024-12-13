@@ -10,16 +10,16 @@ domain Nat {
     // Todo: These Functions require "pattern matching", which currently can not be defined without explicit axioms??!
     //       As a result these functions are currently not translated as limited functions.
     func plus(n: Nat, m: Nat): Nat
-    axiom plus_rec forall n: Nat, m: Nat . plus(S(n), m) == S(plus(n, m))
-    axiom plus_base forall m: Nat . plus(Z(), m) == m
+    axiom plus_rec forall n: Nat, m: Nat @trigger(plus(S(n), m)) . plus(S(n), m) == S(plus(n, m))
+    axiom plus_base forall m: Nat @trigger(plus(Z(), m)) . plus(Z(), m) == m
 
     func mult(n: Nat, m: Nat): Nat
-    axiom mult_rec forall n: Nat, m: Nat . mult(S(n), m) == plus(m, mult(n, m))
-    axiom mult_base forall m: Nat . mult(Z(), m) == Z()
+    axiom mult_rec forall n: Nat, m: Nat @trigger(mult(S(n), m)) . mult(S(n), m) == plus(m, mult(n, m))
+    axiom mult_base forall m: Nat @trigger(mult(Z(), m)) . mult(Z(), m) == Z()
 
-    axiom fac_rec forall n: Nat . factorial(S(n)) == mult(S(n), factorial(n))
-    axiom fac_base factorial(Z()) == S(Z())
     func factorial(n: Nat): Nat
+    axiom fac_rec forall n: Nat @trigger(factorial(S(n))) . factorial(S(n)) == mult(S(n), factorial(n))
+    axiom fac_base factorial(Z()) == S(Z())
 
     func toNat(n: UInt): Nat = ite(n == 0, Z(), S(toNat(n - 1)))
 }
