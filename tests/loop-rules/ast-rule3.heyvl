@@ -21,7 +21,7 @@ domain Functions {
     func harmonic(n: UInt): UReal
 
     axiom harmonic_base harmonic(0) == 0
-    axiom harmonic_step forall n: UInt. harmonic(n + 1) == 1/(n+1) + harmonic(n)
+    axiom harmonic_step forall n: UInt @trigger(harmonic(n)). harmonic(n + 1) == 1/(n+1) + harmonic(n)
 
     func d(v: UReal): UReal
 

@@ -1,0 +1,69 @@
+use crate::scope::WEIGHT_DEFAULT;
+use crate::SmtEq;
+use std::fmt::Debug;
+use z3::ast::{quantifier_const, Ast, Bool, Dynamic};
+use z3::{Context, FuncDecl, Pattern, Sort};
+
+/// Identity function that is used to mark constants values. They allow for axioms instantiation
+/// without consuming fuel. This allows the SMT to still compute the result of functions where the
+/// arguments are known, while limiting instantiation in other cases.
+///
+/// Conceptually the `Lit` function is generic over its argument. For encoding into SMT it must be
+/// monomorphized. A [LitDecl] instance represents a concrete monomorphization and is parameterised
+/// by the z3 sort of the argument/ return value.
+///
+/// An equivalent rust function would look like the following:
+/// ```
+/// # #[allow(non_snake_case)]
+/// fn Lit<S>(x: S) -> S {
+///     x
+/// }
+/// ```
+#[derive(Debug)]
+pub struct LitDecl<'ctx> {
+    ctx: &'ctx Context,
+    arg_sort: Sort<'ctx>,
+    func: FuncDecl<'ctx>,
+}
+
+impl<'ctx> LitDecl<'ctx> {
+    pub fn new(ctx: &'ctx Context, arg_sort: Sort<'ctx>) -> Self {
+        // Clashes with user defined code are avoided by `$` in the name
+        let lit_name = format!("$Lit{}", &arg_sort);
+        // We add an uninterpreted function and add a separate defining axiom.
+        // Using z3 RecFuncDecl causes the applications to get "optimised" away before solving.
+        let func = FuncDecl::new(ctx, lit_name, &[&arg_sort], &arg_sort);
+        Self {
+            ctx,
+            arg_sort,
+            func,
+        }
+    }
+
+    /// Wrap a value in a `Lit` marker.
+    pub fn apply_call(&self, arg: &Dynamic<'ctx>) -> Dynamic<'ctx> {
+        assert_eq!(self.arg_sort, arg.get_sort());
+        self.func.apply(&[arg])
+    }
+
+    pub fn arg_sort(&self) -> &Sort<'ctx> {
+        &self.arg_sort
+    }
+
+    pub fn defining_axiom(&self) -> Bool<'ctx> {
+        // identity function: forall x: ArgSort . Lit(x) == x
+        let x = Dynamic::fresh_const(self.ctx, "x", &self.arg_sort);
+        let app = self.func.apply(&[&x]);
+        quantifier_const(
+            self.ctx,
+            true,
+            WEIGHT_DEFAULT,
+            format!("Lit{}(definitional)", self.arg_sort),
+            "",
+            &[&x],
+            &[&Pattern::new(self.ctx, &[&app])],
+            &[],
+            &app.smt_eq(&x),
+        )
+    }
+}

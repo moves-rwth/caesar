@@ -7,6 +7,7 @@ use z3::{
     Context, DatatypeAccessor, DatatypeBuilder, FuncDecl, Sort,
 };
 
+use crate::scope::WEIGHT_DEFAULT;
 use crate::{
     orders::SmtPartialOrd,
     scope::{SmtAlloc, SmtFresh, SmtScope},
@@ -175,7 +176,12 @@ impl<'ctx> SmtEq<'ctx> for List<'ctx> {
         scope.add_constraint(&self.is_valid_index(&index));
         z3_and!(
             self.len().smt_eq(&other.len()),
-            scope.forall(&[], &self.get(&index).smt_eq(&other.get(&index)))
+            scope.forall(
+                "list_eq",
+                WEIGHT_DEFAULT,
+                &[],
+                &self.get(&index).smt_eq(&other.get(&index))
+            )
         )
     }
 }
