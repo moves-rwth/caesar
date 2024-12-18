@@ -87,6 +87,11 @@ impl Server for CliServer {
         result.print_prove_result(self, translate, name);
         Ok(())
     }
+
+    fn handle_not_checked(&mut self, _span: Span) -> Result<(), ServerError> {
+        // Not relevant for CLI
+        Ok(())
+    }
 }
 
 fn print_diagnostic(mut files: &Files, diagnostic: Diagnostic) -> io::Result<()> {

@@ -18,6 +18,7 @@ mod test;
 
 use ariadne::ReportKind;
 pub use cli::CliServer;
+pub use lsp::run_lsp_server;
 pub use lsp::LspServer;
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
@@ -72,6 +73,9 @@ pub trait Server: Send {
         result: &mut SmtVcCheckResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError>;
+
+    // Sends an unknown verification result for the not checked proc with the given span.
+    fn handle_not_checked(&mut self, span: Span) -> Result<(), ServerError>;
 }
 
 fn unless_fatal_error(werr: bool, diagnostic: Diagnostic) -> Result<Diagnostic, VerifyError> {

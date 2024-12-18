@@ -12,7 +12,6 @@ use std::{
     process::ExitCode,
     str::FromStr,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
 };
 
 use crate::{
@@ -29,7 +28,7 @@ use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use proof_rules::init_encodings;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
-use servers::{CliServer, LspServer, Server, ServerError};
+use servers::{run_lsp_server, CliServer, LspServer, Server, ServerError};
 use slicing::init_slicing;
 use thiserror::Error;
 use timing::DispatchBuilder;
@@ -285,7 +284,7 @@ async fn main() -> ExitCode {
     if !options.language_server {
         run_cli(options).await
     } else {
-        run_server(&options).await
+        run_server(options).await
     }
 }
 
@@ -339,26 +338,33 @@ async fn run_cli(options: Options) -> ExitCode {
     }
 }
 
-async fn run_server(options: &Options) -> ExitCode {
-    let (mut server, _io_threads) = LspServer::connect_stdio(options);
+async fn run_server(options: Options) -> ExitCode {
+    let (mut server, _io_threads) = LspServer::connect_stdio(&options);
     server.initialize().unwrap();
-    let res = server.run_server(|server, user_files| {
-        let limits_ref =
-            LimitsRef::new(Some(Instant::now() + Duration::from_secs(options.timeout)));
-        let res = verify_files_main(options, limits_ref, server, user_files);
-        match res {
-            Ok(_) => Ok(()),
-            Err(VerifyError::Diagnostic(diag)) => {
-                server.add_diagnostic(diag).unwrap();
-                Ok(())
+    let server = Arc::new(Mutex::new(server));
+    let options = Arc::new(options);
+
+    let res = run_lsp_server(server.clone(), |user_files| {
+        let server: Arc<Mutex<dyn Server>> = server.clone();
+        let options = options.clone();
+        Box::pin(async move {
+            let res = verify_files(&options, &server, user_files.to_vec()).await;
+            match res {
+                Ok(_) => Ok(()),
+                Err(VerifyError::Diagnostic(diag)) => {
+                    server.lock().unwrap().add_diagnostic(diag).unwrap();
+                    Ok(())
+                }
+                Err(err) => Err(err),
             }
-            Err(err) => Err(err),
-        }
-    });
+        })
+    })
+    .await;
+
     match res {
         Ok(()) => ExitCode::SUCCESS,
         Err(VerifyError::Diagnostic(diag)) => {
-            server.add_diagnostic(diag).unwrap();
+            server.lock().unwrap().add_diagnostic(diag).unwrap();
             ExitCode::FAILURE
         }
         Err(err) => panic!("{}", err), // TODO
@@ -595,105 +601,137 @@ fn verify_files_main(
 
     let mut num_proven: usize = 0;
     let mut num_failures: usize = 0;
+    let mut wrapping_up: bool = false;
 
     for verify_unit in &mut verify_units {
         let (name, mut verify_unit) = verify_unit.enter_with_name();
 
-        // 4. Desugaring: transforming spec calls to procs
-        verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
-
-        // 5. Prepare slicing
-        let slice_vars = verify_unit.prepare_slicing(&options.slice_options, &mut tcx, server)?;
-
-        // print HeyVL core after desugaring if requested
-        if options.print_core {
-            println!("{}: HeyVL core query:\n{}\n", name, *verify_unit);
+        if wrapping_up {
+            server
+                .handle_not_checked(verify_unit.span)
+                .map_err(VerifyError::ServerError)?;
+            continue;
         }
 
-        // 6. Generating verification conditions.
-        let explanations = options
-            .explain_core_vc
-            .then(|| VcExplanation::new(verify_unit.direction));
-        let mut vcgen = Vcgen::new(&tcx, explanations);
-        let mut vc_expr = verify_unit.vcgen(&mut vcgen)?;
-        if let Some(explanation) = vcgen.explanation {
-            server.add_vc_explanation(explanation)?;
-        }
+        let res: Result<(), VerifyError> = (|| {
+            limits_ref.check_limits()?;
 
-        // 7. Unfolding
-        vc_expr.unfold(options, &limits_ref, &tcx)?;
+            // 4. Desugaring: transforming spec calls to procs
+            verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
 
-        // 8. Quantifier elimination
-        if !options.no_qelim {
-            vc_expr.qelim(&mut tcx);
-        }
+            // 5. Prepare slicing
+            let slice_vars =
+                verify_unit.prepare_slicing(&options.slice_options, &mut tcx, server)?;
 
-        // In-between, gather some stats about the vc expression
-        vc_expr.trace_expr_stats();
-
-        // 9. Create the "vc[S] is valid" expression
-        let mut vc_is_valid = vc_expr.into_bool_vc();
-
-        if options.egraph {
-            vc_is_valid.egraph_simplify();
-        }
-
-        // 10. Optimizations
-        if !options.no_boolify || options.opt_rel {
-            vc_is_valid.remove_parens();
-        }
-        if !options.no_boolify {
-            vc_is_valid.opt_boolify();
-        }
-        if options.opt_rel {
-            vc_is_valid.opt_relational();
-        }
-
-        // print theorem to prove if requested
-        if options.print_theorem {
-            vc_is_valid.print_theorem(name);
-        }
-
-        // 11. Translate to Z3
-        let ctx = mk_z3_ctx(options);
-        let smt_ctx = SmtCtx::new(&ctx, &tcx);
-        let mut translate = TranslateExprs::new(&smt_ctx);
-        let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
-
-        // 12. Simplify
-        if !options.no_simplify {
-            vc_is_valid.simplify();
-        }
-
-        // 13. Create Z3 solver with axioms, solve
-        let mut result =
-            vc_is_valid.run_solver(options, &limits_ref, &ctx, &mut translate, &slice_vars)?;
-
-        server
-            .handle_vc_check_result(name, verify_unit.span, &mut result, &mut translate)
-            .map_err(VerifyError::ServerError)?;
-
-        // If requested, write the SMT-LIB output.
-        result.write_smtlib(options, name)?;
-
-        if options.z3_trace {
-            info!("Z3 tracing output will be written to `z3.log`.");
-        }
-
-        // Handle reasons to stop the verifier.
-        match result.prove_result {
-            ProveResult::Unknown(ReasonUnknown::Interrupted) => {
-                return Err(VerifyError::Interrupted)
+            // print HeyVL core after desugaring if requested
+            if options.print_core {
+                println!("{}: HeyVL core query:\n{}\n", name, *verify_unit);
             }
-            ProveResult::Unknown(ReasonUnknown::Timeout) => return Err(LimitError::Timeout.into()),
-            _ => {}
-        }
 
-        // Increment counters
-        match result.prove_result {
-            ProveResult::Proof => num_proven += 1,
-            ProveResult::Counterexample(_) | ProveResult::Unknown(_) => num_failures += 1,
-        }
+            // 6. Generating verification conditions.
+            let explanations = options
+                .explain_core_vc
+                .then(|| VcExplanation::new(verify_unit.direction));
+            let mut vcgen = Vcgen::new(&tcx, explanations);
+            let mut vc_expr = verify_unit.vcgen(&mut vcgen)?;
+            if let Some(explanation) = vcgen.explanation {
+                server.add_vc_explanation(explanation)?;
+            }
+
+            // 7. Unfolding
+            vc_expr.unfold(options, &limits_ref, &tcx)?;
+
+            // 8. Quantifier elimination
+            if !options.no_qelim {
+                vc_expr.qelim(&mut tcx);
+            }
+
+            // In-between, gather some stats about the vc expression
+            vc_expr.trace_expr_stats();
+
+            // 9. Create the "vc[S] is valid" expression
+            let mut vc_is_valid = vc_expr.into_bool_vc();
+
+            if options.egraph {
+                vc_is_valid.egraph_simplify();
+            }
+
+            // 10. Optimizations
+            if !options.no_boolify || options.opt_rel {
+                vc_is_valid.remove_parens();
+            }
+            if !options.no_boolify {
+                vc_is_valid.opt_boolify();
+            }
+            if options.opt_rel {
+                vc_is_valid.opt_relational();
+            }
+
+            // print theorem to prove if requested
+            if options.print_theorem {
+                vc_is_valid.print_theorem(name);
+            }
+
+            // 11. Translate to Z3
+            let ctx = mk_z3_ctx(options);
+            let smt_ctx = SmtCtx::new(&ctx, &tcx);
+            let mut translate = TranslateExprs::new(&smt_ctx);
+            let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
+
+            // 12. Simplify
+            if !options.no_simplify {
+                vc_is_valid.simplify();
+            }
+
+            // 13. Create Z3 solver with axioms, solve
+            let mut result =
+                vc_is_valid.run_solver(options, &limits_ref, &ctx, &mut translate, &slice_vars)?;
+
+            server
+                .handle_vc_check_result(name, verify_unit.span, &mut result, &mut translate)
+                .map_err(VerifyError::ServerError)?;
+
+            // If requested, write the SMT-LIB output.
+            result.write_smtlib(options, name)?;
+
+            if options.z3_trace {
+                info!("Z3 tracing output will be written to `z3.log`.");
+            }
+
+            // Handle reasons to stop the verifier.
+            match result.prove_result {
+                ProveResult::Unknown(ReasonUnknown::Interrupted) => {
+                    return Err(VerifyError::Interrupted);
+                }
+                ProveResult::Unknown(ReasonUnknown::Timeout) => {
+                    return Err(LimitError::Timeout.into())
+                }
+                _ => {}
+            }
+
+            // Increment counters
+            match result.prove_result {
+                ProveResult::Proof => num_proven += 1,
+                ProveResult::Counterexample(_) | ProveResult::Unknown(_) => num_failures += 1,
+            }
+
+            Ok(())
+        })();
+        match res {
+            Ok(_) => Ok(()),
+            Err(VerifyError::LimitError(_)) | Err(VerifyError::Interrupted) => {
+                wrapping_up = true;
+                server
+                    .handle_not_checked(verify_unit.span)
+                    .map_err(VerifyError::ServerError)?;
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }?;
+    }
+
+    if wrapping_up {
+        return Ok(false);
     }
 
     if !options.language_server {

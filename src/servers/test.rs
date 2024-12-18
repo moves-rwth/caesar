@@ -70,4 +70,9 @@ impl Server for TestServer {
             .insert(span, VerifyResult::from_prove_result(&result.prove_result));
         Ok(())
     }
+
+    fn handle_not_checked(&mut self, span: Span) -> Result<(), ServerError> {
+        self.statuses.insert(span, VerifyResult::Unknown);
+        Ok(())
+    }
 }
