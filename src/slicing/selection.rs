@@ -196,6 +196,19 @@ impl SliceSelection {
         failure_message: None,
     };
 
+    /// Slice everything. This is only used in our tests, as it is generally
+    /// unsound in every other use case.
+    pub const EVERYTHING: Self = SliceSelection {
+        concordant: true,
+        discordant: true,
+        in_slice_verify_annotation: true,
+        in_slice_error_annotation: true,
+        slice_ticks: true,
+        slice_sampling: true,
+        success_message: None,
+        failure_message: None,
+    };
+
     /// Does a selection enable another selection, i.e. is there a part of the
     /// selection enabled in both selections?
     pub fn enables(&self, other: &Self) -> bool {

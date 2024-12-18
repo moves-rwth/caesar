@@ -14,6 +14,9 @@ pub mod solver;
 pub mod transform;
 mod util;
 
+#[cfg(test)]
+mod transform_test;
+
 /// Initialize the slicing annotations in this context.
 pub fn init_slicing(tcx: &mut TyCtx) {
     for kind in [
