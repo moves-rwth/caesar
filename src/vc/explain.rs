@@ -21,7 +21,8 @@ use crate::{
     opt::unfolder::Unfolder,
     pretty::SimplePretty,
     proof_rules::{
-        self, encode_unroll, hey_const, EncodingEnvironment, InvariantAnnotation, UnrollAnnotation,
+        self, encode_unroll, hey_const, negations::DirectionTracker, EncodingEnvironment,
+        InvariantAnnotation, UnrollAnnotation,
     },
     resource_limits::LimitsRef,
     smt::SmtCtx,
@@ -88,13 +89,31 @@ impl ExprExplanation {
     }
 }
 
+/// Data structure to track all vc explanation information that is generated
+/// during vc generation.
+///
+/// It is important that the `direction` field is correctly updated to ensure
+/// that the encodings are done with respect to the correct direction when using
+/// negation statements.
 #[derive(Debug, Default)]
 pub struct VcExplanation {
+    /// The direction is needed to run proof rule encodings in explanations.
+    pub direction: DirectionTracker,
+    /// A stack of explanations for expressions.
     exprs: Vec<ExprExplanation>,
+    /// The current block which is being processed. This is used to remove
+    /// explanations which would show up outside of the surrounding block.
     current_block: Option<Span>,
 }
 
 impl VcExplanation {
+    pub fn new(direction: Direction) -> Self {
+        Self {
+            direction: DirectionTracker::new(direction),
+            ..Default::default()
+        }
+    }
+
     /// Adds an explanation step to the explanations. If multiple explanation
     /// steps are added for the same span, this must be done consecutively.
     pub fn add_expr(&mut self, span: Span, expr: Expr, is_block_itself: bool) {
@@ -207,7 +226,7 @@ pub fn explain_raw_vc(
     post: Expr,
     direction: Direction,
 ) -> Result<VcExplanation, Diagnostic> {
-    let mut vcgen = Vcgen::new(tcx, true, direction);
+    let mut vcgen = Vcgen::new(tcx, Some(VcExplanation::new(direction)));
     vcgen.vcgen_block(block, post)?;
     Ok(vcgen.explanation.unwrap())
 }
@@ -230,40 +249,41 @@ fn explain_unroll(
 ) -> Result<Expr, Diagnostic> {
     let k = proof_rules::lit_u128(&args[0]);
     let terminator = &args[1];
+    let direction = *vcgen.explanation.as_ref().unwrap().direction;
 
-    let enc_env = EncodingEnvironment {
-        // Use a "dummy" proc name since this name is not used during unrolling
-        base_proc_ident: Ident::with_dummy_span(Symbol::intern("unroll_env")),
-        // Span of the whole "annotation+annotated" statement
-        stmt_span,
-        // Span of only the annotation
-        call_span,
-        // VCGen keeps track of the direction of the current proc
-        direction: vcgen.direction,
-    };
-
-    // Generate the explanations for the loop body
+    // 1. generate the explanations for the loop body in the initial iteration
     if let StmtKind::While(_d, body) = &loop_stmt.node {
-        // Vcgen stores explanations for each statement in the body
-        // The return value (pre-vc of the body) is unused since the loop will be unrolled
-        // We need the pre-vc of the k-times unrolled loop instead
+        // we do not use the pre-vc of the initial iteration, but the generated
+        // explanations are stored in `vcgen`.
         let _inner_pre = vcgen.vcgen_block(body, terminator.clone());
+    } else {
+        unreachable!();
     }
 
+    // 2. compute the pre-vc of of unrolling
+
+    // unroll the loop
+    let enc_env = EncodingEnvironment {
+        // this name is not used during unrolling, so we use a dummy
+        base_proc_ident: Ident::with_dummy_span(Symbol::intern("unroll_env")),
+        stmt_span,
+        call_span,
+        direction,
+    };
     let unrolled_stmts = encode_unroll(
         &enc_env,
         loop_stmt,
         k,
-        hey_const(&enc_env, terminator, enc_env.direction, vcgen.tcx),
+        hey_const(&enc_env, terminator, direction, vcgen.tcx),
     );
-
     let unrolled_block = Spanned::new(enc_env.stmt_span, unrolled_stmts);
 
-    // Use a temporary vcgen that will be discarded to generate the pre-vc of the unrolled loop
-    let mut temp_vcgen = Vcgen::new(vcgen.tcx, false, vcgen.direction);
+    // generate pre-vc of unrolled loop with temporary vcgen
+    let mut temp_vcgen = Vcgen::new(vcgen.tcx, None);
     let mut return_expr = temp_vcgen.vcgen_block(&unrolled_block, terminator.clone())?;
 
-    // Apply substitutions and simplify the pre-vc of the unrolled loop
+    // apply substitutions and simplify the pre-vc of the unrolled loop, add it
+    // to our explanations in `vcgen`.
     explain_subst(vcgen, stmt_span, &mut return_expr);
 
     Ok(return_expr)

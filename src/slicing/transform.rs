@@ -25,6 +25,7 @@ use crate::{
         VarKind,
     },
     intrinsic::annotations::AnnotationKind,
+    proof_rules::negations::{DirectionError, DirectionTracker},
     tyctx::TyCtx,
 };
 
@@ -68,7 +69,7 @@ impl SliceStmt {
 pub struct StmtSliceVisitor<'tcx> {
     tcx: &'tcx mut TyCtx,
     selector: SelectionBuilder,
-    direction: Direction,
+    direction: DirectionTracker,
     slice_stmts: SliceStmts,
 }
 
@@ -79,7 +80,7 @@ impl<'tcx> StmtSliceVisitor<'tcx> {
         StmtSliceVisitor {
             tcx,
             selector: SelectionBuilder::new(selection),
-            direction,
+            direction: DirectionTracker::new(direction),
             slice_stmts: SliceStmts::default(),
         }
     }
@@ -151,17 +152,20 @@ impl<'tcx> StmtSliceVisitor<'tcx> {
 pub enum StmtSliceError {
     /// When negation statements are used in an unsupported way. This should not
     /// ever occur from Caesar's internal encodings.
-    UnsupportedNegation(Span),
+    DirectionError(DirectionError),
 }
 
 impl StmtSliceError {
     pub fn to_diagnostic(&self) -> Diagnostic {
         match self {
-            StmtSliceError::UnsupportedNegation(span) => Diagnostic::new(ReportKind::Advice, *span)
-                .with_message("unsupported negation for slicing")
-                .with_label(
-                    Label::new(*span).with_message("after this statement, slicing is disabled"),
-                ),
+            StmtSliceError::DirectionError(err) => {
+                Diagnostic::new(ReportKind::Advice, err.negation_span)
+                    .with_message("unsupported negation for slicing")
+                    .with_label(
+                        Label::new(err.negation_span)
+                            .with_message("after this statement, slicing is disabled"),
+                    )
+            }
         }
     }
 }
@@ -172,7 +176,7 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
     fn visit_proc(&mut self, proc_ref: &mut DeclRef<ProcDecl>) -> Result<(), Self::Err> {
         let decl = proc_ref.borrow();
         let prev_dir = self.direction;
-        self.direction = decl.direction;
+        self.direction.0 = decl.direction;
         drop(decl);
         walk_proc(self, proc_ref)?;
         self.direction = prev_dir;
@@ -229,7 +233,7 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 }
             }
             StmtKind::Assume(dir, expr) => {
-                let effect = if self.direction == *dir {
+                let effect = if *self.direction == *dir {
                     SliceEffect::Concordant
                 } else {
                     SliceEffect::Discordant
@@ -241,7 +245,7 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 self.mk_top_toggle(expr, *dir, slice_var)
             }
             StmtKind::Assert(dir, expr) => {
-                let effect = if self.direction == *dir {
+                let effect = if *self.direction == *dir {
                     SliceEffect::Discordant
                 } else {
                     SliceEffect::Concordant
@@ -253,7 +257,7 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 self.mk_top_toggle(expr, *dir, slice_stmt)
             }
             StmtKind::Tick(expr) if self.selector.should_slice_ticks() => {
-                let effect = match self.direction {
+                let effect = match *self.direction {
                     Direction::Down => SliceEffect::Concordant,
                     Direction::Up => SliceEffect::Discordant,
                 };
@@ -265,7 +269,7 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 self.mk_top_toggle(expr, Direction::Up, slice_var)
             }
             StmtKind::Demonic(lhs, rhs) => {
-                let dir = self.direction;
+                let dir = *self.direction;
                 let effect = match dir {
                     Direction::Down => SliceEffect::Discordant,
                     Direction::Up => SliceEffect::Concordant,
@@ -317,8 +321,8 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 rhs.node.insert(0, generate_slice_stmt(rhs_slice_var));
             }
             StmtKind::Angelic(lhs, rhs) => {
-                let dir = self.direction;
-                let effect = match self.direction {
+                let dir = *self.direction;
+                let effect = match dir {
                     Direction::Down => SliceEffect::Concordant,
                     Direction::Up => SliceEffect::Discordant,
                 };
@@ -384,11 +388,10 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 );
             }
             */
-            StmtKind::Negate(dir) => match (self.direction, dir) {
-                (Direction::Down, Direction::Down) => self.direction = Direction::Up,
-                (Direction::Up, Direction::Up) => self.direction = Direction::Down,
-                _ => return Err(StmtSliceError::UnsupportedNegation(s.span)),
-            },
+            StmtKind::Negate(_) => self
+                .direction
+                .handle_negation_forwards(s)
+                .map_err(StmtSliceError::DirectionError)?,
             _ => {}
         }
 

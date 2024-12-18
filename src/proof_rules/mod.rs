@@ -1,6 +1,7 @@
 //! This module provides annotations that encode proof rules and their desugaring transformations.
 
 mod induction;
+pub mod negations;
 pub use induction::*;
 mod unroll;
 pub use unroll::*;

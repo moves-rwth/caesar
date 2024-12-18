@@ -19,16 +19,13 @@ use super::explain::{explain_annotated_while, explain_proc_call, explain_subst, 
 pub struct Vcgen<'tcx> {
     pub(super) tcx: &'tcx TyCtx,
     pub explanation: Option<VcExplanation>,
-    pub direction: Direction,
 }
 
 impl<'tcx> Vcgen<'tcx> {
-    pub fn new(tcx: &'tcx TyCtx, explain: bool, direction: Direction) -> Self {
-        Vcgen {
-            tcx,
-            explanation: explain.then(VcExplanation::default),
-            direction,
-        }
+    /// Create a new `Vcgen` instance. Initialize with an optional
+    /// `VcExplanation` structure to enable explanations.
+    pub fn new(tcx: &'tcx TyCtx, explanation: Option<VcExplanation>) -> Self {
+        Vcgen { tcx, explanation }
     }
 
     pub fn vcgen_block(&mut self, block: &Block, post: Expr) -> Result<Expr, Diagnostic> {
@@ -100,6 +97,12 @@ impl<'tcx> Vcgen<'tcx> {
                 builder.binary(bin_op, spec_ty, expr.clone(), post)
             }
             StmtKind::Negate(dir) => {
+                if let Some(ref mut explanation) = self.explanation {
+                    explanation
+                        .direction
+                        .handle_negation_backwards(stmt)
+                        .map_err(|_| unsupported_stmt_diagnostic(stmt))?;
+                }
                 let un_op = match dir {
                     Direction::Down => UnOpKind::Not,
                     Direction::Up => UnOpKind::Non,
