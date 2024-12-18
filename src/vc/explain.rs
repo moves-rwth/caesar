@@ -14,12 +14,16 @@ use z3::{Config, Context};
 use crate::{
     ast::{
         util::remove_casts, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Diagnostic,
-        Direction, Expr, ExprBuilder, Files, ProcDecl, Span, Stmt, StmtKind, TyKind,
+        Direction, Expr, ExprBuilder, Files, Ident, ProcDecl, Span, Spanned, Stmt, StmtKind,
+        Symbol, TyKind,
     },
     intrinsic::annotations::AnnotationKind,
     opt::unfolder::Unfolder,
     pretty::SimplePretty,
-    proof_rules::InvariantAnnotation,
+    proof_rules::{
+        self, encode_unroll, hey_const, negations::DirectionTracker, EncodingEnvironment,
+        InvariantAnnotation, UnrollAnnotation,
+    },
     resource_limits::LimitsRef,
     smt::SmtCtx,
     tyctx::TyCtx,
@@ -85,13 +89,31 @@ impl ExprExplanation {
     }
 }
 
+/// Data structure to track all vc explanation information that is generated
+/// during vc generation.
+///
+/// It is important that the `direction` field is correctly updated to ensure
+/// that the encodings are done with respect to the correct direction when using
+/// negation statements.
 #[derive(Debug, Default)]
 pub struct VcExplanation {
+    /// The direction is needed to run proof rule encodings in explanations.
+    pub direction: DirectionTracker,
+    /// A stack of explanations for expressions.
     exprs: Vec<ExprExplanation>,
+    /// The current block which is being processed. This is used to remove
+    /// explanations which would show up outside of the surrounding block.
     current_block: Option<Span>,
 }
 
 impl VcExplanation {
+    pub fn new(direction: Direction) -> Self {
+        Self {
+            direction: DirectionTracker::new(direction),
+            ..Default::default()
+        }
+    }
+
     /// Adds an explanation step to the explanations. If multiple explanation
     /// steps are added for the same span, this must be done consecutively.
     pub fn add_expr(&mut self, span: Span, expr: Expr, is_block_itself: bool) {
@@ -152,8 +174,8 @@ pub(super) fn explain_annotated_while(
     stmt: &Stmt,
     _post: &Expr,
 ) -> Result<Expr, Diagnostic> {
-    if let StmtKind::Annotation(_, ident, args, inner_stmt) = &stmt.node {
-        if let StmtKind::While(_cond, body) = &inner_stmt.node {
+    if let StmtKind::Annotation(anno_span, ident, args, inner_stmt) = &stmt.node {
+        if let StmtKind::While(_, body) = &inner_stmt.node {
             if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
                 vcgen.tcx.get(*ident).unwrap().as_ref()
             {
@@ -163,6 +185,14 @@ pub(super) fn explain_annotated_while(
                     .is_some()
                 {
                     return explain_park_induction(vcgen, &args[0], body);
+                }
+
+                if anno_ref
+                    .as_any()
+                    .downcast_ref::<UnrollAnnotation>()
+                    .is_some()
+                {
+                    return explain_unroll(vcgen, inner_stmt, args, stmt.span, *anno_span);
                 }
             }
         }
@@ -182,7 +212,7 @@ pub fn explain_decl_vc(
         let body = proc.body.borrow();
         if let Some(ref body) = *body {
             let post = fold_spec(&proc, proc.ensures());
-            let res = explain_raw_vc(tcx, body, post)?;
+            let res = explain_raw_vc(tcx, body, post, proc.direction)?;
             return Ok(Some(res));
         }
     }
@@ -190,8 +220,13 @@ pub fn explain_decl_vc(
 }
 
 /// Explain verification condition generation of a [`Block`] given a post.
-pub fn explain_raw_vc(tcx: &TyCtx, block: &Block, post: Expr) -> Result<VcExplanation, Diagnostic> {
-    let mut vcgen = Vcgen::new(tcx, true);
+pub fn explain_raw_vc(
+    tcx: &TyCtx,
+    block: &Block,
+    post: Expr,
+    direction: Direction,
+) -> Result<VcExplanation, Diagnostic> {
+    let mut vcgen = Vcgen::new(tcx, Some(VcExplanation::new(direction)));
     vcgen.vcgen_block(block, post)?;
     Ok(vcgen.explanation.unwrap())
 }
@@ -203,6 +238,55 @@ fn explain_park_induction(
 ) -> Result<Expr, Diagnostic> {
     let _inner_pre = vcgen.vcgen_block(body, invariant.clone());
     Ok(invariant.clone())
+}
+
+fn explain_unroll(
+    vcgen: &mut Vcgen,
+    loop_stmt: &Stmt,
+    args: &[Expr],
+    stmt_span: Span,
+    call_span: Span,
+) -> Result<Expr, Diagnostic> {
+    let k = proof_rules::lit_u128(&args[0]);
+    let terminator = &args[1];
+    let direction = *vcgen.explanation.as_ref().unwrap().direction;
+
+    // 1. generate the explanations for the loop body in the initial iteration
+    if let StmtKind::While(_d, body) = &loop_stmt.node {
+        // we do not use the pre-vc of the initial iteration, but the generated
+        // explanations are stored in `vcgen`.
+        let _inner_pre = vcgen.vcgen_block(body, terminator.clone());
+    } else {
+        unreachable!();
+    }
+
+    // 2. compute the pre-vc of of unrolling
+
+    // unroll the loop
+    let enc_env = EncodingEnvironment {
+        // this name is not used during unrolling, so we use a dummy
+        base_proc_ident: Ident::with_dummy_span(Symbol::intern("unroll_env")),
+        stmt_span,
+        call_span,
+        direction,
+    };
+    let unrolled_stmts = encode_unroll(
+        &enc_env,
+        loop_stmt,
+        k,
+        hey_const(&enc_env, terminator, direction, vcgen.tcx),
+    );
+    let unrolled_block = Spanned::new(enc_env.stmt_span, unrolled_stmts);
+
+    // generate pre-vc of unrolled loop with temporary vcgen
+    let mut temp_vcgen = Vcgen::new(vcgen.tcx, None);
+    let mut return_expr = temp_vcgen.vcgen_block(&unrolled_block, terminator.clone())?;
+
+    // apply substitutions and simplify the pre-vc of the unrolled loop, add it
+    // to our explanations in `vcgen`.
+    explain_subst(vcgen, stmt_span, &mut return_expr);
+
+    Ok(return_expr)
 }
 
 /// To explain a proc call, we just return the pre with the parameters

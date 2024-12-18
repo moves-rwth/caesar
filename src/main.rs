@@ -37,6 +37,7 @@ use tokio::task::JoinError;
 use tracing::{error, info, warn};
 
 use structopt::StructOpt;
+use vc::explain::VcExplanation;
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
 pub mod ast;
@@ -610,7 +611,10 @@ fn verify_files_main(
         }
 
         // 6. Generating verification conditions.
-        let mut vcgen = Vcgen::new(&tcx, options.explain_core_vc);
+        let explanations = options
+            .explain_core_vc
+            .then(|| VcExplanation::new(verify_unit.direction));
+        let mut vcgen = Vcgen::new(&tcx, explanations);
         let mut vc_expr = verify_unit.vcgen(&mut vcgen)?;
         if let Some(explanation) = vcgen.explanation {
             server.add_vc_explanation(explanation)?;
