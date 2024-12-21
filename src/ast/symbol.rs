@@ -1,12 +1,11 @@
 use super::Span;
 use crate::ast::FileId;
-use once_cell::sync::Lazy;
 use std::fmt;
-use std::sync::Mutex;
-use string_interner::{DefaultSymbol, StringInterner};
+use std::sync::{LazyLock, Mutex};
+use string_interner::{DefaultStringInterner, DefaultSymbol, StringInterner};
 
-static INTERNED_STRINGS: Lazy<Mutex<StringInterner>> =
-    Lazy::new(|| Mutex::new(StringInterner::new()));
+static INTERNED_STRINGS: LazyLock<Mutex<DefaultStringInterner>> =
+    LazyLock::new(|| Mutex::new(StringInterner::default()));
 
 /// An interned string.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

@@ -46,8 +46,8 @@ where
 {
     let command: String = {
         let args_strings: Vec<String> = env::args().collect();
-        let args_strs: Vec<&str> = args_strings.iter().map(|s| s.as_str()).collect();
-        shellwords::join(&args_strs)
+        let args_strs = args_strings.iter().map(|s| s.as_str());
+        shlex::try_join(args_strs).unwrap()
     };
     writeln!(w, "Command: {}", command)?;
     writeln!(w, "Caesar version: {}", caesar_version_info())?;
