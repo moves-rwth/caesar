@@ -140,8 +140,9 @@ pub struct OptimizationOptions {
     #[arg(long)]
     pub egraph: bool,
 
-    /// Don't do reachability checks during unfolding of verification conditions
-    /// to eliminate unreachable branches. Instead, unfold all branches.
+    /// Don't do SMT-powered reachability checks during unfolding of
+    /// verification conditions to eliminate unreachable branches. Instead,
+    /// unfold all branches.
     #[arg(long)]
     pub strict: bool,
 
@@ -222,6 +223,11 @@ pub struct DebugOptions {
     /// Do not pretty-print the output of the `--smt-dir` and `--smt-out` options.
     #[arg(long)]
     pub no_pretty_smtlib: bool,
+
+    /// Do not run the final SMT check to verify the program. This is useful to
+    /// obtain just the SMT-LIB output.
+    #[arg(long)]
+    pub no_verify: bool,
 
     /// Enable Z3 tracing for the final SAT check.
     #[arg(long)]
@@ -703,14 +709,11 @@ fn verify_files_main(
 
         // 13. Create Z3 solver with axioms, solve
         let mut result =
-            vc_is_valid.run_solver(options, &limits_ref, &ctx, &mut translate, &slice_vars)?;
+            vc_is_valid.run_solver(options, &limits_ref,name, &ctx, &mut translate, &slice_vars)?;
 
         server
             .handle_vc_check_result(name, verify_unit.span, &mut result, &mut translate)
             .map_err(VerifyError::ServerError)?;
-
-        // If requested, write the SMT-LIB output.
-        result.write_smtlib(options, name)?;
 
         if options.debug_options.z3_trace {
             info!("Z3 tracing output will be written to `z3.log`.");
