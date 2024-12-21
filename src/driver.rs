@@ -676,7 +676,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
 
         let smtlib = get_smtlib(options, &prover);
         if let Some(smtlib) = &smtlib {
-            write_smtlib(&options.debug_options, name, &smtlib, None)?;
+            write_smtlib(&options.debug_options, name, smtlib, None)?;
         }
 
         if options.debug_options.no_verify {
@@ -737,7 +737,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
                 smt_dir: options.debug_options.smt_dir.clone(),
                 ..options.debug_options
             };
-            write_smtlib(&options, name, &smtlib, Some(&result))?;
+            write_smtlib(&options, name, smtlib, Some(&result))?;
         }
 
         Ok(SmtVcCheckResult {
@@ -808,7 +808,7 @@ fn write_smtlib<'ctx>(
         let mut smtlib = smtlib.clone();
         smtlib.add_check_sat();
         if let Some(prove_result) = prove_result {
-            smtlib.add_details_query(&prove_result);
+            smtlib.add_details_query(prove_result);
         }
         let smtlib = smtlib.into_string();
         if options.print_smt {

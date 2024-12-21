@@ -708,8 +708,14 @@ fn verify_files_main(
         }
 
         // 13. Create Z3 solver with axioms, solve
-        let mut result =
-            vc_is_valid.run_solver(options, &limits_ref,name, &ctx, &mut translate, &slice_vars)?;
+        let mut result = vc_is_valid.run_solver(
+            options,
+            &limits_ref,
+            name,
+            &ctx,
+            &mut translate,
+            &slice_vars,
+        )?;
 
         server
             .handle_vc_check_result(name, verify_unit.span, &mut result, &mut translate)
