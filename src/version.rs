@@ -69,3 +69,10 @@ where
     writeln!(w, "Z3 version: {}", z3_version_info())?;
     writeln!(w)
 }
+
+/// Get a detailed version info string about Caesar and its dependencies.
+pub fn detailed_version_info_string() -> String {
+    let mut buffer = Vec::new();
+    write_detailed_version_info(&mut buffer).unwrap();
+    String::from_utf8(buffer).unwrap()
+}

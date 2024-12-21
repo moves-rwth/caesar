@@ -357,12 +357,12 @@ impl SourceUnit {
         options: &Options,
         tcx: &TyCtx,
     ) -> Result<(), VerifyError> {
-        if let Some(jani_dir) = &options.jani_dir {
+        if let Some(jani_dir) = &options.jani_options.jani_dir {
             match self {
                 SourceUnit::Decl(decl) => {
                     if let DeclKind::ProcDecl(decl_ref) = decl {
                         let jani_options = JaniOptions {
-                            skip_quant_pre: options.jani_skip_quant_pre,
+                            skip_quant_pre: options.jani_options.jani_skip_quant_pre,
                         };
                         let jani_model = mc::proc_to_model(&jani_options, tcx, &decl_ref.borrow())
                             .map_err(|err| VerifyError::Diagnostic(err.diagnostic()))?;
@@ -533,7 +533,7 @@ impl QuantVcUnit {
     ) -> Result<(), LimitError> {
         let span = info_span!("unfolding");
         let _entered = span.enter();
-        if !options.strict {
+        if !options.opt_options.strict {
             let ctx = Context::new(&Config::default());
             let smt_ctx = SmtCtx::new(&ctx, tcx);
             let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
@@ -726,7 +726,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
 
 pub fn mk_z3_ctx(options: &Options) -> Context {
     let mut config = Config::default();
-    if options.z3_trace {
+    if options.debug_options.z3_trace {
         config.set_bool_param_value("trace", true);
         config.set_bool_param_value("proof", true);
     }
@@ -759,9 +759,9 @@ fn mk_valid_query_prover<'smt, 'ctx>(
 }
 
 fn get_smtlib(options: &Options, prover: &Prover) -> Option<Smtlib> {
-    if options.print_smt || options.smt_dir.is_some() {
+    if options.debug_options.print_smt || options.debug_options.smt_dir.is_some() {
         let mut smtlib = prover.get_smtlib();
-        if !options.no_pretty_smtlib {
+        if !options.debug_options.no_pretty_smtlib {
             let res = smtlib.pretty_raco_read();
             if let Err(err) = res {
                 tracing::warn!("error pretty-printing SMT-LIB: {}", err);
@@ -908,15 +908,15 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
         options: &Options,
         name: &SourceUnitName,
     ) -> Result<(), VerifyError> {
-        if options.print_smt || options.smt_dir.is_some() {
+        if options.debug_options.print_smt || options.debug_options.smt_dir.is_some() {
             let mut smtlib = self.smtlib.clone().unwrap();
             smtlib.add_check_sat();
             smtlib.add_details_query(&self.prove_result);
             let smtlib = smtlib.into_string();
-            if options.print_smt {
+            if options.debug_options.print_smt {
                 println!("\n; --- Solver SMT-LIB ---\n{}\n", smtlib);
             }
-            if let Some(smt_dir) = &options.smt_dir {
+            if let Some(smt_dir) = &options.debug_options.smt_dir {
                 let file_path = smt_dir.join(name.to_file_name("smt2"));
                 create_dir_all(file_path.parent().unwrap())?;
                 let mut file = File::create(&file_path)?;

@@ -22,7 +22,7 @@ pub struct CliServer {
 impl CliServer {
     pub fn new(options: &Options) -> Self {
         CliServer {
-            werr: options.werr,
+            werr: options.input_options.werr,
             files: Default::default(),
         }
     }

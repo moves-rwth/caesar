@@ -10,7 +10,6 @@ use std::{
     ops::DerefMut,
     path::PathBuf,
     process::ExitCode,
-    str::FromStr,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -25,6 +24,7 @@ use crate::{
     vc::vcgen::Vcgen,
 };
 use ast::{Diagnostic, FileId};
+use clap::{Args, Parser, ValueEnum};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use proof_rules::init_encodings;
@@ -36,7 +36,6 @@ use timing::DispatchBuilder;
 use tokio::task::JoinError;
 use tracing::{error, info, warn};
 
-use structopt::StructOpt;
 use vc::explain::VcExplanation;
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
@@ -59,203 +58,231 @@ pub mod tyctx;
 pub mod vc;
 mod version;
 
-#[derive(StructOpt, Debug, Default)]
-#[structopt(
+#[derive(Debug, Default, Parser)]
+#[command(
     name = "caesar",
-    about = "A deductive verifier for probabilistic programs."
+    about = "A deductive verifier for probabilistic programs.",
+    version = version::detailed_version_info_string()
 )]
 pub struct Options {
-    /// Raw verification of just HeyVL statements without any declarations.
-    #[structopt(short, long)]
-    pub raw: bool,
+    #[command(flatten)]
+    pub input_options: InputOptions,
 
+    #[command(flatten)]
+    pub rlimit_options: ResourceLimitOptions,
+
+    #[command(flatten)]
+    pub jani_options: JaniOptions,
+
+    #[command(flatten)]
+    pub opt_options: OptimizationOptions,
+
+    #[command(flatten)]
+    pub lsp_options: LanguageServerOptions,
+
+    #[command(flatten)]
+    pub slice_options: SliceOptions,
+
+    #[command(flatten)]
+    pub debug_options: DebugOptions,
+}
+
+#[derive(Debug, Default, Args)]
+#[command(next_help_heading = "Input Options")]
+pub struct InputOptions {
     /// The files to verify.
-    #[structopt(name = "FILE", parse(from_os_str))]
+    #[arg(name = "FILE")]
     pub files: Vec<PathBuf>,
 
-    /// Disable quantifier elimination. You'll never want to do this, except to see why quantifier elimination is important.
-    #[structopt(long)]
-    pub no_qelim: bool,
+    /// Raw verification of just HeyVL statements without any declarations.
+    #[arg(short, long)]
+    pub raw: bool,
 
+    /// Treat warnings as errors.
+    #[arg(long)]
+    pub werr: bool,
+}
+
+#[derive(Debug, Default, Args)]
+#[command(next_help_heading = "Resource Limit Options")]
+pub struct ResourceLimitOptions {
     /// Time limit in seconds.
-    #[structopt(long, default_value = "300")]
+    #[arg(long, default_value = "300")]
     pub timeout: u64,
 
     /// Memory usage limit in megabytes.
-    #[structopt(long = "mem", default_value = "8192")]
+    #[arg(long = "mem", default_value = "8192")]
     pub mem_limit: u64,
+}
 
-    /// Emit tracing events as json instead of (ANSI) text.
-    #[structopt(long)]
-    pub json: bool,
-
-    /// Emit timing information from tracing events. The tracing events need to
-    /// be enabled for this to work.
-    #[structopt(long)]
-    pub timing: bool,
-
-    /// Do e-graph optimization of the generated verification conditions.
-    /// The result is not used at the moment.
-    #[structopt(long)]
-    pub egraph: bool,
-
-    /// Don't do reachability checks during unfolding of verification conditions
-    /// to eliminate unreachable branches. Instead, unfold all branches.
-    #[structopt(long)]
-    pub strict: bool,
-
-    /// Run the "relational view" optimization. Defaults to off.
-    #[structopt(long)]
-    pub opt_rel: bool,
-
-    /// Don't run the "boolify" optimization pass.
-    #[structopt(long)]
-    pub no_boolify: bool,
-
-    /// Don't apply Z3's simplification pass. This may help with interpreting
-    /// the current solver state.
-    #[structopt(long)]
-    pub no_simplify: bool,
-
-    /// Print version information to standard error.
-    #[structopt(short, long)]
-    pub debug: bool,
-
-    /// Treat warnings as errors.
-    #[structopt(long)]
-    pub werr: bool,
-
-    /// Print the SMT solver state for each verify unit in the SMT-LIB format to
-    /// standard output.
-    #[structopt(long)]
-    pub print_smt: bool,
-
-    /// Print the SMT solver state for each verify unit in the SMT-LIB format to
-    /// a file in the given directory.
-    #[structopt(long, parse(from_os_str))]
-    pub smt_dir: Option<PathBuf>,
-
-    /// Do not pretty-print the output of the `--smt-dir` and `--smt-out` options.
-    #[structopt(long)]
-    pub no_pretty_smtlib: bool,
-
-    /// Enable Z3 tracing for the final SAT check.
-    #[structopt(long)]
-    pub z3_trace: bool,
-
-    /// Print the parsed HeyVL code to the command-line.
-    #[structopt(long)]
-    pub print_parsed: bool,
-
-    /// Print the raw HeyVL program to the command-line after desugaring.
-    #[structopt(long)]
-    pub print_core: bool,
-
-    /// Print the HeyVL program with generated procs after annotation desugaring
-    #[structopt(long)]
-    pub print_core_procs: bool,
-
-    /// Print the theorem that is sent to the SMT solver to prove. That is, the
-    /// result of preparing `vc(S)[⊤] = ⊤`. Note that axioms are not included.
-    #[structopt(long)]
-    pub print_theorem: bool,
-
-    /// Produce explanations of verification conditions.
-    #[structopt(long)]
-    pub explain_vc: bool,
-
-    /// Produce explanations of verification conditions for the core HeyVL
-    /// that's produced after proof rules have been desugared.
-    #[structopt(long)]
-    pub explain_core_vc: bool,
-
-    /// Run the language server.
-    #[structopt(long)]
-    pub language_server: bool,
-
+#[derive(Debug, Default, Args)]
+#[command(next_help_heading = "JANI Output Options")]
+pub struct JaniOptions {
     /// Export declarations to JANI files in the provided directory.
-    #[structopt(long, parse(from_os_str))]
+    #[arg(long)]
     pub jani_dir: Option<PathBuf>,
 
     /// During extraction of the pre for JANI generation, skip the quantitative
     /// pres (instead of failing with an error).
-    #[structopt(long)]
+    #[arg(long)]
     pub jani_skip_quant_pre: bool,
-
-    #[structopt(flatten)]
-    pub slice_options: SliceOptions,
 }
 
-#[derive(Debug, Default, StructOpt)]
+#[derive(Debug, Default, Args)]
+#[command(next_help_heading = "Optimization Options")]
+pub struct OptimizationOptions {
+    /// Disable quantifier elimination. You'll never want to do this, except to see why quantifier elimination is important.
+    #[arg(long)]
+    pub no_qelim: bool,
+
+    /// Do e-graph optimization of the generated verification conditions.
+    /// The result is not used at the moment.
+    #[arg(long)]
+    pub egraph: bool,
+
+    /// Don't do reachability checks during unfolding of verification conditions
+    /// to eliminate unreachable branches. Instead, unfold all branches.
+    #[arg(long)]
+    pub strict: bool,
+
+    /// Run the "relational view" optimization. Defaults to off.
+    #[arg(long)]
+    pub opt_rel: bool,
+
+    /// Don't run the "boolify" optimization pass.
+    #[arg(long)]
+    pub no_boolify: bool,
+
+    /// Don't apply Z3's simplification pass. This may help with interpreting
+    /// the current solver state.
+    #[arg(long)]
+    pub no_simplify: bool,
+}
+
+#[derive(Debug, Default, Args)]
+#[command(next_help_heading = "Language Server Options")]
+pub struct LanguageServerOptions {
+    /// Produce explanations of verification conditions.
+    #[arg(long)]
+    pub explain_vc: bool,
+
+    /// Produce explanations of verification conditions for the core HeyVL
+    /// that's produced after proof rules have been desugared.
+    #[arg(long)]
+    pub explain_core_vc: bool,
+
+    /// Run the language server.
+    #[arg(long)]
+    pub language_server: bool,
+}
+
+#[derive(Debug, Default, Args)]
+#[command(next_help_heading = "Debug Options")]
+pub struct DebugOptions {
+    /// Emit tracing events as json instead of (ANSI) text.
+    #[arg(long)]
+    pub json: bool,
+
+    /// Emit timing information from tracing events. The tracing events need to
+    /// be enabled for this to work.
+    #[arg(long)]
+    pub timing: bool,
+
+    /// Print version information to standard error.
+    #[arg(short, long)]
+    pub debug: bool,
+
+    /// Print the parsed HeyVL code to the command-line.
+    #[arg(long)]
+    pub print_parsed: bool,
+
+    /// Print the raw HeyVL program to the command-line after desugaring.
+    #[arg(long)]
+    pub print_core: bool,
+
+    /// Print the HeyVL program with generated procs after annotation desugaring
+    #[arg(long)]
+    pub print_core_procs: bool,
+
+    /// Print the theorem that is sent to the SMT solver to prove. That is, the
+    /// result of preparing `vc(S)[⊤] = ⊤`. Note that axioms are not included.
+    #[arg(long)]
+    pub print_theorem: bool,
+
+    /// Print the SMT solver state for each verify unit in the SMT-LIB format to
+    /// standard output.
+    #[arg(long)]
+    pub print_smt: bool,
+
+    /// Print the SMT solver state for each verify unit in the SMT-LIB format to
+    /// a file in the given directory.
+    #[arg(long)]
+    pub smt_dir: Option<PathBuf>,
+
+    /// Do not pretty-print the output of the `--smt-dir` and `--smt-out` options.
+    #[arg(long)]
+    pub no_pretty_smtlib: bool,
+
+    /// Enable Z3 tracing for the final SAT check.
+    #[arg(long)]
+    pub z3_trace: bool,
+}
+
+#[derive(Debug, Default, Args)]
+#[command(next_help_heading = "Slicing Options")]
 pub struct SliceOptions {
     /// Do not try to slice when an error occurs.
-    #[structopt(long)]
+    #[arg(long)]
     pub no_slice_error: bool,
 
     /// Do not try to minimize the error slice and just return the first
     /// counterexample.
-    #[structopt(long)]
+    #[arg(long)]
     pub slice_error_first: bool,
 
     /// Enable slicing tick/reward statements during slicing for errors.
-    #[structopt(long)]
+    #[arg(long)]
     pub slice_ticks: bool,
 
     /// Enable slicing sampling statements (must also be selected via
     /// annotations).
-    #[structopt(long)]
+    #[arg(long)]
     pub slice_sampling: bool,
 
     /// Slice if the program verifies to return a smaller, verifying program.
     /// This is not enabled by default.
-    #[structopt(long)]
+    #[arg(long)]
     pub slice_verify: bool,
 
     /// If slicing for correctness is enabled, slice via these methods. If none
     /// is given, the best method is chosen automatically.
-    #[structopt(long, possible_values = SliceVerifyMethod::variants(), default_value = "core")]
+    #[arg(long, default_value = "core")]
     pub slice_verify_via: SliceVerifyMethod,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
 pub enum SliceVerifyMethod {
     /// Slice for correctness using unsat cores. This approach does not minimize
     /// the result. However, it is applicable all the time and has a very small
     /// overhead. All other methods are much slower or not always applicable.
     #[default]
+    #[value(name = "core")]
     UnsatCore,
     /// Slice by doing a search for minimal unsatisfiable subsets. The result
     /// might not be globally optimal - the method returns the first slice from
     /// which nothing can be removed without making the program not verify anymore.
+    #[value(name = "mus")]
     MinimalUnsatSubset,
     /// Slice by doing a search for the smallest unsatisfiable subset. This will
     /// enumerate all minimal unsat subsets and return the globally smallest one.
+    #[value(name = "sus")]
     SmallestUnsatSubset,
     /// Slice for correctness by encoding a direct exists-forall query into the
     /// SMT solver and then run the minimization algorithm. This approach does
     /// not support using uninterpreted functions. This approach is usually not
     /// good.
+    #[value(name = "exists-forall")]
     ExistsForall,
-}
-
-impl SliceVerifyMethod {
-    const fn variants() -> &'static [&'static str] {
-        &["core", "mus", "sus", "exists-forall"]
-    }
-}
-
-impl FromStr for SliceVerifyMethod {
-    type Err = InvalidSliceVerifyMethod;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "core" => Ok(Self::UnsatCore),
-            "mus" => Ok(Self::MinimalUnsatSubset),
-            "sus" => Ok(Self::SmallestUnsatSubset),
-            "exists-forall" => Ok(Self::ExistsForall),
-            _ => Err(InvalidSliceVerifyMethod),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -269,20 +296,16 @@ impl Display for InvalidSliceVerifyMethod {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    // add version to options config
-    let version_info = version::caesar_version_info();
-    let clap = Options::clap().version(version_info.as_str());
-    // now parse options
-    let options = Options::from_clap(&clap.get_matches());
+    let options = Options::parse();
 
-    if options.debug {
+    if options.debug_options.debug {
         let mut stderr = io::stderr().lock();
         version::write_detailed_version_info(&mut stderr).unwrap();
     }
     // install global collector configured based on RUST_LOG env var.
     setup_tracing(&options);
 
-    if !options.language_server {
+    if !options.lsp_options.language_server {
         run_cli(options).await
     } else {
         run_server(&options).await
@@ -290,13 +313,14 @@ async fn main() -> ExitCode {
 }
 
 async fn run_cli(options: Options) -> ExitCode {
-    if options.files.is_empty() {
+    if options.input_options.files.is_empty() {
         eprintln!("Error: list of files must not be empty.\n");
         return ExitCode::from(1);
     }
 
     let mut client = CliServer::new(&options);
     let user_files: Vec<FileId> = options
+        .input_options
         .files
         .iter()
         .map(|path| client.load_file(path))
@@ -306,11 +330,14 @@ async fn run_cli(options: Options) -> ExitCode {
     let server: Arc<Mutex<dyn Server>> = Arc::new(Mutex::new(client));
     let verify_result = verify_files(&options, &server, user_files).await;
 
-    if options.timing {
+    if options.debug_options.timing {
         print_timings();
     }
 
-    let (timeout, mem_limit) = (options.timeout, options.mem_limit);
+    let (timeout, mem_limit) = (
+        options.rlimit_options.timeout,
+        options.rlimit_options.mem_limit,
+    );
     match verify_result {
         #[allow(clippy::bool_to_int_with_if)]
         Ok(all_verified) => ExitCode::from(if all_verified { 0 } else { 1 }),
@@ -343,8 +370,9 @@ async fn run_server(options: &Options) -> ExitCode {
     let (mut server, _io_threads) = LspServer::connect_stdio(options);
     server.initialize().unwrap();
     let res = server.run_server(|server, user_files| {
-        let limits_ref =
-            LimitsRef::new(Some(Instant::now() + Duration::from_secs(options.timeout)));
+        let limits_ref = LimitsRef::new(Some(
+            Instant::now() + Duration::from_secs(options.rlimit_options.timeout),
+        ));
         let res = verify_files_main(options, limits_ref, server, user_files);
         match res {
             Ok(_) => Ok(()),
@@ -406,7 +434,12 @@ pub async fn verify_files(
         })
     };
     // Unpacking lots of Results with `.await??` :-)
-    await_with_resource_limits(Some(options.timeout), Some(options.mem_limit), handle).await??
+    await_with_resource_limits(
+        Some(options.rlimit_options.timeout),
+        Some(options.rlimit_options.mem_limit),
+        handle,
+    )
+    .await??
 }
 
 /// Synchronously verify the given source code. This is used for tests. The
@@ -416,7 +449,7 @@ pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, servers::
     use ast::SourceFilePath;
 
     let mut options = Options::default();
-    options.werr = true;
+    options.input_options.werr = true;
 
     let mut server = servers::TestServer::new(&options);
     let file_id = server
@@ -437,7 +470,7 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
     use ast::SourceFilePath;
 
     let mut options = Options::default();
-    options.werr = true;
+    options.input_options.werr = true;
 
     let mut client = servers::TestServer::new(&options);
     let file_id = client
@@ -447,9 +480,11 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
         .add(SourceFilePath::Builtin, source.to_owned())
         .id;
 
-    let mut source_units: Vec<Item<SourceUnit>> =
-        SourceUnit::parse(&client.get_file(file_id).unwrap(), options.raw)
-            .map_err(|parse_err| parse_err.diagnostic())?;
+    let mut source_units: Vec<Item<SourceUnit>> = SourceUnit::parse(
+        &client.get_file(file_id).unwrap(),
+        options.input_options.raw,
+    )
+    .map_err(|parse_err| parse_err.diagnostic())?;
 
     let mut source_unit = source_units.remove(0);
 
@@ -502,11 +537,11 @@ fn verify_files_main(
     let mut source_units: Vec<Item<SourceUnit>> = Vec::new();
     for file_id in user_files {
         let file = server.get_file(*file_id).unwrap();
-        let new_units =
-            SourceUnit::parse(&file, options.raw).map_err(|parse_err| parse_err.diagnostic())?;
+        let new_units = SourceUnit::parse(&file, options.input_options.raw)
+            .map_err(|parse_err| parse_err.diagnostic())?;
 
         // Print the result of parsing if requested
-        if options.print_parsed {
+        if options.debug_options.print_parsed {
             println!("{}: Parsed file:\n", file.path);
             for unit in &new_units {
                 println!("{}", unit);
@@ -549,7 +584,7 @@ fn verify_files_main(
     }
 
     // explain high-level HeyVL if requested
-    if options.explain_vc {
+    if options.lsp_options.explain_vc {
         for source_unit in &mut source_units {
             let source_unit = source_unit.enter();
             source_unit.explain_vc(&tcx, server)?;
@@ -577,7 +612,7 @@ fn verify_files_main(
     }
     source_units.extend(source_units_buf);
 
-    if options.print_core_procs {
+    if options.debug_options.print_core_procs {
         println!("HeyVL query with generated procs:");
         for source_unit in &mut source_units {
             println!("{}", source_unit);
@@ -589,7 +624,7 @@ fn verify_files_main(
         .flat_map(|item| item.flat_map(SourceUnit::into_verify_unit))
         .collect();
 
-    if options.z3_trace && verify_units.len() > 1 {
+    if options.debug_options.z3_trace && verify_units.len() > 1 {
         warn!("Z3 tracing is enabled with multiple verification units. Intermediate tracing results will be overwritten.");
     }
 
@@ -606,12 +641,13 @@ fn verify_files_main(
         let slice_vars = verify_unit.prepare_slicing(&options.slice_options, &mut tcx, server)?;
 
         // print HeyVL core after desugaring if requested
-        if options.print_core {
+        if options.debug_options.print_core {
             println!("{}: HeyVL core query:\n{}\n", name, *verify_unit);
         }
 
         // 6. Generating verification conditions.
         let explanations = options
+            .lsp_options
             .explain_core_vc
             .then(|| VcExplanation::new(verify_unit.direction));
         let mut vcgen = Vcgen::new(&tcx, explanations);
@@ -624,7 +660,7 @@ fn verify_files_main(
         vc_expr.unfold(options, &limits_ref, &tcx)?;
 
         // 8. Quantifier elimination
-        if !options.no_qelim {
+        if !options.opt_options.no_qelim {
             vc_expr.qelim(&mut tcx);
         }
 
@@ -634,23 +670,23 @@ fn verify_files_main(
         // 9. Create the "vc[S] is valid" expression
         let mut vc_is_valid = vc_expr.into_bool_vc();
 
-        if options.egraph {
+        if options.opt_options.egraph {
             vc_is_valid.egraph_simplify();
         }
 
         // 10. Optimizations
-        if !options.no_boolify || options.opt_rel {
+        if !options.opt_options.no_boolify || options.opt_options.opt_rel {
             vc_is_valid.remove_parens();
         }
-        if !options.no_boolify {
+        if !options.opt_options.no_boolify {
             vc_is_valid.opt_boolify();
         }
-        if options.opt_rel {
+        if options.opt_options.opt_rel {
             vc_is_valid.opt_relational();
         }
 
         // print theorem to prove if requested
-        if options.print_theorem {
+        if options.debug_options.print_theorem {
             vc_is_valid.print_theorem(name);
         }
 
@@ -661,7 +697,7 @@ fn verify_files_main(
         let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
 
         // 12. Simplify
-        if !options.no_simplify {
+        if !options.opt_options.no_simplify {
             vc_is_valid.simplify();
         }
 
@@ -676,7 +712,7 @@ fn verify_files_main(
         // If requested, write the SMT-LIB output.
         result.write_smtlib(options, name)?;
 
-        if options.z3_trace {
+        if options.debug_options.z3_trace {
             info!("Z3 tracing output will be written to `z3.log`.");
         }
 
@@ -696,7 +732,7 @@ fn verify_files_main(
         }
     }
 
-    if !options.language_server {
+    if !options.lsp_options.language_server {
         println!();
         let ending = if num_failures == 0 {
             " veni, vidi, vici!"
@@ -715,8 +751,8 @@ fn verify_files_main(
 fn setup_tracing(options: &Options) {
     timing::init_tracing(
         DispatchBuilder::default()
-            .json(options.json)
-            .timing(options.timing),
+            .json(options.debug_options.json)
+            .timing(options.debug_options.timing),
     )
 }
 

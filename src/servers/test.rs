@@ -24,7 +24,7 @@ impl TestServer {
     pub fn new(options: &Options) -> Self {
         TestServer {
             files: Default::default(),
-            werr: options.werr,
+            werr: options.input_options.werr,
             diagnostics: Default::default(),
             statuses: Default::default(),
         }
