@@ -144,14 +144,8 @@ coproc k_induction(init_toSend: UInt, init_sent: UInt, init_maxFailed: UInt, ini
                                                     failed = failed + 1
                                                     totalFailed = totalFailed + 1
                                                 }
-                                                if \cap {
-                                                    // constant I
-                                                    coassert ([toSend <= 10] * (totalFailed + 3)) + ([!(toSend <= 10)] * ∞)
-                                                    coassume \infty
-                                                } else {
-                                                    // infty
-                                                    assume 0
-                                                }
+                                                assert ([toSend <= 10] * (totalFailed + 3)) + ([!(toSend <= 10)] * ∞)
+                                                assume 0
                                             } else {}
                                         } else {}
                                     } else {}
