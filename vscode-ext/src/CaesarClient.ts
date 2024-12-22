@@ -416,11 +416,12 @@ export class CaesarClient {
             return;
         }
         const command = '"' + executable.command.replace(/(["'$`\\])/g, '\\$1') + '"';
-        let line = `${command} ${executable.args!.join(" ")}`;
+        const args = executable.args!.filter(arg => !["--language-server", "--debug"].includes(arg));
+        let line = `${command} ${args.join(" ")}`;
         let cwd = executable.options && executable.options.cwd;
         if (cwd !== undefined) {
             cwd = '"' + cwd.replace(/(["'$`\\])/g, '\\$1') + '"';
-            line = `pushd ${cwd}; ${line}; popd`;
+            line = `cd ${cwd}; ${line}`;
         }
         await vscode.env.clipboard.writeText(line);
     }

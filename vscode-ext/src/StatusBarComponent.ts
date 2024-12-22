@@ -20,7 +20,7 @@ const stoppedTooltipMenu =
 export class StatusBarComponent {
 
     private enabled: boolean;
-    private verifyStatus: DocumentMap<[Range, VerifyResult][]> = new DocumentMap();
+    private verifyStatus = new DocumentMap<[Range, VerifyResult][]>();
     private serverStatus: ServerStatus = ServerStatus.NotStarted;
     private view: StatusBarItem;
 
@@ -95,7 +95,7 @@ export class StatusBarComponent {
                     break;
                 case ServerStatus.Starting:
                     viewText = "$(loading~spin) Starting Caesar...";
-                    command = "caesar.showOutput"
+                    command = "caesar.showOutput";
                     break;
                 case ServerStatus.Ready:
                     [viewText, tooltipStatusText] = this.getReadyStatusView();
@@ -104,7 +104,7 @@ export class StatusBarComponent {
                     break;
                 case ServerStatus.Verifying:
                     viewText = "$(sync~spin) Verifying...";
-                    command = "caesar.showOutput"
+                    command = "caesar.showOutput";
                     break;
             }
 
@@ -150,7 +150,7 @@ export class StatusBarComponent {
 
             const results = this.verifyStatus.get(document_id);
 
-            if (results === undefined) throw new Error("No verify results found for document: " + document_id);
+            if (results === undefined) { throw new Error("No verify results found for document: " + document_id.uri); }
 
             let verified = 0;
             let failed = 0;

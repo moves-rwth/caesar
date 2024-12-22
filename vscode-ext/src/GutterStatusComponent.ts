@@ -41,7 +41,7 @@ export class GutterStatusComponent {
 
         // listen to status and verify updates
         verifier.client.onStatusUpdate((status) => {
-            if (status == ServerStatus.Verifying) {
+            if (status === ServerStatus.Verifying) {
                 for (const [_document, results] of this.status.entries()) {
                     results.length = 0;
                 }
