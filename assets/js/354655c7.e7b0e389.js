@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunkcaesar_website=self.webpackChunkcaesar_website||[]).push([[3157],{4426:a=>{a.exports=JSON.parse('{"label":"publications","permalink":"/blog/tags/publications","allTagsPath":"/blog/tags","count":2}')}}]);
