@@ -86,7 +86,7 @@ QuantOp: QuantOp = {
 
 QuantVar: QuantVar = {
     <l: @L> <name: Ident> ":" <ty: Ty> <r: @R>
-        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty: ty, kind: VarKind::Quant, init: None, span: span(file, l, r), created_from: None }))
+        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty, kind: VarKind::Quant, init: None, span: span(file, l, r), created_from: None }))
 }
 
 QuantAnn: QuantAnn = {
@@ -265,9 +265,9 @@ DomainDecl: DomainDecl = {
 
 DomainSpec: DomainSpec = {
     <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> <r: @R>
-        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output: output, body: RefCell::new(None), span: span(file, l, r) })),
+        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(None), span: span(file, l, r) })),
     <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> "=" <body: Expr> <r: @R>
-        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output: output, body: RefCell::new(Some(body)), span: span(file, l, r) })),
+        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(Some(body)), span: span(file, l, r) })),
     <l: @L> "axiom" <name: Ident> <axiom: Expr> <r: @R>
         => DomainSpec::Axiom(DeclRef::new(AxiomDecl{ name, axiom, span: span(file, l, r) }))
 }

@@ -49,9 +49,11 @@ impl SourceFilePath {
     pub fn to_string_lossy(&self) -> Cow<'_, str> {
         match self {
             SourceFilePath::Path(path) => path.to_string_lossy(),
-            SourceFilePath::Lsp(ident) => {
-                Cow::Owned(format!("{} (version {})", ident.uri, ident.version))
-            }
+            SourceFilePath::Lsp(ident) => Cow::Owned(format!(
+                "{} (version {})",
+                ident.uri.as_str(),
+                ident.version
+            )),
             SourceFilePath::Builtin => Cow::from("<builtin>"),
             SourceFilePath::Generated => Cow::from("<generated>"),
         }
@@ -80,7 +82,7 @@ pub struct StoredFile {
 
 impl StoredFile {
     pub(self) fn new(id: FileId, path: SourceFilePath, source: String) -> Self {
-        let lines = Source::from(&source);
+        let lines = Source::from(source.clone());
         StoredFile {
             id,
             path,
@@ -196,6 +198,8 @@ impl Files {
 
 /// Hacky impl of `Cache` for `Files` so that it only requires a shared reference.
 impl<'a> Cache<FileId> for &'a Files {
+    type Storage = String;
+
     fn fetch(&mut self, id: &FileId) -> Result<&Source, Box<dyn std::fmt::Debug + '_>> {
         let stored_file = self.get(*id).unwrap();
         Ok(&stored_file.lines)
@@ -416,7 +420,7 @@ pub struct Diagnostic(Box<DiagnosticInner>);
 /// of a [`Result`] without clippy complaining because of a big object.
 #[derive(Debug)]
 struct DiagnosticInner {
-    kind: ReportKind,
+    kind: ReportKind<'static>,
     code: Option<u32>,
     msg: Option<String>,
     note: Option<String>,
@@ -426,7 +430,7 @@ struct DiagnosticInner {
 }
 
 impl Diagnostic {
-    pub fn new(kind: ReportKind, span: Span) -> Self {
+    pub fn new(kind: ReportKind<'static>, span: Span) -> Self {
         let inner = DiagnosticInner {
             kind,
             code: None,
@@ -440,7 +444,7 @@ impl Diagnostic {
     }
 
     /// Overwrite the [`ReportKind`].
-    pub fn with_kind(mut self, kind: ReportKind) -> Self {
+    pub fn with_kind(mut self, kind: ReportKind<'static>) -> Self {
         self.0.kind = kind;
         self
     }
@@ -493,7 +497,7 @@ impl Diagnostic {
     pub fn into_ariadne(self, files: &Files) -> ReportBuilder<CharSpan> {
         // note that ariadne's report doesn't use the span end
         let span = files.char_span(self.0.location);
-        let mut builder = Report::build(self.0.kind, span.file, span.start);
+        let mut builder = Report::build(self.0.kind, span);
         if let Some(code) = self.0.code {
             builder = builder.with_code(code);
         }

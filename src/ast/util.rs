@@ -52,7 +52,7 @@ impl VisitorMut for FreeVariableCollector {
                 // remove the set of bound variables that haven't been free
                 // before from the set of free variables.
                 for var in bound_and_not_free {
-                    self.variables.remove(&var);
+                    self.variables.swap_remove(&var);
                 }
 
                 Ok(())

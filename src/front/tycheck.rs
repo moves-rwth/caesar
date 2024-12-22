@@ -388,7 +388,7 @@ impl TycheckError {
 }
 
 macro_rules! op_ty_check {
-    ($span:expr, $operand:expr, $( $pat:pat )|+) => {
+    ($span:expr, $operand:expr, $( $pat:pat_param )|+) => {
         {
             let operand = &$operand;
             let ty = operand.ty.as_ref().unwrap();
@@ -401,7 +401,7 @@ macro_rules! op_ty_check {
 }
 
 macro_rules! ops_ty_check {
-    ($expr:expr, $a:expr, $b:expr, $( $pat:pat )|+) => {
+    ($expr:expr, $a:expr, $b:expr, $( $pat:pat_param )|+) => {
         {
             op_ty_check!($expr, $a, $( $pat )|+);
             op_ty_check!($expr, $b, $( $pat )|+);

@@ -13,7 +13,6 @@ use crate::ast::{
 
 lalrpop_util::lalrpop_mod!(
     #[cfg_attr(rustfmt, rustfmt_skip)]
-    #[allow(clippy::all, unused_parens, dead_code)]
     grammar,
     "/src/front/parser/grammar.rs"
 );
@@ -24,7 +23,7 @@ type GrammarParseError<'input> =
 #[derive(Debug)]
 pub enum ParseError {
     InvalidToken { span: Span },
-    UnrecognizedEOF { span: Span, expected: Vec<String> },
+    UnrecognizedEof { span: Span, expected: Vec<String> },
     UnrecognizedToken { span: Span, expected: Vec<String> },
     ExtraToken { span: Span },
 }
@@ -40,8 +39,8 @@ impl ParseError {
                     crate::ast::SpanVariant::Parser,
                 ),
             },
-            GrammarParseError::UnrecognizedEOF { location, expected } => {
-                ParseError::UnrecognizedEOF {
+            GrammarParseError::UnrecognizedEof { location, expected } => {
+                ParseError::UnrecognizedEof {
                     span: Span::new(
                         file_id,
                         location,
@@ -69,7 +68,7 @@ impl ParseError {
             ParseError::InvalidToken { span } => Diagnostic::new(ReportKind::Error, *span)
                 .with_message("Invalid token")
                 .with_label(Label::new(*span).with_message("here")),
-            ParseError::UnrecognizedEOF { span, expected } => {
+            ParseError::UnrecognizedEof { span, expected } => {
                 Diagnostic::new(ReportKind::Error, *span)
                     .with_message("Unrecognized end of file")
                     .with_label(Label::new(*span).with_message("here"))
@@ -259,10 +258,10 @@ mod test {
    ╭─[<builtin>:1:5]
    │
  1 │ if ⊓!
-   ·     ┬
-   ·     ╰── here
-   ·
-   · Note: Expected "{"
+   │     ┬
+   │     ╰── here
+   │
+   │ Note: Expected "{"
 ───╯
 "#
                 );

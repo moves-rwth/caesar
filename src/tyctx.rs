@@ -65,7 +65,7 @@ impl TyCtx {
     /// Panics if there was no existing declaration.
     pub fn undeclare(&mut self, ident: Ident) -> Rc<DeclKind> {
         self.globals.remove(&ident);
-        self.declarations.get_mut().remove(&ident).unwrap()
+        self.declarations.get_mut().shift_remove(&ident).unwrap()
     }
 
     pub fn add_global(&mut self, ident: Ident) {
