@@ -126,7 +126,7 @@ This is because these proof rules implicitly do both lower and upper bounds chec
 ## What Is *Not* Checked By Caesar {#what-is-not-checked}
 
 HeyVL is designed as an intermediate verification language and so it allows some dangerous features on purpose.
-See our [OOPSLA '23 paper](../publications.md#oopsla-23-a-deductive-verification-infrastructure-for-probabilistic-programs-oopsla-23) for more information.
+See our [OOPSLA '23 paper](../publications.md#oopsla-23) for more information.
 However, some items from the list below might also be disallowed in the future.
 
  * You can easily introduce contradictions that lead to unsoundness.
