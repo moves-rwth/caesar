@@ -10,7 +10,7 @@ use crate::{
     forward_binary_op,
     model::{InstrumentedModel, SmtEval, SmtEvalError},
     scope::SmtAlloc,
-    Factory, SmtFactory, SmtInvariant,
+    Factory, LitFactory, LitWrap, SmtFactory, SmtInvariant,
 };
 
 use super::{
@@ -87,6 +87,12 @@ impl<'ctx> SmtBranch<'ctx> for UInt<'ctx> {
 impl<'ctx> SmtPartialOrd<'ctx> for UInt<'ctx> {
     fn smt_cmp(&self, other: &Self, ordering: SmtOrdering) -> Bool<'ctx> {
         self.0.smt_cmp(&other.0, ordering)
+    }
+}
+
+impl<'ctx> LitWrap<'ctx> for UInt<'ctx> {
+    fn lit_wrap(&self, factory: &impl LitFactory<'ctx>) -> Self {
+        UInt::unchecked_from_int(self.as_int().lit_wrap(factory))
     }
 }
 

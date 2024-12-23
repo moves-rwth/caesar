@@ -6,17 +6,18 @@ use crate::smt::limited::{
     build_func_domain, computation_axiom, defining_axiom, fuel_synonym_axiom,
     return_value_invariant,
 };
-use crate::smt::symbolic::Symbolic;
 use crate::{
     ast::{DeclRef, DomainDecl, DomainSpec, Ident, TyKind},
     tyctx::TyCtx,
 };
-use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use z3::ast::{Ast, Dynamic};
 use z3::{ast::Bool, Context, Sort};
 use z3rro::prover::Prover;
-use z3rro::{eureal::EURealSuperFactory, EUReal, Factory, FuelFactory, ListFactory, LitDecl};
+use z3rro::{
+    eureal::EURealSuperFactory, EUReal, Factory, FuelFactory, ListFactory, LitDecl, LitFactory,
+};
 
 mod limited;
 pub mod pretty_model;
@@ -37,7 +38,7 @@ pub struct SmtCtx<'ctx> {
     eureal: EURealSuperFactory<'ctx>,
     fuel: Rc<FuelFactory<'ctx>>,
     lists: RefCell<HashMap<TyKind, Rc<ListFactory<'ctx>>>>,
-    lits: RefCell<HashMap<TyKind, Rc<Lit<'ctx>>>>,
+    lits: RefCell<Vec<(Sort<'ctx>, LitDecl<'ctx>)>>,
     uninterpreteds: Uninterpreteds<'ctx>,
     use_limited_functions: bool,
     lit_wrap: bool,
@@ -51,7 +52,7 @@ impl<'ctx> SmtCtx<'ctx> {
             eureal: EURealSuperFactory::new(ctx),
             fuel: FuelFactory::new(ctx),
             lists: RefCell::new(HashMap::new()),
-            lits: RefCell::new(HashMap::new()),
+            lits: RefCell::new(Vec::new()),
             uninterpreteds: Uninterpreteds::new(ctx),
             use_limited_functions: options.use_limited_functions,
             lit_wrap: options.lit_wrap,
@@ -169,17 +170,6 @@ impl<'ctx> SmtCtx<'ctx> {
         lists.get(element_ty).unwrap().clone()
     }
 
-    fn lit(&self, arg_ty: &TyKind) -> Rc<Lit<'ctx>> {
-        if !self.lit_wrap {
-            return Rc::new(Lit::disabled());
-        }
-
-        let mut lits = self.lits.borrow_mut();
-        lits.entry(arg_ty.clone())
-            .or_insert_with(|| Rc::new(Lit::enabled(self, arg_ty.clone())))
-            .clone()
-    }
-
     fn fuel_factory(&self) -> Rc<FuelFactory<'ctx>> {
         self.fuel.clone()
     }
@@ -192,7 +182,7 @@ impl<'ctx> SmtCtx<'ctx> {
 
     pub fn add_lit_axioms_to_prover(&self, prover: &mut Prover<'ctx>) {
         for (_, lit) in self.lits.borrow().iter() {
-            if let Some(axiom) = lit.defining_axiom() {
+            for axiom in lit.defining_axiom() {
                 prover.add_assumption(&axiom);
             }
         }
@@ -225,6 +215,25 @@ impl<'ctx> SmtCtx<'ctx> {
     }
 }
 
+impl<'ctx> LitFactory<'ctx> for SmtCtx<'ctx> {
+    fn lit_wrap_dynamic(&self, arg: &Dynamic<'ctx>) -> Dynamic<'ctx> {
+        if !self.lit_wrap {
+            return arg.clone();
+        }
+
+        let arg_sort = arg.get_sort();
+        let mut lits = self.lits.borrow_mut();
+        let lit_decl =
+            if let Some((_, decl)) = lits.iter().find(|(sort, _)| *sort == arg_sort) {
+                decl
+            } else {
+                lits.push((arg_sort.clone(), LitDecl::new(self.ctx, arg_sort)));
+                &lits.last().unwrap().1
+            };
+        lit_decl.apply_call(arg)
+    }
+}
+
 pub fn ty_to_sort<'ctx>(ctx: &SmtCtx<'ctx>, ty: &TyKind) -> Sort<'ctx> {
     match ty {
         TyKind::Bool => Sort::bool(ctx.ctx()),
@@ -241,49 +250,6 @@ pub fn ty_to_sort<'ctx>(ctx: &SmtCtx<'ctx>, ty: &TyKind) -> Sort<'ctx> {
 
         TyKind::String | TyKind::SpecTy | TyKind::Unresolved(_) | TyKind::None => {
             panic!("invalid type")
-        }
-    }
-}
-
-/// A [LitDecl] wrapper providing a simpler and better typed interface.
-pub enum Lit<'ctx> {
-    Disabled,
-    Enabled { decl: LitDecl<'ctx>, ty: TyKind },
-}
-
-impl<'ctx> Lit<'ctx> {
-    fn enabled(ctx: &SmtCtx<'ctx>, ty: TyKind) -> Self {
-        Self::Enabled {
-            decl: LitDecl::new(ctx.ctx, ty_to_sort(ctx, &ty)),
-            ty,
-        }
-    }
-
-    fn disabled() -> Self {
-        Self::Disabled
-    }
-
-    /// Wrap a value in a `Lit` marker if the functionality is enabled. Otherwise, return the
-    /// argument directly.
-    pub fn wrap<A>(&self, ctx: &SmtCtx<'ctx>, arg: A) -> A
-    where
-        A: Into<Symbolic<'ctx>> + TryFrom<Symbolic<'ctx>>,
-        <A as TryFrom<Symbolic<'ctx>>>::Error: Debug,
-    {
-        match self {
-            Lit::Disabled => arg,
-            Lit::Enabled { decl, ty } => {
-                let arg_dynamic = arg.into().into_dynamic(ctx);
-                let call = decl.apply_call(&arg_dynamic);
-                Symbolic::from_dynamic(ctx, ty, &call).try_into().unwrap()
-            }
-        }
-    }
-
-    fn defining_axiom(&self) -> Option<Bool<'ctx>> {
-        match self {
-            Lit::Disabled => None,
-            Lit::Enabled { decl, .. } => Some(decl.defining_axiom()),
         }
     }
 }

@@ -686,6 +686,9 @@ impl<'ctx> SmtVcUnit<'ctx> {
         if options.force_ematching {
             prover.enforce_ematching();
         }
+        if let Some(seed) = options.z3_seed {
+            prover.seed(seed);
+        }
 
         let smtlib = get_smtlib(options, &prover);
         if let Some(smtlib) = &smtlib {

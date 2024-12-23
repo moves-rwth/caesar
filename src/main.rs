@@ -247,6 +247,10 @@ pub struct DebugOptions {
     /// Enable Z3 tracing for the final SAT check.
     #[arg(long)]
     pub z3_trace: bool,
+
+    /// An explicit seed used by Z3 for the final SAT check.
+    #[structopt(long)]
+    pub z3_seed: Option<u32>,
 }
 
 #[derive(Debug, Default, Args)]

@@ -3,7 +3,6 @@
 use itertools::Itertools;
 use once_cell::unsync::OnceCell;
 use ref_cast::RefCast;
-use std::fmt::Debug;
 use std::{collections::HashMap, convert::TryFrom, vec};
 use z3::{
     ast::{Ast, Bool, Dynamic, Int, Real},
@@ -33,7 +32,7 @@ use z3rro::{
         SmtPartialOrd,
     },
     scope::SmtScope,
-    Fuel, List, SmtBranch, SmtEq, UInt, UReal,
+    Fuel, List, LitWrap, SmtBranch, SmtEq, UInt, UReal,
 };
 
 /// Translates caesar expressions to Z3 formulas.
@@ -113,18 +112,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         self.constant_exprs = ConstantExprs::default();
     }
 
-    fn wrap_if_constant<A>(&self, expr: &Expr, ast: A) -> A
-    where
-        A: Into<Symbolic<'ctx>> + TryFrom<Symbolic<'ctx>>,
-        <A as TryFrom<Symbolic<'ctx>>>::Error: Debug,
-    {
+    fn wrap_if_constant<A: LitWrap<'ctx>>(&self, expr: &Expr, ast: A) -> A
+where {
         if self.constant_exprs.is_constant(expr) {
-            if let Some(ty) = expr.ty.as_ref() {
-                self.ctx.lit(ty).wrap(self.ctx, ast)
-            } else {
-                tracing::warn!("Unable to lit-wrap expr with unknown ty");
-                ast
-            }
+            ast.lit_wrap(self.ctx)
         } else {
             ast
         }
@@ -245,10 +236,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             }
             ExprKind::Subst(_, _, _) => panic!("illegal exprkind"),
             ExprKind::Lit(lit) => match lit.node {
-                LitKind::Bool(value) => self
-                    .ctx
-                    .lit(&TyKind::Bool)
-                    .wrap(self.ctx, Bool::from_bool(self.ctx.ctx, value)),
+                LitKind::Bool(value) => Bool::from_bool(self.ctx.ctx, value),
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
         };

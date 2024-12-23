@@ -19,11 +19,18 @@ use z3::{Context, FuncDecl, Pattern, Sort};
 ///     x
 /// }
 /// ```
-#[derive(Debug)]
 pub struct LitDecl<'ctx> {
     ctx: &'ctx Context,
     arg_sort: Sort<'ctx>,
     func: FuncDecl<'ctx>,
+}
+
+impl<'ctx> Debug for LitDecl<'ctx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LitDecl")
+            .field("arg_sort", &self.arg_sort)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'ctx> LitDecl<'ctx> {
@@ -50,20 +57,81 @@ impl<'ctx> LitDecl<'ctx> {
         &self.arg_sort
     }
 
-    pub fn defining_axiom(&self) -> Bool<'ctx> {
-        // identity function: forall x: ArgSort . Lit(x) == x
-        let x = Dynamic::fresh_const(self.ctx, "x", &self.arg_sort);
-        let app = self.func.apply(&[&x]);
-        quantifier_const(
-            self.ctx,
-            true,
-            WEIGHT_DEFAULT,
-            format!("Lit{}(definitional)", self.arg_sort),
-            "",
-            &[&x],
-            &[&Pattern::new(self.ctx, &[&app])],
-            &[],
-            &app.smt_eq(&x),
-        )
+    pub fn defining_axiom(&self) -> Vec<Bool<'ctx>> {
+        let generic_forall = || {
+            // identity function: forall x: ArgSort . Lit(x) == x
+            let x = Dynamic::fresh_const(self.ctx, "x", &self.arg_sort);
+            let app = self.func.apply(&[&x]);
+            quantifier_const(
+                self.ctx,
+                true,
+                WEIGHT_DEFAULT,
+                format!("Lit{}(definitional)", self.arg_sort),
+                "",
+                &[&x],
+                &[&Pattern::new(self.ctx, &[&app])],
+                &[],
+                &app.smt_eq(&x),
+            )
+        };
+        /*match self.arg_sort.kind() {
+            SortKind::Bool => [true, false]
+                .iter()
+                .map(|boolean| {
+                    let bool = Bool::from_bool(self.ctx, *boolean);
+                    let app = self.func.apply(&[&bool]);
+                    app.smt_eq(&bool.into())
+                })
+                .collect(),
+            SortKind::Real => {
+                let mut axioms = vec![generic_forall()];
+                axioms.extend([-1, 0, 1].into_iter().map(|n| {
+                    let real = Real::from_real(self.ctx, n, 1);
+                    let app = self.func.apply(&[&real]);
+                    app.smt_eq(&real.into())
+                }));
+                axioms
+            }
+            SortKind::Int => {
+                let mut axioms = vec![generic_forall()];
+                axioms.extend([-1, 0, 1].into_iter().map(|n| {
+                    let int = Int::from_i64(self.ctx, n);
+                    let app = self.func.apply(&[&int]);
+                    app.smt_eq(&int.into())
+                }));
+                axioms
+            }
+            _ => {
+                vec![generic_forall()]
+            }
+        }*/
+        vec![generic_forall()]
+    }
+}
+
+/// Object that does the actual `Lit` wrapping on SMT level including monomorphization.
+pub trait LitFactory<'ctx> {
+    /// Wrap a [Dynamic] Z3 object in a `Lit` marker. The sort of the returned value must be
+    /// the same as the sort of the argument.
+    fn lit_wrap_dynamic(&self, arg: &Dynamic<'ctx>) -> Dynamic<'ctx>;
+}
+
+/// SMT values that can be wrapped in a `Lit` marker.
+pub trait LitWrap<'ctx> {
+    /// Wrap the value in a `Lit` marker (if enabled by the [LitFactory]).
+    fn lit_wrap(&self, factory: &impl LitFactory<'ctx>) -> Self;
+}
+
+/// Any built-in Z3 [Ast] object that can be converted to/from [Dynamic] trivially implements [LitWrap]
+impl<'ctx, A: Ast<'ctx>> LitWrap<'ctx> for A
+where
+    A: TryFrom<Dynamic<'ctx>> + Into<Dynamic<'ctx>> + Clone,
+    <A as TryFrom<Dynamic<'ctx>>>::Error: Debug,
+{
+    fn lit_wrap(&self, factory: &impl LitFactory<'ctx>) -> Self {
+        factory
+            .lit_wrap_dynamic(&self.clone().into())
+            .try_into()
+            .unwrap()
     }
 }

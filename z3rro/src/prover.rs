@@ -72,9 +72,15 @@ impl<'ctx> Prover<'ctx> {
     }
 
     pub fn enforce_ematching(&mut self) {
-        let mut params = default_params(self.solver.get_context());
-        params.set_bool("auto-config", false);
+        let mut params = Params::new(self.solver.get_context());
+        // params.set_bool("auto-config", false);
         params.set_bool("smt.mbqi", false);
+        self.solver.set_params(&params);
+    }
+
+    pub fn seed(&mut self, seed: u32) {
+        let mut params = Params::new(self.solver.get_context());
+        params.set_u32("smt.random_seed", seed);
         self.solver.set_params(&params);
     }
 
@@ -201,8 +207,8 @@ impl<'ctx> Prover<'ctx> {
 
 fn default_params<'ctx>(ctx: &'ctx Context) -> Params<'ctx> {
     let mut params = Params::new(ctx);
-    params.set_f64("smt.qi.eager_threshold", 1000.0);
-    params.set_f64("smt.qi.lazy_threshold", 2000.0);
+    params.set_f64("smt.qi.eager_threshold", 100.0);
+    params.set_f64("smt.qi.lazy_threshold", 1000.0);
     params
 }
 

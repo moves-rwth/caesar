@@ -38,7 +38,7 @@ pub use list::{List, ListFactory};
 mod fuel;
 pub use fuel::{Fuel, FuelFactory};
 mod lit;
-pub use lit::LitDecl;
+pub use lit::{LitDecl, LitFactory, LitWrap};
 
 #[cfg(test)]
 mod test;
