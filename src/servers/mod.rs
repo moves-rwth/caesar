@@ -74,7 +74,7 @@ pub trait Server: Send {
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError>;
 
-    // Sends an unknown verification result for the not checked proc with the given span.
+    /// Sends an unknown verification result for the not checked proc with the given span.
     fn handle_not_checked(&mut self, span: Span) -> Result<(), ServerError>;
 }
 

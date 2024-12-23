@@ -335,19 +335,27 @@ impl SourceUnit {
     }
 
     /// Explain high-level verification conditions.
-    pub fn explain_vc(&self, tcx: &TyCtx, server: &mut dyn Server) -> Result<(), VerifyError> {
+    pub fn explain_vc(
+        &self,
+        tcx: &TyCtx,
+        server: &mut dyn Server,
+        limits_ref: &LimitsRef,
+    ) -> Result<(), VerifyError> {
         let explanation = match self {
-            SourceUnit::Decl(decl) => explain_decl_vc(tcx, decl),
+            SourceUnit::Decl(decl) => explain_decl_vc(tcx, decl, limits_ref),
             SourceUnit::Raw(block) => {
                 let builder = ExprBuilder::new(Span::dummy_span());
                 let post = builder.top_lit(tcx.spec_ty());
-                explain_raw_vc(tcx, block, post, Direction::Down).map(Some)
+                explain_raw_vc(tcx, block, post, Direction::Down, limits_ref).map(Some)
             }
         };
         match explanation {
             Ok(Some(explanation)) => server.add_vc_explanation(explanation),
             Ok(None) => Ok(()),
-            Err(diagnostic) => server.add_diagnostic(diagnostic.with_kind(ReportKind::Warning)),
+            Err(VerifyError::Diagnostic(diagnostic)) => {
+                server.add_diagnostic(diagnostic.with_kind(ReportKind::Warning))
+            }
+            Err(err) => Err(err),
         }
     }
 
@@ -539,17 +547,18 @@ impl QuantVcUnit {
             let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
             unfolder.visit_expr(&mut self.expr)
         } else {
-            apply_subst(tcx, &mut self.expr);
+            apply_subst(tcx, &mut self.expr, limits_ref)?;
             Ok(())
         }
     }
 
     /// Apply quantitative quantifier elimination.
-    pub fn qelim(&mut self, tcx: &mut TyCtx) {
+    pub fn qelim(&mut self, tcx: &mut TyCtx, limits_ref: &LimitsRef) -> Result<(), VerifyError> {
         let mut qelim = Qelim::new(tcx);
         qelim.qelim(self);
         // Apply/eliminate substitutions again
-        apply_subst(tcx, &mut self.expr);
+        apply_subst(tcx, &mut self.expr, limits_ref)?;
+        Ok(())
     }
 
     /// Trace some statistics about this vc expression.

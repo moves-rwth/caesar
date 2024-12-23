@@ -55,6 +55,7 @@ serde = "1.0.197"
 jani = { path = "./jani" }
 itertools = "0.12.0"
 stacker = "0.1.15"
+crossbeam-channel = "0.5.14"
 
 [build-dependencies]
 lalrpop = "0.19"

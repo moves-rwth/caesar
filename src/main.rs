@@ -504,6 +504,10 @@ fn verify_files_main(
     server: &mut dyn Server,
     user_files: &[FileId],
 ) -> Result<bool, VerifyError> {
+    // Limit errors or interrupts are saved here. Then rest of the procs are marked as unknown.
+    // Then the saved error is returned.
+    let mut limit_interrupt_error: Option<VerifyError> = None;
+
     // 1. Parsing
     let mut source_units: Vec<Item<SourceUnit>> = Vec::new();
     for file_id in user_files {
@@ -558,7 +562,14 @@ fn verify_files_main(
     if options.explain_vc {
         for source_unit in &mut source_units {
             let source_unit = source_unit.enter();
-            source_unit.explain_vc(&tcx, server)?;
+            let res = source_unit.explain_vc(&tcx, server, &limits_ref);
+            match res {
+                Err(VerifyError::LimitError(_)) | Err(VerifyError::Interrupted) => {
+                    limit_interrupt_error = Some(res.unwrap_err());
+                }
+                Err(err) => Err(err)?,
+                _ => (),
+            };
         }
     }
 
@@ -568,6 +579,9 @@ fn verify_files_main(
         let jani_res = source_unit.write_to_jani_if_requested(options, &tcx);
         match jani_res {
             Err(VerifyError::Diagnostic(diagnostic)) => server.add_diagnostic(diagnostic)?,
+            Err(VerifyError::LimitError(_)) | Err(VerifyError::Interrupted) => {
+                limit_interrupt_error = Some(jani_res.unwrap_err());
+            }
             Err(err) => Err(err)?,
             _ => (),
         }
@@ -577,9 +591,16 @@ fn verify_files_main(
     // units (for side conditions).
     let mut source_units_buf = vec![];
     for source_unit in &mut source_units {
-        source_unit
+        let res = source_unit
             .enter()
-            .apply_encodings(&mut tcx, &mut source_units_buf)?;
+            .apply_encodings(&mut tcx, &mut source_units_buf);
+        match res {
+            Err(VerifyError::LimitError(_)) | Err(VerifyError::Interrupted) => {
+                limit_interrupt_error = Some(res.unwrap_err());
+            }
+            Err(err) => Err(err)?,
+            _ => (),
+        }
     }
     source_units.extend(source_units_buf);
 
@@ -601,18 +622,19 @@ fn verify_files_main(
 
     let mut num_proven: usize = 0;
     let mut num_failures: usize = 0;
-    let mut wrapping_up: bool = false;
 
     for verify_unit in &mut verify_units {
         let (name, mut verify_unit) = verify_unit.enter_with_name();
 
-        if wrapping_up {
+        if limit_interrupt_error.is_some() {
             server
                 .handle_not_checked(verify_unit.span)
                 .map_err(VerifyError::ServerError)?;
             continue;
         }
 
+        // Use an immediately-invoked closure to catch VerifyError::LimitError and VerifyError::Interrupted with ?
+        // This way, we can handle errors that can come from multiple points in the following block together.
         let res: Result<(), VerifyError> = (|| {
             limits_ref.check_limits()?;
 
@@ -632,7 +654,7 @@ fn verify_files_main(
             let explanations = options
                 .explain_core_vc
                 .then(|| VcExplanation::new(verify_unit.direction));
-            let mut vcgen = Vcgen::new(&tcx, explanations);
+            let mut vcgen = Vcgen::new(&tcx, explanations, &limits_ref);
             let mut vc_expr = verify_unit.vcgen(&mut vcgen)?;
             if let Some(explanation) = vcgen.explanation {
                 server.add_vc_explanation(explanation)?;
@@ -643,7 +665,7 @@ fn verify_files_main(
 
             // 8. Quantifier elimination
             if !options.no_qelim {
-                vc_expr.qelim(&mut tcx);
+                vc_expr.qelim(&mut tcx, &limits_ref)?;
             }
 
             // In-between, gather some stats about the vc expression
@@ -720,7 +742,7 @@ fn verify_files_main(
         match res {
             Ok(_) => Ok(()),
             Err(VerifyError::LimitError(_)) | Err(VerifyError::Interrupted) => {
-                wrapping_up = true;
+                limit_interrupt_error = Some(res.unwrap_err());
                 server
                     .handle_not_checked(verify_unit.span)
                     .map_err(VerifyError::ServerError)?;
@@ -730,8 +752,8 @@ fn verify_files_main(
         }?;
     }
 
-    if wrapping_up {
-        return Ok(false);
+    if let Some(err) = limit_interrupt_error {
+        return Err(err);
     }
 
     if !options.language_server {
