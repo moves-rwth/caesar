@@ -8,6 +8,7 @@
 //! For this to work the SMT solver is not allowed to synthesis fuel values itself.
 //! Therefore, MBQI must be disabled.
 
+use std::collections::HashSet;
 use crate::ast::visit::{walk_expr, VisitorMut};
 use crate::ast::{
     Expr, ExprBuilder, ExprData, ExprKind, FuncDecl, Ident, PointerHashShared, QuantVar,
@@ -263,7 +264,7 @@ pub fn return_value_invariant<'smt, 'ctx>(
 type HashExpr = PointerHashShared<ExprData>;
 
 #[derive(Default)]
-pub struct ConstantExprs(IndexSet<HashExpr>);
+pub struct ConstantExprs(HashSet<HashExpr>);
 
 impl ConstantExprs {
     pub fn is_constant(&self, expr: &Expr) -> bool {

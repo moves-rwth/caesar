@@ -249,7 +249,7 @@ pub struct DebugOptions {
     pub z3_trace: bool,
 
     /// An explicit seed used by Z3 for the final SAT check.
-    #[structopt(long)]
+    #[arg(long)]
     pub z3_seed: Option<u32>,
 }
 
@@ -721,8 +721,8 @@ fn verify_files_main(
             &ctx,
             &tcx,
             SmtCtxOptions {
-                use_limited_functions: options.limited_functions,
-                lit_wrap: options.lit_wrap,
+                use_limited_functions: options.opt_options.limited_functions,
+                lit_wrap: options.opt_options.lit_wrap,
             },
         );
         let mut translate = TranslateExprs::new(&smt_ctx);

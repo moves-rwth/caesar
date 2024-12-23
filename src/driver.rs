@@ -683,10 +683,10 @@ impl<'ctx> SmtVcUnit<'ctx> {
         let _entered = span.enter();
 
         let mut prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc);
-        if options.force_ematching {
+        if options.opt_options.force_ematching {
             prover.enforce_ematching();
         }
-        if let Some(seed) = options.z3_seed {
+        if let Some(seed) = options.debug_options.z3_seed {
             prover.seed(seed);
         }
 

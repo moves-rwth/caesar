@@ -16,7 +16,7 @@ use crate::{
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
 };
-
+use crate::smt::SmtCtxOptions;
 use super::{
     selection::SliceSelection,
     transform::{SliceStmt, SliceStmts, StmtSliceVisitor},
@@ -121,7 +121,7 @@ fn prove_equiv(
         stmt2_vc.clone(),
     );
     let ctx = z3::Context::new(&z3::Config::new());
-    let smt_ctx = SmtCtx::new(&ctx, tcx);
+    let smt_ctx = SmtCtx::new(&ctx, tcx, SmtCtxOptions::default());
     let mut translate = TranslateExprs::new(&smt_ctx);
     let eq_expr_z3 = translate.t_bool(&eq_expr);
     let mut prover = Prover::new(&ctx);

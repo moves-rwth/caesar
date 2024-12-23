@@ -1,9 +1,9 @@
 //! Translation of Caesar expressions to Z3 expressions.
 
 use itertools::Itertools;
-use once_cell::unsync::OnceCell;
 use ref_cast::RefCast;
 use std::{collections::HashMap, convert::TryFrom, vec};
+use std::cell::OnceCell;
 use z3::{
     ast::{Ast, Bool, Dynamic, Int, Real},
     Pattern,
@@ -813,7 +813,11 @@ impl<'ctx> QuantifiedFuel<'ctx> {
     pub fn new(value: Option<ScopeSymbolic<'ctx>>) -> Self {
         Self {
             lazy_fuel: match value {
-                Some(s) => OnceCell::with_value(s),
+                Some(s) => {
+                    let cell = OnceCell::new();
+                    cell.set(s).unwrap_or_else(|_| unreachable!("Cell was newly constructed"));
+                    cell
+                },
                 None => OnceCell::new(),
             },
         }
