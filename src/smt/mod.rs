@@ -20,6 +20,8 @@ use z3rro::{
 };
 
 mod limited;
+pub use limited::LiteralExprCollector;
+
 pub mod pretty_model;
 pub mod symbolic;
 mod symbols;
@@ -223,13 +225,12 @@ impl<'ctx> LitFactory<'ctx> for SmtCtx<'ctx> {
 
         let arg_sort = arg.get_sort();
         let mut lits = self.lits.borrow_mut();
-        let lit_decl =
-            if let Some((_, decl)) = lits.iter().find(|(sort, _)| *sort == arg_sort) {
-                decl
-            } else {
-                lits.push((arg_sort.clone(), LitDecl::new(self.ctx, arg_sort)));
-                &lits.last().unwrap().1
-            };
+        let lit_decl = if let Some((_, decl)) = lits.iter().find(|(sort, _)| *sort == arg_sort) {
+            decl
+        } else {
+            lits.push((arg_sort.clone(), LitDecl::new(self.ctx, arg_sort)));
+            &lits.last().unwrap().1
+        };
         lit_decl.apply_call(arg)
     }
 }

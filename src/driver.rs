@@ -68,7 +68,7 @@ use z3rro::{
     util::{PrefixWriter, ReasonUnknown},
 };
 
-use crate::smt::SmtCtxOptions;
+use crate::smt::{LiteralExprCollector, SmtCtxOptions};
 use tracing::{info_span, instrument, trace};
 
 /// Human-readable name for a source unit. Used for debugging and error messages.
@@ -640,13 +640,13 @@ impl BoolVcUnit {
         let span = info_span!("translation to Z3");
         let _entered = span.enter();
 
-        translate.add_constant_exprs(
-            translate.ctx.functions_with_def().as_slice(),
-            &[],
-            &mut self.vc,
+        translate.set_literal_exprs(
+            LiteralExprCollector::new()
+                .with_functions_with_def(translate.ctx.functions_with_def().as_slice())
+                .collect(&mut self.vc),
         );
         let bool_vc = translate.t_bool(&self.vc);
-        translate.clear_constant_exprs();
+        translate.clear_literal_exprs();
 
         SmtVcUnit {
             quant_vc: self.quant_vc,

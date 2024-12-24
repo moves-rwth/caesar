@@ -2,8 +2,8 @@
 
 use itertools::Itertools;
 use ref_cast::RefCast;
-use std::{collections::HashMap, convert::TryFrom, vec};
 use std::cell::OnceCell;
+use std::{collections::HashMap, convert::TryFrom, vec};
 use z3::{
     ast::{Ast, Bool, Dynamic, Int, Real},
     Pattern,
@@ -21,9 +21,8 @@ use super::{
     symbolic::{ScopeSymbolic, Symbolic, SymbolicPair},
     SmtCtx,
 };
-use crate::ast::visit::VisitorMut;
 use crate::ast::{ExprData, PointerHashShared};
-use crate::smt::limited::{ConstantExprCollector, ConstantExprs};
+use crate::smt::limited::LiteralExprs;
 use z3rro::scope::WEIGHT_DEFAULT;
 use z3rro::{
     eureal::EUReal,
@@ -45,7 +44,7 @@ pub struct TranslateExprs<'smt, 'ctx> {
     locals: ScopeMap<Ident, ScopeSymbolic<'ctx>>,
     cache: TranslateCache<'ctx>,
     fuel_context: FuelContext<'ctx>,
-    constant_exprs: ConstantExprs,
+    literal_exprs: LiteralExprs,
 }
 
 impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
@@ -56,7 +55,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             locals: ScopeMap::new(),
             cache: TranslateCache::new(),
             fuel_context: FuelContext::call(),
-            constant_exprs: ConstantExprs::default(),
+            literal_exprs: LiteralExprs::default(),
         }
     }
 
@@ -97,24 +96,23 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         &mut self.fuel_context
     }
 
-    pub fn add_constant_exprs(
-        &mut self,
-        functions_with_definition: &[Ident],
-        constant_vars: &[Ident],
-        expr_to_analyse: &mut Expr,
-    ) {
-        let mut collector = ConstantExprCollector::new(functions_with_definition, constant_vars);
-        collector.visit_expr(expr_to_analyse).unwrap();
-        self.constant_exprs.extend(collector.into_constant_exprs());
+    /// Defines what expressions should be considered literal from now (until reset
+    /// by [Self::clear_literal_exprs]). An expression is literal if it always has the same value
+    /// under all interpretations.
+    /// If enabled, literal expressions are marked during translation by wrapping them in
+    /// `Lit`-functions. Quantifier instantiation using Lit values does not consume fuel.
+    ///
+    /// See [crate::smt::limited]
+    pub fn set_literal_exprs(&mut self, literal_exprs: LiteralExprs) {
+        self.literal_exprs = literal_exprs;
     }
 
-    pub fn clear_constant_exprs(&mut self) {
-        self.constant_exprs = ConstantExprs::default();
+    pub fn clear_literal_exprs(&mut self) {
+        self.literal_exprs = LiteralExprs::default();
     }
 
-    fn wrap_if_constant<A: LitWrap<'ctx>>(&self, expr: &Expr, ast: A) -> A
-where {
-        if self.constant_exprs.is_constant(expr) {
+    fn wrap_if_literal<A: LitWrap<'ctx>>(&self, expr: &Expr, ast: A) -> A {
+        if self.literal_exprs.is_literal(expr) {
             ast.lit_wrap(self.ctx)
         } else {
             ast
@@ -244,7 +242,7 @@ where {
         if is_expr_worth_caching(expr) {
             self.cache.insert(expr, Symbolic::Bool(res.clone()));
         }
-        self.wrap_if_constant(expr, res)
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_int(&mut self, expr: &Expr) -> Int<'ctx> {
@@ -298,7 +296,7 @@ where {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::Int(res.clone()));
         }
-        self.wrap_if_constant(expr, res)
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_uint(&mut self, expr: &Expr) -> UInt<'ctx> {
@@ -350,7 +348,7 @@ where {
             self.cache.insert(expr, Symbolic::UInt(res.clone()));
         }
 
-        self.wrap_if_constant(expr, res)
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_real(&mut self, expr: &Expr) -> Real<'ctx> {
@@ -412,7 +410,7 @@ where {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::Real(res.clone()));
         }
-        self.wrap_if_constant(expr, res)
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_ureal(&mut self, expr: &Expr) -> UReal<'ctx> {
@@ -475,7 +473,7 @@ where {
             self.cache.insert(expr, Symbolic::UReal(res.clone()));
         }
 
-        self.wrap_if_constant(expr, res)
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_eureal(&mut self, expr: &Expr) -> EUReal<'ctx> {
@@ -561,7 +559,7 @@ where {
                 eureal
             }
         };
-        self.wrap_if_constant(expr, res)
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_uninterpreted(&mut self, expr: &Expr) -> Dynamic<'ctx> {
@@ -607,7 +605,7 @@ where {
             self.cache
                 .insert(expr, Symbolic::Uninterpreted(res.clone()));
         }
-        self.wrap_if_constant(expr, res)
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_list(&mut self, expr: &Expr) -> List<'ctx> {
@@ -815,9 +813,10 @@ impl<'ctx> QuantifiedFuel<'ctx> {
             lazy_fuel: match value {
                 Some(s) => {
                     let cell = OnceCell::new();
-                    cell.set(s).unwrap_or_else(|_| unreachable!("Cell was newly constructed"));
+                    cell.set(s)
+                        .unwrap_or_else(|_| unreachable!("Cell was newly constructed"));
                     cell
-                },
+                }
                 None => OnceCell::new(),
             },
         }

@@ -6,6 +6,11 @@ use z3rro::{
     prover::{ProveResult, Prover},
 };
 
+use super::{
+    selection::SliceSelection,
+    transform::{SliceStmt, SliceStmts, StmtSliceVisitor},
+};
+use crate::smt::SmtCtxOptions;
 use crate::{
     ast::{
         visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Direction, Expr, ExprBuilder,
@@ -15,11 +20,6 @@ use crate::{
     smt::{translate_exprs::TranslateExprs, SmtCtx},
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
-};
-use crate::smt::SmtCtxOptions;
-use super::{
-    selection::SliceSelection,
-    transform::{SliceStmt, SliceStmts, StmtSliceVisitor},
 };
 
 /// Prove that the transformation for assert, assume, and tick statements is

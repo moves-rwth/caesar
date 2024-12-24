@@ -8,7 +8,6 @@
 //! For this to work the SMT solver is not allowed to synthesis fuel values itself.
 //! Therefore, MBQI must be disabled.
 
-use std::collections::HashSet;
 use crate::ast::visit::{walk_expr, VisitorMut};
 use crate::ast::{
     Expr, ExprBuilder, ExprData, ExprKind, FuncDecl, Ident, PointerHashShared, QuantVar,
@@ -19,6 +18,7 @@ use crate::smt::{ty_to_sort, SmtCtx};
 use crate::tyctx::TyCtx;
 use indexmap::IndexSet;
 use itertools::Itertools;
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::fmt::{Display, Formatter};
 use z3::ast::{Ast, Bool};
@@ -27,7 +27,7 @@ use z3rro::scope::{SmtScope, WEIGHT_DEFAULT};
 use z3rro::{SmtEq, SmtInvariant};
 
 /// (higher) weight that is used to deprioritize the computation axiom.
-const WEIGHT_COMP: u32 = 1;
+const WEIGHT_COMP: u32 = 3;
 
 /// Builds the domain (parameter list) for `func`. If the limited function transformation is
 /// applicable a fuel parameter is implicitly added as the first parameter.
@@ -162,12 +162,12 @@ pub fn defining_axiom<'smt, 'ctx>(
     })
 }
 
-/// Creates the computation axiom that allows for constant arguments instantiation without
+/// Creates the computation axiom that allows for literal arguments instantiation without
 /// consuming fuel. It is very similar to the [defining_axiom]. The only differences are that
-///  - all arguments must be known constant values (marked with [super::Lit]),
+///  - all arguments must be known literal values (marked with [super::Lit]),
 ///  - the fuel value can be zero,
 ///  - the fuel value is not decreased in the body
-///  - and the constant information is also propagated to the result.
+///  - and the literal information is also propagated to the result.
 ///
 /// It has the form:
 /// ```txt
@@ -191,26 +191,23 @@ pub fn computation_axiom<'smt, 'ctx>(
 
     translate.set_fuel_context(FuelContext::body());
     {
-        let constant_vars = func
+        let literal_vars = func
             .inputs
             .node
             .iter()
             .map(|param| param.name)
             .collect_vec();
+        let collector = LiteralExprCollector::new()
+            .with_functions_with_def(translate.ctx.functions_with_def().as_slice())
+            .with_literal_vars(literal_vars.as_slice());
 
-        let functions_with_def = translate.ctx.functions_with_def();
-        translate.add_constant_exprs(
-            functions_with_def.as_slice(),
-            constant_vars.as_slice(),
-            func.body.borrow_mut().as_mut().unwrap(),
-        );
+        let mut literal_exprs = collector
+            .clone()
+            .collect(func.body.borrow_mut().as_mut().unwrap());
         for arg in app.children_mut() {
-            translate.add_constant_exprs(
-                functions_with_def.as_slice(),
-                constant_vars.as_slice(),
-                arg,
-            );
+            literal_exprs.extend(collector.clone().collect(arg));
         }
+        translate.set_literal_exprs(literal_exprs);
     }
 
     let body_ref = func.body.borrow();
@@ -229,7 +226,7 @@ pub fn computation_axiom<'smt, 'ctx>(
         )],
         &app_z3.smt_eq(&body_z3),
     );
-    translate.clear_constant_exprs();
+    translate.clear_literal_exprs();
     translate.set_fuel_context(FuelContext::call());
 
     Some(axiom)
@@ -263,11 +260,11 @@ pub fn return_value_invariant<'smt, 'ctx>(
 
 type HashExpr = PointerHashShared<ExprData>;
 
-#[derive(Default)]
-pub struct ConstantExprs(HashSet<HashExpr>);
+#[derive(Default, Clone)]
+pub struct LiteralExprs(HashSet<HashExpr>);
 
-impl ConstantExprs {
-    pub fn is_constant(&self, expr: &Expr) -> bool {
+impl LiteralExprs {
+    pub fn is_literal(&self, expr: &Expr) -> bool {
         self.0.contains(&HashExpr::new(expr.clone()))
     }
 
@@ -284,7 +281,7 @@ impl ConstantExprs {
     }
 }
 
-impl Display for ConstantExprs {
+impl Display for LiteralExprs {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{")?;
         for (i, expr) in self.0.iter().enumerate() {
@@ -297,44 +294,56 @@ impl Display for ConstantExprs {
     }
 }
 
-/// Collects the maximal constant subexpressions of an expression.
-/// An expression is to be considered constant if it is a literal, a known constant variable, or
-/// all its children are constant. Maximality is in relation to the expression size. Meaning if an
-/// expression is reported as constant, none of its children are reported.
+/// Collects the maximal literal subexpressions of an expression.
+/// An expression is to be considered literal if it is a literal, a known literal variable, or
+/// all its children are literal. Maximality is in relation to the expression size. Meaning if an
+/// expression is reported as literal, none of its children are reported.
 ///
 /// # Example
-/// If `a` is a known constant variable then for the expression `a + 4 * b` this analysis will
+/// If `a` is a known literal variable then for the expression `a + 4 * b` this analysis will
 /// return only `a + 4`.
 ///
 /// # Note
-/// Only reporting maximal subexpressions is an optimisation. The resulting constant information
+/// Only reporting maximal subexpressions is an optimisation. The resulting literal information
 /// is forward to the SMT-solver (wrapping them in Lit-marker). Also, wrapping all the
 /// intermediate expressions severally degrades solver performance.
-pub struct ConstantExprCollector {
-    constant_exprs: ConstantExprs,
-    constant_vars: IndexSet<Ident>,
+#[derive(Default, Clone)]
+pub struct LiteralExprCollector {
+    literal_exprs: LiteralExprs,
+    literal_vars: IndexSet<Ident>,
     functions_with_def: IndexSet<Ident>,
 }
 
-impl ConstantExprCollector {
-    pub fn new(functions_with_def: &[Ident], constant_vars: &[Ident]) -> Self {
+impl LiteralExprCollector {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn is_literal(&self, expr: &Expr) -> bool {
+        self.literal_exprs.is_literal(expr)
+    }
+
+    pub fn with_literal_vars(self, literal_vars: &[Ident]) -> Self {
         Self {
-            constant_exprs: ConstantExprs::default(),
-            constant_vars: constant_vars.iter().cloned().collect(),
-            functions_with_def: functions_with_def.iter().cloned().collect(),
+            literal_vars: literal_vars.iter().cloned().collect(),
+            ..self
         }
     }
 
-    fn is_constant(&self, expr: &Expr) -> bool {
-        self.constant_exprs.is_constant(expr)
+    pub fn with_functions_with_def(self, functions_with_def: &[Ident]) -> Self {
+        Self {
+            functions_with_def: functions_with_def.iter().cloned().collect(),
+            ..self
+        }
     }
 
-    pub fn into_constant_exprs(self) -> ConstantExprs {
-        self.constant_exprs
+    pub fn collect(mut self, expr: &mut Expr) -> LiteralExprs {
+        self.visit_expr(expr).unwrap();
+        self.literal_exprs
     }
 }
 
-impl VisitorMut for ConstantExprCollector {
+impl VisitorMut for LiteralExprCollector {
     type Err = Infallible;
 
     fn visit_expr(&mut self, expr: &mut Expr) -> Result<(), Self::Err> {
@@ -342,23 +351,23 @@ impl VisitorMut for ConstantExprCollector {
 
         match &expr.kind {
             ExprKind::Var(ident) => {
-                if self.constant_vars.contains(ident) {
-                    self.constant_exprs.insert(expr);
+                if self.literal_vars.contains(ident) {
+                    self.literal_exprs.insert(expr);
                 }
             }
             ExprKind::Call(func, args) => {
-                // Function calls with only constant arguments are themselves constant.
+                // Function calls with only literal arguments are themselves literal.
                 // This is intuitively true but can cause some problems in practice if the function
                 // does not actually have a definition.
                 // E.g. probCollision() only defined as:
                 //     func probCollision(): UReal
                 //     axiom collisionProb probCollision() <= 1
-                // is trivially always constant but performing any kind of computation with
+                // is trivially always literal but performing any kind of computation with
                 // it is hopeless.
                 if self.functions_with_def.contains(func)
-                    && args.iter().all(|arg| self.is_constant(arg))
+                    && args.iter().all(|arg| self.is_literal(arg))
                 {
-                    self.constant_exprs.insert(expr);
+                    self.literal_exprs.insert(expr);
                     // Do not remove arguments for calls. Otherwise, the computation axiom might
                     // not match because we lifted the Lit marker too far.
                     // Example: Lit(fac(5) == 125) does not let us compute fib(5)
@@ -367,44 +376,44 @@ impl VisitorMut for ConstantExprCollector {
             }
             ExprKind::Ite(cond, then, other) => {
                 // TODO: maybe this should never be consider const?
-                //       If-then-else is used as a stopper for constant values and therefore itself
-                //       never considered constant. The paper mentions that this works well
+                //       If-then-else is used as a stopper for literal values and therefore itself
+                //       never considered literal. The paper mentions that this works well
                 //       in practise.
-                if self.is_constant(cond) && self.is_constant(then) && self.is_constant(other) {
-                    self.constant_exprs.insert(expr);
-                    self.constant_exprs.remove(cond);
-                    self.constant_exprs.remove(then);
-                    self.constant_exprs.remove(other);
+                if self.is_literal(cond) && self.is_literal(then) && self.is_literal(other) {
+                    self.literal_exprs.insert(expr);
+                    self.literal_exprs.remove(cond);
+                    self.literal_exprs.remove(then);
+                    self.literal_exprs.remove(other);
                 }
             }
             ExprKind::Binary(_, lhs, rhs) => {
-                if self.is_constant(lhs) && self.is_constant(rhs) {
-                    self.constant_exprs.insert(expr);
-                    self.constant_exprs.remove(lhs);
-                    self.constant_exprs.remove(rhs);
+                if self.is_literal(lhs) && self.is_literal(rhs) {
+                    self.literal_exprs.insert(expr);
+                    self.literal_exprs.remove(lhs);
+                    self.literal_exprs.remove(rhs);
                 }
             }
             ExprKind::Unary(_, inner_expr) => {
-                if self.is_constant(inner_expr) {
-                    self.constant_exprs.insert(expr);
-                    self.constant_exprs.remove(inner_expr);
+                if self.is_literal(inner_expr) {
+                    self.literal_exprs.insert(expr);
+                    self.literal_exprs.remove(inner_expr);
                 }
             }
             ExprKind::Cast(inner_expr) => {
-                if self.is_constant(inner_expr) {
-                    self.constant_exprs.insert(expr);
-                    self.constant_exprs.remove(inner_expr);
+                if self.is_literal(inner_expr) {
+                    self.literal_exprs.insert(expr);
+                    self.literal_exprs.remove(inner_expr);
                 }
             }
             ExprKind::Quant(_, _, _, _) => {}
             ExprKind::Subst(_, _, _) => {
                 panic!(
-                    "cannot determine constant subexpressions in expressions with substitutions: {}",
+                    "cannot determine literal subexpressions in expressions with substitutions: {}",
                     expr
                 );
             }
             ExprKind::Lit(_) => {
-                self.constant_exprs.insert(expr);
+                self.literal_exprs.insert(expr);
             }
         }
 
