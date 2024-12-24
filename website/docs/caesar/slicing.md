@@ -98,7 +98,7 @@ flowchart TD
         cex1_conclusion --No --> cex1_unknown
     end
 
-    verifies1 -- --slice-verify --> slicing_correctness
+    verifies1 -- "--slice-verify" --> slicing_correctness
     subgraph slicing_correctness[Slicing for Correctness]
         verifies1_slice[[Slice statements]]
         verifies1_slice --> verifies1_slice
@@ -379,7 +379,7 @@ When they're used in upper bound contexts, then their effects are reversed.
 For the `co`-statements, the situation is also exactly reversed.
 
 <>
-    <table style={{float: "left", "padding-right": "2em"}}>
+    <table style={{float: "left", "paddingRight": "2em"}}>
         <thead>
             <tr>
                 <td>Statement</td>
@@ -458,7 +458,7 @@ This must be enabled with the `--slice-ticks` command-line option.
 
 Caesar's implementation of slicing is a two-stage approach.
 It first does a [program transformation](#program-transformation) to prepare the input program for slicing.
-Then we use the SMT solver to minimize the number of enabled statements in the slice in the [solving for minimal slices](#solving-for-minimal-slices) stage.
+Then we use the SMT solver to minimize the number of enabled statements in the slice in the [solving for slices](#solving-for-slices) stage.
 
 ### Program Transformation
 
@@ -480,7 +480,7 @@ However, we do an equivalent transformation so that the post is not duplicated:
 vc[assume ite(slice_1, f, 0)](post) = (ite(slice_1, f, 0) ==> post)
 ```
 
-### Solving for Slices
+### Solving for Slices {#solving-for-slices}
 
 After this program transformation, every potentially sliceable statement is associated with a Boolean variable that we can use to turn it on or off.
 That means we can just set constraints on the number of enabled statements in the SMT solver to query for a new slice.

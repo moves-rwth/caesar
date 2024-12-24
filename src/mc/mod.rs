@@ -113,7 +113,6 @@ pub struct JaniOptions {
     pub skip_quant_pre: bool,
 }
 
-#[allow(clippy::field_reassign_with_default)]
 pub fn proc_to_model(
     options: &JaniOptions,
     tcx: &TyCtx,
@@ -147,15 +146,16 @@ pub fn proc_to_model(
     let mut model = Model::new(model_type);
 
     // Metadata
-    let mut metadata = Metadata::default();
-    metadata.description = Some(
-        format!(
-            "Created by the Caesar deductive verifier ({}).",
-            caesar_version_info()
-        )
-        .into_boxed_str(),
-    );
-    model.metadata = Some(metadata);
+    model.metadata = Some(Metadata {
+        description: Some(
+            format!(
+                "Created by the Caesar deductive verifier ({}).",
+                caesar_version_info()
+            )
+            .into_boxed_str(),
+        ),
+        ..Default::default()
+    });
 
     // Features
     model.features.push(ModelFeature::DerivedOperators);

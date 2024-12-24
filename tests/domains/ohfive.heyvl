@@ -12,7 +12,7 @@ domain Exponentials {
 
 domain List {
     func len(l: List): UInt
-    func pop(l: List): List 
+    func pop(l: List): List
 
     axiom list_len forall l: List. len(pop(l)) == len(l) - 1
 }

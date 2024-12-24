@@ -64,7 +64,7 @@ impl LspServer {
     pub fn connect_stdio(options: &Options) -> (LspServer, IoThreads) {
         let (connection, io_threads) = Connection::stdio();
         let connection = LspServer {
-            werr: options.werr,
+            werr: options.input_options.werr,
             project_root: None,
             files: Default::default(),
             connection,

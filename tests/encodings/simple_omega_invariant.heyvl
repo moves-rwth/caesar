@@ -1,10 +1,12 @@
+// RUN: @caesar @file
+
 proc omega(init_x: UInt) -> (x: UInt)
     pre init_x
     post 0
 {
     x = init_x
 
-    @omega_inv(n,[x<=n] * x)
+    @omega_invariant(n, [x<=n] * x)
     while 0 <= x {
         tick 1
         x = x - 1

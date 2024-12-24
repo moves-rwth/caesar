@@ -33,7 +33,7 @@ fn main() {
         let line = item.unwrap();
         let (prefix, args) = line.split_once(':').unwrap();
         outer_pb.set_message(prefix.to_owned());
-        let mut args = shell_words::split(args).unwrap();
+        let mut args = shlex::split(args).unwrap();
         args.append(&mut more_args.clone());
         println!(
             "{}",

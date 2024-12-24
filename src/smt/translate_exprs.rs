@@ -577,8 +577,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 _ => panic!("illegal exprkind"),
             },
             ExprKind::Cast(_) => panic!("illegal exprkind"),
-            ExprKind::Quant(_, _, _, _) => todo!(),
-            ExprKind::Subst(_, _, _) => todo!(),
+            ExprKind::Quant(_, _, _, _) => unreachable!(),
+            ExprKind::Subst(_, _, _) => unreachable!(),
             ExprKind::Lit(_) => panic!("illegal exprkind"),
         };
 
@@ -648,8 +648,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 TyKind::List(element_ty) => ScopeSymbolic::fresh_list(self.ctx, ident, element_ty),
                 TyKind::String => unreachable!(),
                 TyKind::SpecTy => unreachable!(),
-                TyKind::Unresolved(_) => todo!(),
-                TyKind::None => todo!(),
+                TyKind::Unresolved(_) => unreachable!(),
+                TyKind::None => unreachable!(),
             },
             _ => panic!("variable is not declared"),
         };

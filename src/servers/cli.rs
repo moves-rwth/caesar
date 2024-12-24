@@ -1,5 +1,5 @@
 use std::{
-    io,
+    io::{self, IsTerminal},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -22,7 +22,7 @@ pub struct CliServer {
 impl CliServer {
     pub fn new(options: &Options) -> Self {
         CliServer {
-            werr: options.werr,
+            werr: options.input_options.werr,
             files: Default::default(),
         }
     }
@@ -96,7 +96,7 @@ impl Server for CliServer {
 
 fn print_diagnostic(mut files: &Files, diagnostic: Diagnostic) -> io::Result<()> {
     let mut report = diagnostic.into_ariadne(files);
-    if atty::isnt(atty::Stream::Stderr) {
+    if !io::stderr().is_terminal() {
         // let's hope there's no config already there
         report = report.with_config(ariadne::Config::default().with_color(false));
     }

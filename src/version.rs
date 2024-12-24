@@ -46,8 +46,8 @@ where
 {
     let command: String = {
         let args_strings: Vec<String> = env::args().collect();
-        let args_strs: Vec<&str> = args_strings.iter().map(|s| s.as_str()).collect();
-        shellwords::join(&args_strs)
+        let args_strs = args_strings.iter().map(|s| s.as_str());
+        shlex::try_join(args_strs).unwrap()
     };
     writeln!(w, "Command: {}", command)?;
     writeln!(w, "Caesar version: {}", caesar_version_info())?;
@@ -68,4 +68,11 @@ where
     )?;
     writeln!(w, "Z3 version: {}", z3_version_info())?;
     writeln!(w)
+}
+
+/// Get a detailed version info string about Caesar and its dependencies.
+pub fn detailed_version_info_string() -> String {
+    let mut buffer = Vec::new();
+    write_detailed_version_info(&mut buffer).unwrap();
+    String::from_utf8(buffer).unwrap()
 }

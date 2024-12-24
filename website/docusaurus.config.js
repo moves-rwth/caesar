@@ -1,8 +1,7 @@
 // @ts-check
 // Note: type annotations allow type checking and IDEs autocompletion
 
-const lightCodeTheme = require('prism-react-renderer/themes/nightOwlLight');
-const darkCodeTheme = require('prism-react-renderer/themes/nightOwl');
+import {themes as prismThemes} from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -21,7 +20,8 @@ const config = {
   organizationName: 'moves-rwth', // Usually your GitHub org/user name.
   projectName: 'caesar', // Usually your repo name.
 
-  onBrokenLinks: 'throw',
+  // the broken links detection seems to be broken for links to images in the blog, so we set it to warn only
+  onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
 
   // Even if you don't use internalization, you can use this field to set useful
@@ -158,8 +158,8 @@ const config = {
         copyright: `Copyright © ${new Date().getFullYear()} Caesar Developers. Built with Docusaurus.`,
       },
       prism: {
-        theme: lightCodeTheme,
-        darkTheme: darkCodeTheme,
+        theme: prismThemes.nightOwlLight,
+        darkTheme: prismThemes.nightOwl,
         additionalLanguages: ['bash', 'shell-session'],
       },
     }),
