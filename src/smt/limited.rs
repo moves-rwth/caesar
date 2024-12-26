@@ -16,11 +16,11 @@ use crate::ast::{
 use crate::smt::translate_exprs::{FuelContext, TranslateExprs};
 use crate::smt::{ty_to_sort, SmtCtx};
 use crate::tyctx::TyCtx;
-use indexmap::IndexSet;
 use itertools::Itertools;
 use std::collections::HashSet;
 use std::convert::Infallible;
 use std::fmt::{Display, Formatter};
+use tracing::info_span;
 use z3::ast::{Ast, Bool};
 use z3::{Pattern, Sort};
 use z3rro::scope::{SmtScope, WEIGHT_DEFAULT};
@@ -162,19 +162,19 @@ pub fn defining_axiom<'smt, 'ctx>(
     })
 }
 
-/// Creates the computation axiom that allows for literal arguments instantiation without
+/// Creates the computation axiom that allows instantiation with literal arguments without
 /// consuming fuel. It is very similar to the [defining_axiom]. The only differences are that
-///  - all arguments must be known literal values (marked with [super::Lit]),
+///  - all arguments must be known literal values (marked with [z3rro::LitDecl]),
 ///  - the fuel value can be zero,
 ///  - the fuel value is not decreased in the body
-///  - and the literal information is also propagated to the result.
+///  - and the literal information is also propagated in the body.
 ///
 /// It has the form:
 /// ```txt
 /// forall fuel: Fuel, <args...> @trigger(func_name(fuel, Lit(<args...>))) . func_name(fuel, Lit(<args...>)) = <body>
 /// ```
 ///
-/// The is axiom only generated for limited functions and if the corresponding feature is enabled.
+/// This axiom is only generated for limited functions and if the corresponding feature is enabled.
 pub fn computation_axiom<'smt, 'ctx>(
     translate: &mut TranslateExprs<'smt, 'ctx>,
     func: &FuncDecl,
@@ -197,16 +197,18 @@ pub fn computation_axiom<'smt, 'ctx>(
             .iter()
             .map(|param| param.name)
             .collect_vec();
-        let collector = LiteralExprCollector::new()
+        let mut literal_exprs = LiteralExprCollector::new()
             .with_functions_with_def(translate.ctx.functions_with_def().as_slice())
-            .with_literal_vars(literal_vars.as_slice());
-
-        let mut literal_exprs = collector
-            .clone()
+            .with_literal_vars(literal_vars.as_slice())
             .collect(func.body.borrow_mut().as_mut().unwrap());
-        for arg in app.children_mut() {
-            literal_exprs.extend(collector.clone().collect(arg));
-        }
+
+        // Add arguments to ensure that they are lit-wrapped in the trigger
+        literal_exprs.extend(LiteralExprs(
+            app.children_mut()
+                .into_iter()
+                .map(|c| HashExpr::new(c.clone()))
+                .collect(),
+        ));
         translate.set_literal_exprs(literal_exprs);
     }
 
@@ -310,8 +312,8 @@ impl Display for LiteralExprs {
 #[derive(Default, Clone)]
 pub struct LiteralExprCollector {
     literal_exprs: LiteralExprs,
-    literal_vars: IndexSet<Ident>,
-    functions_with_def: IndexSet<Ident>,
+    literal_vars: HashSet<Ident>,
+    functions_with_def: HashSet<Ident>,
 }
 
 impl LiteralExprCollector {
@@ -338,7 +340,17 @@ impl LiteralExprCollector {
     }
 
     pub fn collect(mut self, expr: &mut Expr) -> LiteralExprs {
+        let span = info_span!("collect literal expressions");
+        let _enter = span.enter();
+
         self.visit_expr(expr).unwrap();
+        tracing::trace!(
+            analized_expr=%expr,
+            literal_vars=?self.literal_vars,
+            functions_with_def=?self.functions_with_def,
+            literal_exprs=%self.literal_exprs,
+            "collected literal expressions"
+        );
         self.literal_exprs
     }
 }
