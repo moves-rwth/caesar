@@ -63,7 +63,9 @@ struct TestFile {
 impl TestFile {
     fn parse(path: PathBuf) -> io::Result<Self> {
         let test_file = fs::read_to_string(&path).unwrap();
-        let regex = Regex::new(r"//\s*(RUN|XFAIL|IGNORE): (.*)").unwrap();
+        // we enable CLRF mode for the regex to support both LF and CRLF line
+        // endings. this way, the matched command will never end with '\r'.
+        let regex = Regex::new(r"(?R)//\s*(RUN|XFAIL|IGNORE): (.*)").unwrap();
         let commands = regex
             .captures_iter(&test_file)
             .map(|capture| {
