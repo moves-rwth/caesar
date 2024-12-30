@@ -171,6 +171,7 @@ pub struct JaniPgclProperties {
 }
 
 pub fn extract_properties(
+    proc_span: Span,
     spec_part: &SpecAutomaton,
     stmts: &mut Vec<Stmt>,
     skip_quant_pre: bool,
@@ -180,7 +181,7 @@ pub fn extract_properties(
     let can_diverge = mk_can_diverge_property(spec_part, "can_diverge");
 
     let restrict_initial = extract_preconditions(spec_part, stmts, skip_quant_pre)?;
-    let sink_reward = extract_post(spec_part, stmts)?;
+    let sink_reward = extract_post(proc_span, spec_part, stmts)?;
 
     Ok(JaniPgclProperties {
         restrict_initial,
@@ -313,6 +314,7 @@ fn extract_preconditions(
 ///
 /// These (co)assert statements may be quantitative.
 fn extract_post(
+    proc_span: Span,
     spec_part: &SpecAutomaton,
     stmts: &mut Vec<Stmt>,
 ) -> Result<Expression, JaniConversionError> {
@@ -333,7 +335,7 @@ fn extract_post(
         }
     }
 
-    let expr_builder = ExprBuilder::new(Span::dummy_span());
+    let expr_builder = ExprBuilder::new(proc_span);
     let bin_op = spec_part.direction.map(BinOpKind::Inf, BinOpKind::Sup);
     let sink_reward = posts
         .into_iter()

@@ -122,6 +122,7 @@ pub fn proc_to_model(
     let spec_part = SpecAutomaton::new(proc.direction);
     let mut verify_unit = verify_proc(proc).unwrap();
     let property = extract_properties(
+        proc.span,
         &spec_part,
         &mut verify_unit.block.node,
         options.skip_quant_pre,
