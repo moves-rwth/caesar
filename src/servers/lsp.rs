@@ -1,9 +1,13 @@
 use std::{
     collections::HashMap,
+    future::Future,
+    pin::Pin,
     sync::{Arc, Mutex},
 };
 
-use lsp_server::{Connection, IoThreads, Message, Response};
+use crossbeam_channel::Sender;
+
+use lsp_server::{Connection, IoThreads, Message, Request, Response};
 use lsp_types::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
     InitializeParams, ServerCapabilities, TextDocumentItem, TextDocumentSyncCapability,
@@ -101,72 +105,6 @@ impl LspServer {
             .sender
             .send(Message::Notification(start_notification))?;
 
-        Ok(())
-    }
-
-    pub fn run_server(
-        &mut self,
-        mut verify: impl FnMut(&mut Self, &[FileId]) -> Result<(), VerifyError>,
-    ) -> Result<(), VerifyError> {
-        let sender = self.connection.sender.clone();
-        let receiver = self.connection.receiver.clone();
-        for msg in &receiver {
-            match msg {
-                Message::Request(req) => match req.method.as_str() {
-                    "custom/verify" => {
-                        let (id, params) = req
-                            .extract::<VerifyRequest>("custom/verify")
-                            .map_err(|e| VerifyError::ServerError(e.into()))?;
-                        self.project_root = Some(params.text_document.clone());
-                        let files = self.files.lock().unwrap();
-                        let file_id = files
-                            .find(&SourceFilePath::Lsp(params.text_document.clone()))
-                            .unwrap_or_else(|| {
-                                panic!(
-                                    "Could not find file id for document {:?}",
-                                    params.text_document
-                                )
-                            })
-                            .id;
-                        drop(files);
-                        self.clear_file_information(&file_id)
-                            .map_err(VerifyError::ServerError)?;
-                        let result = verify(self, &[file_id]);
-                        let res = match &result {
-                            Ok(_) => Response::new_ok(id, Value::Null),
-                            Err(err) => Response::new_err(id, 0, format!("{}", err)),
-                        };
-                        sender
-                            .send(Message::Response(res))
-                            .map_err(|e| VerifyError::ServerError(e.into()))?;
-                        match result {
-                            Ok(()) => {}
-                            Err(VerifyError::Diagnostic(diagnostic)) => {
-                                self.add_diagnostic(diagnostic)?;
-                            }
-                            Err(VerifyError::Interrupted) => {}
-                            Err(VerifyError::LimitError(_)) => {}
-                            Err(err) => Err(err)?,
-                        }
-                    }
-                    "shutdown" => {
-                        self.connection
-                            .sender
-                            .send(Message::Response(Response::new_ok(
-                                req.id.clone(),
-                                Value::Null,
-                            )))
-                            .map_err(|e| VerifyError::ServerError(e.into()))?;
-                    }
-                    _ => {}
-                },
-                Message::Response(_) => todo!(),
-                Message::Notification(notification) => {
-                    self.handle_notification(notification)
-                        .map_err(VerifyError::ServerError)?;
-                }
-            }
-        }
         Ok(())
     }
 
@@ -390,6 +328,58 @@ impl Server for LspServer {
         self.publish_verify_statuses()?;
         Ok(())
     }
+
+    fn handle_not_checked(&mut self, span: Span) -> Result<(), ServerError> {
+        self.statuses.insert(span, VerifyResult::Unknown);
+        self.publish_verify_statuses()?;
+        Ok(())
+    }
+}
+
+/// A type alias representing an asynchronous closure that returns a `Result<(), VerifyError>`.
+///
+/// Since async closures are currently unstable in Rust, this type simulates them by using
+/// a pinned boxed future that captures the closure and its lifetime.
+type VerifyFuture<'a> = Pin<Box<dyn Future<Output = Result<(), VerifyError>> + 'a>>;
+
+/// Run the LSP server with the given verify function which is an async closure that returns a verification result modeled by a `Result<(), VerifyError>` type.
+pub async fn run_lsp_server(
+    server: Arc<Mutex<LspServer>>,
+    mut verify: impl FnMut(&[FileId]) -> VerifyFuture,
+) -> Result<(), VerifyError> {
+    let (sender, receiver) = {
+        let server_guard = server.lock().unwrap();
+        let sender = server_guard.connection.sender.clone();
+        let receiver = server_guard.connection.receiver.clone();
+        (sender, receiver)
+    };
+    for msg in &receiver {
+        match msg {
+            Message::Request(req) => match req.method.as_str() {
+                "custom/verify" => {
+                    handle_verify_request(req, server.clone(), sender.clone(), &mut verify).await?;
+                }
+                "shutdown" => {
+                    sender
+                        .send(Message::Response(Response::new_ok(
+                            req.id.clone(),
+                            Value::Null,
+                        )))
+                        .map_err(|e| VerifyError::ServerError(e.into()))?;
+                }
+                _ => {}
+            },
+            Message::Response(_) => todo!(),
+            Message::Notification(notification) => {
+                server
+                    .lock()
+                    .unwrap()
+                    .handle_notification(notification)
+                    .map_err(VerifyError::ServerError)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn by_lsp_document<'a, T: 'a>(
@@ -404,4 +394,59 @@ fn by_lsp_document<'a, T: 'a>(
         let document_id = files.get(file_id).unwrap().path.to_lsp_identifier()?;
         Some((document_id, vals))
     })
+}
+
+/// Handles the verify request from the client by calling the given verify method and sends the result back.
+///
+/// The lock on the server must be carefully managed to avoid deadlocks, because the verify function also needs to lock the server.
+/// Therefore the server is not locked for the entire duration of the function.
+/// Takes a mutable reference to a verify function which is an async closure.
+async fn handle_verify_request(
+    req: Request,
+    server: Arc<Mutex<LspServer>>,
+    sender: Sender<Message>,
+    verify: &mut impl FnMut(&[FileId]) -> VerifyFuture,
+) -> Result<(), VerifyError> {
+    let (id, params) = req
+        .extract::<VerifyRequest>("custom/verify")
+        .map_err(|e| VerifyError::ServerError(e.into()))?;
+    let file_id = {
+        let mut server_ref = server.lock().unwrap();
+        server_ref.project_root = Some(params.text_document.clone());
+        let files = server_ref.files.lock().unwrap();
+        let file_id = files
+            .find(&SourceFilePath::Lsp(params.text_document.clone()))
+            .unwrap_or_else(|| {
+                panic!(
+                    "Could not find file id for document {:?}",
+                    params.text_document
+                )
+            })
+            .id;
+        drop(files);
+
+        server_ref
+            .clear_file_information(&file_id)
+            .map_err(VerifyError::ServerError)?;
+        file_id
+    };
+
+    let result = verify(&[file_id]).await;
+    let res = match &result {
+        Ok(_) => Response::new_ok(id, Value::Null),
+        Err(err) => Response::new_err(id, 0, format!("{}", err)),
+    };
+    sender
+        .send(Message::Response(res))
+        .map_err(|e| VerifyError::ServerError(e.into()))?;
+    match result {
+        Ok(()) => {}
+        Err(VerifyError::Diagnostic(diagnostic)) => {
+            server.lock().unwrap().add_diagnostic(diagnostic)?;
+        }
+        Err(VerifyError::Interrupted) => {}
+        Err(VerifyError::LimitError(_)) => {}
+        Err(err) => Err(err)?,
+    }
+    Ok(())
 }

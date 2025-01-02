@@ -1,6 +1,11 @@
 //! Pretty-printing an SMT model.
 
-use std::{collections::BTreeMap, fmt::Display, rc::Rc};
+use std::{
+    collections::BTreeMap,
+    fmt::Display,
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use itertools::Itertools;
 use z3rro::model::{InstrumentedModel, SmtEvalError};
@@ -12,6 +17,7 @@ use crate::{
     },
     driver::QuantVcUnit,
     pretty::Doc,
+    resource_limits::LimitsRef,
     slicing::model::{SliceModel, SliceResult},
     smt::translate_exprs::TranslateExprs,
     vc::subst::apply_subst,
@@ -65,7 +71,12 @@ pub fn pretty_vc_value<'smt, 'ctx>(
             |_ident| expr_true.clone(),
         );
         let mut res = subst_expr;
-        apply_subst(translate.ctx.tcx(), &mut res);
+        let deadline = Instant::now() + Duration::from_millis(1);
+        let _ = apply_subst(
+            translate.ctx.tcx(),
+            &mut res,
+            &LimitsRef::new(Some(deadline)),
+        );
         res
     };
 

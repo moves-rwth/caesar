@@ -3,19 +3,15 @@
 //! Caesar internally, but rather used for visualizations in VSCode that are
 //! used for teaching.
 
-use std::{
-    mem,
-    time::{Duration, Instant},
-};
+use std::mem;
 
 use itertools::Itertools;
 use z3::{Config, Context};
 
 use crate::{
     ast::{
-        util::remove_casts, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Diagnostic,
-        Direction, Expr, ExprBuilder, Files, Ident, ProcDecl, Span, Spanned, Stmt, StmtKind,
-        Symbol, TyKind,
+        util::remove_casts, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Direction,
+        Expr, ExprBuilder, Files, Ident, ProcDecl, Span, Spanned, Stmt, StmtKind, Symbol, TyKind,
     },
     intrinsic::annotations::AnnotationKind,
     opt::unfolder::Unfolder,
@@ -27,6 +23,7 @@ use crate::{
     resource_limits::LimitsRef,
     smt::SmtCtx,
     tyctx::TyCtx,
+    VerifyError,
 };
 
 use super::{
@@ -150,30 +147,34 @@ impl IntoIterator for VcExplanation {
 /// itself and the expression with applied substitutions to the explanations.
 /// Finally, simplifications are applied (then the modified expression should be
 /// added to explanations by the caller).
-pub(super) fn explain_subst(vcgen: &mut Vcgen, span: Span, expr: &mut Expr) {
+pub(super) fn explain_subst(
+    vcgen: &mut Vcgen,
+    span: Span,
+    expr: &mut Expr,
+) -> Result<(), VerifyError> {
     if let Some(explanation) = &mut vcgen.explanation {
         // first add the original expression with substitutions
         explanation.add_expr(span, expr.clone(), false);
 
         // now the simple substitutions
-        apply_subst(vcgen.tcx, expr);
+        apply_subst(vcgen.tcx, expr, &vcgen.limits_ref)?;
         explanation.add_expr(span, expr.clone(), false);
 
         // finally, run the unfolder for more detailed simplifications
         let ctx = Context::new(&Config::default());
         let smt_ctx = SmtCtx::new(&ctx, vcgen.tcx);
-        let deadline = Instant::now() + Duration::from_millis(1);
-        let mut unfolder = Unfolder::new(LimitsRef::new(Some(deadline)), &smt_ctx);
+        let mut unfolder = Unfolder::new(vcgen.limits_ref.clone(), &smt_ctx);
         let _ = unfolder.visit_expr(expr);
         // the last value will be added to the explanations automatically in vcgen_stmt
     }
+    Ok(())
 }
 
 pub(super) fn explain_annotated_while(
     vcgen: &mut Vcgen,
     stmt: &Stmt,
     _post: &Expr,
-) -> Result<Expr, Diagnostic> {
+) -> Result<Expr, VerifyError> {
     if let StmtKind::Annotation(anno_span, ident, args, inner_stmt) = &stmt.node {
         if let StmtKind::While(_, body) = &inner_stmt.node {
             if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
@@ -198,7 +199,7 @@ pub(super) fn explain_annotated_while(
         }
     }
 
-    Err(unsupported_stmt_diagnostic(stmt))
+    Err(unsupported_stmt_diagnostic(stmt).into())
 }
 
 /// Explain verification condition of a declaration. Right now, this only
@@ -206,13 +207,14 @@ pub(super) fn explain_annotated_while(
 pub fn explain_decl_vc(
     tcx: &TyCtx,
     decl_kind: &DeclKind,
-) -> Result<Option<VcExplanation>, Diagnostic> {
+    limits_ref: &LimitsRef,
+) -> Result<Option<VcExplanation>, VerifyError> {
     if let DeclKind::ProcDecl(decl_ref) = decl_kind {
         let proc = decl_ref.borrow();
         let body = proc.body.borrow();
         if let Some(ref body) = *body {
             let post = fold_spec(&proc, proc.ensures());
-            let res = explain_raw_vc(tcx, body, post, proc.direction)?;
+            let res = explain_raw_vc(tcx, body, post, proc.direction, limits_ref)?;
             return Ok(Some(res));
         }
     }
@@ -225,8 +227,9 @@ pub fn explain_raw_vc(
     block: &Block,
     post: Expr,
     direction: Direction,
-) -> Result<VcExplanation, Diagnostic> {
-    let mut vcgen = Vcgen::new(tcx, Some(VcExplanation::new(direction)));
+    limits_ref: &LimitsRef,
+) -> Result<VcExplanation, VerifyError> {
+    let mut vcgen = Vcgen::new(tcx, Some(VcExplanation::new(direction)), limits_ref);
     vcgen.vcgen_block(block, post)?;
     Ok(vcgen.explanation.unwrap())
 }
@@ -235,7 +238,7 @@ fn explain_park_induction(
     vcgen: &mut Vcgen,
     invariant: &Expr,
     body: &Block,
-) -> Result<Expr, Diagnostic> {
+) -> Result<Expr, VerifyError> {
     let _inner_pre = vcgen.vcgen_block(body, invariant.clone());
     Ok(invariant.clone())
 }
@@ -246,7 +249,7 @@ fn explain_unroll(
     args: &[Expr],
     stmt_span: Span,
     call_span: Span,
-) -> Result<Expr, Diagnostic> {
+) -> Result<Expr, VerifyError> {
     let k = proof_rules::lit_u128(&args[0]);
     let terminator = &args[1];
     let direction = *vcgen.explanation.as_ref().unwrap().direction;
@@ -279,12 +282,12 @@ fn explain_unroll(
     let unrolled_block = Spanned::new(enc_env.stmt_span, unrolled_stmts);
 
     // generate pre-vc of unrolled loop with temporary vcgen
-    let mut temp_vcgen = Vcgen::new(vcgen.tcx, None);
+    let mut temp_vcgen = Vcgen::new(vcgen.tcx, None, &vcgen.limits_ref);
     let mut return_expr = temp_vcgen.vcgen_block(&unrolled_block, terminator.clone())?;
 
     // apply substitutions and simplify the pre-vc of the unrolled loop, add it
     // to our explanations in `vcgen`.
-    explain_subst(vcgen, stmt_span, &mut return_expr);
+    explain_subst(vcgen, stmt_span, &mut return_expr)?;
 
     Ok(return_expr)
 }
