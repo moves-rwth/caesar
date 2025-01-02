@@ -107,7 +107,7 @@
       "properties": {
         "caesar.server.timeout": {
           "type": "number",
-          "default": 300,
+          "default": 60,
           "description": "Specifies the timeout for the verifier in seconds.",
           "order": 1
         },
