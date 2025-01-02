@@ -50,9 +50,8 @@ const config = {
             'https://github.com/moves-rwth/caesar/tree/main/website/',
         },
         blog: {
+          blogSidebarCount: 20,
           showReadingTime: true,
-          // Please change this to your repo.
-          // Remove this to remove the "edit this page" links.
           editUrl:
             'https://github.com/moves-rwth/caesar/tree/main/website/',
         },
