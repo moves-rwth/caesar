@@ -2,11 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://www.caesarverifier.org/blog</id>
     <title>Caesar Blog</title>
-    <updated>2024-05-20T00:00:00.000Z</updated>
+    <updated>2024-12-31T00:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://www.caesarverifier.org/blog"/>
     <subtitle>Caesar Blog</subtitle>
     <icon>https://www.caesarverifier.org/img/laurel-square.svg</icon>
+    <entry>
+        <title type="html"><![CDATA[A Game-Based Operational Semantics for HeyVL]]></title>
+        <id>https://www.caesarverifier.org/blog/2024/12/31/game-based-semantics</id>
+        <link href="https://www.caesarverifier.org/blog/2024/12/31/game-based-semantics"/>
+        <updated>2024-12-31T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[The publication [_"A Game-Based Semantics for the Probabilistic]]></summary>
+        <content type="html"><![CDATA[<p>The publication <a href="https://doi.org/10.1007/978-3-031-75434-0_17" target="_blank" rel="noopener noreferrer"><em>"A Game-Based Semantics for the Probabilistic
+Intermediate Verification Language HeyVL"</em></a> by Christoph Matheja was published at <a href="https://2024-isola.isola-conference.org/" target="_blank" rel="noopener noreferrer">AISoLA 2024</a> and is now available online.</p>
+<p>Quoting from its abstract:</p>
+<blockquote>
+<p>[T]he original language [HeyVL] lacked a formal “ground truth” in terms of a small-step operational semantics that enables an intuitive reading of HeyVL programs.</p>
+<p>In this paper, we define an operational semantics for a cleaned-up version of HeyVL in terms of <em>refereed</em> stochastic games, a novel extension of simple stochastic games in which a referee may perform quantitative reasoning about the expected outcome of sub-games and give one player an advantage if those sub-game are outside of certain boundaries.</p>
+</blockquote>
+<p>This new operational semantics is aimed at improved intuition and ergonomics of HeyVL, as well as a possible future work enabling other verification backends such as ones based on probabilistic model checking tools.</p>
+<p>Note that the existing <a href="https://www.caesarverifier.org/docs/model-checking">model checking backend</a> of Caesar does not yet support for the full extent of the HeyVL language, but merely an "executable subset".
+Therefore, this publication shows an avenue for a future extension of this existing backend via refereed stochastic games.</p>]]></content>
+        <author>
+            <name>Philipp Schroer</name>
+            <uri>https://moves.rwth-aachen.de/people/philipp-schroer/</uri>
+        </author>
+        <category label="publications" term="publications"/>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Caesar 2.0: VSCode Extension, Slicing, and more!]]></title>
         <id>https://www.caesarverifier.org/blog/2024/05/20/caesar-2-0</id>
