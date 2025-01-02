@@ -9,6 +9,22 @@ Caesar is a project from a collaboration of the [Chair for Software Modeling and
 
 If you are interested in collaborations or simply have some questions, please reach out to [Philipp Schroer](https://moves.rwth-aachen.de/people/philipp-schroer/) ([phisch@cs.rwth-aachen.de](mailto:phisch@cs.rwth-aachen.de)).
 
+:::note Citing Caesar
+
+For publications about Caesar, please cite our [OOPSLA '23 paper](#oopsla-23) ([BibTeX file](https://dblp.org/rec/journals/pacmpl/SchroerBKKM23.html?view=bibtex)):
+
+> Philipp Schröer, Kevin Batz, Benjamin Lucien Kaminski, Joost-Pieter Katoen, Christoph Matheja. *A Deductive Verification Infrastructure for Probabilistic Programs.* Proceedings of the ACM on Programming Languages 7, OOPSLA 2023. DOI: https://doi.org/10.1145/3622870.
+
+:::
+
+**Overview:**
+
+```mdx-code-block
+import TOCInline from '@theme/TOCInline';
+
+<TOCInline toc={toc} />
+```
+
 ## AISoLA '24: A Game-Based Semantics for the Probabilistic Intermediate Verification Language HeyVL
 
 The publication [_"A Game-Based Semantics for the Probabilistic
@@ -26,11 +42,19 @@ This new operational semantics is aimed at improved intuition and ergonomics of 
 
 HeyVL and Caesar were first published at [OOPSLA '23](https://2023.splashcon.org/track/splash-2023-oopsla): [A Deductive Verification Infrastructure for Probabilistic Programs](https://doi.org/10.1145/3622870) by Schröer et al.
 
-For publication, please cite as follows:
+For publication, please cite as follows ([BibTeX file](https://dblp.org/rec/journals/pacmpl/SchroerBKKM23.html?view=bibtex)):
 
-Philipp Schröer, Kevin Batz, Benjamin Lucien Kaminski, Joost-Pieter Katoen, Christoph Matheja. *A Deductive Verification Infrastructure for Probabilistic Programs.* Proceedings of the ACM on Programming Languages 7, OOPSLA 2023. DOI: https://doi.org/10.1145/3622870.
+> Philipp Schröer, Kevin Batz, Benjamin Lucien Kaminski, Joost-Pieter Katoen, Christoph Matheja. *A Deductive Verification Infrastructure for Probabilistic Programs.* Proceedings of the ACM on Programming Languages 7, OOPSLA 2023. DOI: https://doi.org/10.1145/3622870.
 
 An **extended version with proofs and details on encodings** is available on arXiv: [A Deductive Verification Infrastructure for Probabilistic Programs (extended version) — arXiv:2309.07781](https://arxiv.org/abs/2309.07781).
 
 **The artifact** for our OOPSLA '23 publication is [available on Zenodo](https://zenodo.org/record/8146987).
 During artifact evaluation, it received the _reusable_ badge.
+
+## Master Thesis '22: A Deductive Verifier for Probabilistic Programs
+
+Caesar is based on a 2022 Master thesis by Philipp Schroer entitled [_"A Deductive Verifier for Probabilistic Programs"_](https://publications.rwth-aachen.de/record/998370).
+
+The [PDF file is available online](https://publications.rwth-aachen.de/record/998370/files/998370.pdf).
+
+DOI: https://doi.org/10.18154/RWTH-2024-11340.
