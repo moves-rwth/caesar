@@ -163,7 +163,7 @@ One can understand this as an instance of *Reverse Hoare Logic* or *(Partial) In
     We recommend adding the <code>--no-slice-error</code> flag to obtain a simpler version that is not cluttered with stuff from slicing for error messages.
 </details>
 
-#### Usually You Want `!?(b)`
+#### Usually You Want `!?(b)` {#usually-you-want-coembed}
 
 We often write `!?(b)` to abbreviate `?(!(b))`, i.e. mapping `b` to $0$ if it is true and to $\infty$ otherwise.
 
@@ -182,20 +182,26 @@ And the `post` encodes that we reach $y = 42$ &mdash; the set of initial states 
 
 ### Multiple Or No `pre`/`post` Annotations
 
-Multiple `pre` annotations are combined.
+Multiple `pre` and `post` annotations are logically combined.[^spec-combination]
 `⊓` is the minimum operator and `⊔` maximum operator (see [expressions documentation](./expressions.md)).
 
 | | `pre A pre B` | `post C post D` |
 |- | - | - |
-| `proc` | `pre (A ⊓ B)` | `post (C ⊔ D)` |
-| `coproc` | `pre (A ⊔ B)` | `post (C ⊓ D)` |
+| `proc` | `pre (A ⊓ B)` | `post (C ⊓ D)` |
+| `coproc` | `pre (A ⊔ B)` | `post (C ⊔ D)` |
 
-In procedures, this generalizes the Boolean setting where multiple `pre` annotations are *assumptions* that are combined with a *logical or* and multiple `post` annotations are *assertions* that are combined with a *logical and*.
+In `proc`s, we combine `pre`s and `post`s with the minimum `⊓`.
+In `coproc`s, the combination is dual and uses the maximum `⊔`.
+
+This generalizes the Boolean setting neatly:
 
 | | `pre ?(A) pre ?(B)` | `post ?(C) post ?(D)` |
 |- | - | - |
-| `proc` | `pre ?(A && B)` | `post ?(C \|\| D)` |
-| `coproc` | `pre ?(A \|\| B)` | `post (C && D)` |
+| `proc` | `pre ?(A && B)` | `post ?(C && D)` |
+| `coproc` | `pre ?(A \|\| B)` | `post (C \|\| D)` |
+
+If [we use `!?(b)` in `coproc`s](#usually-you-want-coembed), then we obtain that `pre !?(A) pre !?(B)` is equivalent to `pre !?(A && B)` as one might expect.
+Same for `post` annotations.
 
 The specification is optional; if it's not provided, Caesar will add a default specification: `pre ?(true)` and `post ?(true)` for procedures and `pre ?(false)` and `post ?(false)` for coprocedures.
 
@@ -310,5 +316,9 @@ This generalizes the Boolean setting:
 A more formal treatment of the encoding and semantics of procedure calls can be found in our [OOPSLA '23 paper](../publications.md#oopsla-23).
 
 
+
+[^spec-combination]: The combination of specifications is a logical consequence of their encodings in HeyVL. When *verifying* a procedure, `pre` annotations will be translated to `assume` and `post` annotations will be translated to `assert` statements.
+One can prove that the HeyVL statements `assume A1; assume A2` are equivalent to `assume (A1 ⊓ A2)`, and also that the sequence `assert A1; assert A2` is equivalent to `assert (A1 ⊓ A2)`.
+The same equalities can be used for the procedure *call* encoding.
 
 [^on-negative-numbers]: Many verification tasks that require reasoning with negative numbers can be embedded in this framework. First, note that we can still have negative numbers in our program states, we just have to ensure that the `post` is non-negative. [Chapter 11 of the paper _"Relatively Complete Verification for Probabilistic Programs"_](https://dl.acm.org/doi/pdf/10.1145/3434320#page=24) by Batz et al. might be of interest for further reading.
