@@ -59,3 +59,7 @@ a.button {
     display: inherit;
   }
 }
+
+/* by default, katex equations are bigger than the surrounding text. we want our
+math to nicely be contained in the surrounding text. */
+.katex { font-size: 1em !important; }

@@ -55,8 +55,8 @@ proc ohfive_3() -> ()
 {}
 ```
 
-**Do not forget the _empty_ block of statements `{}` at the end!**
-If you omit it, Caesar will not attempt to verify the procedure and thus will not check the specification.
+Do not forget the _empty_ block of statements `{}` at the end.
+If you omit it, [Caesar will not attempt to verify the procedure](./procs.md#procs-without-body) and thus will not check the specification.
 
 ## Pure Functions
 

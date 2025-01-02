@@ -51,8 +51,8 @@ x, y = two_numbers()
 
 If the right-hand side of the assignment is a (pure) expression, then the verification condition semantics amounts to a substitution of the left-hand side by the right-hand side.
 
-If the right-hand side is a call to a procedure, then the assignment is translated to a combination of `assert`, `havoc`, and `compare` statements.
-See the [reference on procedures](./procs.md) for more information.
+The right-hand side of the assignment can be a procedure call.
+See the [reference on procedure calls](./procs.md#calling-procedures) for more information.
 
 If the procedure does not have any return values, the call may be written without the equals sign and the left-hand side, i.e. simply `fn(arg1, arg2)`.
 
