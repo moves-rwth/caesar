@@ -9,6 +9,8 @@ use z3::{ast::Bool, Context};
 use crate::model::{InstrumentedModel, SmtEval, SmtEvalError};
 use crate::{forward_binary_op, scope::SmtAlloc, Factory, SmtEq, SmtFactory, SmtInvariant, UReal};
 
+use super::ConcreteEUReal;
+use crate::lit::{LitFactory, LitWrap};
 use crate::{
     orders::{
         smt_max, smt_min, SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering, SmtPartialOrd,
@@ -17,8 +19,6 @@ use crate::{
     uint::UInt,
     SmtBranch,
 };
-
-use super::ConcreteEUReal;
 
 #[derive(Debug, Clone)]
 pub struct EURealFactory<'ctx> {
@@ -122,6 +122,16 @@ impl<'ctx> SmtBranch<'ctx> for EUReal<'ctx> {
             factory: a.factory.clone(),
             is_infinite: Bool::ite(cond, &a.is_infinite, &b.is_infinite),
             number: SmtBranch::branch(cond, &a.number, &b.number),
+        }
+    }
+}
+
+impl<'ctx> LitWrap<'ctx> for EUReal<'ctx> {
+    fn lit_wrap(&self, factory: &impl LitFactory<'ctx>) -> Self {
+        Self {
+            factory: self.factory.clone(),
+            is_infinite: self.is_infinite.lit_wrap(factory),
+            number: self.number.lit_wrap(factory),
         }
     }
 }

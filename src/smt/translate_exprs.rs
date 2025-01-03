@@ -1,13 +1,9 @@
 //! Translation of Caesar expressions to Z3 expressions.
 
-use std::{
-    cmp::Ordering,
-    collections::HashMap,
-    convert::TryFrom,
-    hash::{Hash, Hasher},
-};
-
+use itertools::Itertools;
 use ref_cast::RefCast;
+use std::cell::OnceCell;
+use std::{collections::HashMap, convert::TryFrom, vec};
 use z3::{
     ast::{Ast, Bool, Dynamic, Int, Real},
     Pattern,
@@ -21,6 +17,13 @@ use crate::{
     scope_map::ScopeMap,
 };
 
+use super::{
+    symbolic::{ScopeSymbolic, Symbolic, SymbolicPair},
+    SmtCtx,
+};
+use crate::ast::{ExprData, PointerHashShared};
+use crate::smt::limited::LiteralExprs;
+use z3rro::scope::WEIGHT_DEFAULT;
 use z3rro::{
     eureal::EUReal,
     orders::{
@@ -28,12 +31,7 @@ use z3rro::{
         SmtPartialOrd,
     },
     scope::SmtScope,
-    List, SmtBranch, SmtEq, UInt, UReal,
-};
-
-use super::{
-    symbolic::{ScopeSymbolic, Symbolic, SymbolicPair},
-    SmtCtx,
+    Fuel, List, LitWrap, SmtBranch, SmtEq, UInt, UReal,
 };
 
 /// Translates caesar expressions to Z3 formulas.
@@ -45,6 +43,8 @@ pub struct TranslateExprs<'smt, 'ctx> {
     limits_stack: Vec<SmtScope<'ctx>>,
     locals: ScopeMap<Ident, ScopeSymbolic<'ctx>>,
     cache: TranslateCache<'ctx>,
+    fuel_context: FuelContext<'ctx>,
+    literal_exprs: LiteralExprs,
 }
 
 impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
@@ -54,6 +54,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             limits_stack: vec![SmtScope::new()],
             locals: ScopeMap::new(),
             cache: TranslateCache::new(),
+            fuel_context: FuelContext::call(),
+            literal_exprs: LiteralExprs::default(),
         }
     }
 
@@ -74,7 +76,47 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     pub fn local_scope(&self) -> SmtScope<'ctx> {
         let mut scope = self.limits_stack.last().unwrap().clone();
         scope.extend(self.locals.local_iter().map(|(_ident, local)| &local.scope));
+        scope.extend(
+            self.fuel_context
+                .quantified_fuel()
+                .and_then(|qf| qf.scope()),
+        );
         scope
+    }
+
+    pub fn set_fuel_context(&mut self, fuel_context: FuelContext<'ctx>) {
+        self.fuel_context = fuel_context;
+    }
+
+    pub fn fuel_context(&self) -> &FuelContext<'ctx> {
+        &self.fuel_context
+    }
+
+    pub fn fuel_context_mut(&mut self) -> &mut FuelContext<'ctx> {
+        &mut self.fuel_context
+    }
+
+    /// Defines what expressions should be considered literal from now (until reset
+    /// by [Self::clear_literal_exprs]). An expression is literal if it always has the same value
+    /// under all interpretations.
+    /// If enabled, literal expressions are marked during translation by wrapping them in
+    /// `Lit`-functions. Quantifier instantiation using Lit values does not consume fuel.
+    ///
+    /// See [crate::smt::limited]
+    pub fn set_literal_exprs(&mut self, literal_exprs: LiteralExprs) {
+        self.literal_exprs = literal_exprs;
+    }
+
+    pub fn clear_literal_exprs(&mut self) {
+        self.literal_exprs = LiteralExprs::default();
+    }
+
+    fn wrap_if_literal<A: LitWrap<'ctx>>(&self, expr: &Expr, ast: A) -> A {
+        if self.literal_exprs.is_literal(expr) {
+            ast.lit_wrap(self.ctx)
+        } else {
+            ast
+        }
     }
 
     pub fn local_idents<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
@@ -179,10 +221,16 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 let scope = self.mk_scope(quant_vars);
                 let patterns: Vec<_> = self.t_triggers(&ann.triggers);
                 let patterns: Vec<_> = patterns.iter().collect();
-                match quant_op.node {
-                    QuantOpKind::Forall | QuantOpKind::Inf => scope.forall(&patterns, &operand),
+                let quant = match quant_op.node {
+                    QuantOpKind::Forall | QuantOpKind::Inf => scope.forall(
+                        format!("{:?}", quant_op.span),
+                        WEIGHT_DEFAULT,
+                        &patterns,
+                        &operand,
+                    ),
                     QuantOpKind::Exists | QuantOpKind::Sup => scope.exists(&patterns, &operand),
-                }
+                };
+                quant
             }
             ExprKind::Subst(_, _, _) => panic!("illegal exprkind"),
             ExprKind::Lit(lit) => match lit.node {
@@ -194,7 +242,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         if is_expr_worth_caching(expr) {
             self.cache.insert(expr, Symbolic::Bool(res.clone()));
         }
-        res
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_int(&mut self, expr: &Expr) -> Int<'ctx> {
@@ -248,7 +296,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::Int(res.clone()));
         }
-        res
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_uint(&mut self, expr: &Expr) -> UInt<'ctx> {
@@ -299,7 +347,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::UInt(res.clone()));
         }
-        res
+
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_real(&mut self, expr: &Expr) -> Real<'ctx> {
@@ -361,7 +410,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::Real(res.clone()));
         }
-        res
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_ureal(&mut self, expr: &Expr) -> UReal<'ctx> {
@@ -423,11 +472,12 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::UReal(res.clone()));
         }
-        res
+
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_eureal(&mut self, expr: &Expr) -> EUReal<'ctx> {
-        match &expr.kind {
+        let res = match &expr.kind {
             ExprKind::Var(ident) => self
                 .get_local(*ident)
                 .symbolic
@@ -497,15 +547,19 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 }
             }
             ExprKind::Subst(_, _, _) => panic!("illegal exprkind"),
-            ExprKind::Lit(lit) => match &lit.node {
-                LitKind::Infinity => EUReal::infinity(self.ctx.eureal()),
-                LitKind::Frac(frac) => EUReal::from_ureal(
-                    self.ctx.eureal(),
-                    &UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac)),
-                ),
-                _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
-            },
-        }
+            ExprKind::Lit(lit) => {
+                let eureal = match &lit.node {
+                    LitKind::Infinity => EUReal::infinity(self.ctx.eureal()),
+                    LitKind::Frac(frac) => EUReal::from_ureal(
+                        self.ctx.eureal(),
+                        &UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac)),
+                    ),
+                    _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
+                };
+                eureal
+            }
+        };
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_uninterpreted(&mut self, expr: &Expr) -> Dynamic<'ctx> {
@@ -551,7 +605,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             self.cache
                 .insert(expr, Symbolic::Uninterpreted(res.clone()));
         }
-        res
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_list(&mut self, expr: &Expr) -> List<'ctx> {
@@ -593,17 +647,21 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     fn t_call(&mut self, name: Ident, args: &[Expr]) -> Symbolic<'ctx> {
         match self.ctx.tcx().get(name).as_deref() {
             Some(DeclKind::FuncDecl(func)) => {
-                let args: Vec<Dynamic<'_>> = args
-                    .iter()
-                    .map(|arg| self.t_symbolic(arg).into_dynamic(self.ctx))
-                    .collect();
-                let args: Vec<&dyn Ast<'ctx>> = args
-                    .iter()
-                    .map(|ast| {
-                        let a: &dyn Ast<'ctx> = ast;
-                        a
-                    })
-                    .collect();
+                let mut args_vec = if self.ctx.is_limited_function(name) {
+                    let fuel_arg: Dynamic<'ctx> = match &self.fuel_context {
+                        FuelContext::Head(qf) => Fuel::succ(qf.get_or_init(self.ctx)).as_dynamic(),
+                        FuelContext::Body(qf) => qf.get_or_init(self.ctx).as_dynamic(),
+                        FuelContext::Call => Fuel::new(self.ctx.fuel_factory(), 1).as_dynamic(),
+                    };
+                    vec![fuel_arg]
+                } else {
+                    vec![]
+                };
+                args_vec.extend(
+                    args.iter()
+                        .map(|arg| self.t_symbolic(arg).into_dynamic(self.ctx)),
+                );
+                let args = args_vec.iter().map(|d| d as &dyn Ast<'ctx>).collect_vec();
                 let res_dynamic = self.ctx.uninterpreteds().apply_function(name, &args);
                 Symbolic::from_dynamic(self.ctx, &func.borrow().output, &res_dynamic)
             }
@@ -625,39 +683,43 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         self.locals.get(&ident).unwrap()
     }
 
-    fn init_local(&mut self, ident: Ident) {
+    fn get_local_ty(&self, ident: Ident) -> TyKind {
         let decl = self
             .ctx
             .tcx()
             .get(ident)
             .unwrap_or_else(|| panic!("{} is not declared", ident));
-        let local = match decl.as_ref() {
-            DeclKind::VarDecl(var_ref) => match &var_ref.borrow().ty {
-                TyKind::Bool => ScopeSymbolic::fresh_bool(self.ctx, ident),
-                TyKind::Int => ScopeSymbolic::fresh_int(self.ctx, ident),
-                TyKind::UInt => ScopeSymbolic::fresh_uint(self.ctx, ident),
-                TyKind::Real => ScopeSymbolic::fresh_real(self.ctx, ident),
-                TyKind::UReal => ScopeSymbolic::fresh_ureal(self.ctx, ident),
-                TyKind::EUReal => ScopeSymbolic::fresh_eureal(self.ctx, ident),
-                TyKind::Domain(domain) => {
-                    let domain_name = domain.borrow().name;
-                    let domain_sort = self.ctx.uninterpreteds().get_sort(domain_name).unwrap();
-                    ScopeSymbolic::fresh_uninterpreted(self.ctx, ident, domain_sort)
-                }
-                TyKind::Tuple(_) => todo!(),
-                TyKind::List(element_ty) => ScopeSymbolic::fresh_list(self.ctx, ident, element_ty),
-                TyKind::String => unreachable!(),
-                TyKind::SpecTy => unreachable!(),
-                TyKind::Unresolved(_) => unreachable!(),
-                TyKind::None => unreachable!(),
-            },
+        match decl.as_ref() {
+            DeclKind::VarDecl(var_ref) => var_ref.borrow().ty.clone(),
             _ => panic!("variable is not declared"),
+        }
+    }
+
+    fn init_local(&mut self, ident: Ident) {
+        let local = match &self.get_local_ty(ident) {
+            TyKind::Bool => ScopeSymbolic::fresh_bool(self.ctx, ident),
+            TyKind::Int => ScopeSymbolic::fresh_int(self.ctx, ident),
+            TyKind::UInt => ScopeSymbolic::fresh_uint(self.ctx, ident),
+            TyKind::Real => ScopeSymbolic::fresh_real(self.ctx, ident),
+            TyKind::UReal => ScopeSymbolic::fresh_ureal(self.ctx, ident),
+            TyKind::EUReal => ScopeSymbolic::fresh_eureal(self.ctx, ident),
+            TyKind::Domain(domain) => {
+                let domain_name = domain.borrow().name;
+                let domain_sort = self.ctx.uninterpreteds().get_sort(domain_name).unwrap();
+                ScopeSymbolic::fresh_uninterpreted(self.ctx, ident, domain_sort)
+            }
+            TyKind::Tuple(_) => todo!(),
+            TyKind::List(element_ty) => ScopeSymbolic::fresh_list(self.ctx, ident, element_ty),
+            TyKind::String => unreachable!(),
+            TyKind::SpecTy => unreachable!(),
+            TyKind::Unresolved(_) => unreachable!(),
+            TyKind::None => unreachable!(),
         };
         self.locals.insert(ident, local);
     }
 
     /// Create a new scope with the given quantified variables.
-    fn mk_scope(&mut self, quant_vars: &[QuantVar]) -> SmtScope<'ctx> {
+    pub fn mk_scope(&mut self, quant_vars: &[QuantVar]) -> SmtScope<'ctx> {
         let mut bounds = SmtScope::new();
         for quant_var in quant_vars {
             bounds.append(&self.get_local(quant_var.name()).scope);
@@ -666,7 +728,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     /// Translate our [`Trigger`]s to z3's [`Pattern`]s.
-    fn t_triggers(&mut self, triggers: &[Trigger]) -> Vec<Pattern<'ctx>> {
+    pub fn t_triggers(&mut self, triggers: &[Trigger]) -> Vec<Pattern<'ctx>> {
         triggers
             .iter()
             .map(|trigger| {
@@ -679,6 +741,104 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 Pattern::new(self.ctx.ctx, &terms_ref)
             })
             .collect()
+    }
+}
+
+/// Type that determines how the fuel parameter for uninterpreted functions should be synthesised.
+pub enum FuelContext<'ctx> {
+    Head(QuantifiedFuel<'ctx>),
+    Body(QuantifiedFuel<'ctx>),
+    Call,
+}
+
+impl<'ctx> FuelContext<'ctx> {
+    /// In the head of a defining axiom a non-zero universally quantified fuel parameter is
+    /// synthesised i.e. `Succ(fuel)`.
+    pub fn head() -> Self {
+        Self::Head(QuantifiedFuel::default())
+    }
+
+    /// In the body of a defining axiom a universally quantified fuel parameter is
+    /// synthesised i.e. `fuel`.
+    pub fn body() -> Self {
+        Self::Body(QuantifiedFuel::default())
+    }
+
+    pub fn body_with_fuel(quantified_fuel: QuantifiedFuel<'ctx>) -> Self {
+        Self::Body(quantified_fuel)
+    }
+
+    /// In other positions the function application represents a call. A fixed fuel
+    /// parameter is synthesized that determines how often the function definition can
+    /// be instantiated i.e. `Succ(Zero)`.
+    pub fn call() -> Self {
+        Self::Call
+    }
+
+    pub fn quantified_fuel_scope(&self) -> Option<&SmtScope<'ctx>> {
+        self.quantified_fuel().and_then(|qf| qf.scope())
+    }
+
+    fn quantified_fuel(&self) -> Option<&QuantifiedFuel<'ctx>> {
+        match self {
+            Self::Head(qf) => Some(qf),
+            Self::Body(qf) => Some(qf),
+            Self::Call => None,
+        }
+    }
+
+    pub fn take_quantified_fuel(&mut self) -> Option<QuantifiedFuel<'ctx>> {
+        let do_take = |qf: &mut QuantifiedFuel<'ctx>| QuantifiedFuel::new(qf.lazy_fuel.take());
+        match self {
+            Self::Head(qf) => Some(do_take(qf)),
+            Self::Body(qf) => Some(do_take(qf)),
+            Self::Call => None,
+        }
+    }
+}
+
+/// Lazily initialised [ScopeSymbolic] of type [Fuel]. It is initialised when a limited function is
+/// encountered in context that requires a fresh quantified fuel variable ([FuelContext::Head],
+/// [FuelContext::Body]). It is discarded when the context changes back to [FuelContext::Call]
+/// (see [TranslateExprs::set_fuel_context]). The lazy initialisation ensures that the fuel variable
+/// is only added to the quantifier if it is actually used.
+#[derive(Default)]
+pub struct QuantifiedFuel<'ctx> {
+    lazy_fuel: OnceCell<ScopeSymbolic<'ctx>>,
+}
+
+impl<'ctx> QuantifiedFuel<'ctx> {
+    pub fn new(value: Option<ScopeSymbolic<'ctx>>) -> Self {
+        Self {
+            lazy_fuel: match value {
+                Some(s) => {
+                    let cell = OnceCell::new();
+                    cell.set(s)
+                        .unwrap_or_else(|_| unreachable!("Cell was newly constructed"));
+                    cell
+                }
+                None => OnceCell::new(),
+            },
+        }
+    }
+
+    fn get_or_init(&self, ctx: &SmtCtx<'ctx>) -> Fuel<'ctx> {
+        self.lazy_fuel
+            .get_or_init(|| ScopeSymbolic::fresh_fuel(ctx))
+            .symbolic
+            .clone()
+            .into_fuel()
+            .unwrap()
+    }
+
+    pub fn get(&self) -> Option<Fuel<'ctx>> {
+        self.lazy_fuel
+            .get()
+            .and_then(|s| s.symbolic.clone().into_fuel())
+    }
+
+    pub fn scope(&self) -> Option<&SmtScope<'ctx>> {
+        self.lazy_fuel.get().map(|s| &s.scope)
     }
 }
 
@@ -706,7 +866,7 @@ impl<'ctx> TranslateCache<'ctx> {
     }
 
     fn insert(&mut self, expr: &Expr, value: Symbolic<'ctx>) {
-        let cache_expr = CacheExpr(expr.clone());
+        let cache_expr = CacheExpr::new(expr.clone());
         self.cache.last_mut().unwrap().insert(cache_expr, value);
     }
 
@@ -715,31 +875,4 @@ impl<'ctx> TranslateCache<'ctx> {
     }
 }
 
-#[repr(transparent)]
-#[derive(RefCast)]
-struct CacheExpr(Expr);
-
-impl PartialEq for CacheExpr {
-    fn eq(&self, other: &Self) -> bool {
-        Shared::as_ptr(&self.0) == Shared::as_ptr(&other.0)
-    }
-}
-impl Eq for CacheExpr {}
-
-impl Ord for CacheExpr {
-    fn cmp(&self, other: &Self) -> Ordering {
-        Shared::as_ptr(&self.0).cmp(&Shared::as_ptr(&other.0))
-    }
-}
-
-impl PartialOrd for CacheExpr {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(Shared::as_ptr(&self.0).cmp(&Shared::as_ptr(&other.0)))
-    }
-}
-
-impl Hash for CacheExpr {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        Shared::as_ptr(&self.0).hash(state)
-    }
-}
+type CacheExpr = PointerHashShared<ExprData>;

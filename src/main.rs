@@ -36,6 +36,7 @@ use timing::DispatchBuilder;
 use tokio::task::JoinError;
 use tracing::{error, info, warn};
 
+use crate::smt::SmtCtxOptions;
 use vc::explain::VcExplanation;
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
@@ -158,6 +159,20 @@ pub struct OptimizationOptions {
     /// the current solver state.
     #[arg(long)]
     pub no_simplify: bool,
+
+    /// Limit the number of times a function declaration can be recursively instantiated.
+    /// Requires that MBQI is disabled with `force-ematching`.
+    #[arg(long)]
+    pub limited_functions: bool,
+
+    /// Force the SMT solver to only use emaching for quantifier instantiation, disabling mbqi.
+    #[arg(long)]
+    pub force_ematching: bool,
+
+    /// Do not count applications to constant values towards the instantiation count
+    /// when using `limited-functions`.
+    #[arg(long)]
+    pub lit_wrap: bool,
 }
 
 #[derive(Debug, Default, Args)]
@@ -232,6 +247,10 @@ pub struct DebugOptions {
     /// Enable Z3 tracing for the final SAT check.
     #[arg(long)]
     pub z3_trace: bool,
+
+    /// An explicit seed used by Z3 for the final SAT check.
+    #[arg(long)]
+    pub z3_seed: Option<u32>,
 }
 
 #[derive(Debug, Default, Args)]
@@ -698,7 +717,14 @@ fn verify_files_main(
 
         // 11. Translate to Z3
         let ctx = mk_z3_ctx(options);
-        let smt_ctx = SmtCtx::new(&ctx, &tcx);
+        let smt_ctx = SmtCtx::new(
+            &ctx,
+            &tcx,
+            SmtCtxOptions {
+                use_limited_functions: options.opt_options.limited_functions,
+                lit_wrap: options.opt_options.lit_wrap,
+            },
+        );
         let mut translate = TranslateExprs::new(&smt_ctx);
         let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
 

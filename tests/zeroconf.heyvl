@@ -1,9 +1,7 @@
 // RUN: @caesar @file
 
 domain Arith {
-    func exp(b: UReal, i: UInt): UReal
-    axiom exp_base forall b: UReal. exp(b, 0) == 1
-    axiom exp_step forall b: UReal, i: UInt. exp(b, i + 1) == b * exp(b, i)
+    func exp(b: UReal, i: UInt): UReal = ite(i == 0, 1, b * exp(b, i - 1))
     axiom exp_bounded forall b: UReal, i: UInt. (b <= 1) ==> (exp(b, i) <= 1)
 }
 

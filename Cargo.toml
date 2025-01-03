@@ -80,8 +80,8 @@ harness = false
 opt-level = 3
 
 [patch.crates-io]
-z3 = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = 'bdd501ca1e50785365b875b3438a0cf953cffbfc' }
-z3-sys = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = 'bdd501ca1e50785365b875b3438a0cf953cffbfc' }
+z3 = { git = 'https://github.com/prove-rs/z3.rs.git', rev = '60001b36fc8a7ab1d4f22595e80a3b6f7adc1bcf' }
+z3-sys = { git = 'https://github.com/prove-rs/z3.rs.git', rev = '60001b36fc8a7ab1d4f22595e80a3b6f7adc1bcf' }
 # to work on z3.rs locally, clone it into the main directory and use the following directive instead:
 # z3 = { path = 'z3.rs/z3' }
 
