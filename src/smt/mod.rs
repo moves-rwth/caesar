@@ -4,7 +4,7 @@ use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
 use crate::ast::{DeclKind, FuncDecl};
 use crate::smt::limited::{
     build_func_domain, computation_axiom, defining_axiom, fuel_synonym_axiom,
-    return_value_invariant,
+    is_eligible_for_limited_function, return_value_invariant,
 };
 use crate::{
     ast::{DeclRef, DomainDecl, DomainSpec, Ident, TyKind},
@@ -48,6 +48,15 @@ pub struct SmtCtx<'ctx> {
 
 impl<'ctx> SmtCtx<'ctx> {
     pub fn new(ctx: &'ctx Context, tcx: &'ctx TyCtx, options: SmtCtxOptions) -> Self {
+        let domains: Vec<_> = tcx.domains_owned();
+        // disable lit-wrapping if there are no limited functions that can profit from it
+        let lit_wrap = options.lit_wrap
+            && options.use_limited_functions
+            && domains.iter().any(|d| {
+                d.borrow()
+                    .function_decls()
+                    .any(|func| is_eligible_for_limited_function(&func.borrow()))
+            });
         let mut res = SmtCtx {
             ctx,
             tcx,
@@ -57,9 +66,8 @@ impl<'ctx> SmtCtx<'ctx> {
             lits: RefCell::new(Vec::new()),
             uninterpreteds: Uninterpreteds::new(ctx),
             use_limited_functions: options.use_limited_functions,
-            lit_wrap: options.lit_wrap,
+            lit_wrap,
         };
-        let domains: Vec<_> = tcx.domains_owned();
         res.declare_domains(domains.as_slice());
         res
     }
@@ -204,7 +212,7 @@ impl<'ctx> SmtCtx<'ctx> {
     }
 
     pub fn is_limited_function_decl(&self, func: &FuncDecl) -> bool {
-        self.use_limited_functions && func.body.borrow().is_some()
+        self.use_limited_functions && is_eligible_for_limited_function(func)
     }
 
     pub fn functions_with_def(&self) -> Vec<Ident> {

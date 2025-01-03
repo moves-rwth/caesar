@@ -260,6 +260,12 @@ pub fn return_value_invariant<'smt, 'ctx>(
     axiom
 }
 
+/// Returns true if the [FuncDecl] can be transformed into a limited function.
+/// Use [SmtCtx::is_limited_function_decl] to check if the transformation should actually be applied.
+pub fn is_eligible_for_limited_function(func: &FuncDecl) -> bool {
+    func.body.borrow().is_some()
+}
+
 type HashExpr = PointerHashShared<ExprData>;
 
 #[derive(Default, Clone)]
