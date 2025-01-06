@@ -198,7 +198,7 @@ This generalizes the Boolean setting neatly:
 | | `pre ?(A) pre ?(B)` | `post ?(C) post ?(D)` |
 |- | - | - |
 | `proc` | `pre ?(A && B)` | `post ?(C && D)` |
-| `coproc` | `pre ?(A \|\| B)` | `post (C \|\| D)` |
+| `coproc` | `pre ?(A \|\| B)` | `post ?(C \|\| D)` |
 
 If [we use `!?(b)` in `coproc`s](#usually-you-want-coembed), then we obtain that `pre !?(A) pre !?(B)` is equivalent to `pre !?(A && B)` as one might expect.
 Same for `post` annotations.
