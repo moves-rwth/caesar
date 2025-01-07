@@ -165,7 +165,7 @@ One can understand this as an instance of *Reverse Hoare Logic* or *(Partial) In
 
 #### Usually You Want `!?(b)` {#usually-you-want-coembed}
 
-We often write `!?(b)` to abbreviate `?(!(b))`, i.e. mapping `b` to $0$ if it is true and to $\infty$ otherwise.
+We often write `!?(b)` to abbreviate `?(!(b))`, i.e. mapping `b` to $0$ if it is true and to $\infty$ otherwise.[^bang-question-operator]
 
 ```heyvl
 coproc forty_two_upper2(x: UInt) -> (y: UInt)
@@ -322,3 +322,8 @@ One can prove that the HeyVL statements `assume A1; assume A2` are equivalent to
 The same equalities can be used for the procedure *call* encoding.
 
 [^on-negative-numbers]: Many verification tasks that require reasoning with negative numbers can be embedded in this framework. First, note that we can still have negative numbers in our program states, we just have to ensure that the `post` is non-negative. [Chapter 11 of the paper _"Relatively Complete Verification for Probabilistic Programs"_](https://dl.acm.org/doi/pdf/10.1145/3434320#page=24) by Batz et al. might be of interest for further reading.
+
+[^bang-question-operator]: `!?(b)` is not a special kind of operator, it is simply the `!` operator applied to `?(b)`, i.e. `!(?(b))`.
+The negation operator `!` is defined on `EUReal` by $!0 = \infty$ and $!x = 0$ for all $x \neq 0$.
+Thus, `!?(b)` is logically equivalent to `?(!b)`.
+In the [OOPSLA '23 paper](../publications.md#oopsla-23), we denoted `!?(b)` by $\mathrm{co?}(b)$.
