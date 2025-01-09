@@ -45,7 +45,7 @@ impl Display for ProveResult<'_> {
 ///
 /// In contrast to [`z3::Solver`], the [`Prover`] requires exclusive ownership
 /// to do any modifications of the solver.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Prover<'ctx> {
     /// The underlying solver.
     solver: Solver<'ctx>,

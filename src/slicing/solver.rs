@@ -119,13 +119,10 @@ impl<'ctx> SliceSolver<'ctx> {
     pub fn new<'smt>(
         slice_stmts: SliceStmts,
         translate: &mut TranslateExprs<'smt, 'ctx>,
-        mut prover: Prover<'ctx>,
+        prover: Prover<'ctx>,
     ) -> Self {
         let slice_stmts = SmtSliceStmts::new(slice_stmts, translate);
         let universally_bound = slice_stmts.universally_bound(translate);
-
-        prover.push();
-        prover.push();
 
         SliceSolver {
             prover,
@@ -170,19 +167,17 @@ impl<'ctx> SliceSolver<'ctx> {
     /// an exists-forall encoding.
     #[instrument(level = "info", skip_all)]
     pub fn exists_verified_slice(
-        &mut self,
+        &self,
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
     ) -> Result<Option<SliceModel>, VerifyError> {
-        assert_eq!(self.prover.level(), 2);
-        self.prover.pop();
-        self.prover.pop();
-        self.prover.push();
+        assert_eq!(self.prover.level(), 0);
+        let mut prover = self.prover.clone();
 
         let selection = SliceSelection::VERIFIED_SELECTION;
         let (active_toggle_values, inactive_formula) = self.translate_selection(&selection);
 
-        let (prover, universally_bound) = (&mut self.prover, &self.universally_bound);
+        let (prover, universally_bound) = (&mut prover, &self.universally_bound);
 
         tracing::warn!("The --slice-verify option is unsound if uninterpreted functions are used."); // TODO
 
@@ -191,8 +186,8 @@ impl<'ctx> SliceSolver<'ctx> {
         exists_forall_solver.add_assumption(&inactive_formula);
         exists_forall_solver.push();
         exists_forall_solver.push();
-        slice_sat_binary_search(
-            &mut exists_forall_solver,
+        exists_forall_solver = slice_sat_binary_search(
+            exists_forall_solver,
             &active_toggle_values,
             options,
             limits_ref,
@@ -210,28 +205,26 @@ impl<'ctx> SliceSolver<'ctx> {
     /// Get a "slice while verified" from the SMT solver's unsat core.
     #[instrument(level = "info", skip_all)]
     pub fn verified_slice_unsat_core(
-        &mut self,
+        &self,
         limits_ref: &LimitsRef,
     ) -> Result<Option<SliceModel>, VerifyError> {
-        assert_eq!(self.prover.level(), 2);
-        self.prover.pop();
-        self.prover.pop();
-        self.prover.push();
+        assert_eq!(self.prover.level(), 0);
+        let mut prover = self.prover.clone();
 
         let selection = SliceSelection::VERIFIED_SELECTION;
         let (active_toggle_values, inactive_formula) = self.translate_selection(&selection);
 
         if let Some(timeout) = limits_ref.time_left() {
-            self.prover.set_timeout(timeout);
+            prover.set_timeout(timeout);
         }
 
-        self.prover.add_assumption(&self.slice_stmts.constraints);
-        self.prover.add_assumption(&inactive_formula);
-        let res = self.prover.check_proof_assuming(&active_toggle_values);
+        prover.add_assumption(&self.slice_stmts.constraints);
+        prover.add_assumption(&inactive_formula);
+        let res = prover.check_proof_assuming(&active_toggle_values);
 
         let mut slice_searcher = SliceModelSearch::new(active_toggle_values.clone());
         if let ProveResult::Proof = res {
-            slice_searcher.found_active(self.prover.get_unsat_core());
+            slice_searcher.found_active(prover.get_unsat_core());
         }
 
         Ok(slice_searcher.finish().map(|minimal_unsat| {
@@ -251,27 +244,25 @@ impl<'ctx> SliceSolver<'ctx> {
     /// subsets to find the globally smallest one.
     #[instrument(level = "info", skip_all)]
     pub fn verified_slice_mus(
-        &mut self,
+        &self,
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
     ) -> Result<Option<SliceModel>, VerifyError> {
-        assert_eq!(self.prover.level(), 2);
-        self.prover.pop();
-        self.prover.pop();
-        self.prover.push();
+        assert_eq!(self.prover.level(), 0);
+        let mut prover = self.prover.clone();
 
         let selection = SliceSelection::VERIFIED_SELECTION;
         let (active_toggle_values, inactive_formula) = self.translate_selection(&selection);
 
-        self.prover.add_assumption(&self.slice_stmts.constraints);
-        self.prover.add_assumption(&inactive_formula);
+        prover.add_assumption(&self.slice_stmts.constraints);
+        prover.add_assumption(&inactive_formula);
 
         // TODO: re-use the unsat core from the proof instead of starting fresh
         let mut slice_searcher = SliceModelSearch::new(active_toggle_values.clone());
         let mut subset_explorer =
             SubsetExploration::new(self.prover.solver().get_context(), active_toggle_values);
         while let Some(extremal_set) =
-            slice_next_extremal_set(&mut subset_explorer, &mut self.prover, options, limits_ref)?
+            slice_next_extremal_set(&mut subset_explorer, &mut prover, options, limits_ref)?
         {
             if let ExtremalSet::MinimalUnsat(minimal_unsat) = extremal_set {
                 let minimal_unsat: Vec<_> = minimal_unsat.into_iter().collect();
@@ -302,24 +293,22 @@ impl<'ctx> SliceSolver<'ctx> {
     /// consider "unknown" a failure.
     #[instrument(level = "info", skip_all)]
     pub fn slice_while_failing(
-        &mut self,
+        &self,
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
     ) -> Result<(ProveResult<'ctx>, Option<SliceModel>), VerifyError> {
-        assert_eq!(self.prover.level(), 2);
-        self.prover.pop();
-        self.prover.pop();
-        self.prover.push();
+        assert_eq!(self.prover.level(), 0);
+        let mut prover = self.prover.clone();
 
         let selection = SliceSelection::FAILURE_SELECTION;
         let (active_toggle_values, inactive_formula) = self.translate_selection(&selection);
 
-        self.prover.add_assumption(&self.slice_stmts.constraints);
-        self.prover.add_assumption(&inactive_formula);
-        self.prover.push();
+        prover.add_assumption(&self.slice_stmts.constraints);
+        prover.add_assumption(&inactive_formula);
+        let mut prover = prover.clone();
 
-        slice_sat_binary_search(&mut self.prover, &active_toggle_values, options, limits_ref)?;
-        let res = self.prover.check_proof();
+        prover = slice_sat_binary_search(prover, &active_toggle_values, options, limits_ref)?;
+        let res = prover.check_proof();
         let slice_model = if let ProveResult::Counterexample(model) = &res {
             let slice_model =
                 SliceModel::from_model(SliceMode::Error, &self.slice_stmts, selection, model);
@@ -412,20 +401,17 @@ impl<'ctx> SliceModelSearch<'ctx> {
 /// returns SAT. We do a kind of binary search on the number of enabled slice
 /// variables using Z3's `pb_le` constraint (at most n true).
 fn slice_sat_binary_search<'ctx>(
-    prover: &mut Prover<'ctx>,
+    base_prover: Prover<'ctx>,
     active_slice_vars: &[Bool<'ctx>],
     options: &SliceSolveOptions,
     limits_ref: &LimitsRef,
-) -> Result<(), VerifyError> {
-    assert_eq!(prover.level(), 2);
+) -> Result<Prover<'ctx>, VerifyError> {
+    assert_eq!(base_prover.level(), 0);
 
     let slice_vars: Vec<(&Bool<'ctx>, i32)> =
         active_slice_vars.iter().map(|value| (value, 1)).collect();
 
     let set_at_most_true = |prover: &mut Prover<'ctx>, at_most_n: usize| {
-        prover.pop();
-        prover.push();
-
         let ctx = prover.solver().get_context();
         let at_most_n_true = Bool::pb_le(ctx, &slice_vars, at_most_n as i32);
         prover.add_assumption(&at_most_n_true);
@@ -445,10 +431,18 @@ fn slice_sat_binary_search<'ctx>(
     let min_least_bound = 0;
     let mut minimize = PartialMinimizer::new(min_least_bound..=slice_vars.len());
 
-    let mut cur_solver_n = None;
+    struct IterationInfo<'ctx> {
+        n: usize,
+        prover: Prover<'ctx>,
+    }
+    let mut cur_info = None;
     let mut slice_searcher = SliceModelSearch::new(active_slice_vars.to_vec());
     while let Some(n) = minimize.next_trial() {
-        cur_solver_n = Some(n);
+        cur_info = Some(IterationInfo {
+            n,
+            prover: base_prover.clone(),
+        });
+        let current_prover = &mut cur_info.as_mut().unwrap().prover;
         limits_ref.check_limits()?;
 
         let entered = info_span!(
@@ -460,17 +454,17 @@ fn slice_sat_binary_search<'ctx>(
         )
         .entered();
 
-        set_at_most_true(prover, n);
+        set_at_most_true(current_prover, n);
         if let Some(timeout) = limits_ref.time_left() {
-            prover.set_timeout(timeout);
+            current_prover.set_timeout(timeout);
         }
-        let res = prover.check_sat();
+        let res = current_prover.check_sat();
 
         entered.record("res", tracing::field::debug(res));
 
         match res {
             SatResult::Sat => {
-                let model = prover.get_model().unwrap();
+                let model = current_prover.get_model().unwrap();
                 let num_actually_true = slice_searcher.found_model(model);
 
                 assert!(num_actually_true <= n);
@@ -490,7 +484,7 @@ fn slice_sat_binary_search<'ctx>(
                 }
             }
             SatResult::Unknown => {
-                if prover.get_reason_unknown() == Some(ReasonUnknown::Interrupted) {
+                if current_prover.get_reason_unknown() == Some(ReasonUnknown::Interrupted) {
                     return Err(VerifyError::Interrupted);
                 }
                 let res = if options.continue_on_unknown {
@@ -514,10 +508,17 @@ fn slice_sat_binary_search<'ctx>(
 
     // after we're done searching, reset the solver to the last known
     // working number of statements.
-    if let Some(cur_solver_n) = cur_solver_n {
-        // only reset if the solver isn't already in the correct state
-        if cur_solver_n != enabled {
-            set_at_most_true(prover, enabled);
+    if let Some(IterationInfo {
+        n,
+        prover: last_prover,
+    }) = cur_info
+    {
+        if n == enabled {
+            Ok(last_prover)
+        } else {
+            let mut prover = base_prover.clone();
+            // only reset if the solver isn't already in the correct state
+            set_at_most_true(&mut prover, enabled);
             if let Some(timeout) = limits_ref.time_left() {
                 prover.set_timeout(timeout);
             }
@@ -529,11 +530,11 @@ fn slice_sat_binary_search<'ctx>(
             } else if !active_slice_vars.is_empty() {
                 assert_eq!(res, SatResult::Unknown);
             }
+            Ok(prover)
         }
+    } else {
+        Ok(base_prover)
     }
-
-    assert_eq!(prover.level(), 2);
-    Ok(())
 }
 
 enum ExtremalSet<'ctx> {
