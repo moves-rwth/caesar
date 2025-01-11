@@ -6,6 +6,11 @@ use z3rro::{
     prover::{ProveResult, Prover},
 };
 
+use super::{
+    selection::SliceSelection,
+    transform::{SliceStmt, SliceStmts, StmtSliceVisitor},
+};
+use crate::smt::SmtCtxOptions;
 use crate::{
     ast::{
         visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Direction, Expr, ExprBuilder,
@@ -15,11 +20,6 @@ use crate::{
     smt::{translate_exprs::TranslateExprs, SmtCtx},
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
-};
-
-use super::{
-    selection::SliceSelection,
-    transform::{SliceStmt, SliceStmts, StmtSliceVisitor},
 };
 
 /// Prove that the transformation for assert, assume, and tick statements is
@@ -121,7 +121,7 @@ fn prove_equiv(
         stmt2_vc.clone(),
     );
     let ctx = z3::Context::new(&z3::Config::new());
-    let smt_ctx = SmtCtx::new(&ctx, tcx);
+    let smt_ctx = SmtCtx::new(&ctx, tcx, SmtCtxOptions::default());
     let mut translate = TranslateExprs::new(&smt_ctx);
     let eq_expr_z3 = translate.t_bool(&eq_expr);
     let mut prover = Prover::new(&ctx);
