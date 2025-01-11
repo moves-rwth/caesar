@@ -3,12 +3,9 @@ use std::{
     collections::HashMap,
     fmt::{Display, Formatter, Write},
     str::FromStr,
-    time::Duration,
 };
 
 use num::{BigInt, BigRational, Integer, Signed, Zero};
-
-use z3::{Params, Solver};
 
 /// Build a conjunction of Boolean expressions.
 macro_rules! z3_and {
@@ -144,15 +141,6 @@ impl Display for ReasonUnknown {
             ReasonUnknown::Other(reason) => f.write_str(reason),
         }
     }
-}
-
-/// Set a solver timeout with millisecond precision.
-///
-/// Panics if the duration is not representable as a 32-bit unsigned integer.
-pub fn set_solver_timeout(solver: &Solver, duration: Duration) {
-    let mut params = Params::new(solver.get_context());
-    params.set_u32("timeout", duration.as_millis().try_into().unwrap());
-    solver.set_params(&params);
 }
 
 /// Pretty-printing wrapper type for [`BigRational`] values. This type's
