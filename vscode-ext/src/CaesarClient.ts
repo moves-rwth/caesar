@@ -32,6 +32,11 @@ export interface VerifyStatusNotification {
     statuses: [vscode.Range, VerifyResult][];
 }
 
+export interface SourceUnitRegisterNotification {
+    document: VersionedTextDocumentIdentifier;
+    source_units: vscode.Range[];
+}
+
 export interface ComputedPreNotification {
     document: VersionedTextDocumentIdentifier;
     pres: [vscode.Range, boolean, [string, string][]][];
@@ -47,6 +52,7 @@ export class CaesarClient {
     private statusListeners = new Array<(status: ServerStatus) => void>();
     private updateListeners = new Array<(document: TextDocumentIdentifier, results: [Range, VerifyResult][]) => void>();
     private computedPreListeners = new Array<(update: ComputedPreNotification) => void>();
+    private verifyUnitSpansListeners = new Array<(document: TextDocumentIdentifier, ranges: Range[]) => void>();
     private needsRestart = false;
 
     constructor(context: ExtensionContext, logger: Logger, walkthrough: WalkthroughComponent, installer: ServerInstaller) {
@@ -159,6 +165,12 @@ export class CaesarClient {
         );
 
         context.subscriptions.push(client);
+
+        context.subscriptions.push(client.onNotification("custom/sourceUnitSpans", (params: SourceUnitRegisterNotification) => {
+            for (const listener of this.verifyUnitSpansListeners) {
+                listener(params.document, params.source_units);
+            }
+        }));
 
         // set up listeners for our custom events
         context.subscriptions.push(client.onNotification("custom/verifyStatus", (params: VerifyStatusNotification) => {
@@ -399,6 +411,7 @@ export class CaesarClient {
         try {
             await this.client.sendRequest('custom/verify', { text_document: documentItem });
             this.notifyStatusUpdate(ServerStatus.Ready);
+
             this.logger.info("Client: completed verification.", document.uri);
             await this.walkthrough.setVerifiedHeyVL(true);
         } catch (error) {
@@ -442,5 +455,9 @@ export class CaesarClient {
 
     public onComputedPre(callback: (update: ComputedPreNotification) => void) {
         this.computedPreListeners.push(callback);
+    }
+
+    public onSourceUnitSpans(callback: (document: TextDocumentIdentifier, ranges: Range[]) => void) {
+        this.verifyUnitSpansListeners.push(callback);
     }
 }

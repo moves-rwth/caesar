@@ -65,6 +65,9 @@ pub trait Server: Send {
     /// Add an explanation for vc calculations.
     fn add_vc_explanation(&mut self, explanation: VcExplanation) -> Result<(), VerifyError>;
 
+    /// Register a source unit span with the server.
+    fn add_source_unit_span(&mut self, span: Span) -> Result<(), VerifyError>;
+
     /// Send a verification status message to the client (a custom notification).
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,

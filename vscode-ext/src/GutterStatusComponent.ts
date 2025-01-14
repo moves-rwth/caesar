@@ -10,6 +10,8 @@ export class GutterStatusComponent {
 
     private enabled: boolean;
     private status: DocumentMap<[Range, VerifyResult][]>;
+    private registeredSourceUnits: DocumentMap<Range[]>;
+    private serverStatus: ServerStatus = ServerStatus.NotStarted;
 
     private verifyDecType: vscode.TextEditorDecorationType;
     private failedDecType: vscode.TextEditorDecorationType;
@@ -25,6 +27,7 @@ export class GutterStatusComponent {
         this.enabled = GutterInformationViewConfig.get(ConfigurationConstants.showGutterIcons);
 
         this.status = new DocumentMap();
+        this.registeredSourceUnits = new DocumentMap();
 
         // subscribe to config changes
         verifier.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
@@ -41,12 +44,13 @@ export class GutterStatusComponent {
 
         // listen to status and verify updates
         verifier.client.onStatusUpdate((status) => {
+            this.serverStatus = status;
             if (status === ServerStatus.Verifying) {
                 for (const [_document, results] of this.status.entries()) {
                     results.length = 0;
                 }
-                this.render();
             }
+            this.render();
         });
 
         verifier.client.onVerifyResult((document, results) => {
@@ -54,16 +58,24 @@ export class GutterStatusComponent {
             this.render();
         });
 
+        verifier.client.onSourceUnitSpans((document, ranges) => {
+            this.registeredSourceUnits.insert(document, ranges);
+            this.render();
+        });
+
         verifier.context.subscriptions.push(vscode.workspace.onDidCloseTextDocument((document) => {
             const documentIdentifier: TextDocumentIdentifier = { uri: document.uri.toString() };
             this.status.remove(documentIdentifier);
+            this.registeredSourceUnits.remove(documentIdentifier);
             this.render();
         }));
     }
 
     render() {
-        for (const [document_id, results] of this.status.entries()) {
-            for (const editor of vscode.window.visibleTextEditors) {
+
+        for (const editor of vscode.window.visibleTextEditors) {
+            for (const [document_id, ranges] of this.registeredSourceUnits.entries()) {
+
                 if (editor.document.uri.toString() !== document_id.uri) {
                     continue;
                 }
@@ -72,20 +84,34 @@ export class GutterStatusComponent {
                 const failedProcs: vscode.DecorationOptions[] = [];
                 const unknownProcs: vscode.DecorationOptions[] = [];
 
+                const results = this.status.get(document_id) || [];
+
                 if (this.enabled) {
-                    for (const [range, result] of results) {
+                    for (const range of ranges) {
                         const line = range.start.line;
                         const gutterRange = new vscode.Range(line, 0, line, 0);
-                        switch (result) {
-                            case VerifyResult.Verified:
-                                verifiedProcs.push({ range: gutterRange, hoverMessage: 'Verified' });
-                                break;
-                            case VerifyResult.Failed:
-                                failedProcs.push({ range: gutterRange, hoverMessage: 'Not Verified' });
-                                break;
-                            case VerifyResult.Unknown:
+
+                        // Try to find the result for the current registered range
+                        const index = results.findIndex((value) => value[0].start.line === line);
+                        console.log(index);
+                        if (index === -1) {
+                            if (this.serverStatus === ServerStatus.Ready) {
+                                // If the result is not found, we assume it is unknown
                                 unknownProcs.push({ range: gutterRange, hoverMessage: 'Unknown' });
-                                break;
+                            }
+                        } else {
+                            // If the result is found, we check its status and display the appropriate icon
+                            switch (results[index][1]) {
+                                case VerifyResult.Verified:
+                                    verifiedProcs.push({ range: gutterRange, hoverMessage: 'Verified' });
+                                    break;
+                                case VerifyResult.Failed:
+                                    failedProcs.push({ range: gutterRange, hoverMessage: 'Not Verified' });
+                                    break;
+                                case VerifyResult.Unknown:
+                                    unknownProcs.push({ range: gutterRange, hoverMessage: 'Unknown' });
+                                    break;
+                            }
                         }
                     }
                 }

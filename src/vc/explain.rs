@@ -229,7 +229,7 @@ pub fn explain_raw_vc(
     direction: Direction,
     limits_ref: &LimitsRef,
 ) -> Result<VcExplanation, VerifyError> {
-    let mut vcgen = Vcgen::new(tcx, Some(VcExplanation::new(direction)), limits_ref);
+    let mut vcgen = Vcgen::new(tcx, limits_ref, Some(VcExplanation::new(direction)));
     vcgen.vcgen_block(block, post)?;
     Ok(vcgen.explanation.unwrap())
 }
@@ -282,7 +282,7 @@ fn explain_unroll(
     let unrolled_block = Spanned::new(enc_env.stmt_span, unrolled_stmts);
 
     // generate pre-vc of unrolled loop with temporary vcgen
-    let mut temp_vcgen = Vcgen::new(vcgen.tcx, None, &vcgen.limits_ref);
+    let mut temp_vcgen = Vcgen::new(vcgen.tcx, &vcgen.limits_ref, None);
     let mut return_expr = temp_vcgen.vcgen_block(&unrolled_block, terminator.clone())?;
 
     // apply substitutions and simplify the pre-vc of the unrolled loop, add it

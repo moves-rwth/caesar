@@ -39,6 +39,12 @@ struct VerifyStatusUpdate {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+struct SourceUnitRegisterUpdate {
+    document: VersionedTextDocumentIdentifier,
+    source_units: Vec<lsp_types::Range>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct ComputedPreUpdate {
     document: VersionedTextDocumentIdentifier,
     #[allow(clippy::type_complexity)]
@@ -55,6 +61,7 @@ pub struct LspServer {
     #[allow(clippy::type_complexity)]
     vc_explanations: HashMap<FileId, Vec<(Span, bool, Vec<(String, String)>)>>,
     statuses: HashMap<Span, VerifyResult>,
+    source_unit_spans: HashMap<FileId, Vec<Span>>,
 }
 
 impl LspServer {
@@ -71,6 +78,7 @@ impl LspServer {
             diagnostics: Default::default(),
             vc_explanations: Default::default(),
             statuses: Default::default(),
+            source_unit_spans: Default::default(),
         };
         (connection, io_threads)
     }
@@ -249,12 +257,39 @@ impl LspServer {
         Ok(())
     }
 
+    fn publish_source_unit_spans(&self) -> Result<(), ServerError> {
+        let files = self.files.lock().unwrap();
+        let by_document = self.source_unit_spans.iter().flat_map(|(file_id, spans)| {
+            let document_id = files.get(*file_id).unwrap().path.to_lsp_identifier()?;
+            Some((document_id, spans))
+        });
+        for (document_id, spans) in by_document {
+            let ranges: Vec<lsp_types::Range> = spans
+                .iter()
+                .flat_map(|span| Some(span.to_lsp(&files)?.1))
+                .collect();
+            let params = SourceUnitRegisterUpdate {
+                document: document_id,
+                source_units: ranges,
+            };
+            let notification =
+                lsp_server::Notification::new("custom/sourceUnitSpans".to_string(), params);
+            self.connection
+                .sender
+                .send(lsp_server::Message::Notification(notification))?;
+        }
+        Ok(())
+    }
+
     fn clear_file_information(&mut self, file_id: &FileId) -> Result<(), ServerError> {
         if let Some(diag) = self.diagnostics.get_mut(file_id) {
             diag.clear();
         }
         if let Some(explanations) = self.vc_explanations.get_mut(file_id) {
             explanations.clear();
+        }
+        if let Some(spans) = self.source_unit_spans.get_mut(file_id) {
+            spans.clear();
         }
         self.statuses.retain(|span, _| span.file != *file_id);
         self.publish_diagnostics()?;
@@ -311,6 +346,16 @@ impl Server for LspServer {
         }
         drop(files);
         self.publish_explanations()
+            .map_err(VerifyError::ServerError)?;
+        Ok(())
+    }
+
+    fn add_source_unit_span(&mut self, span: Span) -> Result<(), VerifyError> {
+        self.source_unit_spans
+            .entry(span.file)
+            .or_default()
+            .push(span);
+        self.publish_source_unit_spans()
             .map_err(VerifyError::ServerError)?;
         Ok(())
     }

@@ -29,8 +29,8 @@ impl<'tcx> Vcgen<'tcx> {
     /// `VcExplanation` structure to enable explanations.
     pub fn new(
         tcx: &'tcx TyCtx,
-        explanation: Option<VcExplanation>,
         limits_ref: &LimitsRef,
+        explanation: Option<VcExplanation>,
     ) -> Self {
         Vcgen {
             explanation,

@@ -77,6 +77,11 @@ impl Server for CliServer {
         Ok(())
     }
 
+    fn add_source_unit_span(&mut self, _span: Span) -> Result<(), VerifyError> {
+        // Not relevant for CLI
+        Ok(())
+    }
+
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
         name: &SourceUnitName,

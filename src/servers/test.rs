@@ -59,6 +59,11 @@ impl Server for TestServer {
         Ok(())
     }
 
+    fn add_source_unit_span(&mut self, span: Span) -> Result<(), VerifyError> {
+        // TODO
+        Ok(())
+    }
+
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
         _name: &SourceUnitName,

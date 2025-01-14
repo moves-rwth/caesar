@@ -240,6 +240,24 @@ pub enum SourceUnit {
 }
 
 impl SourceUnit {
+    pub fn span(&self) -> Span {
+        match self {
+            SourceUnit::Decl(decl) => match decl {
+                DeclKind::VarDecl(var_decl) => var_decl.borrow().span,
+                DeclKind::ProcDecl(proc_decl) => proc_decl.borrow().span,
+                DeclKind::DomainDecl(domain_decl) => domain_decl.borrow().span,
+                DeclKind::FuncDecl(func_decl) => func_decl.borrow().span,
+                DeclKind::AxiomDecl(axiom_decl) => axiom_decl.borrow().span,
+                DeclKind::LabelDecl(ident) => ident.span,
+                DeclKind::ProcIntrin(_) | DeclKind::FuncIntrin(_) | DeclKind::AnnotationDecl(_) => {
+                    // Intrinsic declarations can not be source units
+                    unreachable!();
+                }
+            },
+            SourceUnit::Raw(block) => block.span,
+        }
+    }
+
     /// Return a new [`Item`] by wrapping it around the [`SourceUnit`]
     /// and set the file path of the new [`SourceUnitName`] to the given file_path argument
     /// This function is used to generate [`Item`]s from generated [`SourceUnit`] objects (through AST transformations)
