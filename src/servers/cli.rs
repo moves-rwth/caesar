@@ -77,7 +77,7 @@ impl Server for CliServer {
         Ok(())
     }
 
-    fn add_source_unit_span(&mut self, _span: Span) -> Result<(), VerifyError> {
+    fn register_source_unit(&mut self, _span: Span) -> Result<(), VerifyError> {
         // Not relevant for CLI
         Ok(())
     }

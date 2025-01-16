@@ -30,6 +30,8 @@ pub type ServerError = Box<dyn Error + Send + Sync>;
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum VerifyResult {
+    // If the verification is not done yet the result is Todo
+    Todo,
     Verified,
     Failed,
     Unknown,
@@ -66,7 +68,7 @@ pub trait Server: Send {
     fn add_vc_explanation(&mut self, explanation: VcExplanation) -> Result<(), VerifyError>;
 
     /// Register a source unit span with the server.
-    fn add_source_unit_span(&mut self, span: Span) -> Result<(), VerifyError>;
+    fn register_source_unit(&mut self, span: Span) -> Result<(), VerifyError>;
 
     /// Send a verification status message to the client (a custom notification).
     fn handle_vc_check_result<'smt, 'ctx>(

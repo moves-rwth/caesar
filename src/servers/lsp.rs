@@ -257,30 +257,6 @@ impl LspServer {
         Ok(())
     }
 
-    fn publish_source_unit_spans(&self) -> Result<(), ServerError> {
-        let files = self.files.lock().unwrap();
-        let by_document = self.source_unit_spans.iter().flat_map(|(file_id, spans)| {
-            let document_id = files.get(*file_id).unwrap().path.to_lsp_identifier()?;
-            Some((document_id, spans))
-        });
-        for (document_id, spans) in by_document {
-            let ranges: Vec<lsp_types::Range> = spans
-                .iter()
-                .flat_map(|span| Some(span.to_lsp(&files)?.1))
-                .collect();
-            let params = SourceUnitRegisterUpdate {
-                document: document_id,
-                source_units: ranges,
-            };
-            let notification =
-                lsp_server::Notification::new("custom/sourceUnitSpans".to_string(), params);
-            self.connection
-                .sender
-                .send(lsp_server::Message::Notification(notification))?;
-        }
-        Ok(())
-    }
-
     fn clear_file_information(&mut self, file_id: &FileId) -> Result<(), ServerError> {
         if let Some(diag) = self.diagnostics.get_mut(file_id) {
             diag.clear();
@@ -350,13 +326,8 @@ impl Server for LspServer {
         Ok(())
     }
 
-    fn add_source_unit_span(&mut self, span: Span) -> Result<(), VerifyError> {
-        self.source_unit_spans
-            .entry(span.file)
-            .or_default()
-            .push(span);
-        self.publish_source_unit_spans()
-            .map_err(VerifyError::ServerError)?;
+    fn register_source_unit(&mut self, span: Span) -> Result<(), VerifyError> {
+        self.statuses.insert(span, VerifyResult::Todo);
         Ok(())
     }
 
@@ -489,8 +460,16 @@ async fn handle_verify_request(
         Err(VerifyError::Diagnostic(diagnostic)) => {
             server.lock().unwrap().add_diagnostic(diagnostic)?;
         }
-        Err(VerifyError::Interrupted) => {}
-        Err(VerifyError::LimitError(_)) => {}
+        Err(VerifyError::Interrupted) | Err(VerifyError::LimitError(_)) => {
+            // If the verification is interrupted or a limit is reached before the verification starts, no verification statuses are published yet.
+            // In this case, the client needs to be notified about the registered source units that are not checked yet (marked with VerifyResult::Todo).
+            // This acts as a fallback mechanism for this case.
+            server
+                .lock()
+                .unwrap()
+                .publish_verify_statuses()
+                .map_err(VerifyError::ServerError)?;
+        }
         Err(err) => Err(err)?,
     }
     Ok(())

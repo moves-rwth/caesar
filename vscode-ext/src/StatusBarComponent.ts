@@ -21,7 +21,7 @@ export class StatusBarComponent {
 
     private enabled: boolean;
     private verifyStatus = new DocumentMap<[Range, VerifyResult][]>();
-    private registeredSourceUnits = new DocumentMap<Range[]>();
+
     private serverStatus: ServerStatus = ServerStatus.NotStarted;
     private view: StatusBarItem;
 
@@ -56,15 +56,9 @@ export class StatusBarComponent {
             this.render();
         });
 
-        verifier.client.onSourceUnitSpans((document, ranges) => {
-            this.registeredSourceUnits.insert(document, ranges);
-            this.render();
-        });
-
         verifier.context.subscriptions.push(vscode.workspace.onDidCloseTextDocument((document) => {
             const documentIdentifier: TextDocumentIdentifier = { uri: document.uri.toString() };
             this.verifyStatus.remove(documentIdentifier);
-            this.registeredSourceUnits.remove(documentIdentifier);
             this.render();
         }));
 
@@ -156,33 +150,30 @@ export class StatusBarComponent {
             const document_id: TextDocumentIdentifier = { uri: editor.document.uri.toString() };
 
             const results = this.verifyStatus.get(document_id);
-            const ranges = this.registeredSourceUnits.get(document_id);
 
             if (results === undefined) { throw new Error("No verify results found for document: " + document_id.uri); }
-            if (ranges === undefined) { throw new Error("No source unit spans found for document: " + document_id.uri); }
 
             let verified = 0;
             let failed = 0;
             let unknown = 0;
 
-            for (const range of ranges) {
-                const index = results.findIndex((value) => value[0].start.line === range.start.line);
-                console.log(index);
-                if (index === -1) {
-                    unknown++;
-                } else {
-                    const result = results[index][1];
-                    switch (result) {
-                        case VerifyResult.Verified:
-                            verified++;
-                            break;
-                        case VerifyResult.Failed:
-                            failed++;
-                            break;
-                        case VerifyResult.Unknown:
+            for (const [_, result] of results) {
+                switch (result) {
+                    case VerifyResult.Todo:
+                        // Only count as an unknown if the verification process is ended but this is still a Todo.
+                        if (this.serverStatus === ServerStatus.Ready) {
                             unknown++;
-                            break;
-                    }
+                        }
+                        break;
+                    case VerifyResult.Verified:
+                        verified++;
+                        break;
+                    case VerifyResult.Failed:
+                        failed++;
+                        break;
+                    case VerifyResult.Unknown:
+                        unknown++;
+                        break;
                 }
             }
             if (failed > 0 || unknown > 0) {

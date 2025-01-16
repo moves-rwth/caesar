@@ -59,7 +59,7 @@ impl Server for TestServer {
         Ok(())
     }
 
-    fn add_source_unit_span(&mut self, span: Span) -> Result<(), VerifyError> {
+    fn register_source_unit(&mut self, _span: Span) -> Result<(), VerifyError> {
         // TODO
         Ok(())
     }

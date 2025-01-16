@@ -22,7 +22,7 @@ use crate::{
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
 };
-use ast::{Diagnostic, FileId};
+use ast::{DeclKind, Diagnostic, FileId};
 use clap::{Args, Parser, ValueEnum};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
@@ -594,10 +594,18 @@ fn verify_files_main(
         }
     }
 
-    // Register the source units with the server for diagnostics
+    // Register all relevant source units with the server
     for source_unit in &mut source_units {
         let source_unit = source_unit.enter();
-        server.add_source_unit_span(source_unit.span())?;
+
+        match *source_unit {
+            SourceUnit::Decl(ref decl) => {
+                if let DeclKind::ProcDecl(proc_decl) = decl {
+                    server.register_source_unit(proc_decl.borrow().span)?;
+                }
+            }
+            SourceUnit::Raw(ref block) => server.register_source_unit(block.span)?,
+        }
     }
 
     // explain high-level HeyVL if requested
