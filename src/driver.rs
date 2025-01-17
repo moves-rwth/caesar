@@ -963,7 +963,7 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
                         .with_message(format!("Unknown result: SMT solver returned {}", reason))
                         .with_note(
                             "For many queries, the query to the SMT solver is inherently undecidable. \
-                             There are various tricks to help the SMT solver, which can be found in the Caesar documentation: 
+                             There are various tricks to help the SMT solver, which can be found in the Caesar documentation:
                              https://www.caesarverifier.org/docs/caesar/debugging"
                         ),
                 )?;

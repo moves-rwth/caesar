@@ -600,6 +600,7 @@ fn verify_files_main(
 
         match *source_unit {
             SourceUnit::Decl(ref decl) => {
+                // only register procs since we do not check any other decls
                 if let DeclKind::ProcDecl(proc_decl) = decl {
                     server.register_source_unit(proc_decl.borrow().span)?;
                 }

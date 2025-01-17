@@ -39,12 +39,6 @@ struct VerifyStatusUpdate {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct SourceUnitRegisterUpdate {
-    document: VersionedTextDocumentIdentifier,
-    source_units: Vec<lsp_types::Range>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 struct ComputedPreUpdate {
     document: VersionedTextDocumentIdentifier,
     #[allow(clippy::type_complexity)]
@@ -61,7 +55,6 @@ pub struct LspServer {
     #[allow(clippy::type_complexity)]
     vc_explanations: HashMap<FileId, Vec<(Span, bool, Vec<(String, String)>)>>,
     statuses: HashMap<Span, VerifyResult>,
-    source_unit_spans: HashMap<FileId, Vec<Span>>,
 }
 
 impl LspServer {
@@ -78,7 +71,6 @@ impl LspServer {
             diagnostics: Default::default(),
             vc_explanations: Default::default(),
             statuses: Default::default(),
-            source_unit_spans: Default::default(),
         };
         (connection, io_threads)
     }
@@ -263,9 +255,6 @@ impl LspServer {
         }
         if let Some(explanations) = self.vc_explanations.get_mut(file_id) {
             explanations.clear();
-        }
-        if let Some(spans) = self.source_unit_spans.get_mut(file_id) {
-            spans.clear();
         }
         self.statuses.retain(|span, _| span.file != *file_id);
         self.publish_diagnostics()?;
