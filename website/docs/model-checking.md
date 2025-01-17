@@ -51,13 +51,11 @@ proc geo_mc(init_c: UInt) -> (c: UInt, cont: Bool)
 
 ### Generating JANI Files
 
-To export JANI files for the model checker, simply run Caesar with the `--jani-dir DIR` option to instruct it to save all translateable (co)procs to `.jani` files in the directory `DIR`:
+To export JANI files for the model checker, run Caesar with the `to-jani` subcommand and the `--jani-dir DIR` option to instruct it to save all translateable (co)procs to `.jani` files in the directory `DIR`:
 
 ```bash
-caesar example.heyvl --jani-dir DIR --no-verify
+caesar to-jani example.heyvl --jani-dir DIR
 ```
-
-The `--no-verify` option tells Caesar to skip the actual verification because it is not needed for the JANI output.
 
 The output JANI files will have the following structure that you can use:
  * Properties:

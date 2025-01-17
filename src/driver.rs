@@ -19,7 +19,7 @@ use crate::{
         resolve::Resolve,
         tycheck::Tycheck,
     },
-    mc::{self, JaniOptions},
+    mc,
     opt::{
         boolify::Boolify, egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder,
         RemoveParens,
@@ -53,7 +53,7 @@ use crate::{
         vcgen::Vcgen,
     },
     version::write_detailed_version_info,
-    DebugOptions, Options, SliceOptions, SliceVerifyMethod, VerifyError,
+    DebugOptions, SliceOptions, SliceVerifyMethod, VerifyCommand, VerifyError,
 };
 
 use ariadne::ReportKind;
@@ -362,15 +362,15 @@ impl SourceUnit {
     /// Encode the source unit as a JANI file if requested.
     pub fn write_to_jani_if_requested(
         &self,
-        options: &Options,
+        options: &crate::JaniOptions,
         tcx: &TyCtx,
     ) -> Result<(), VerifyError> {
-        if let Some(jani_dir) = &options.jani_options.jani_dir {
+        if let Some(jani_dir) = &options.jani_dir {
             match self {
                 SourceUnit::Decl(decl) => {
                     if let DeclKind::ProcDecl(decl_ref) = decl {
-                        let jani_options = JaniOptions {
-                            skip_quant_pre: options.jani_options.jani_skip_quant_pre,
+                        let jani_options = mc::JaniOptions {
+                            skip_quant_pre: options.jani_skip_quant_pre,
                         };
                         let jani_model = mc::proc_to_model(&jani_options, tcx, &decl_ref.borrow())
                             .map_err(|err| VerifyError::Diagnostic(err.diagnostic()))?;
@@ -535,7 +535,7 @@ impl QuantVcUnit {
     /// unfolding. Otherwise, eager.
     pub fn unfold(
         &mut self,
-        options: &Options,
+        options: &VerifyCommand,
         limits_ref: &LimitsRef,
         tcx: &TyCtx,
     ) -> Result<(), LimitError> {
@@ -671,7 +671,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
     /// Run the solver(s) on this SMT formula.
     pub fn run_solver<'smt>(
         self,
-        options: &Options,
+        options: &VerifyCommand,
         limits_ref: &LimitsRef,
         name: &SourceUnitName,
         ctx: &'ctx Context,
@@ -757,7 +757,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
     }
 }
 
-pub fn mk_z3_ctx(options: &Options) -> Context {
+pub fn mk_z3_ctx(options: &VerifyCommand) -> Context {
     let mut config = Config::default();
     if options.debug_options.z3_trace {
         config.set_bool_param_value("trace", true);
@@ -791,7 +791,7 @@ fn mk_valid_query_prover<'smt, 'ctx>(
     prover
 }
 
-fn get_smtlib(options: &Options, prover: &Prover) -> Option<Smtlib> {
+fn get_smtlib(options: &VerifyCommand, prover: &Prover) -> Option<Smtlib> {
     if options.debug_options.print_smt || options.debug_options.smt_dir.is_some() {
         let mut smtlib = prover.get_smtlib();
         if !options.debug_options.no_pretty_smtlib {

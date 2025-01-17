@@ -8,7 +8,7 @@ use crate::{
     driver::{SmtVcCheckResult, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
-    Options, VerifyError,
+    VerifyCommand, VerifyError,
 };
 
 use super::{unless_fatal_error, Server, ServerError, VerifyResult};
@@ -21,7 +21,7 @@ pub struct TestServer {
 }
 
 impl TestServer {
-    pub fn new(options: &Options) -> Self {
+    pub fn new(options: &VerifyCommand) -> Self {
         TestServer {
             files: Default::default(),
             werr: options.input_options.werr,

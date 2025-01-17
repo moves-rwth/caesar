@@ -5,7 +5,7 @@
 
 use std::{
     collections::HashMap,
-    fmt::Display,
+    ffi::OsString,
     io,
     ops::DerefMut,
     path::PathBuf,
@@ -23,7 +23,7 @@ use crate::{
     vc::vcgen::Vcgen,
 };
 use ast::{DeclKind, Diagnostic, FileId};
-use clap::{Args, Parser, ValueEnum};
+use clap::{crate_description, Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use proof_rules::init_encodings;
@@ -57,13 +57,63 @@ pub mod tyctx;
 pub mod vc;
 mod version;
 
-#[derive(Debug, Default, Parser)]
+#[derive(Debug, Parser)]
 #[command(
     name = "caesar",
-    about = "A deductive verifier for probabilistic programs.",
+    about = crate_description!(),
+    long_about = "Caesar is a deductive verifier for probabilistic programs. Run the caesar binary with a subcommand to use it. Usually, you'll want to use the `verify` command.",
     version = version::detailed_version_info_string()
 )]
-pub struct Options {
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Command,
+}
+
+impl Cli {
+    fn parse_and_normalize() -> Self {
+        let cli = Self::parse();
+        match cli.command {
+            Command::Other(vec) => {
+                // if it's an unrecognized command, parse as "verify" command
+                Self::parse_from(
+                    std::iter::once(std::env::args().next().unwrap().into())
+                        .chain(std::iter::once("verify".into()))
+                        .chain(vec),
+                )
+            }
+            command => Cli { command },
+        }
+    }
+
+    fn debug_options(&self) -> Option<&DebugOptions> {
+        match &self.command {
+            Command::Verify(verify_options) => Some(&verify_options.debug_options),
+            Command::Lsp(verify_options) => Some(&verify_options.debug_options),
+            Command::ToJani(to_jani_options) => Some(&to_jani_options.debug_options),
+            Command::ShellCompletions(_) => None,
+            Command::Other(_vec) => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+pub enum Command {
+    /// Verify HeyVL files with Caesar.
+    Verify(VerifyCommand),
+    /// Convert HeyVL files to JANI files.
+    ToJani(ToJaniCommand),
+    /// Run Caesar's LSP server.
+    Lsp(VerifyCommand),
+    /// Generate shell completions for the Caesar binary.
+    ShellCompletions(ShellCompletionsCommand),
+    /// This is to support the default `verify` command.
+    #[command(external_subcommand)]
+    #[command(hide(true))]
+    Other(Vec<OsString>),
+}
+
+#[derive(Debug, Default, Args)]
+pub struct VerifyCommand {
     #[command(flatten)]
     pub input_options: InputOptions,
 
@@ -81,6 +131,21 @@ pub struct Options {
 
     #[command(flatten)]
     pub slice_options: SliceOptions,
+
+    #[command(flatten)]
+    pub debug_options: DebugOptions,
+}
+
+#[derive(Debug, Args)]
+pub struct ToJaniCommand {
+    #[command(flatten)]
+    pub input_options: InputOptions,
+
+    #[command(flatten)]
+    pub rlimit_options: ResourceLimitOptions,
+
+    #[command(flatten)]
+    pub jani_options: JaniOptions,
 
     #[command(flatten)]
     pub debug_options: DebugOptions,
@@ -114,7 +179,7 @@ pub struct ResourceLimitOptions {
     pub mem_limit: u64,
 }
 
-#[derive(Debug, Default, Args)]
+#[derive(Debug, Default, Clone, Args)]
 #[command(next_help_heading = "JANI Output Options")]
 pub struct JaniOptions {
     /// Export declarations to JANI files in the provided directory.
@@ -259,8 +324,7 @@ pub struct SliceOptions {
     #[arg(long)]
     pub slice_verify: bool,
 
-    /// If slicing for correctness is enabled, slice via these methods. If none
-    /// is given, the best method is chosen automatically.
+    /// If slicing for correctness is enabled, slice via these methods.
     #[arg(long, default_value = "core")]
     pub slice_verify_via: SliceVerifyMethod,
 }
@@ -290,59 +354,58 @@ pub enum SliceVerifyMethod {
     ExistsForall,
 }
 
-#[derive(Debug)]
-pub struct InvalidSliceVerifyMethod;
-
-impl Display for InvalidSliceVerifyMethod {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Invalid slice verify method")
-    }
+#[derive(Debug, Default, Args)]
+pub struct ShellCompletionsCommand {
+    /// The shell for which to generate completions.
+    #[arg(required(true), value_enum)]
+    shell: Option<clap_complete::Shell>,
 }
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let options = Options::parse();
+    let options = Cli::parse_and_normalize();
 
-    if options.debug_options.debug {
-        let mut stderr = io::stderr().lock();
-        version::write_detailed_version_info(&mut stderr).unwrap();
+    if let Some(debug_options) = options.debug_options() {
+        if debug_options.debug {
+            let mut stderr = io::stderr().lock();
+            version::write_detailed_version_info(&mut stderr).unwrap();
+        }
+        // install global collector configured based on RUST_LOG env var.
+        setup_tracing(debug_options);
     }
-    // install global collector configured based on RUST_LOG env var.
-    setup_tracing(&options);
 
-    if !options.lsp_options.language_server {
-        run_cli(options).await
-    } else {
-        run_server(options).await
+    match options.command {
+        Command::Verify(options) => run_cli(options).await,
+        Command::ToJani(options) => run_to_jani_main(options),
+        Command::Lsp(options) => run_server(options).await,
+        Command::ShellCompletions(options) => run_generate_completions(options),
+        Command::Other(_) => unreachable!(),
     }
 }
 
-async fn run_cli(options: Options) -> ExitCode {
-    if options.input_options.files.is_empty() {
-        eprintln!("Error: list of files must not be empty.\n");
-        return ExitCode::from(1);
-    }
-
-    let mut client = CliServer::new(&options);
-    let user_files: Vec<FileId> = options
-        .input_options
-        .files
-        .iter()
-        .map(|path| client.load_file(path))
-        .collect();
-
+async fn run_cli(options: VerifyCommand) -> ExitCode {
+    let (user_files, server) = match mk_cli_server(&options.input_options) {
+        Ok(value) => value,
+        Err(value) => return value,
+    };
     let options = Arc::new(options);
-    let server: Arc<Mutex<dyn Server>> = Arc::new(Mutex::new(client));
     let verify_result = verify_files(&options, &server, user_files).await;
 
     if options.debug_options.timing {
         print_timings();
     }
 
-    let (timeout, mem_limit) = (
-        options.rlimit_options.timeout,
-        options.rlimit_options.mem_limit,
-    );
+    finalize_verify_result(server, &options.rlimit_options, verify_result)
+}
+
+type SharedServer = Arc<Mutex<dyn Server>>;
+
+fn finalize_verify_result(
+    server: SharedServer,
+    rlimit_options: &ResourceLimitOptions,
+    verify_result: Result<bool, VerifyError>,
+) -> ExitCode {
+    let (timeout, mem_limit) = (rlimit_options.timeout, rlimit_options.mem_limit);
     match verify_result {
         #[allow(clippy::bool_to_int_with_if)]
         Ok(all_verified) => ExitCode::from(if all_verified { 0 } else { 1 }),
@@ -362,6 +425,10 @@ async fn run_cli(options: Options) -> ExitCode {
             tracing::error!("Exhausted {} megabytes of memory, exiting.", mem_limit);
             std::process::exit(3); // exit ASAP
         }
+        Err(VerifyError::UserError(err)) => {
+            eprintln!("Error: {}", err);
+            ExitCode::from(1)
+        }
         Err(VerifyError::ServerError(err)) => panic!("{}", err),
         Err(VerifyError::Panic(join_error)) => panic!("{}", join_error),
         Err(VerifyError::Interrupted) => {
@@ -371,14 +438,29 @@ async fn run_cli(options: Options) -> ExitCode {
     }
 }
 
-async fn run_server(options: Options) -> ExitCode {
+fn mk_cli_server(input_options: &InputOptions) -> Result<(Vec<FileId>, SharedServer), ExitCode> {
+    if input_options.files.is_empty() {
+        eprintln!("Error: list of files must not be empty.\n");
+        return Err(ExitCode::from(1));
+    }
+    let mut client = CliServer::new(input_options);
+    let user_files: Vec<FileId> = input_options
+        .files
+        .iter()
+        .map(|path| client.load_file(path))
+        .collect();
+    let server: SharedServer = Arc::new(Mutex::new(client));
+    Ok((user_files, server))
+}
+
+async fn run_server(options: VerifyCommand) -> ExitCode {
     let (mut server, _io_threads) = LspServer::connect_stdio(&options);
     server.initialize().unwrap();
     let server = Arc::new(Mutex::new(server));
     let options = Arc::new(options);
 
     let res = run_lsp_server(server.clone(), |user_files| {
-        let server: Arc<Mutex<dyn Server>> = server.clone();
+        let server: SharedServer = server.clone();
         let options = options.clone();
         Box::pin(async move {
             let res = verify_files(&options, &server, user_files.to_vec()).await;
@@ -410,24 +492,33 @@ async fn run_server(options: Options) -> ExitCode {
 /// counter-example) is not actually considered a [`VerifyError`].
 #[derive(Debug, Error)]
 pub enum VerifyError {
+    /// A diagnostic to be emitted.
     #[error("{0}")]
     Diagnostic(#[from] Diagnostic),
+    /// An I/O error.
     #[error("io error")]
     IoError(#[from] io::Error),
+    /// An error due to resource limits.
     #[error("{0}")]
     LimitError(#[from] LimitError),
+    /// An error by the user, to be printed via the error message.
+    #[error("{0}")]
+    UserError(Box<dyn std::error::Error + Send + Sync>),
+    /// An internal server error, e.g. because of logic or IO errors.
     #[error("{0}")]
     ServerError(ServerError),
+    /// A panic occurred somewhere.
     #[error("panic: {0}")]
     Panic(#[from] JoinError),
+    /// The verifier was interrupted.
     #[error("interrupted")]
     Interrupted,
 }
 
 /// Verify a list of `user_files`. The `options.files` value is ignored here.
 pub async fn verify_files(
-    options: &Arc<Options>,
-    server: &Arc<Mutex<dyn Server>>,
+    options: &Arc<VerifyCommand>,
+    server: &SharedServer,
     user_files: Vec<FileId>,
 ) -> Result<bool, VerifyError> {
     let handle = |limits_ref: LimitsRef| {
@@ -453,13 +544,63 @@ pub async fn verify_files(
     .await??
 }
 
+fn parse_and_tycheck(
+    input_options: &InputOptions,
+    debug_options: &DebugOptions,
+    server: &mut dyn Server,
+    user_files: &[FileId],
+) -> Result<(Vec<Item<SourceUnit>>, TyCtx), VerifyError> {
+    let mut source_units: Vec<Item<SourceUnit>> = Vec::new();
+    for file_id in user_files {
+        let file = server.get_file(*file_id).unwrap();
+        let new_units = SourceUnit::parse(&file, input_options.raw)
+            .map_err(|parse_err| parse_err.diagnostic())?;
+
+        // Print the result of parsing if requested
+        if debug_options.print_parsed {
+            println!("{}: Parsed file:\n", file.path);
+            for unit in &new_units {
+                println!("{}", unit);
+            }
+        }
+
+        source_units.extend(new_units);
+    }
+    let mut tcx = TyCtx::new(TyKind::EUReal);
+    let mut files = server.get_files_internal().lock().unwrap();
+    init_calculi(&mut files, &mut tcx);
+    init_encodings(&mut files, &mut tcx);
+    init_distributions(&mut files, &mut tcx);
+    init_lists(&mut files, &mut tcx);
+    init_slicing(&mut tcx);
+    drop(files);
+    let mut resolve = Resolve::new(&mut tcx);
+    for source_unit in &mut source_units {
+        source_unit.enter().forward_declare(&mut resolve)?;
+    }
+    for source_unit in &mut source_units {
+        source_unit.enter().resolve(&mut resolve)?;
+    }
+    let mut tycheck = Tycheck::new(&mut tcx);
+    for source_unit in &mut source_units {
+        let mut source_unit = source_unit.enter();
+        source_unit.tycheck(&mut tycheck)?;
+
+        let monotonicity_res = source_unit.check_monotonicity();
+        if let Err(err) = monotonicity_res {
+            server.add_or_throw_diagnostic(err)?;
+        }
+    }
+    Ok((source_units, tcx))
+}
+
 /// Synchronously verify the given source code. This is used for tests. The
 /// `--werr` option is enabled by default.
 #[cfg(test)]
 pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, servers::TestServer) {
     use ast::SourceFilePath;
 
-    let mut options = Options::default();
+    let mut options = VerifyCommand::default();
     options.input_options.werr = true;
 
     let mut server = servers::TestServer::new(&options);
@@ -480,48 +621,26 @@ pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, servers::
 pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
     use ast::SourceFilePath;
 
-    let mut options = Options::default();
+    let mut options = VerifyCommand::default();
     options.input_options.werr = true;
 
-    let mut client = servers::TestServer::new(&options);
-    let file_id = client
+    let mut server = servers::TestServer::new(&options);
+    let file_id = server
         .get_files_internal()
         .lock()
         .unwrap()
         .add(SourceFilePath::Builtin, source.to_owned())
         .id;
 
-    let mut source_units: Vec<Item<SourceUnit>> = SourceUnit::parse(
-        &client.get_file(file_id).unwrap(),
-        options.input_options.raw,
-    )
-    .map_err(|parse_err| parse_err.diagnostic())?;
+    let (source_units, mut tcx) = parse_and_tycheck(
+        &options.input_options,
+        &options.debug_options,
+        &mut server,
+        &[file_id],
+    )?;
 
-    let mut source_unit = source_units.remove(0);
-
-    // 2. Resolving (and declaring) idents
-    let mut tcx = TyCtx::new(TyKind::EUReal);
-    let mut files = client.get_files_internal().lock().unwrap();
-    init_calculi(&mut files, &mut tcx);
-    init_encodings(&mut files, &mut tcx);
-    init_distributions(&mut files, &mut tcx);
-    init_lists(&mut files, &mut tcx);
-    init_slicing(&mut tcx);
-    drop(files);
-
-    let mut resolve = Resolve::new(&mut tcx);
-    // first, do forward declarations
-    source_unit.enter().forward_declare(&mut resolve)?;
-    // then, the actual resolving
-    source_unit.enter().resolve(&mut resolve)?;
-
-    // 3. Type checking
-    let mut tycheck = Tycheck::new(&mut tcx);
-
-    let mut entered = source_unit.enter();
-    entered.tycheck(&mut tycheck)?;
-    entered.check_monotonicity()?;
-    drop(entered);
+    assert_eq!(source_units.len(), 1);
+    let mut source_unit = source_units.into_iter().next().unwrap();
 
     let mut new_source_units: Vec<Item<SourceUnit>> = vec![];
     source_unit
@@ -539,60 +658,17 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
 
 /// Synchronously verify the given files.
 fn verify_files_main(
-    options: &Options,
+    options: &VerifyCommand,
     limits_ref: LimitsRef,
     server: &mut dyn Server,
     user_files: &[FileId],
 ) -> Result<bool, VerifyError> {
-    // 1. Parsing
-    let mut source_units: Vec<Item<SourceUnit>> = Vec::new();
-    for file_id in user_files {
-        let file = server.get_file(*file_id).unwrap();
-        let new_units = SourceUnit::parse(&file, options.input_options.raw)
-            .map_err(|parse_err| parse_err.diagnostic())?;
-
-        // Print the result of parsing if requested
-        if options.debug_options.print_parsed {
-            println!("{}: Parsed file:\n", file.path);
-            for unit in &new_units {
-                println!("{}", unit);
-            }
-        }
-
-        source_units.extend(new_units);
-    }
-
-    // 2. Resolving (and declaring) idents
-    let mut tcx = TyCtx::new(TyKind::EUReal);
-    let mut files = server.get_files_internal().lock().unwrap();
-    init_calculi(&mut files, &mut tcx);
-    init_encodings(&mut files, &mut tcx);
-    init_distributions(&mut files, &mut tcx);
-    init_lists(&mut files, &mut tcx);
-    init_slicing(&mut tcx);
-    drop(files);
-
-    let mut resolve = Resolve::new(&mut tcx);
-    // first, do forward declarations
-    for source_unit in &mut source_units {
-        source_unit.enter().forward_declare(&mut resolve)?;
-    }
-    // then, the actual resolving
-    for source_unit in &mut source_units {
-        source_unit.enter().resolve(&mut resolve)?;
-    }
-
-    // 3. Type checking
-    let mut tycheck = Tycheck::new(&mut tcx);
-    for source_unit in &mut source_units {
-        let mut source_unit = source_unit.enter();
-        source_unit.tycheck(&mut tycheck)?;
-
-        let monotonicity_res = source_unit.check_monotonicity();
-        if let Err(err) = monotonicity_res {
-            server.add_or_throw_diagnostic(err)?;
-        }
-    }
+    let (mut source_units, mut tcx) = parse_and_tycheck(
+        &options.input_options,
+        &options.debug_options,
+        server,
+        user_files,
+    )?;
 
     // Register all relevant source units with the server
     for source_unit in &mut source_units {
@@ -620,7 +696,7 @@ fn verify_files_main(
     // write to JANI if requested
     for source_unit in &mut source_units {
         let source_unit = source_unit.enter();
-        let jani_res = source_unit.write_to_jani_if_requested(options, &tcx);
+        let jani_res = source_unit.write_to_jani_if_requested(&options.jani_options, &tcx);
         match jani_res {
             Err(VerifyError::Diagnostic(diagnostic)) => server.add_diagnostic(diagnostic)?,
             Err(err) => Err(err)?,
@@ -779,11 +855,49 @@ fn verify_files_main(
     Ok(num_failures == 0)
 }
 
-fn setup_tracing(options: &Options) {
+fn run_to_jani_main(options: ToJaniCommand) -> ExitCode {
+    let (user_files, server) = match mk_cli_server(&options.input_options) {
+        Ok(value) => value,
+        Err(value) => return value,
+    };
+    let res = to_jani_main(&options, user_files, &server).map(|_| true);
+    finalize_verify_result(server, &options.rlimit_options, res)
+}
+
+fn to_jani_main(
+    options: &ToJaniCommand,
+    user_files: Vec<FileId>,
+    server: &SharedServer,
+) -> Result<(), VerifyError> {
+    let mut server = server.lock().unwrap();
+    let (mut source_units, tcx) = parse_and_tycheck(
+        &options.input_options,
+        &options.debug_options,
+        &mut *server,
+        &user_files,
+    )?;
+    if options.jani_options.jani_dir.is_none() {
+        return Err(VerifyError::UserError(
+            "--jani-dir is required for the to-jani command.".into(),
+        ));
+    }
+    for source_unit in &mut source_units {
+        let source_unit = source_unit.enter();
+        let jani_res = source_unit.write_to_jani_if_requested(&options.jani_options, &tcx);
+        match jani_res {
+            Err(VerifyError::Diagnostic(diagnostic)) => server.add_diagnostic(diagnostic)?,
+            Err(err) => Err(err)?,
+            Ok(()) => (),
+        }
+    }
+    Ok(())
+}
+
+fn setup_tracing(options: &DebugOptions) {
     timing::init_tracing(
         DispatchBuilder::default()
-            .json(options.debug_options.json)
-            .timing(options.debug_options.timing),
+            .json(options.json)
+            .timing(options.timing),
     )
 }
 
@@ -794,4 +908,15 @@ fn print_timings() {
         .map(|(key, value)| (*key, format!("{}", value.as_nanos())))
         .collect();
     eprintln!("Timings: {:?}", timings);
+}
+
+fn run_generate_completions(options: ShellCompletionsCommand) -> ExitCode {
+    let binary_name = std::env::args().next().unwrap();
+    clap_complete::aot::generate(
+        options.shell.unwrap(),
+        &mut Cli::command(),
+        binary_name,
+        &mut std::io::stdout(),
+    );
+    ExitCode::SUCCESS
 }

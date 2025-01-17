@@ -9,6 +9,11 @@ members = [
 name = "caesar"
 version = "2.0.8"
 authors = ["Philipp Schroer <phisch@cs.rwth-aachen.de>"]
+description = "Caesar is a deductive verifier for probabilistic programs."
+homepage = "https://www.caesarverifier.org/"
+repository = "https://github.com/moves-rwth/caesar"
+license = "MIT"
+keywords = ["verification", "probabilistic programming"]
 edition = "2021"
 build = "build.rs" # LALRPOP preprocessing
 
@@ -52,7 +57,8 @@ itertools = "0.13.0"
 stacker = "0.1.15"
 crossbeam-channel = "0.5.14"
 shlex = "1.3.0"
-clap = { version = "4.5.23", features = ["derive", "string"] }
+clap = { version = "4.5.23", features = ["derive", "string", "cargo"] }
+clap_complete = "4.5.42"
 
 [build-dependencies]
 lalrpop = "0.22"

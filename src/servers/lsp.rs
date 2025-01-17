@@ -22,7 +22,7 @@ use crate::{
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
     version::caesar_semver_version,
-    Options, VerifyError,
+    VerifyCommand, VerifyError,
 };
 
 use super::{unless_fatal_error, Server, ServerError, VerifyResult};
@@ -61,7 +61,7 @@ impl LspServer {
     const HEYVL_LANGUAGE_IDENTIFIER: &'static str = "heyvl";
 
     /// Create a new client connection on stdin and stdout.
-    pub fn connect_stdio(options: &Options) -> (LspServer, IoThreads) {
+    pub fn connect_stdio(options: &VerifyCommand) -> (LspServer, IoThreads) {
         let (connection, io_threads) = Connection::stdio();
         let connection = LspServer {
             werr: options.input_options.werr,

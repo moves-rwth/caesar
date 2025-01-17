@@ -9,7 +9,7 @@ use crate::{
     driver::{SmtVcCheckResult, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
-    Options, VerifyError,
+    InputOptions, VerifyError,
 };
 
 use super::{unless_fatal_error, Server, ServerError};
@@ -20,9 +20,9 @@ pub struct CliServer {
 }
 
 impl CliServer {
-    pub fn new(options: &Options) -> Self {
+    pub fn new(input_options: &InputOptions) -> Self {
         CliServer {
-            werr: options.input_options.werr,
+            werr: input_options.werr,
             files: Default::default(),
         }
     }
