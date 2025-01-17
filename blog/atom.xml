@@ -2,11 +2,107 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://www.caesarverifier.org/blog</id>
     <title>Caesar Blog</title>
-    <updated>2024-12-31T00:00:00.000Z</updated>
+    <updated>2025-01-17T00:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://www.caesarverifier.org/blog"/>
     <subtitle>Caesar Blog</subtitle>
     <icon>https://www.caesarverifier.org/img/laurel-square.svg</icon>
+    <entry>
+        <title type="html"><![CDATA[Caesar 2.1: UI Improvements, More Guardrails, and Improvements to Slicing]]></title>
+        <id>https://www.caesarverifier.org/blog/2025/01/17/caesar-2-1</id>
+        <link href="https://www.caesarverifier.org/blog/2025/01/17/caesar-2-1"/>
+        <updated>2025-01-17T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[The Caesar 2.1 release adds contains various improvements to existing features and fixes some bugs.]]></summary>
+        <content type="html"><![CDATA[<p>The <em>Caesar 2.1</em> release adds contains various improvements to existing features and fixes some bugs.</p>
+<p><strong>Overview:</strong></p>
+<ol>
+<li><a href="https://www.caesarverifier.org/blog/2025/01/17/caesar-2-1#ui-and-docs">UI and Documentation Improvements</a></li>
+<li><a href="https://www.caesarverifier.org/blog/2025/01/17/caesar-2-1#more-guardrails">More Guardrails</a></li>
+<li><a href="https://www.caesarverifier.org/blog/2025/01/17/caesar-2-1#improvements-to-slicing">Slicing Improvements</a></li>
+<li><a href="https://www.caesarverifier.org/blog/2025/01/17/caesar-2-1#minor-fixes">Minor Fixes</a></li>
+</ol>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="ui-and-docs">UI and Documentation Improvements<a href="https://www.caesarverifier.org/blog/2025/01/17/caesar-2-1#ui-and-docs" class="hash-link" aria-label="Direct link to UI and Documentation Improvements" title="Direct link to UI and Documentation Improvements">​</a></h2>
+<p>We have improved Caesar's UI, especially the Visual Studio Code extension.
+Thanks to PRs <a href="https://github.com/moves-rwth/caesar/pull/48" target="_blank" rel="noopener noreferrer">#48</a> and <a href="https://github.com/moves-rwth/caesar/pull/60" target="_blank" rel="noopener noreferrer">#60</a>:</p>
+<ul>
+<li>We now properly support verification with multiple open HeyVL files (before, the extension only remembered the latest verification task). This includes error messages and warnings.</li>
+<li>We improved the wording in the status bar to more accurately reflect the verification status.</li>
+<li>Proper handling of "unknown" results from the SMT solver.</li>
+<li>The tooltip menu on the status bar is much more dynamic and supports more features depending on verification results.</li>
+</ul>
+<p><a href="https://github.com/moves-rwth/caesar/pull/59" target="_blank" rel="noopener noreferrer">PR #59</a> added verification condition explanations for the <code>@unroll</code> proof rule.</p>
+<p>Additionally:</p>
+<ul>
+<li>We now automatically start the Caesar LSP server if a HeyVL file is opened.</li>
+<li>The default timeout for Caesar in VS Code is now 60 seconds (previously it was 300 seconds).</li>
+<li>The documentation for various features of Caesar has been improved with notes about some relevant theoretical aspects.</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="more-guardrails">More Guardrails<a href="https://www.caesarverifier.org/blog/2025/01/17/caesar-2-1#more-guardrails" class="hash-link" aria-label="Direct link to More Guardrails" title="Direct link to More Guardrails">​</a></h2>
+<p>Caesar now prevents accidental unsound verification through more "guardrails".
+This extends the soundness checks from <a href="https://www.caesarverifier.org/docs/proof-rules/calculi">calculus annotations</a> feature introduced in the last release.
+Thanks to <a href="https://github.com/moves-rwth/caesar/pull/42" target="_blank" rel="noopener noreferrer">PR #42</a>:</p>
+<ul>
+<li>We now check that procedures only call other procedures with the same calculus annotations.<!-- -->
+<ul>
+<li>If either the caller or callee has no calculus annotation, we do not currently warn the user.</li>
+</ul>
+</li>
+<li>We now check that <code>proc</code>s are only called inside <code>proc</code>s (and analogously for <code>coproc</code>s).</li>
+<li>Various other checks for proof rule annotations have been improved.</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="improvements-to-slicing">Improvements to Slicing<a href="https://www.caesarverifier.org/blog/2025/01/17/caesar-2-1#improvements-to-slicing" class="hash-link" aria-label="Direct link to Improvements to Slicing" title="Direct link to Improvements to Slicing">​</a></h2>
+<p>We have been hard at work to complete and further improve <a href="https://www.caesarverifier.org/docs/caesar/slicing">Caesar's slicing support</a>.</p>
+<ul>
+<li>We now support slicing probabilistic choices via the command-line flag <code>--slice-sampling</code>.<!-- -->
+<ul>
+<li>This is disabled by default because we have observed negative performance effects for relatively little gain in the average case.</li>
+</ul>
+</li>
+<li>Caesar now uses irrelevancy information from the SMT solver to speed up the slice search.</li>
+<li>Caesar no longer highlights the entire procedure if it does not have a <code>pre</code> when slicing for verification.</li>
+<li>We now properly slice demonic and angelic choices.</li>
+</ul>
+<p>We added additional slicing backends to slice verifying programs:</p>
+<ul>
+<li>A slicing backend on unsatisfiable cores was added (<code>core</code>). It is very fast, but does not report optimal slices in many cases.<!-- -->
+<ul>
+<li>This backend is now the default when slicing verifying programs.</li>
+</ul>
+</li>
+<li>We implemented minimal unsat core enumeration to support finding the locally or globally smallest slices (<code>mus</code> and <code>sus</code> backends).</li>
+<li>The old <code>exists-forall</code> backend still exists, but is not recommended for the general use case because it does not support reasoning with uninterpreted functions.</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="command-line-interface">Command-Line Interface<a href="https://www.caesarverifier.org/blog/2025/01/17/caesar-2-1#command-line-interface" class="hash-link" aria-label="Direct link to Command-Line Interface" title="Direct link to Command-Line Interface">​</a></h2>
+<p>Caesar's command-line interface has been redesigned.
+The binary now accepts different sub-commands to enable different tasks.</p>
+<ul>
+<li>The new <code>verify</code> command includes all behavior of the previous Caesar CLI interface.<!-- -->
+<ul>
+<li>If no sub-command is specified, this command will be used. Therefore, the command-line interface is backwards-compatible.</li>
+</ul>
+</li>
+<li>The <code>to-jani</code> command can be used to only convert HeyVL files to JANI files without running Caesar's checks or verification.</li>
+<li>The <code>shell-completions</code> command can be used to generate code for shell completions for the <code>caesar</code> binary.</li>
+</ul>
+<p>Furthermore:</p>
+<ul>
+<li>Caesar's <code>--help</code> output is now much more organized and helpful.</li>
+<li>A new <code>--no-verify</code> option can be used to skip the final SMT check. This is useful in conjunction with either <code>--print-smt</code> or <code>--smt-dir</code> options.</li>
+<li>The <code>--print-smt</code> and <code>--smt-dir</code> flags will now emit the SMT-LIB code <em>before</em> the final SMT call happens to avoid no output on timeouts.</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="minor-fixes">Minor Fixes<a href="https://www.caesarverifier.org/blog/2025/01/17/caesar-2-1#minor-fixes" class="hash-link" aria-label="Direct link to Minor Fixes" title="Direct link to Minor Fixes">​</a></h2>
+<p>We have also fixed minor issues, for example:</p>
+<ul>
+<li>Proper error reporting when using the <code>@k_induction</code> proof rule with the invalid parameter <code>k = 0</code>.</li>
+<li>The <code>--smt-dir</code> flag now works properly on Windows.</li>
+<li>Fixed syntax highlighting of block comments in VS Code.</li>
+</ul>]]></content>
+        <author>
+            <name>Philipp Schroer</name>
+            <uri>https://moves.rwth-aachen.de/people/philipp-schroer/</uri>
+        </author>
+        <category label="releases" term="releases"/>
+    </entry>
     <entry>
         <title type="html"><![CDATA[A Game-Based Operational Semantics for HeyVL]]></title>
         <id>https://www.caesarverifier.org/blog/2024/12/31/game-based-semantics</id>
