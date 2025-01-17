@@ -60,8 +60,8 @@ pub struct Unfolder<'smt, 'ctx> {
 impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
     pub fn new(limits_ref: LimitsRef, ctx: &'smt SmtCtx<'ctx>) -> Self {
         Unfolder {
-            limits_ref,
-            subst: Subst::new(ctx.tcx()),
+            limits_ref: limits_ref.clone(),
+            subst: Subst::new(ctx.tcx(), &limits_ref),
             translate: TranslateExprs::new(ctx),
             prover: Prover::new(ctx.ctx()),
         }

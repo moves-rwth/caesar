@@ -21,6 +21,7 @@ export class StatusBarComponent {
 
     private enabled: boolean;
     private verifyStatus = new DocumentMap<[Range, VerifyResult][]>();
+
     private serverStatus: ServerStatus = ServerStatus.NotStarted;
     private view: StatusBarItem;
 
@@ -158,6 +159,12 @@ export class StatusBarComponent {
 
             for (const [_, result] of results) {
                 switch (result) {
+                    case VerifyResult.Todo:
+                        // Only count as an unknown if the verification process is ended but this is still a Todo.
+                        if (this.serverStatus === ServerStatus.Ready) {
+                            unknown++;
+                        }
+                        break;
                     case VerifyResult.Verified:
                         verified++;
                         break;
@@ -169,7 +176,6 @@ export class StatusBarComponent {
                         break;
                 }
             }
-
             if (failed > 0 || unknown > 0) {
                 someError = true;
             }

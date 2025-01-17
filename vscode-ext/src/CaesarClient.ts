@@ -22,6 +22,7 @@ export enum ServerStatus {
 }
 
 export enum VerifyResult {
+    Todo = "todo",
     Verified = "verified",
     Failed = "failed",
     Unknown = "unknown"
@@ -159,6 +160,7 @@ export class CaesarClient {
         );
 
         context.subscriptions.push(client);
+
 
         // set up listeners for our custom events
         context.subscriptions.push(client.onNotification("custom/verifyStatus", (params: VerifyStatusNotification) => {
@@ -399,6 +401,7 @@ export class CaesarClient {
         try {
             await this.client.sendRequest('custom/verify', { text_document: documentItem });
             this.notifyStatusUpdate(ServerStatus.Ready);
+
             this.logger.info("Client: completed verification.", document.uri);
             await this.walkthrough.setVerifiedHeyVL(true);
         } catch (error) {
@@ -443,4 +446,5 @@ export class CaesarClient {
     public onComputedPre(callback: (update: ComputedPreNotification) => void) {
         this.computedPreListeners.push(callback);
     }
+
 }

@@ -248,6 +248,7 @@ dependencies = [
  "built",
  "cfg-if",
  "clap",
+ "crossbeam-channel",
  "dashmap",
  "egg",
  "glob",

@@ -11,7 +11,6 @@ use std::{
     path::PathBuf,
     process::ExitCode,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
 };
 
 use crate::{
@@ -23,13 +22,13 @@ use crate::{
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
 };
-use ast::{Diagnostic, FileId};
+use ast::{DeclKind, Diagnostic, FileId};
 use clap::{Args, Parser, ValueEnum};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use proof_rules::init_encodings;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
-use servers::{CliServer, LspServer, Server, ServerError};
+use servers::{run_lsp_server, CliServer, LspServer, Server, ServerError};
 use slicing::init_slicing;
 use thiserror::Error;
 use timing::DispatchBuilder;
@@ -314,7 +313,7 @@ async fn main() -> ExitCode {
     if !options.lsp_options.language_server {
         run_cli(options).await
     } else {
-        run_server(&options).await
+        run_server(options).await
     }
 }
 
@@ -372,27 +371,33 @@ async fn run_cli(options: Options) -> ExitCode {
     }
 }
 
-async fn run_server(options: &Options) -> ExitCode {
-    let (mut server, _io_threads) = LspServer::connect_stdio(options);
+async fn run_server(options: Options) -> ExitCode {
+    let (mut server, _io_threads) = LspServer::connect_stdio(&options);
     server.initialize().unwrap();
-    let res = server.run_server(|server, user_files| {
-        let limits_ref = LimitsRef::new(Some(
-            Instant::now() + Duration::from_secs(options.rlimit_options.timeout),
-        ));
-        let res = verify_files_main(options, limits_ref, server, user_files);
-        match res {
-            Ok(_) => Ok(()),
-            Err(VerifyError::Diagnostic(diag)) => {
-                server.add_diagnostic(diag).unwrap();
-                Ok(())
+    let server = Arc::new(Mutex::new(server));
+    let options = Arc::new(options);
+
+    let res = run_lsp_server(server.clone(), |user_files| {
+        let server: Arc<Mutex<dyn Server>> = server.clone();
+        let options = options.clone();
+        Box::pin(async move {
+            let res = verify_files(&options, &server, user_files.to_vec()).await;
+            match res {
+                Ok(_) => Ok(()),
+                Err(VerifyError::Diagnostic(diag)) => {
+                    server.lock().unwrap().add_diagnostic(diag).unwrap();
+                    Ok(())
+                }
+                Err(err) => Err(err),
             }
-            Err(err) => Err(err),
-        }
-    });
+        })
+    })
+    .await;
+
     match res {
         Ok(()) => ExitCode::SUCCESS,
         Err(VerifyError::Diagnostic(diag)) => {
-            server.add_diagnostic(diag).unwrap();
+            server.lock().unwrap().add_diagnostic(diag).unwrap();
             ExitCode::FAILURE
         }
         Err(err) => panic!("{}", err), // TODO
@@ -589,11 +594,26 @@ fn verify_files_main(
         }
     }
 
+    // Register all relevant source units with the server
+    for source_unit in &mut source_units {
+        let source_unit = source_unit.enter();
+
+        match *source_unit {
+            SourceUnit::Decl(ref decl) => {
+                // only register procs since we do not check any other decls
+                if let DeclKind::ProcDecl(proc_decl) = decl {
+                    server.register_source_unit(proc_decl.borrow().span)?;
+                }
+            }
+            SourceUnit::Raw(ref block) => server.register_source_unit(block.span)?,
+        }
+    }
+
     // explain high-level HeyVL if requested
     if options.lsp_options.explain_vc {
         for source_unit in &mut source_units {
             let source_unit = source_unit.enter();
-            source_unit.explain_vc(&tcx, server)?;
+            source_unit.explain_vc(&tcx, server, &limits_ref)?;
         }
     }
 
@@ -640,6 +660,7 @@ fn verify_files_main(
     for verify_unit in &mut verify_units {
         let (name, mut verify_unit) = verify_unit.enter_with_name();
 
+        limits_ref.check_limits()?;
         // 4. Desugaring: transforming spec calls to procs
         verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
 
@@ -656,7 +677,7 @@ fn verify_files_main(
             .lsp_options
             .explain_core_vc
             .then(|| VcExplanation::new(verify_unit.direction));
-        let mut vcgen = Vcgen::new(&tcx, explanations);
+        let mut vcgen = Vcgen::new(&tcx, &limits_ref, explanations);
         let mut vc_expr = verify_unit.vcgen(&mut vcgen)?;
         if let Some(explanation) = vcgen.explanation {
             server.add_vc_explanation(explanation)?;
@@ -667,7 +688,7 @@ fn verify_files_main(
 
         // 8. Quantifier elimination
         if !options.opt_options.no_qelim {
-            vc_expr.qelim(&mut tcx);
+            vc_expr.qelim(&mut tcx, &limits_ref)?;
         }
 
         // In-between, gather some stats about the vc expression
@@ -730,6 +751,7 @@ fn verify_files_main(
             ProveResult::Unknown(ReasonUnknown::Interrupted) => {
                 return Err(VerifyError::Interrupted)
             }
+
             ProveResult::Unknown(ReasonUnknown::Timeout) => return Err(LimitError::Timeout.into()),
             _ => {}
         }

@@ -10,6 +10,7 @@ export class GutterStatusComponent {
 
     private enabled: boolean;
     private status: DocumentMap<[Range, VerifyResult][]>;
+    private serverStatus: ServerStatus = ServerStatus.NotStarted;
 
     private verifyDecType: vscode.TextEditorDecorationType;
     private failedDecType: vscode.TextEditorDecorationType;
@@ -41,12 +42,13 @@ export class GutterStatusComponent {
 
         // listen to status and verify updates
         verifier.client.onStatusUpdate((status) => {
+            this.serverStatus = status;
             if (status === ServerStatus.Verifying) {
                 for (const [_document, results] of this.status.entries()) {
                     results.length = 0;
                 }
-                this.render();
             }
+            this.render();
         });
 
         verifier.client.onVerifyResult((document, results) => {
@@ -62,8 +64,9 @@ export class GutterStatusComponent {
     }
 
     render() {
-        for (const [document_id, results] of this.status.entries()) {
-            for (const editor of vscode.window.visibleTextEditors) {
+        for (const editor of vscode.window.visibleTextEditors) {
+            for (const [document_id, results] of this.status.entries()) {
+
                 if (editor.document.uri.toString() !== document_id.uri) {
                     continue;
                 }
@@ -76,7 +79,14 @@ export class GutterStatusComponent {
                     for (const [range, result] of results) {
                         const line = range.start.line;
                         const gutterRange = new vscode.Range(line, 0, line, 0);
+
                         switch (result) {
+                            case VerifyResult.Todo:
+                                // Only show unknown icon if the verification process is ended but this is still a Todo.
+                                if (this.serverStatus === ServerStatus.Ready) {
+                                    unknownProcs.push({ range: gutterRange, hoverMessage: 'Unknown' });
+                                }
+                                break;
                             case VerifyResult.Verified:
                                 verifiedProcs.push({ range: gutterRange, hoverMessage: 'Verified' });
                                 break;
@@ -89,7 +99,6 @@ export class GutterStatusComponent {
                         }
                     }
                 }
-
                 editor.setDecorations(this.verifyDecType, verifiedProcs);
                 editor.setDecorations(this.failedDecType, failedProcs);
                 editor.setDecorations(this.unknownDecType, unknownProcs);

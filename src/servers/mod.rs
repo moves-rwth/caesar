@@ -18,6 +18,7 @@ mod test;
 
 use ariadne::ReportKind;
 pub use cli::CliServer;
+pub use lsp::run_lsp_server;
 pub use lsp::LspServer;
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
@@ -29,6 +30,8 @@ pub type ServerError = Box<dyn Error + Send + Sync>;
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum VerifyResult {
+    // If the verification is not done yet the result is Todo
+    Todo,
     Verified,
     Failed,
     Unknown,
@@ -64,6 +67,9 @@ pub trait Server: Send {
     /// Add an explanation for vc calculations.
     fn add_vc_explanation(&mut self, explanation: VcExplanation) -> Result<(), VerifyError>;
 
+    /// Register a source unit span with the server.
+    fn register_source_unit(&mut self, span: Span) -> Result<(), VerifyError>;
+
     /// Send a verification status message to the client (a custom notification).
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
@@ -72,6 +78,9 @@ pub trait Server: Send {
         result: &mut SmtVcCheckResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError>;
+
+    /// Sends an unknown verification result for the not checked proc with the given span.
+    fn handle_not_checked(&mut self, span: Span) -> Result<(), ServerError>;
 }
 
 fn unless_fatal_error(werr: bool, diagnostic: Diagnostic) -> Result<Diagnostic, VerifyError> {
