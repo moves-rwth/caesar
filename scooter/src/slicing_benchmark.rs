@@ -89,7 +89,7 @@ fn parse_slicing_result(result: &BenchmarkResult, tracing_name: &str) -> Slicing
         event
             .span
             .as_ref()
-            .map_or(false, |span| span.name == tracing_name)
+            .is_some_and(|span| span.name == tracing_name)
     });
     let mut total_time = None;
     let mut active = None;
