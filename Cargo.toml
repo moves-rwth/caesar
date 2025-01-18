@@ -7,7 +7,7 @@ members = [
 
 [package]
 name = "caesar"
-version = "2.1.0"
+version = "2.1.1"
 authors = ["Philipp Schroer <phisch@cs.rwth-aachen.de>"]
 description = "Caesar is a deductive verifier for probabilistic programs."
 homepage = "https://www.caesarverifier.org/"

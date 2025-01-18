@@ -230,7 +230,7 @@ export class CaesarClient {
                         serverExecutable = pathRes;
                     }
                 }
-                args.push('--language-server');
+                args.push('lsp');
             }
                 break;
             case ConfigurationConstants.userBinaryOption:
@@ -242,7 +242,7 @@ export class CaesarClient {
                     });
                     throw new Error("Installation path is not set");
                 }
-                args.push('--language-server');
+                args.push('lsp');
                 break;
             case ConfigurationConstants.sourceCodeOption:
                 serverDirectory = ServerConfig.get(ConfigurationConstants.sourcePath);
@@ -262,7 +262,7 @@ export class CaesarClient {
                     throw new Error("Cargo.toml file is not found in the path");
                 }
                 serverExecutable = "cargo";
-                args.push('run', '--', '--language-server');
+                args.push('run', '--', 'lsp');
                 break;
             default:
                 this.logger.error("Client: unknown installation choice config setting", installationChoice);
