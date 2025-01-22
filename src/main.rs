@@ -453,10 +453,11 @@ fn mk_cli_server(input_options: &InputOptions) -> Result<(Vec<FileId>, SharedSer
     Ok((user_files, server))
 }
 
-async fn run_server(options: VerifyCommand) -> ExitCode {
+async fn run_server(mut options: VerifyCommand) -> ExitCode {
     let (mut server, _io_threads) = LspServer::connect_stdio(&options);
     server.initialize().unwrap();
     let server = Arc::new(Mutex::new(server));
+    options.lsp_options.language_server = true;
     let options = Arc::new(options);
 
     let res = run_lsp_server(server.clone(), |user_files| {
