@@ -328,14 +328,17 @@ impl Server for LspServer {
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError> {
         result.emit_diagnostics(span, self, translate)?;
-        self.statuses
+        let prev = self
+            .statuses
             .insert(span, VerifyResult::from_prove_result(&result.prove_result));
+        assert!(prev.is_some());
         self.publish_verify_statuses()?;
         Ok(())
     }
 
     fn handle_not_checked(&mut self, span: Span) -> Result<(), ServerError> {
-        self.statuses.insert(span, VerifyResult::Unknown);
+        let prev = self.statuses.insert(span, VerifyResult::Unknown);
+        assert!(prev.is_some());
         self.publish_verify_statuses()?;
         Ok(())
     }

@@ -674,12 +674,11 @@ fn verify_files_main(
     // Register all relevant source units with the server
     for source_unit in &mut source_units {
         let source_unit = source_unit.enter();
-
         match *source_unit {
             SourceUnit::Decl(ref decl) => {
                 // only register procs since we do not check any other decls
                 if let DeclKind::ProcDecl(proc_decl) = decl {
-                    server.register_source_unit(proc_decl.borrow().span)?;
+                    server.register_source_unit(proc_decl.borrow().name.span)?;
                 }
             }
             SourceUnit::Raw(ref block) => server.register_source_unit(block.span)?,
