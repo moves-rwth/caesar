@@ -37,7 +37,7 @@ impl SpecAutomaton {
         // Reward transient variable
         variables.push(VariableDeclaration {
             name: self.var_reward(),
-            typ: Type::BasicType(BasicType::Int), // integer type for now
+            typ: Type::BasicType(BasicType::Real),
             transient: true,
             initial_value: Some(Box::new(Expression::Constant(ConstantValue::Number(
                 0.into(),
