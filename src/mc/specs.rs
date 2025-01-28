@@ -288,7 +288,7 @@ fn extract_preconditions(
                     let builder = ExprBuilder::new(Span::dummy_span());
                     operand = builder.unary(UnOpKind::Not, Some(TyKind::Bool), operand);
                 }
-                restrict_initial.push(operand.clone());
+                restrict_initial.push(operand);
             } else if !skip_quant_pre {
                 return Err(JaniConversionError::UnsupportedPre(expr.clone()));
             }
@@ -298,14 +298,12 @@ fn extract_preconditions(
         }
     }
 
+    // regardless of the direction, we conjunct all the preconditions we collected
     let expr_builder = ExprBuilder::new(Span::dummy_span());
-    let direction = spec_part.direction;
-    let bin_op = direction.map(BinOpKind::And, BinOpKind::Or);
-    let default = direction == Direction::Down;
     let restrict_initial = restrict_initial
         .into_iter()
-        .reduce(|acc, e| expr_builder.binary(bin_op, Some(TyKind::Bool), acc, e))
-        .unwrap_or_else(|| expr_builder.bool_lit(default));
+        .reduce(|acc, e| expr_builder.binary(BinOpKind::And, Some(TyKind::Bool), acc, e))
+        .unwrap_or_else(|| expr_builder.bool_lit(true));
     translate_expr(&restrict_initial)
 }
 
