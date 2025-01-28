@@ -69,8 +69,26 @@ The output JANI files will have the following structure that you can use:
 ### Model Checking with Storm
 
 We use the probabilistic model checker [Storm](https://www.stormchecker.org).
-Running Storm on the produced file gives us the optimal value.[^1]
-Procedure inputs to are translated to JANI's *constants*, and must be given to Storm via the flag `--constants init_c=0` (any other initial value can be chosen).
+
+<details>
+    <summary>Quick Start: Using Storm via Docker.</summary>
+
+    Using [Docker](https://www.docker.com/), you can download and run the latest version of Storm with just one command.
+
+    ```bash
+    docker run --mount type=bind,source="$(pwd)",target=/pwd -w /pwd --rm -it --name storm movesrwth/storm:stable storm [ARGS...]
+    ```
+
+    This command will automatically download the latest stable build of Storm (c.f. [list of Storm Docker image releases](https://hub.docker.com/r/movesrwth/storm/tags/)).
+    The container will have the current directory mounted as `/pwd` and the container will use that as the working directory.
+    Note that this means you can only access files from your working directory inside the container.
+    After running the command, the container will be deleted.
+
+    Read more on [Storm's documentation page for its Docker containers](https://www.stormchecker.org/documentation/obtain-storm/docker.html).
+</details>
+
+Running Storm on the produced file computes the expected reward.[^1]
+Caesar translates procedure inputs to JANI's *constants*, and values for constants can be given to Storm via the flag `--constants init_c=0` (any other initial value can be chosen).
 
 ```bash
 $ storm --jani DIR/FILE.jani -jprop reward --exact --sound --constants init_c=0
