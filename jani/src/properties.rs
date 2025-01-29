@@ -177,6 +177,48 @@ pub enum PropertyExpression {
     Predicate(StatePredicate),
 }
 
+impl From<Expression> for PropertyExpression {
+    fn from(exp: Expression) -> Self {
+        PropertyExpression::Expression(exp)
+    }
+}
+
+impl From<FilterExpression> for PropertyExpression {
+    fn from(exp: FilterExpression) -> Self {
+        PropertyExpression::Filter(exp)
+    }
+}
+
+impl From<QuantifiedExpression> for PropertyExpression {
+    fn from(exp: QuantifiedExpression) -> Self {
+        PropertyExpression::Quantified(exp)
+    }
+}
+
+impl From<ExpectedValueExpression> for PropertyExpression {
+    fn from(exp: ExpectedValueExpression) -> Self {
+        PropertyExpression::ExpectedValue(exp)
+    }
+}
+
+impl From<UntilExpression> for PropertyExpression {
+    fn from(exp: UntilExpression) -> Self {
+        PropertyExpression::Until(exp)
+    }
+}
+
+impl From<UnaryPathExpression> for PropertyExpression {
+    fn from(exp: UnaryPathExpression) -> Self {
+        PropertyExpression::UnaryPath(exp)
+    }
+}
+
+impl From<StatePredicate> for PropertyExpression {
+    fn from(pred: StatePredicate) -> Self {
+        PropertyExpression::Predicate(pred)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Property {
     pub name: Identifier,
