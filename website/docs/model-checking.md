@@ -91,7 +91,7 @@ Running Storm on the produced file computes the expected reward.[^1]
 Caesar translates procedure inputs to JANI's *constants*, and values for constants can be given to Storm via the flag `--constants init_c=0` (any other initial value can be chosen).
 
 ```bash
-$ storm --jani DIR/FILE.jani -jprop reward --exact --sound --constants init_c=0
+storm --jani DIR/FILE.jani -jprop reward --exact --sound --constants init_c=0
 ```
 
 Part of the output:
@@ -145,6 +145,22 @@ In the body, statements:
  * [If-then-else statements](./heyvl/statements.md#boolean-choices),
  * While loops (with least-fixed point semantics &mdash; [see below for semantics details](#loop-semantics)),
  * Annotations, in particular [proof rule annotations](./proof-rules/), will be ignored.
+
+#### Initial Values of Output Variables
+
+By default, Caesar will try to choose valid initial values for variables of built-in types such as `Bool`.
+This reduces the number of initial states the model checker has to check.
+We do this in a way that is not observable to the program, with one exception.
+
+:::warning
+
+Caesar will assign arbitrary initial values to output variables.
+This is correct when output variables are never read before they are written to.
+However, if uninitialized output variables are read, then the choice is observable.
+
+:::
+
+This behavior can be disabled with the `--jani-uninit-outputs` option so that output variables are left uninitialized in the JANI model.
 
 #### Loop Semantics
 

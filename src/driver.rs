@@ -369,10 +369,7 @@ impl SourceUnit {
             match self {
                 SourceUnit::Decl(decl) => {
                     if let DeclKind::ProcDecl(decl_ref) = decl {
-                        let jani_options = mc::JaniOptions {
-                            skip_quant_pre: options.jani_skip_quant_pre,
-                        };
-                        let jani_model = mc::proc_to_model(&jani_options, tcx, &decl_ref.borrow())
+                        let jani_model = mc::proc_to_model(options, tcx, &decl_ref.borrow())
                             .map_err(|err| VerifyError::Diagnostic(err.diagnostic()))?;
                         let file_path = jani_dir.join(format!("{}.jani", decl.name()));
                         create_dir_all(file_path.parent().unwrap())?;

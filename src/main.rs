@@ -190,6 +190,14 @@ pub struct JaniOptions {
     /// pres (instead of failing with an error).
     #[arg(long)]
     pub jani_skip_quant_pre: bool,
+
+    /// By default, Caesar assigns arbitrary initial values to output variables.
+    /// This means that the model does not reflect the possible effects of
+    /// initial values of output variables on the program. Usually, this is not
+    /// the case anyway and assigning initial values speeds up the model
+    /// checking quite a bit. To disable this behavior, use this flag.
+    #[arg(long)]
+    pub jani_uninit_outputs: bool,
 }
 
 #[derive(Debug, Default, Args)]

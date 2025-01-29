@@ -28,6 +28,7 @@ use crate::{
     procs::proc_verify::verify_proc,
     tyctx::TyCtx,
     version::caesar_version_info,
+    JaniOptions,
 };
 
 use self::{
@@ -105,11 +106,6 @@ impl JaniConversionError {
     }
 }
 
-#[derive(Debug)]
-pub struct JaniOptions {
-    pub skip_quant_pre: bool,
-}
-
 pub fn proc_to_model(
     options: &JaniOptions,
     tcx: &TyCtx,
@@ -122,14 +118,14 @@ pub fn proc_to_model(
         proc.span,
         &spec_part,
         &mut verify_unit.block.node,
-        options.skip_quant_pre,
+        options.jani_skip_quant_pre,
     )?;
 
     // initialize the rest of the automaton
     let mut op_automaton = OpAutomaton::new(tcx, spec_part);
 
     // translate the variables
-    let (constants, variables) = translate_variables(proc)?;
+    let (constants, variables) = translate_var_decls(options, proc)?;
     op_automaton.variables.extend(variables);
 
     // translate the statements
@@ -191,12 +187,48 @@ pub fn proc_to_model(
     Ok(model)
 }
 
-fn translate_variables(
+/// Translate variable declarations, including local variable declarations, as
+/// well as input and output parameters.
+fn translate_var_decls(
+    options: &JaniOptions,
     proc: &ProcDecl,
 ) -> Result<(Vec<ConstantDeclaration>, Vec<VariableDeclaration>), JaniConversionError> {
+    let mut vars = translate_local_decls(proc)?;
+
+    // we declare proc inputs as constants, not variables
+    let mut constants = vec![];
+    for param in proc.inputs.node.iter() {
+        constants.push(ConstantDeclaration {
+            name: Identifier(param.name.to_string()),
+            typ: translate_type(&param.ty, param.span)?,
+            value: None,
+            comment: None,
+        });
+    }
+
+    // proc outputs are normal variables
+    for param in proc.outputs.node.iter() {
+        let (comment, initial_value) = if !options.jani_uninit_outputs {
+            arbitrarily_choose_initial(&param.ty)?
+        } else {
+            (None, None)
+        };
+        vars.push(VariableDeclaration {
+            name: Identifier(param.name.to_string()),
+            typ: translate_type(&param.ty, param.span)?,
+            transient: false,
+            initial_value: initial_value.map(Box::new),
+            comment,
+        });
+    }
+
+    Ok((constants, vars))
+}
+
+/// Create variable declarations for the local variables of a procedure.
+fn translate_local_decls(proc: &ProcDecl) -> Result<Vec<VariableDeclaration>, JaniConversionError> {
     #[derive(Default)]
     struct VarDeclCollector(Vec<VariableDeclaration>);
-
     impl VisitorMut for VarDeclCollector {
         type Err = JaniConversionError;
 
@@ -206,17 +238,13 @@ fn translate_variables(
             let initial_value = if let Some(initial_expr) = &decl.init {
                 if is_constant(initial_expr) {
                     Some(translate_expr(initial_expr)?)
-                } else if let TyKind::Bool | TyKind::UInt | TyKind::UReal | TyKind::EUReal = decl.ty
-                {
-                    comment = Some(
-                            "(initial value arbitrarily chosen by Caesar translation to reduce state space)"
-                                .to_string()
-                                .into_boxed_str(),
-                        );
-                    let builder = ExprBuilder::new(Span::dummy_span());
-                    Some(translate_expr(&builder.bot_lit(&decl.ty))?)
                 } else {
-                    None
+                    // only if the variable is immediately initialized, we can
+                    // now choose an arbitrary initial value because that will
+                    // be unobservable in the program.
+                    let (comment_res, initial_value) = arbitrarily_choose_initial(&decl.ty)?;
+                    comment = comment_res;
+                    initial_value
                 }
             } else {
                 None
@@ -231,36 +259,26 @@ fn translate_variables(
             Ok(())
         }
     }
-
     let mut collector = VarDeclCollector::default();
-    collector.visit_proc(&mut DeclRef::new(proc.clone()))?; // TODO: this clone should not be necessary
-    let mut vars = collector.0;
+    collector.visit_proc(&mut DeclRef::new(proc.clone()))?;
+    Ok(collector.0)
+}
 
-    // we declare proc inputs as constants, not variables
-    let mut constants = vec![];
-    for param in proc.inputs.node.iter() {
-        constants.push(ConstantDeclaration {
-            name: Identifier(param.name.to_string()),
-            typ: translate_type(&param.ty, param.span)?,
-            value: None,
-            comment: None,
-        });
+fn arbitrarily_choose_initial(
+    ty: &TyKind,
+) -> Result<(Option<Box<str>>, Option<Expression>), JaniConversionError> {
+    if let TyKind::Bool | TyKind::UInt | TyKind::UReal | TyKind::EUReal = ty {
+        let comment = Some(
+            "(initial value arbitrarily chosen by Caesar translation to reduce state space)"
+                .to_string()
+                .into_boxed_str(),
+        );
+        let builder = ExprBuilder::new(Span::dummy_span());
+        let initial_value = Some(translate_expr(&builder.bot_lit(ty))?);
+        Ok((comment, initial_value))
+    } else {
+        Ok((None, None))
     }
-
-    // proc outputs are normal variables
-    let builder = ExprBuilder::new(Span::dummy_span());
-    for param in proc.outputs.node.iter() {
-        let initial_value = translate_expr(&builder.bot_lit(&param.ty))?;
-        vars.push(VariableDeclaration {
-            name: Identifier(param.name.to_string()),
-            typ: translate_type(&param.ty, param.span)?,
-            transient: false,
-            initial_value: Some(Box::new(initial_value)),
-            comment: None,
-        });
-    }
-
-    Ok((constants, vars))
 }
 
 fn translate_type(ty: &TyKind, span: Span) -> Result<Type, JaniConversionError> {
