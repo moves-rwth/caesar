@@ -444,9 +444,7 @@ async fn handle_verify_request(
         Ok(_) => Response::new_ok(id, Value::Null),
         Err(err) => Response::new_err(id, 0, format!("{}", err)),
     };
-    sender
-        .send(Message::Response(res))
-        .map_err(|e| VerifyError::ServerError(e.into()))?;
+
     match result {
         Ok(()) => {}
         Err(VerifyError::Diagnostic(diagnostic)) => {
@@ -464,5 +462,10 @@ async fn handle_verify_request(
         }
         Err(err) => Err(err)?,
     }
+
+    sender
+        .send(Message::Response(res))
+        .map_err(|e| VerifyError::ServerError(e.into()))?;
+
     Ok(())
 }
