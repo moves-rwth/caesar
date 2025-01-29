@@ -110,36 +110,49 @@ fn translate_stmt(
             if *dir != automaton.spec_part.direction {
                 return Err(JaniConversionError::MismatchedDirection(stmt.span));
             }
-            // only down asserts supported at the moment
-            if *dir != Direction::Down {
-                return Err(JaniConversionError::UnsupportedStmt(Box::new(stmt.clone())));
-            }
-            // TODO: negate if in upper bounds setting
-            let cond = if let Some(cond) = extract_embed(expr) {
-                cond
+
+            if extract_embed(expr).is_some() {
+                translate_bool_assert(automaton, *dir, &next, expr)
             } else {
-                return Err(JaniConversionError::UnsupportedAssert(expr.clone()));
+                translate_quant_assert(automaton, span, &next, expr)
+            }
+        }
+        StmtKind::Assume(dir, expr) => {
+            // we can translate both directions, but only with Boolean exprs
+            let cond = if let Some(cond) = extract_embed(expr) {
+                let cond = translate_expr(&cond)?;
+                match *dir {
+                    Direction::Down => cond,
+                    Direction::Up => !cond,
+                }
+            } else {
+                return Err(JaniConversionError::UnsupportedAssume(expr.clone()));
             };
 
             let start = automaton.next_stmt_location();
 
-            let ok_edge = Edge::from_to_if(start.clone(), next, translate_expr(&cond)?);
-            automaton.edges.push(ok_edge);
+            let cont_edge = Edge::from_to_if(start.clone(), next.clone(), cond.clone());
+            automaton.edges.push(cont_edge);
 
-            let not_cond_jani = !translate_expr(&cond)?;
-            let err_edge = Edge::from_to_if(start.clone(), automaton.spec_part.error_location(), not_cond_jani);
-            automaton.edges.push(err_edge);
+            let miracle_location = translate_miracle(automaton, *dir);
+            let miracle_edge = Edge::from_to_if(start.clone(), miracle_location, !cond);
+            automaton.edges.push(miracle_edge);
 
             Ok(start)
         }
         StmtKind::Havoc(_, _)
-        | StmtKind::Assume(_, _) // TODO: handle assume?
         | StmtKind::Compare(_, _)
         | StmtKind::Negate(_)
         | StmtKind::Validate(_) => {
             Err(JaniConversionError::UnsupportedStmt(Box::new(stmt.clone())))
         }
-        StmtKind::Tick(expr) => translate_assign(automaton,span,  automaton.spec_part.var_reward(), expr, next),
+        StmtKind::Tick(expr) => translate_assign(
+            automaton,
+            span,
+            automaton.spec_part.var_reward(),
+            expr,
+            next,
+        ),
         StmtKind::Demonic(lhs, rhs) | StmtKind::Angelic(lhs, rhs) => {
             let direction = if matches!(stmt.node, StmtKind::Demonic(_, _)) {
                 Direction::Down
@@ -285,4 +298,102 @@ fn translate_assign(
     }
 
     Ok(start)
+}
+
+/// Translate an assert statement with a Boolean condition.
+///
+/// If the condition is true, then we continue with `next`. Otherwise, we go to
+/// the error location.
+fn translate_bool_assert(
+    automaton: &mut OpAutomaton,
+    dir: Direction,
+    next: &Identifier,
+    expr: &Expr,
+) -> Result<Identifier, JaniConversionError> {
+    let cond = if let Some(cond) = extract_embed(expr) {
+        let cond = translate_expr(&cond)?;
+        match dir {
+            Direction::Down => cond,
+            Direction::Up => !cond,
+        }
+    } else {
+        return Err(JaniConversionError::UnsupportedAssert(expr.clone()));
+    };
+
+    let start = automaton.next_stmt_location();
+
+    let ok_edge = Edge::from_to_if(start.clone(), next.clone(), cond.clone());
+    automaton.edges.push(ok_edge);
+
+    let not_cond_jani = !cond;
+    let err_edge = Edge::from_to_if(
+        start.clone(),
+        automaton.spec_part.error_location(),
+        not_cond_jani,
+    );
+    automaton.edges.push(err_edge);
+
+    Ok(start)
+}
+
+/// Translate a quantitative assert statement.
+///
+/// It is translated as a nondeterministic choice between either a transition to
+/// the error location with the reward of the expression, or continuing the
+/// execution with `next`
+fn translate_quant_assert(
+    automaton: &mut OpAutomaton,
+    span: Span,
+    next: &Identifier,
+    expr: &Expr,
+) -> Result<Identifier, JaniConversionError> {
+    let start = automaton.next_stmt_location();
+    automaton.has_nondet = true;
+
+    let next_edge = Edge::from_to(start.clone(), next.clone());
+    automaton.edges.push(next_edge);
+
+    // increase the reward by the expression and go to the error location
+    let return_start = translate_assign(
+        automaton,
+        span,
+        automaton.spec_part.var_reward(),
+        expr,
+        automaton.spec_part.error_location(),
+    )?;
+    let return_edge = Edge::from_to(start.clone(), return_start);
+    automaton.edges.push(return_edge);
+
+    Ok(start)
+}
+
+/// The "miracle loop" is a loop that never reaches the sink state. Depending on
+/// the direction, we collect infinite (down) or zero (up) reward.
+fn translate_miracle(automaton: &mut OpAutomaton, dir: Direction) -> Identifier {
+    let assignments = match dir {
+        Direction::Down => vec![Assignment {
+            reference: automaton.spec_part.var_reward(),
+            value: 1.into(),
+            index: None,
+            comment: None,
+        }],
+        Direction::Up => vec![],
+    };
+
+    let start = automaton.next_stmt_location();
+    let edge = Edge {
+        location: start.clone(),
+        action: None,
+        rate: None,
+        guard: None,
+        destinations: vec![Destination {
+            location: start.clone(),
+            probability: None,
+            assignments,
+            comment: None,
+        }],
+        comment: None,
+    };
+    automaton.edges.push(edge);
+    start
 }

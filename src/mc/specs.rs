@@ -249,7 +249,6 @@ fn extract_preconditions(
             if let Some(operand) = extract_embed(expr) {
                 let mut operand = translate_expr(&operand)?;
                 if spec_part.direction == Direction::Up {
-                    // TODO: if one used the !?(b) idiom, we'd have !!b in the end. optimize that
                     operand = !operand;
                 }
                 restrict_initial.push(operand);

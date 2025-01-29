@@ -11,19 +11,18 @@ import Link from '@docusaurus/Link';
 
 Caesar has some support to export probabilistic programs written in (an executable fragment of) HeyVL to [the *jani-model* format](https://jani-spec.org/).
 The JANI project defines exchange formats for quantitative model checking problems (and more).
+Caesar outputs [Markov chains](https://en.wikipedia.org/wiki/Markov_chain) (MCs) or [Markov decision processes](https://en.wikipedia.org/wiki/Markov_decision_process) (MDPs), depending on which HeyVL language features are used.
 
-[Executable HeyVL programs](#supported-programs) are essentially programs without verification statements, where therefore the Markov chain semantics is clearly defined and the program can be executed forwards in a step-by-step fashion.
+The translation supports [executable HeyVL programs](#supported-programs).
+These are written in a subset of HeyVL, for which we have well-defined forwards-stepping MC/MDP semantics.
+[Not supported right now](#not-supported) is local unbounded nondeterminism (`havoc` or uninitialized local variables), procedure calls or quantitative `assume` statements.
 
-After exporting HeyVL programs to JANI, we can use our favorite probabilistic model checkers to calculate and/or verify expected rewards.
-For now, we have only tested with the [model checker *Storm*](https://www.stormchecker.org/).
+After exporting HeyVL programs to JANI, we can use probabilistic model checkers to calculate and/or verify expected rewards.
+In contrast to Caesar, these do not need user annotations like [invariants](./proof-rules/induction.md), but are fully automatic.
+On the other hand, probabilistic model checkers often struggle with large or infinite state spaces.
+Thus, the two approaches complement each other.
 
-:::caution
-
-This feature is still under development.
-There are sure to be bugs and missing functionality.
-The encoding is sure to change in the near future.
-
-:::
+Caesar's developers recommend the [probabilistic model checker *Storm*](https://www.stormchecker.org/).
 
 <small>
   Note: Caesar should not be confused with the set of tools in the <Link to="https://cadp.inria.fr/">CADP toolbox</Link> by INRIA, which includes tools like CAESAR, CAESAR.ADT, or OPEN/CAESAR.
@@ -68,7 +67,7 @@ The output JANI files will have the following structure that you can use:
 
 ### Model Checking with Storm
 
-We use the probabilistic model checker [Storm](https://www.stormchecker.org).
+We use the [probabilistic model checker *Storm*](https://www.stormchecker.org).
 
 <details>
     <summary>Quick Start: Using Storm via Docker.</summary>
@@ -136,25 +135,27 @@ In the body, statements:
  * [Variable declarations](./heyvl/statements.md#variable-declarations) with initializers,
  * Assignments with pure expressions,
  * [Sampling from distributions](./stdlib/distributions.md),
- * [`reward` statements](./heyvl/statements.md#reward-formerly-tick),
- * In `proc`s:
-   * [`assert` statements](./heyvl/statements.md#assert-and-assume) with Boolean condition of the form `assert ?(b)`,
-   * [Binary demonic choices](./heyvl/statements.md#nondeterministic-choices),
- * In `coproc`s:
-   * [Binary angelic choices](./heyvl/statements.md#nondeterministic-choices),
  * [If-then-else statements](./heyvl/statements.md#boolean-choices),
  * While loops (with least-fixed point semantics &mdash; [see below for semantics details](#loop-semantics)),
+ * [`reward` statements](./heyvl/statements.md#reward-formerly-tick),
+ * In `proc`s:
+   * [`assert` statements](./heyvl/statements.md#assert-and-assume),
+   * [Binary demonic choices](./heyvl/statements.md#nondeterministic-choices),
+ * In `coproc`s:
+   * [`coassert` statements](./heyvl/statements.md#assert-and-assume),
+   * [Binary angelic choices](./heyvl/statements.md#nondeterministic-choices),
+ * [Assumptions](./heyvl/statements.md#assert-and-assume) of the form `assume ?(b)` and `coassume !?(b)`,
  * Annotations, in particular [proof rule annotations](./proof-rules/), will be ignored.
 
 #### Initial Values of Output Variables
 
-By default, Caesar will try to choose valid initial values for variables of built-in types such as `Bool`.
+Caesar will try to choose valid initial values for variables of built-in types such as `Bool`.
 This reduces the number of initial states the model checker has to check.
 We do this in a way that is not observable to the program, with one exception.
 
 :::warning
 
-Caesar will assign arbitrary initial values to output variables.
+By default, the JANI translation will assign arbitrary initial values to output variables.
 This is correct when output variables are never read before they are written to.
 However, if uninitialized output variables are read, then the choice is observable.
 
@@ -181,10 +182,10 @@ If you want [one-bounded wlp semantics](./proof-rules/calculi.md) (greatest fixe
 Then the result should be the sum of the `reward` and `diverge_prob` properties (Storm: `-jprop reward,diverge_prob`).[^3]
 
 If you want *unbounded* greatest fixed-point semantics, then you can use the generated property `can_diverge` to check whether there is a diverging path.
-Then the result is `\infty` if `can_diverge` is `true`, otherwise the result is `reward`.[^4]
+Then the result is $\infty$ if `can_diverge` is `true`, otherwise the result is `reward`.[^4]
 This property is currently not supported by Storm.[^5]
 
-We intentionally avoid using the *reachability reward* properties (i.e. setting the `reach` property of `ExpectedValueExpression` in JANI) as it will assign the expected reward `\infty` to any state from which goal states are not reachable with probability 1.
+We intentionally avoid using the *reachability reward* properties (i.e. setting the `reach` property of `ExpectedValueExpression` in JANI) as it will assign the expected reward $\infty$ to any state from which goal states are not reachable with probability 1.
 If the program is not AST, then this does not correspond to either least or greatest fixpoint semantics weakest pre-expectation style semantics that we know of.
 
 ### Supported Types
@@ -201,19 +202,19 @@ Make sure to check in your model checker's documentation how these types are rea
 For example, [Storm](https://www.stormchecker.org) assumes 32-bit numbers by default for unbounded integer types.
 
 [`EUReal`](./stdlib/numbers.md#eureal) values are currently only supported as values in `pre`/`post` declarations and in `assert` statements.
-The value `\infty` cannot be explicitly represented in JANI, therefore `EUReal` expressions that go beyond the specific supported verification constructs are not supported.
+The value $\infty$ cannot be explicitly represented in JANI, therefore `EUReal` expressions that go beyond the specific supported verification constructs are not supported.
 
 ### Not Supported
 
 In particular, the following constructs are *not* supported:
  * Calls to uninterpreted functions or to `proc`s/`coproc`s,
  * Uninitialized variable declarations or `havoc`/`cohavoc` statements,
- * Quantitative verification statements such as `assume`/`assert` in arbitrary locations.
+ * Quantitative `assume` or `coassume` statements.
  * [User-defined domains](./heyvl/domains.md), axioms will be ignored.
 
 
 [^1]: We use the `--exact` and `--sound` flags to ensure that Storm is forced to use exact arithmetic and only sound algorithms to produce the solution. Consult your chosen model checker's documentation to see which guarantees they give.
 [^2]: We always use least-fixed point semantics because encoding greatest fixpoint/weakest *liberal* pre-expectation semantics seems to be impossible with a single JANI property right now.
 [^3]: [Corollary 4.26 of Benjamin Kaminski's PhD thesis](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=115) states that (one-bounded) `wlp` can be computed via `wp` plus the probability of divergence.
-[^4]: This is similar to the qualitative wlp, which evaluates to the top element of the Boolean lattice (`true`) if the loop has a possibility of nontermination. In the quantitative setting, we have `\infty` as our top element of the [`EUReal`](./stdlib/numbers.md#eureal) lattice.
+[^4]: This is similar to the qualitative wlp, which evaluates to the top element of the Boolean lattice (`true`) if the loop has a possibility of nontermination. In the quantitative setting, we have $\infty$ as our top element of the [`EUReal`](./stdlib/numbers.md#eureal) lattice.
 [^5]: Storm currently does not support the qualitative analysis required for the `can_diverge` property and will throw an error. The feature is tracked in the issue [moves-rwth/storm#529](https://github.com/moves-rwth/storm/issues/529).
