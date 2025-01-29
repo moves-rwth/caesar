@@ -1,8 +1,8 @@
 //! Extraction of quantitative specifications and conversion to JANI equivalents.
 
 use jani::{
-    exprs::{ConstantValue, Expression, UnaryExpression, UnaryOp},
-    models::{Destination, Edge, Location, TransientValue, VariableDeclaration},
+    exprs::Expression,
+    models::{Edge, Location, TransientValue, VariableDeclaration},
     properties::{
         ExpectedValueExpression, ExpectedValueKind, FilterExpression, FilterFun, Property,
         PropertyExpression, QuantifiedExpression, Quantifier, Reward, StatePredicate,
@@ -14,7 +14,7 @@ use jani::{
 
 use crate::ast::{
     util::{is_dir_top_lit, is_top_lit},
-    BinOpKind, Direction, ExprBuilder, Span, Stmt, StmtKind, TyKind, UnOpKind,
+    BinOpKind, Direction, ExprBuilder, Span, Stmt, StmtKind, TyKind,
 };
 
 use super::{extract_embed, translate_expr, JaniConversionError};
@@ -39,9 +39,7 @@ impl SpecAutomaton {
             name: self.var_reward(),
             typ: Type::BasicType(BasicType::Real),
             transient: true,
-            initial_value: Some(Box::new(Expression::Constant(ConstantValue::Number(
-                0.into(),
-            )))),
+            initial_value: Some(Box::new(0.into())),
             comment: None,
         });
         // is_sink_state transient variable
@@ -49,9 +47,7 @@ impl SpecAutomaton {
             name: self.var_is_sink_state(),
             typ: Type::BasicType(BasicType::Bool),
             transient: true,
-            initial_value: Some(Box::new(Expression::Constant(ConstantValue::Boolean(
-                false,
-            )))),
+            initial_value: Some(Box::new(false.into())),
             comment: None,
         });
         // is_error_state transient variable
@@ -59,9 +55,7 @@ impl SpecAutomaton {
             name: self.var_is_error_state(),
             typ: Type::BasicType(BasicType::Bool),
             transient: true,
-            initial_value: Some(Box::new(Expression::Constant(ConstantValue::Boolean(
-                false,
-            )))),
+            initial_value: Some(Box::new(false.into())),
             comment: None,
         });
         variables
@@ -113,7 +107,7 @@ impl SpecAutomaton {
             time_progress: None,
             transient_values: Some(vec![TransientValue {
                 reference: self.var_is_sink_state(),
-                value: Expression::Constant(ConstantValue::Boolean(true)),
+                value: true.into(),
                 comment: None,
             }]),
         });
@@ -123,40 +117,14 @@ impl SpecAutomaton {
             time_progress: None,
             transient_values: Some(vec![TransientValue {
                 reference: self.var_is_error_state(),
-                value: Expression::Constant(ConstantValue::Boolean(true)),
+                value: true.into(),
                 comment: None,
             }]),
         });
 
-        // edge from end to sink
-        edges.push(Edge {
-            location: self.end_location(),
-            action: None,
-            rate: None,
-            guard: None,
-            destinations: vec![Destination {
-                location: self.sink_location(),
-                probability: None,
-                assignments: vec![],
-                comment: None,
-            }],
-            comment: None,
-        });
+        edges.push(Edge::from_to(self.end_location(), self.sink_location()));
 
-        // edge from error to sink
-        edges.push(Edge {
-            location: self.error_location(),
-            action: None,
-            rate: None,
-            guard: None,
-            destinations: vec![Destination {
-                location: self.sink_location(),
-                probability: None,
-                assignments: vec![],
-                comment: None,
-            }],
-            comment: None,
-        });
+        edges.push(Edge::from_to(self.error_location(), self.sink_location()));
     }
 }
 
@@ -191,7 +159,7 @@ pub fn extract_properties(
 }
 
 fn mk_expected_reward_property(spec_part: &SpecAutomaton, name: &str) -> Property {
-    let expected_value = PropertyExpression::ExpectedValue(ExpectedValueExpression {
+    let expected_value = ExpectedValueExpression {
         op: spec_part
             .direction
             .map(ExpectedValueKind::Emin, ExpectedValueKind::Emax),
@@ -202,15 +170,15 @@ fn mk_expected_reward_property(spec_part: &SpecAutomaton, name: &str) -> Propert
         step_instant: None,
         time_instant: None,
         reward_instants: None,
-    });
-    let expected_value_from_initial = PropertyExpression::Filter(FilterExpression {
+    };
+    let expected_value_from_initial = FilterExpression {
         fun: FilterFun::Values,
-        values: Box::new(expected_value),
+        values: Box::new(expected_value.into()),
         states: Box::new(PropertyExpression::Predicate(StatePredicate::Initial)),
-    });
+    };
     Property {
         name: Identifier(name.to_owned()),
-        expression: expected_value_from_initial,
+        expression: expected_value_from_initial.into(),
         comment: None,
     }
 }
@@ -218,12 +186,9 @@ fn mk_expected_reward_property(spec_part: &SpecAutomaton, name: &str) -> Propert
 fn mk_diverge_path(spec_part: &SpecAutomaton) -> UnaryPathExpression {
     UnaryPathExpression {
         op: UnaryPathExpressionKind::Globally,
-        exp: Box::new(PropertyExpression::Expression(Expression::Unary(Box::new(
-            UnaryExpression {
-                op: UnaryOp::Not,
-                exp: Expression::Identifier(spec_part.var_is_sink_state()),
-            },
-        )))),
+        exp: Box::new(PropertyExpression::Expression(!Expression::Identifier(
+            spec_part.var_is_sink_state(),
+        ))),
         step_bounds: None,
         time_bounds: None,
         reward_bounds: None,
@@ -235,35 +200,35 @@ fn mk_diverge_prob_property(spec_part: &SpecAutomaton, name: &str) -> Property {
         Direction::Down => Quantifier::Pmin,
         Direction::Up => Quantifier::Pmax,
     };
-    let diverge_prob = PropertyExpression::Quantified(QuantifiedExpression {
+    let diverge_prob = QuantifiedExpression {
         op: quantifier,
         exp: Box::new(PropertyExpression::UnaryPath(mk_diverge_path(spec_part))),
-    });
-    let diverge_prob_from_initial = PropertyExpression::Filter(FilterExpression {
+    };
+    let diverge_prob_from_initial = FilterExpression {
         fun: FilterFun::Values,
-        values: Box::new(diverge_prob),
+        values: Box::new(diverge_prob.into()),
         states: Box::new(PropertyExpression::Predicate(StatePredicate::Initial)),
-    });
+    };
     Property {
         name: Identifier(name.to_owned()),
-        expression: diverge_prob_from_initial,
+        expression: diverge_prob_from_initial.into(),
         comment: None,
     }
 }
 
 fn mk_can_diverge_property(spec_part: &SpecAutomaton, name: &str) -> Property {
-    let can_diverge = PropertyExpression::Quantified(QuantifiedExpression {
+    let can_diverge = QuantifiedExpression {
         op: Quantifier::Exists,
         exp: Box::new(PropertyExpression::UnaryPath(mk_diverge_path(spec_part))),
-    });
-    let can_diverge_from_initial = PropertyExpression::Filter(FilterExpression {
+    };
+    let can_diverge_from_initial = FilterExpression {
         fun: FilterFun::Values,
-        values: Box::new(can_diverge),
-        states: Box::new(PropertyExpression::Predicate(StatePredicate::Initial)),
-    });
+        values: Box::new(can_diverge.into()),
+        states: Box::new(StatePredicate::Initial.into()),
+    };
     Property {
         name: Identifier(name.to_owned()),
-        expression: can_diverge_from_initial,
+        expression: can_diverge_from_initial.into(),
         comment: None,
     }
 }
@@ -282,11 +247,10 @@ fn extract_preconditions(
                 return Err(JaniConversionError::MismatchedDirection(first.span));
             }
             if let Some(operand) = extract_embed(expr) {
-                let mut operand = operand.clone();
+                let mut operand = translate_expr(&operand)?;
                 if spec_part.direction == Direction::Up {
                     // TODO: if one used the !?(b) idiom, we'd have !!b in the end. optimize that
-                    let builder = ExprBuilder::new(Span::dummy_span());
-                    operand = builder.unary(UnOpKind::Not, Some(TyKind::Bool), operand);
+                    operand = !operand;
                 }
                 restrict_initial.push(operand);
             } else if !skip_quant_pre {
@@ -299,12 +263,10 @@ fn extract_preconditions(
     }
 
     // regardless of the direction, we conjunct all the preconditions we collected
-    let expr_builder = ExprBuilder::new(Span::dummy_span());
-    let restrict_initial = restrict_initial
+    Ok(restrict_initial
         .into_iter()
-        .reduce(|acc, e| expr_builder.binary(BinOpKind::And, Some(TyKind::Bool), acc, e))
-        .unwrap_or_else(|| expr_builder.bool_lit(true));
-    translate_expr(&restrict_initial)
+        .reduce(|acc, e| acc & e)
+        .unwrap_or_else(|| true.into()))
 }
 
 /// Eat (co)assert statements from the end of the statements and return a single

@@ -9,10 +9,7 @@ use std::{convert::TryInto, mem};
 
 use ariadne::ReportKind;
 use jani::{
-    exprs::{
-        BinaryExpression, BinaryOp, ConstantValue, Expression, IteExpression, UnaryExpression,
-        UnaryOp,
-    },
+    exprs::{BinaryExpression, BinaryOp, Expression, IteExpression},
     models::{
         Composition, CompositionElement, ConstantDeclaration, Metadata, Model, ModelFeature,
         VariableDeclaration,
@@ -208,19 +205,18 @@ fn translate_variables(
             let mut comment = None;
             let initial_value = if let Some(initial_expr) = &decl.init {
                 if is_constant(initial_expr) {
-                    Some(Box::new(translate_expr(initial_expr)?))
-                } else {
-                    let builder = ExprBuilder::new(Span::dummy_span());
-                    if let TyKind::Bool | TyKind::UInt | TyKind::UReal | TyKind::EUReal = decl.ty {
-                        comment = Some(
+                    Some(translate_expr(initial_expr)?)
+                } else if let TyKind::Bool | TyKind::UInt | TyKind::UReal | TyKind::EUReal = decl.ty
+                {
+                    comment = Some(
                             "(initial value arbitrarily chosen by Caesar translation to reduce state space)"
                                 .to_string()
                                 .into_boxed_str(),
                         );
-                        Some(Box::new(translate_expr(&builder.bot_lit(&decl.ty))?))
-                    } else {
-                        None
-                    }
+                    let builder = ExprBuilder::new(Span::dummy_span());
+                    Some(translate_expr(&builder.bot_lit(&decl.ty))?)
+                } else {
+                    None
                 }
             } else {
                 None
@@ -229,7 +225,7 @@ fn translate_variables(
                 name: Identifier(decl.name.to_string()),
                 typ: translate_type(&decl.ty, decl.span)?,
                 transient: false,
-                initial_value,
+                initial_value: initial_value.map(Box::new),
                 comment,
             });
             Ok(())
@@ -273,17 +269,13 @@ fn translate_type(ty: &TyKind, span: Span) -> Result<Type, JaniConversionError> 
         TyKind::Int => Ok(Type::BasicType(BasicType::Int)),
         TyKind::UInt => Ok(Type::BoundedType(BoundedType {
             base: BoundedTypeBase::Int,
-            lower_bound: Some(Box::new(Expression::Constant(ConstantValue::Number(
-                0.into(),
-            )))),
+            lower_bound: Some(Box::new(0.into())),
             upper_bound: None,
         })),
         TyKind::Real => Ok(Type::BasicType(BasicType::Real)),
         TyKind::UReal => Ok(Type::BoundedType(BoundedType {
             base: BoundedTypeBase::Real,
-            lower_bound: Some(Box::new(Expression::Constant(ConstantValue::Number(
-                0.into(),
-            )))),
+            lower_bound: Some(Box::new(0.into())),
             upper_bound: None,
         })),
         TyKind::EUReal
@@ -302,81 +294,73 @@ fn translate_ident(ident: Ident) -> Identifier {
 }
 
 fn translate_expr(expr: &Expr) -> Result<Expression, JaniConversionError> {
+    let unsupported_expr_err = || JaniConversionError::UnsupportedExpr(expr.clone());
+
     match &expr.kind {
         ExprKind::Var(ident) => Ok(Expression::Identifier(translate_ident(*ident))),
-        ExprKind::Call(_, _) => Err(JaniConversionError::UnsupportedExpr(expr.clone())),
-        ExprKind::Ite(cond, left, right) => Ok(Expression::IfThenElse(Box::new(IteExpression {
+        ExprKind::Call(_, _) => Err(unsupported_expr_err()),
+        ExprKind::Ite(cond, left, right) => Ok(Expression::from(IteExpression {
             cond: translate_expr(cond)?,
             left: translate_expr(left)?,
             right: translate_expr(right)?,
-        }))),
-        ExprKind::Binary(bin_op, left, right) => {
-            Ok(Expression::Binary(Box::new(BinaryExpression {
-                op: match bin_op.node {
-                    BinOpKind::Add => BinaryOp::Plus,
-                    BinOpKind::Sub => BinaryOp::Minus,
-                    BinOpKind::Mul => BinaryOp::Times,
-                    BinOpKind::Div => BinaryOp::Divide,
-                    BinOpKind::Mod => BinaryOp::Modulo,
-                    BinOpKind::And => BinaryOp::And,
-                    BinOpKind::Or => BinaryOp::Or,
-                    BinOpKind::Eq => BinaryOp::Equals,
-                    BinOpKind::Lt => BinaryOp::Less,
-                    BinOpKind::Le => BinaryOp::LessOrEqual,
-                    BinOpKind::Ne => BinaryOp::NotEquals,
-                    BinOpKind::Ge => BinaryOp::GreaterOrEqual,
-                    BinOpKind::Gt => BinaryOp::Greater,
-                    BinOpKind::Inf => BinaryOp::Min,
-                    BinOpKind::Sup => BinaryOp::Max,
-                    BinOpKind::Impl
-                    | BinOpKind::CoImpl
-                    | BinOpKind::Compare
-                    | BinOpKind::CoCompare => {
-                        Err(JaniConversionError::UnsupportedExpr(expr.clone()))?
-                    }
-                },
-                left: translate_expr(left)?,
-                right: translate_expr(right)?,
-            })))
-        }
+        })),
+        ExprKind::Binary(bin_op, left, right) => Ok(Expression::from(BinaryExpression {
+            op: match bin_op.node {
+                BinOpKind::Add => BinaryOp::Plus,
+                BinOpKind::Sub => BinaryOp::Minus,
+                BinOpKind::Mul => BinaryOp::Times,
+                BinOpKind::Div => BinaryOp::Divide,
+                BinOpKind::Mod => BinaryOp::Modulo,
+                BinOpKind::And => BinaryOp::And,
+                BinOpKind::Or => BinaryOp::Or,
+                BinOpKind::Eq => BinaryOp::Equals,
+                BinOpKind::Lt => BinaryOp::Less,
+                BinOpKind::Le => BinaryOp::LessOrEqual,
+                BinOpKind::Ne => BinaryOp::NotEquals,
+                BinOpKind::Ge => BinaryOp::GreaterOrEqual,
+                BinOpKind::Gt => BinaryOp::Greater,
+                BinOpKind::Inf => BinaryOp::Min,
+                BinOpKind::Sup => BinaryOp::Max,
+                BinOpKind::Impl | BinOpKind::CoImpl | BinOpKind::Compare | BinOpKind::CoCompare => {
+                    Err(unsupported_expr_err())?
+                }
+            },
+            left: translate_expr(left)?,
+            right: translate_expr(right)?,
+        })),
         ExprKind::Unary(un_op, operand) => match un_op.node {
             // TODO: support other types as well
-            UnOpKind::Not => Ok(Expression::Unary(Box::new(UnaryExpression {
-                op: UnaryOp::Not,
-                exp: translate_expr(operand)?,
-            }))),
-            UnOpKind::Non => todo!(),
-            UnOpKind::Embed => todo!(),
-            UnOpKind::Iverson => Ok(Expression::IfThenElse(Box::new(IteExpression {
+            UnOpKind::Not => {
+                if expr.ty == Some(TyKind::Bool) {
+                    Ok(!translate_expr(operand)?)
+                } else {
+                    Err(unsupported_expr_err())
+                }
+            }
+            UnOpKind::Non => Err(unsupported_expr_err()),
+            UnOpKind::Embed => Err(unsupported_expr_err()),
+            UnOpKind::Iverson => Ok(Expression::from(IteExpression {
                 cond: translate_expr(operand)?,
-                left: Expression::Constant(ConstantValue::Number(1.into())),
-                right: Expression::Constant(ConstantValue::Number(0.into())),
-            }))),
+                left: 1.into(),
+                right: 0.into(),
+            })),
             UnOpKind::Parens => translate_expr(operand),
         },
         // TODO: for the cast we just hope for the best
         ExprKind::Cast(operand) => translate_expr(operand),
-        ExprKind::Quant(_, _, _, _) => todo!(),
+        ExprKind::Quant(_, _, _, _) => Err(unsupported_expr_err()),
         ExprKind::Subst(_, _, _) => todo!(),
         ExprKind::Lit(lit) => match &lit.node {
-            LitKind::UInt(val) => Ok(Expression::Constant(ConstantValue::Number(
-                TryInto::<u64>::try_into(*val)
-                    .map_err(|_| JaniConversionError::UnsupportedExpr(expr.clone()))?
-                    .into(),
-            ))),
-            LitKind::Bool(val) => Ok(Expression::Constant(ConstantValue::Boolean(*val))),
-            LitKind::Frac(frac) => Ok(Expression::Binary(Box::new(BinaryExpression {
+            LitKind::UInt(val) => Ok(Expression::from(
+                TryInto::<u64>::try_into(*val).map_err(|_| unsupported_expr_err())?,
+            )),
+            LitKind::Bool(val) => Ok(Expression::from(*val)),
+            LitKind::Frac(frac) => Ok(Expression::from(BinaryExpression {
                 op: BinaryOp::Divide,
-                left: Expression::Constant(ConstantValue::Number(
-                    TryInto::<u64>::try_into(frac.numer()).unwrap().into(),
-                )),
-                right: Expression::Constant(ConstantValue::Number(
-                    TryInto::<u64>::try_into(frac.denom()).unwrap().into(),
-                )),
-            }))),
-            LitKind::Str(_) | LitKind::Infinity => {
-                Err(JaniConversionError::UnsupportedExpr(expr.clone()))
-            }
+                left: TryInto::<u64>::try_into(frac.numer()).unwrap().into(),
+                right: TryInto::<u64>::try_into(frac.denom()).unwrap().into(),
+            })),
+            LitKind::Str(_) | LitKind::Infinity => Err(unsupported_expr_err()),
         },
     }
 }

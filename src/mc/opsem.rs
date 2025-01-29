@@ -4,7 +4,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use jani::{
-    exprs::{Expression, UnaryExpression, UnaryOp},
+    exprs::Expression,
     models::{Assignment, Automaton, Destination, Edge, Location, ModelType, VariableDeclaration},
     Identifier,
 };
@@ -44,8 +44,11 @@ impl OpAutomaton {
         }
     }
 
-    fn next_stmt_location(&self) -> Identifier {
-        Identifier(format!("l{}", self.locations.len()))
+    /// Create a new location for the next statement.
+    fn next_stmt_location(&mut self) -> Identifier {
+        let ident = Identifier(format!("l{}", self.locations.len()));
+        self.locations.push(Location::new(ident.clone()));
+        ident
     }
 
     pub fn finish(
@@ -97,7 +100,7 @@ fn translate_stmt(
         }
         StmtKind::Assign(lhs, rhs) => {
             if lhs.len() != 1 {
-                todo!();
+                return Err(JaniConversionError::UnsupportedStmt(Box::new(stmt.clone())));
             }
             let lhs = lhs[0];
 
@@ -118,46 +121,13 @@ fn translate_stmt(
                 return Err(JaniConversionError::UnsupportedAssert(expr.clone()));
             };
 
-            let location = Location {
-                name: automaton.next_stmt_location(),
-                time_progress: None,
-                transient_values: None,
-            };
-            let start = location.name.clone();
-            automaton.locations.push(location);
+            let start = automaton.next_stmt_location();
 
-            let ok_edge = Edge {
-                location: start.clone(),
-                action: None,
-                rate: None,
-                guard: Some(translate_expr(&cond)?.into()),
-                destinations: vec![Destination {
-                    location: next,
-                    probability: None,
-                    assignments: vec![],
-                    comment: None,
-                }],
-                comment: None,
-            };
+            let ok_edge = Edge::from_to_if(start.clone(), next, translate_expr(&cond)?);
             automaton.edges.push(ok_edge);
 
-            let not_cond_jani = Expression::Unary(Box::new(UnaryExpression {
-                op: UnaryOp::Not,
-                exp: translate_expr(&cond)?,
-            }));
-            let err_edge = Edge {
-                location: start.clone(),
-                action: None,
-                rate: None,
-                guard: Some(not_cond_jani.into()),
-                destinations: vec![Destination {
-                    location: automaton.spec_part.error_location(),
-                    probability: None,
-                    assignments: vec![],
-                    comment: None,
-                }],
-                comment: None,
-            };
+            let not_cond_jani = !translate_expr(&cond)?;
+            let err_edge = Edge::from_to_if(start.clone(), automaton.spec_part.error_location(), not_cond_jani);
             automaton.edges.push(err_edge);
 
             Ok(start)
@@ -180,145 +150,49 @@ fn translate_stmt(
                 return Err(JaniConversionError::MismatchedDirection(stmt.span));
             }
             automaton.has_nondet = true;
-            let location = Location {
-                name: automaton.next_stmt_location(),
-                time_progress: None,
-                transient_values: None,
-            };
-            let start = location.name.clone();
-            automaton.locations.push(location);
+            let start = automaton.next_stmt_location();
 
             let lhs_start = translate_block(automaton, lhs, next.clone())?;
-            let to_lhs_edge = Edge {
-                location: start.clone(),
-                action: None,
-                rate: None,
-                guard: None,
-                destinations: vec![Destination {
-                    location: lhs_start,
-                    probability: None,
-                    assignments: vec![],
-                    comment: None,
-                }],
-                comment: None,
-            };
+            let to_lhs_edge = Edge::from_to(start.clone(), lhs_start);
             automaton.edges.push(to_lhs_edge);
 
-            let rhs_start = translate_block(automaton, rhs, next.clone())?;
-            let to_rhs_edge = Edge {
-                location: start.clone(),
-                action: None,
-                rate: None,
-                guard: None,
-                destinations: vec![Destination {
-                    location: rhs_start,
-                    probability: None,
-                    assignments: vec![],
-                    comment: None,
-                }],
-                comment: None,
-            };
+            let rhs_start = translate_block(automaton, rhs, next)?;
+            let to_rhs_edge = Edge::from_to(start.clone(), rhs_start);
             automaton.edges.push(to_rhs_edge);
 
             Ok(start)
         }
         StmtKind::If(cond, lhs, rhs) => {
-            let location = Location {
-                name: automaton.next_stmt_location(),
-                time_progress: None,
-                transient_values: None,
-            };
-            let start = location.name.clone();
-            automaton.locations.push(location);
+            let start = automaton.next_stmt_location();
 
             let cond_jani = translate_expr(cond)?;
             let lhs_start = translate_block(automaton, lhs, next.clone())?;
-            let to_lhs_edge = Edge {
-                location: start.clone(),
-                action: None,
-                rate: None,
-                guard: Some(cond_jani.into()),
-                destinations: vec![Destination {
-                    location: lhs_start,
-                    probability: None,
-                    assignments: vec![],
-                    comment: None,
-                }],
-                comment: None,
-            };
+            let to_lhs_edge = Edge::from_to_if(start.clone(), lhs_start, cond_jani);
             automaton.edges.push(to_lhs_edge);
 
-            let not_cond_jani = Expression::Unary(Box::new(UnaryExpression {
-                op: UnaryOp::Not,
-                exp: translate_expr(cond)?,
-            }));
+            let not_cond_jani = !translate_expr(cond)?;
             let rhs_start = translate_block(automaton, rhs, next)?;
-            let to_rhs_edge = Edge {
-                location: start.clone(),
-                action: None,
-                rate: None,
-                guard: Some(not_cond_jani.into()),
-                destinations: vec![Destination {
-                    location: rhs_start,
-                    probability: None,
-                    assignments: vec![],
-                    comment: None,
-                }],
-                comment: None,
-            };
+            let to_rhs_edge = Edge::from_to_if(start.clone(), rhs_start, not_cond_jani);
             automaton.edges.push(to_rhs_edge);
 
             Ok(start)
         }
         StmtKind::While(cond, body) => {
-            let location = Location {
-                name: automaton.next_stmt_location(),
-                time_progress: None,
-                transient_values: None,
-            };
-            let start = location.name.clone();
-            automaton.locations.push(location);
+            let start = automaton.next_stmt_location();
 
             let cond_jani = translate_expr(cond)?;
             let body_start = translate_block(automaton, body, start.clone())?;
-            let body_edge = Edge {
-                location: start.clone(),
-                action: None,
-                rate: None,
-                guard: Some(cond_jani.into()),
-                destinations: vec![Destination {
-                    location: body_start,
-                    probability: None,
-                    assignments: vec![],
-                    comment: None,
-                }],
-                comment: None,
-            };
+            let body_edge = Edge::from_to_if(start.clone(), body_start.clone(), cond_jani);
             automaton.edges.push(body_edge);
 
-            let not_cond_jani = Expression::Unary(Box::new(UnaryExpression {
-                op: UnaryOp::Not,
-                exp: translate_expr(cond)?,
-            }));
-            let to_next_edge = Edge {
-                location: start.clone(),
-                action: None,
-                rate: None,
-                guard: Some(not_cond_jani.into()),
-                destinations: vec![Destination {
-                    location: next,
-                    probability: None,
-                    assignments: vec![],
-                    comment: None,
-                }],
-                comment: None,
-            };
+            let not_cond_jani = !translate_expr(cond)?;
+            let to_next_edge = Edge::from_to_if(start.clone(), next, not_cond_jani);
             automaton.edges.push(to_next_edge);
 
             Ok(start)
         }
         StmtKind::Annotation(_, _, _, stmt) => translate_stmt(automaton, stmt, next),
-        StmtKind::Label(_) => todo!(),
+        StmtKind::Label(_) => Ok(next),
     }
 }
 
@@ -348,13 +222,7 @@ fn translate_assign(
     rhs: &Expr,
     next: Identifier,
 ) -> Result<Identifier, JaniConversionError> {
-    let location = Location {
-        name: automaton.next_stmt_location(),
-        time_progress: None,
-        transient_values: None,
-    };
-    let start = location.name.clone();
-    automaton.locations.push(location);
+    let start = automaton.next_stmt_location();
 
     if let ExprKind::Call(ident, args) = &rhs.kind {
         let decl = if let Some(decl) = automaton.distributions.get(ident) {
