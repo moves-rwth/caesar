@@ -53,6 +53,16 @@ a.button {
   text-decoration: none;
 }
 
+/* external links are marked with dashed underlines.
+   we can spot them by the target="_blank" attribute that docusaurus adds. */
+article a[target="_blank"]:not(.button) {
+  text-decoration: dashed underline;
+}
+
+article a[target="_blank"]:not(.button):hover {
+  text-decoration: none;
+}
+
 /* fixing a bug in docosaurus: inline TOCs should be shown in print mode */
 @media print {
   article .table-of-contents {
