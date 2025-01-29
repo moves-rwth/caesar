@@ -12,15 +12,12 @@ use jani::{
     Identifier,
 };
 
-use crate::{
-    ast::{
-        util::{is_dir_top_lit, is_top_lit},
-        BinOpKind, Direction, ExprBuilder, Span, Stmt, StmtKind, TyKind,
-    },
-    tyctx::TyCtx,
+use crate::ast::{
+    util::{is_dir_top_lit, is_top_lit},
+    BinOpKind, Direction, ExprBuilder, Span, Stmt, StmtKind, TyKind,
 };
 
-use super::{extract_embed, translate_expr, JaniConversionError};
+use super::{extract_embed, ExprTranslator, JaniConversionError};
 
 /// The part of the automaton that's just for encoding the specification, such
 /// as end, error, or miracle states.
@@ -142,9 +139,9 @@ pub struct JaniPgclProperties {
 }
 
 pub fn extract_properties(
-    tcx: &TyCtx,
     proc_span: Span,
     spec_part: &SpecAutomaton,
+    expr_translator: &ExprTranslator,
     stmts: &mut Vec<Stmt>,
     skip_quant_pre: bool,
 ) -> Result<JaniPgclProperties, JaniConversionError> {
@@ -152,8 +149,9 @@ pub fn extract_properties(
     let diverge_prob = mk_diverge_prob_property(spec_part, "diverge_prob");
     let can_diverge = mk_can_diverge_property(spec_part, "can_diverge");
 
-    let restrict_initial = extract_preconditions(tcx, spec_part, stmts, skip_quant_pre)?;
-    let sink_reward = extract_post(tcx, proc_span, spec_part, stmts)?;
+    let restrict_initial =
+        extract_preconditions(spec_part, expr_translator, stmts, skip_quant_pre)?;
+    let sink_reward = extract_post(expr_translator, proc_span, spec_part, stmts)?;
 
     Ok(JaniPgclProperties {
         restrict_initial,
@@ -240,8 +238,8 @@ fn mk_can_diverge_property(spec_part: &SpecAutomaton, name: &str) -> Property {
 /// Eat Boolean assumptions from the beginning of the program and convert them
 /// to a Boolean precondition.
 fn extract_preconditions(
-    tcx: &TyCtx,
     spec_part: &SpecAutomaton,
+    expr_translator: &ExprTranslator,
     stmts: &mut Vec<Stmt>,
     skip_quant_pre: bool,
 ) -> Result<Expression, JaniConversionError> {
@@ -252,7 +250,7 @@ fn extract_preconditions(
                 return Err(JaniConversionError::MismatchedDirection(first.span));
             }
             if let Some(operand) = extract_embed(expr) {
-                let mut operand = translate_expr(tcx, &operand)?;
+                let mut operand = expr_translator.translate(&operand)?;
                 if spec_part.direction == Direction::Up {
                     operand = !operand;
                 }
@@ -278,7 +276,7 @@ fn extract_preconditions(
 ///
 /// These (co)assert statements may be quantitative.
 fn extract_post(
-    tcx: &TyCtx,
+    expr_translator: &ExprTranslator,
     proc_span: Span,
     spec_part: &SpecAutomaton,
     stmts: &mut Vec<Stmt>,
@@ -315,7 +313,7 @@ fn extract_post(
             first_infty_post.unwrap_or(sink_reward),
         ));
     }
-    translate_expr(tcx, &sink_reward)
+    expr_translator.translate(&sink_reward)
 }
 
 fn through_annotation(stmt: &Stmt) -> &StmtKind {
