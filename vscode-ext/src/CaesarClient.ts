@@ -419,7 +419,13 @@ export class CaesarClient {
             return;
         }
         const command = '"' + executable.command.replace(/(["'$`\\])/g, '\\$1') + '"';
-        const args = executable.args!.filter(arg => !["--language-server", "--debug"].includes(arg));
+        const args = executable.args!.filter(arg => !["--debug"].includes(arg));
+        { // replace lsp by verify
+            const index = args.indexOf('lsp');
+            if (index !== -1) {
+                args[index] = 'verify';
+            }
+        }
         let line = `${command} ${args.join(" ")}`;
         let cwd = executable.options && executable.options.cwd;
         if (cwd !== undefined) {
