@@ -113,7 +113,7 @@ forall x: Int, y: UInt. x == y || x != y
 ### Triggers
 
 We also support *triggers* for the Boolean quantifiers via annotations.
-They are *patterns* that will instruct the SMT solver to instantiate quantifiers if the pattern is found in the current list of terms it maintains.
+They are patterns that will instruct the SMT solver to instantiate quantifiers if the pattern is found in the current list of terms it maintains.
 For example:
 ```heyvl
 forall list: []Int @trigger(len(list)). len(list) >= 0

@@ -163,7 +163,7 @@ domain List {
               The example from above is <Link to="https://github.com/moves-rwth/caesar/blob/main/tests/domains/lossy_list.heyvl">included in the Git repository</Link>.
               After downloading and storing it in <code>examples/lossy_list.heyvl</code> you can try Caesar on it:
             </p>
-            <CodeBlock language='bash'>{`caesar examples/lossy_list.heyvl` }
+            <CodeBlock language='bash'>{`caesar verify examples/lossy_list.heyvl` }
             </CodeBlock>
             <p>
               Caesar will print: <code>examples/lossy_list.heyvl: Verified.</code>

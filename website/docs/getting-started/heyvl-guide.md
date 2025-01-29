@@ -348,7 +348,7 @@ proc lossy_list(init_l: List) -> (l: List)
 
 To verify this example using Caesar, simply run the following command in the Caesar source directory:
 ```bash
-caesar tests/domains/lossy_list.heyvl
+caesar verify tests/domains/lossy_list.heyvl
 ```
 
 ### Reasoning About Upper Bounds (Coprocedures) {#upper-bounds}

@@ -157,10 +157,17 @@ But since *all* states satisfy $42 = 42$, e.g. the initial state $x = 0$ is a co
 One can understand this as an instance of *Reverse Hoare Logic* or *(Partial) Incorrectness Reasoning*, i.e. asking a question of the form: "Do all initial states that *reach* $y = 42$ satisfy $x = 41$?".
 
 <details>
-    <summary>How To: Obtaining the above formula via <code>caesar --print-theorem --no-slice-error</code>.</summary>
+    <summary>How To: Obtaining the above formula via <code>--print-theorem --no-slice-error</code>.</summary>
 
-    Using the <code>--print-theorem</code> command-line flag, you can print the theorem Caesar tries to prove about your (co)procedures. The result will have some optimizations applied, but it might be helpful to understand what exactly is being verified.
+    Using the <code>--print-theorem</code> command-line flag, you can print the theorem Caesar tries to prove about your (co)procedures.
+    The result will have some optimizations applied, but it might be helpful to understand what exactly is being verified.
     We recommend adding the <code>--no-slice-error</code> flag to obtain a simpler version that is not cluttered with stuff from slicing for error messages.
+    For example:
+
+    ```bash
+    caesar verify --print-theorem --no-slice-error example.heyvl
+    ```
+
 </details>
 
 #### Usually You Want `!?(b)` {#usually-you-want-coembed}
@@ -295,10 +302,15 @@ proc runPrimaryOrSpare() -> (working: Bool)
 ```
 
 <details>
-    <summary>How To: Obtaining intermediate encodings via <code>caesar --print-core</code>.</summary>
+    <summary>How To: Obtaining intermediate encodings via <code>--print-core</code>.</summary>
 
     To obtain the intermediate encodings from Caesar, we can use the <code>--print-core</code> command-line flag.
     This will print the fully desugared HeyVL code for each procedure to standard output.
+    For example:
+
+    ```bash
+    caesar verify  --print-core example.heyvl
+    ```
 </details>
 
 We can now read the encoding as follows:
