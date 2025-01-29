@@ -111,6 +111,10 @@ impl SourceUnitName {
         };
         PathBuf::from(file_name)
     }
+
+    pub fn to_string(&self) -> String {
+        format!("{}", self)
+    }
 }
 
 impl fmt::Display for SourceUnitName {
@@ -150,6 +154,10 @@ impl<T> Item<T> {
             span: res.span,
             item: res.item?,
         })
+    }
+
+    pub fn name(&self) -> &SourceUnitName {
+        &self.name
     }
 
     pub fn enter(&mut self) -> ItemEntered<'_, T> {

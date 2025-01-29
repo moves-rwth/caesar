@@ -27,6 +27,7 @@ use clap::{crate_description, Args, CommandFactory, Parser, Subcommand, ValueEnu
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use proof_rules::init_encodings;
+use regex::Regex;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
 use servers::{run_lsp_server, CliServer, LspServer, Server, ServerError};
 use slicing::init_slicing;
@@ -165,6 +166,11 @@ pub struct InputOptions {
     /// Treat warnings as errors.
     #[arg(long)]
     pub werr: bool,
+
+    /// Only verify/translate (co)procs that match the given filter.
+    /// The filter is a regular expression.
+    #[arg(short, long)]
+    pub filter: Option<String>,
 }
 
 #[derive(Debug, Default, Args)]
@@ -600,6 +606,15 @@ fn parse_and_tycheck(
             server.add_or_throw_diagnostic(err)?;
         }
     }
+
+    // filter source units if requested
+    if let Some(filter) = &input_options.filter {
+        let filter = Regex::new(filter).map_err(|err| {
+            VerifyError::UserError(format!("Invalid filter regex: {}", err).into())
+        })?;
+        source_units.retain(|source_unit| filter.is_match(&source_unit.name().to_string()));
+    };
+
     Ok((source_units, tcx))
 }
 
