@@ -22,7 +22,8 @@ use super::{
 
 /// Intermediate structure to build the JANI automaton for pGCL semantics with
 /// expected rewards.
-pub struct OpAutomaton {
+pub struct OpAutomaton<'tcx> {
+    tcx: &'tcx TyCtx,
     distributions: HashMap<Ident, Rc<DistributionProc>>,
     pub variables: Vec<VariableDeclaration>,
     pub locations: Vec<Location>,
@@ -31,10 +32,11 @@ pub struct OpAutomaton {
     has_nondet: bool,
 }
 
-impl OpAutomaton {
-    pub fn new(tcx: &TyCtx, spec_part: SpecAutomaton) -> Self {
+impl<'a> OpAutomaton<'a> {
+    pub fn new(tcx: &'a TyCtx, spec_part: SpecAutomaton) -> Self {
         let distributions = tcx.get_distributions();
         OpAutomaton {
+            tcx,
             distributions,
             variables: spec_part.get_variables(),
             locations: vec![],
@@ -72,6 +74,7 @@ impl OpAutomaton {
             locations: self.locations,
             initial_locations: vec![initial_location],
             edges: self.edges,
+            functions: vec![],
             comment: None,
         };
         (model_type, automaton)
@@ -120,7 +123,7 @@ fn translate_stmt(
         StmtKind::Assume(dir, expr) => {
             // we can translate both directions, but only with Boolean exprs
             let cond = if let Some(cond) = extract_embed(expr) {
-                let cond = translate_expr(&cond)?;
+                let cond = translate_expr(automaton.tcx, &cond)?;
                 match *dir {
                     Direction::Down => cond,
                     Direction::Up => !cond,
@@ -178,12 +181,12 @@ fn translate_stmt(
         StmtKind::If(cond, lhs, rhs) => {
             let start = automaton.next_stmt_location();
 
-            let cond_jani = translate_expr(cond)?;
+            let cond_jani = translate_expr(automaton.tcx, cond)?;
             let lhs_start = translate_block(automaton, lhs, next.clone())?;
             let to_lhs_edge = Edge::from_to_if(start.clone(), lhs_start, cond_jani);
             automaton.edges.push(to_lhs_edge);
 
-            let not_cond_jani = !translate_expr(cond)?;
+            let not_cond_jani = !translate_expr(automaton.tcx, cond)?;
             let rhs_start = translate_block(automaton, rhs, next)?;
             let to_rhs_edge = Edge::from_to_if(start.clone(), rhs_start, not_cond_jani);
             automaton.edges.push(to_rhs_edge);
@@ -193,12 +196,12 @@ fn translate_stmt(
         StmtKind::While(cond, body) => {
             let start = automaton.next_stmt_location();
 
-            let cond_jani = translate_expr(cond)?;
+            let cond_jani = translate_expr(automaton.tcx, cond)?;
             let body_start = translate_block(automaton, body, start.clone())?;
             let body_edge = Edge::from_to_if(start.clone(), body_start.clone(), cond_jani);
             automaton.edges.push(body_edge);
 
-            let not_cond_jani = !translate_expr(cond)?;
+            let not_cond_jani = !translate_expr(automaton.tcx, cond)?;
             let to_next_edge = Edge::from_to_if(start.clone(), next, not_cond_jani);
             automaton.edges.push(to_next_edge);
 
@@ -251,8 +254,8 @@ fn translate_assign(
             .0
             .iter()
             .map(|(prob, value)| {
-                let prob = translate_expr(prob)?;
-                let value = translate_expr(value)?;
+                let prob = translate_expr(automaton.tcx, prob)?;
+                let value = translate_expr(automaton.tcx, value)?;
                 Ok(Destination {
                     location: next.clone(),
                     probability: Some(prob.into()),
@@ -285,7 +288,7 @@ fn translate_assign(
                 probability: None,
                 assignments: vec![Assignment {
                     reference: lhs,
-                    value: translate_expr(rhs)?,
+                    value: translate_expr(automaton.tcx, rhs)?,
                     index: None,
                     comment: None,
                 }],
@@ -311,7 +314,7 @@ fn translate_bool_assert(
     expr: &Expr,
 ) -> Result<Identifier, JaniConversionError> {
     let cond = if let Some(cond) = extract_embed(expr) {
-        let cond = translate_expr(&cond)?;
+        let cond = translate_expr(automaton.tcx, &cond)?;
         match dir {
             Direction::Down => cond,
             Direction::Up => !cond,

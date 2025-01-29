@@ -184,6 +184,14 @@ pub struct NondetSelectionExpression {
     exp: Expression,
 }
 
+/// Function call (needs [`super::models::ModelFeature::FunctionCalls`]).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(tag = "op", rename = "call")]
+pub struct CallExpression {
+    pub function: Identifier,
+    pub args: Vec<Expression>,
+}
+
 /// JANI expressions.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(untagged)]
@@ -195,6 +203,8 @@ pub enum Expression {
     Binary(Box<BinaryExpression>),
     // TODO: DistributionSampling
     NondetSelection(Box<NondetSelectionExpression>),
+    /// Function calls need [`super::models::ModelFeature::FunctionCalls`].
+    Call(Box<CallExpression>),
 }
 
 impl<T> From<T> for Expression
@@ -227,6 +237,12 @@ impl From<UnaryExpression> for Expression {
 impl From<BinaryExpression> for Expression {
     fn from(binary: BinaryExpression) -> Self {
         Expression::Binary(Box::new(binary))
+    }
+}
+
+impl From<CallExpression> for Expression {
+    fn from(call: CallExpression) -> Self {
+        Expression::Call(Box::new(call))
     }
 }
 

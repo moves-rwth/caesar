@@ -220,6 +220,9 @@ pub struct Model {
     pub typ: ModelType,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub features: Vec<ModelFeature>,
+    /// Function definitions need [`ModelFeature::Functions`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub functions: Vec<FunctionDefinition>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actions: Vec<ModelAction>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -242,6 +245,7 @@ impl Model {
             metadata: Default::default(),
             typ,
             features: Default::default(),
+            functions: Default::default(),
             actions: Default::default(),
             constants: Default::default(),
             variables: Default::default(),
@@ -364,6 +368,24 @@ impl Edge {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
+pub struct ParameterDefinition {
+    pub name: Identifier,
+    #[serde(rename = "type")]
+    pub typ: Type,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct FunctionDefinition {
+    pub name: Identifier,
+    #[serde(rename = "type")]
+    pub typ: Type,
+    pub parameters: Vec<ParameterDefinition>,
+    pub body: Expression,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
 pub struct Automaton {
     pub name: Identifier,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -373,6 +395,9 @@ pub struct Automaton {
     pub locations: Vec<Location>,
     pub initial_locations: Vec<Identifier>,
     pub edges: Vec<Edge>,
+    /// Function definitions need [`ModelFeature::Functions`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub functions: Vec<FunctionDefinition>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<Box<str>>,
 }

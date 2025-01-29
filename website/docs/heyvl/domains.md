@@ -68,11 +68,12 @@ The following function declaration has a such a definition (`= x + 1`):
 func plus_one(x: UInt): UInt = x + 1
 ```
 
-This syntax is just syntactic sugar for a function declaration with an additional axiom, i.e.
+One can intuitively understand the above syntax as syntactic sugar for a function declaration with an additional axiom, i.e.
 ```heyvl
 func plus_one(x: UInt): UInt
 axiom plus_one_def forall x: UInt. plus_one(x) == x + 1
 ```
+However, the *pure* function syntax allows Caesar to make certain optimizations, therefore it should always be preferred.
 
 ## Unsoundness From Axioms
 

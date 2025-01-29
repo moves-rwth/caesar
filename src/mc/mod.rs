@@ -9,10 +9,10 @@ use std::{convert::TryInto, mem};
 
 use ariadne::ReportKind;
 use jani::{
-    exprs::{BinaryExpression, BinaryOp, Expression, IteExpression},
+    exprs::{BinaryExpression, BinaryOp, CallExpression, Expression, IteExpression},
     models::{
-        Composition, CompositionElement, ConstantDeclaration, Metadata, Model, ModelFeature,
-        VariableDeclaration,
+        Composition, CompositionElement, ConstantDeclaration, FunctionDefinition, Metadata, Model,
+        ModelFeature, ParameterDefinition, VariableDeclaration,
     },
     types::{BasicType, BoundedType, BoundedTypeBase, Type},
     Identifier,
@@ -22,8 +22,9 @@ use crate::{
     ast::{
         util::{is_bot_lit, is_top_lit},
         visit::VisitorMut,
-        BinOpKind, DeclRef, Diagnostic, Expr, ExprBuilder, ExprData, ExprKind, Ident, Label,
-        LitKind, ProcDecl, Shared, Span, Spanned, Stmt, TyKind, UnOpKind, VarDecl,
+        BinOpKind, DeclKind, DeclRef, Diagnostic, DomainSpec, Expr, ExprBuilder, ExprData,
+        ExprKind, Ident, Label, LitKind, ProcDecl, Shared, Span, Spanned, Stmt, TyKind, UnOpKind,
+        VarDecl,
     },
     procs::proc_verify::verify_proc,
     tyctx::TyCtx,
@@ -100,7 +101,7 @@ impl JaniConversionError {
             JaniConversionError::UnsupportedCall(span, ident) => {
                 Diagnostic::new(ReportKind::Error, *span)
                     .with_message(format!("JANI: Cannot call '{}'", ident.name))
-                    .with_label(Label::new(*span).with_message("here"))
+                    .with_label(Label::new(*span).with_message("must be a func with a body"))
             }
         }
     }
@@ -115,6 +116,7 @@ pub fn proc_to_model(
     let spec_part = SpecAutomaton::new(proc.direction);
     let mut verify_unit = verify_proc(proc).unwrap();
     let property = extract_properties(
+        tcx,
         proc.span,
         &spec_part,
         &mut verify_unit.block.node,
@@ -125,7 +127,7 @@ pub fn proc_to_model(
     let mut op_automaton = OpAutomaton::new(tcx, spec_part);
 
     // translate the variables
-    let (constants, variables) = translate_var_decls(options, proc)?;
+    let (constants, variables) = translate_var_decls(options, tcx, proc)?;
     op_automaton.variables.extend(variables);
 
     // translate the statements
@@ -154,6 +156,12 @@ pub fn proc_to_model(
     // Features
     model.features.push(ModelFeature::DerivedOperators);
     model.features.push(ModelFeature::StateExitRewards);
+
+    // Translate functions
+    model.functions.extend(translate_fns(tcx)?);
+    if !model.functions.is_empty() {
+        model.features.push(ModelFeature::Functions);
+    }
 
     // Declare the proc inputs as model parameters
     // TODO: add an option to instead declare the proc parameters as
@@ -191,9 +199,10 @@ pub fn proc_to_model(
 /// well as input and output parameters.
 fn translate_var_decls(
     options: &JaniOptions,
+    tcx: &TyCtx,
     proc: &ProcDecl,
 ) -> Result<(Vec<ConstantDeclaration>, Vec<VariableDeclaration>), JaniConversionError> {
-    let mut vars = translate_local_decls(proc)?;
+    let mut vars = translate_local_decls(tcx, proc)?;
 
     // we declare proc inputs as constants, not variables
     let mut constants = vec![];
@@ -209,7 +218,7 @@ fn translate_var_decls(
     // proc outputs are normal variables
     for param in proc.outputs.node.iter() {
         let (comment, initial_value) = if !options.jani_uninit_outputs {
-            arbitrarily_choose_initial(&param.ty)?
+            arbitrarily_choose_initial(tcx, &param.ty)?
         } else {
             (None, None)
         };
@@ -226,10 +235,15 @@ fn translate_var_decls(
 }
 
 /// Create variable declarations for the local variables of a procedure.
-fn translate_local_decls(proc: &ProcDecl) -> Result<Vec<VariableDeclaration>, JaniConversionError> {
-    #[derive(Default)]
-    struct VarDeclCollector(Vec<VariableDeclaration>);
-    impl VisitorMut for VarDeclCollector {
+fn translate_local_decls(
+    tcx: &TyCtx,
+    proc: &ProcDecl,
+) -> Result<Vec<VariableDeclaration>, JaniConversionError> {
+    struct VarDeclCollector<'a> {
+        tcx: &'a TyCtx,
+        decls: Vec<VariableDeclaration>,
+    }
+    impl<'a> VisitorMut for VarDeclCollector<'a> {
         type Err = JaniConversionError;
 
         fn visit_var_decl(&mut self, var_ref: &mut DeclRef<VarDecl>) -> Result<(), Self::Err> {
@@ -237,19 +251,20 @@ fn translate_local_decls(proc: &ProcDecl) -> Result<Vec<VariableDeclaration>, Ja
             let mut comment = None;
             let initial_value = if let Some(initial_expr) = &decl.init {
                 if is_constant(initial_expr) {
-                    Some(translate_expr(initial_expr)?)
+                    Some(translate_expr(self.tcx, initial_expr)?)
                 } else {
                     // only if the variable is immediately initialized, we can
                     // now choose an arbitrary initial value because that will
                     // be unobservable in the program.
-                    let (comment_res, initial_value) = arbitrarily_choose_initial(&decl.ty)?;
+                    let (comment_res, initial_value) =
+                        arbitrarily_choose_initial(self.tcx, &decl.ty)?;
                     comment = comment_res;
                     initial_value
                 }
             } else {
                 None
             };
-            self.0.push(VariableDeclaration {
+            self.decls.push(VariableDeclaration {
                 name: Identifier(decl.name.to_string()),
                 typ: translate_type(&decl.ty, decl.span)?,
                 transient: false,
@@ -259,12 +274,16 @@ fn translate_local_decls(proc: &ProcDecl) -> Result<Vec<VariableDeclaration>, Ja
             Ok(())
         }
     }
-    let mut collector = VarDeclCollector::default();
+    let mut collector = VarDeclCollector {
+        tcx,
+        decls: Vec::new(),
+    };
     collector.visit_proc(&mut DeclRef::new(proc.clone()))?;
-    Ok(collector.0)
+    Ok(collector.decls)
 }
 
 fn arbitrarily_choose_initial(
+    tcx: &TyCtx,
     ty: &TyKind,
 ) -> Result<(Option<Box<str>>, Option<Expression>), JaniConversionError> {
     if let TyKind::Bool | TyKind::UInt | TyKind::UReal | TyKind::EUReal = ty {
@@ -274,7 +293,7 @@ fn arbitrarily_choose_initial(
                 .into_boxed_str(),
         );
         let builder = ExprBuilder::new(Span::dummy_span());
-        let initial_value = Some(translate_expr(&builder.bot_lit(ty))?);
+        let initial_value = Some(translate_expr(tcx, &builder.bot_lit(ty))?);
         Ok((comment, initial_value))
     } else {
         Ok((None, None))
@@ -311,16 +330,16 @@ fn translate_ident(ident: Ident) -> Identifier {
     Identifier(ident.to_string())
 }
 
-fn translate_expr(expr: &Expr) -> Result<Expression, JaniConversionError> {
+fn translate_expr(tcx: &TyCtx, expr: &Expr) -> Result<Expression, JaniConversionError> {
     let unsupported_expr_err = || JaniConversionError::UnsupportedExpr(expr.clone());
 
     match &expr.kind {
         ExprKind::Var(ident) => Ok(Expression::Identifier(translate_ident(*ident))),
-        ExprKind::Call(_, _) => Err(unsupported_expr_err()),
+        ExprKind::Call(ident, args) => translate_call(tcx, expr, ident, args),
         ExprKind::Ite(cond, left, right) => Ok(Expression::from(IteExpression {
-            cond: translate_expr(cond)?,
-            left: translate_expr(left)?,
-            right: translate_expr(right)?,
+            cond: translate_expr(tcx, cond)?,
+            left: translate_expr(tcx, left)?,
+            right: translate_expr(tcx, right)?,
         })),
         ExprKind::Binary(bin_op, left, right) => Ok(Expression::from(BinaryExpression {
             op: match bin_op.node {
@@ -343,14 +362,14 @@ fn translate_expr(expr: &Expr) -> Result<Expression, JaniConversionError> {
                     Err(unsupported_expr_err())?
                 }
             },
-            left: translate_expr(left)?,
-            right: translate_expr(right)?,
+            left: translate_expr(tcx, left)?,
+            right: translate_expr(tcx, right)?,
         })),
         ExprKind::Unary(un_op, operand) => match un_op.node {
             // TODO: support other types as well
             UnOpKind::Not => {
                 if expr.ty == Some(TyKind::Bool) {
-                    Ok(!translate_expr(operand)?)
+                    Ok(!translate_expr(tcx, operand)?)
                 } else {
                     Err(unsupported_expr_err())
                 }
@@ -358,14 +377,14 @@ fn translate_expr(expr: &Expr) -> Result<Expression, JaniConversionError> {
             UnOpKind::Non => Err(unsupported_expr_err()),
             UnOpKind::Embed => Err(unsupported_expr_err()),
             UnOpKind::Iverson => Ok(Expression::from(IteExpression {
-                cond: translate_expr(operand)?,
+                cond: translate_expr(tcx, operand)?,
                 left: 1.into(),
                 right: 0.into(),
             })),
-            UnOpKind::Parens => translate_expr(operand),
+            UnOpKind::Parens => translate_expr(tcx, operand),
         },
         // TODO: for the cast we just hope for the best
-        ExprKind::Cast(operand) => translate_expr(operand),
+        ExprKind::Cast(operand) => translate_expr(tcx, operand),
         ExprKind::Quant(_, _, _, _) => Err(unsupported_expr_err()),
         ExprKind::Subst(_, _, _) => todo!(),
         ExprKind::Lit(lit) => match &lit.node {
@@ -380,6 +399,31 @@ fn translate_expr(expr: &Expr) -> Result<Expression, JaniConversionError> {
             })),
             LitKind::Str(_) | LitKind::Infinity => Err(unsupported_expr_err()),
         },
+    }
+}
+
+/// We can translate calls to pure funcs.
+fn translate_call(tcx: &TyCtx, expr: &Expr, ident: &Ident, args: &Vec<Expr>) -> Result<Expression, JaniConversionError> {
+    if let Some(decl) = tcx.get(*ident) {
+        match &*decl {
+            DeclKind::FuncDecl(func) => {
+                let func = func.borrow();
+                if func.body.borrow().is_none() {
+                    Err(JaniConversionError::UnsupportedCall(expr.span, *ident))
+                } else {
+                    Ok(Expression::from(CallExpression {
+                        function: translate_ident(*ident),
+                        args: args
+                            .iter()
+                            .map(|arg| translate_expr(tcx, arg))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    }))
+                }
+            }
+            _ => Err(JaniConversionError::UnsupportedCall(expr.span, *ident)),
+        }
+    } else {
+        Err(JaniConversionError::UnsupportedCall(expr.span, *ident))
     }
 }
 
@@ -429,4 +473,38 @@ fn extract_embed(expr: &Expr) -> Option<Expr> {
 /// could allow more complex (constant) expressions as well.
 fn is_constant(expr: &Expr) -> bool {
     matches!(expr.kind, ExprKind::Lit(_))
+}
+
+/// Translate functions with bodies to JANI function definitions.
+fn translate_fns(tcx: &TyCtx) -> Result<Vec<FunctionDefinition>, JaniConversionError> {
+    let mut functions = vec![];
+    for domain in tcx.domains_owned() {
+        let decl = domain.borrow();
+        for spec in &decl.body {
+            if let DomainSpec::Function(func_ref) = &spec {
+                let func = func_ref.borrow();
+                let body = func.body.borrow();
+                if let Some(body) = &*body {
+                    let definition = FunctionDefinition {
+                        name: Identifier(func.name.to_string()),
+                        typ: translate_type(&func.output, func.span)?,
+                        parameters: func
+                            .inputs
+                            .node
+                            .iter()
+                            .map(|param| {
+                                Ok(ParameterDefinition {
+                                    name: Identifier(param.name.to_string()),
+                                    typ: translate_type(&param.ty, param.span)?,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, _>>()?,
+                        body: translate_expr(tcx, &body)?,
+                    };
+                    functions.push(definition);
+                }
+            }
+        }
+    }
+    Ok(functions)
 }

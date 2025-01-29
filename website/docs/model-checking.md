@@ -126,6 +126,7 @@ The currently implemented translation only supports a subset of the executable f
     * Inputs and output declarations,
     * `pre` declarations that are only Boolean conditions of the form `?(b)`.
     * `post` declarations (arbitrary operands).
+ * [pure `func`s](./heyvl/domains.md#pure-functions) (*not* uninterpreted functions)
 
 ### Supported Statements
 
@@ -210,7 +211,7 @@ In particular, the following constructs are *not* supported:
  * Calls to uninterpreted functions or to `proc`s/`coproc`s,
  * Uninitialized variable declarations or `havoc`/`cohavoc` statements,
  * Quantitative `assume` or `coassume` statements.
- * [User-defined domains](./heyvl/domains.md), axioms will be ignored.
+ * In [user-defined domains](./heyvl/domains.md), uninterpreted functions are not supported and axioms will be ignored.
 
 
 [^1]: We use the `--exact` and `--sound` flags to ensure that Storm is forced to use exact arithmetic and only sound algorithms to produce the solution. Consult your chosen model checker's documentation to see which guarantees they give.

@@ -12,9 +12,12 @@ use jani::{
     Identifier,
 };
 
-use crate::ast::{
-    util::{is_dir_top_lit, is_top_lit},
-    BinOpKind, Direction, ExprBuilder, Span, Stmt, StmtKind, TyKind,
+use crate::{
+    ast::{
+        util::{is_dir_top_lit, is_top_lit},
+        BinOpKind, Direction, ExprBuilder, Span, Stmt, StmtKind, TyKind,
+    },
+    tyctx::TyCtx,
 };
 
 use super::{extract_embed, translate_expr, JaniConversionError};
@@ -139,6 +142,7 @@ pub struct JaniPgclProperties {
 }
 
 pub fn extract_properties(
+    tcx: &TyCtx,
     proc_span: Span,
     spec_part: &SpecAutomaton,
     stmts: &mut Vec<Stmt>,
@@ -148,8 +152,8 @@ pub fn extract_properties(
     let diverge_prob = mk_diverge_prob_property(spec_part, "diverge_prob");
     let can_diverge = mk_can_diverge_property(spec_part, "can_diverge");
 
-    let restrict_initial = extract_preconditions(spec_part, stmts, skip_quant_pre)?;
-    let sink_reward = extract_post(proc_span, spec_part, stmts)?;
+    let restrict_initial = extract_preconditions(tcx, spec_part, stmts, skip_quant_pre)?;
+    let sink_reward = extract_post(tcx, proc_span, spec_part, stmts)?;
 
     Ok(JaniPgclProperties {
         restrict_initial,
@@ -236,6 +240,7 @@ fn mk_can_diverge_property(spec_part: &SpecAutomaton, name: &str) -> Property {
 /// Eat Boolean assumptions from the beginning of the program and convert them
 /// to a Boolean precondition.
 fn extract_preconditions(
+    tcx: &TyCtx,
     spec_part: &SpecAutomaton,
     stmts: &mut Vec<Stmt>,
     skip_quant_pre: bool,
@@ -247,7 +252,7 @@ fn extract_preconditions(
                 return Err(JaniConversionError::MismatchedDirection(first.span));
             }
             if let Some(operand) = extract_embed(expr) {
-                let mut operand = translate_expr(&operand)?;
+                let mut operand = translate_expr(tcx, &operand)?;
                 if spec_part.direction == Direction::Up {
                     operand = !operand;
                 }
@@ -273,6 +278,7 @@ fn extract_preconditions(
 ///
 /// These (co)assert statements may be quantitative.
 fn extract_post(
+    tcx: &TyCtx,
     proc_span: Span,
     spec_part: &SpecAutomaton,
     stmts: &mut Vec<Stmt>,
@@ -309,7 +315,7 @@ fn extract_post(
             first_infty_post.unwrap_or(sink_reward),
         ));
     }
-    translate_expr(&sink_reward)
+    translate_expr(tcx, &sink_reward)
 }
 
 fn through_annotation(stmt: &Stmt) -> &StmtKind {
