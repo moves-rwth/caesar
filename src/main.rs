@@ -186,10 +186,9 @@ pub struct ResourceLimitOptions {
     pub mem_limit: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum RunWhichStorm {
     /// Look for the Storm binary in the PATH.
-    #[default]
     Path,
     /// Run Storm using Docker, with the `movesrwth/storm:stable` image.
     DockerStable,
@@ -951,9 +950,10 @@ fn to_jani_main(
     if options.jani_dir.is_none() {
         if is_jani_command && options.run_storm.is_none() {
             return Err(VerifyError::UserError(
-                "--jani-dir is required for the to-jani command.".into(),
+                "Either --jani-dir or --run-storm must be provided.".into(),
             ));
-        } else {
+        }
+        if options.run_storm.is_some() {
             temp_dir = Some(tempfile::tempdir().map_err(|err| {
                 VerifyError::UserError(
                     format!("Could not create temporary directory: {}", err).into(),
@@ -962,6 +962,7 @@ fn to_jani_main(
             options.jani_dir = temp_dir.as_ref().map(|dir| dir.path().to_owned());
         }
     }
+
     for source_unit in source_units {
         let source_unit = source_unit.enter();
         let jani_res = source_unit.write_to_jani_if_requested(&options, tcx);
