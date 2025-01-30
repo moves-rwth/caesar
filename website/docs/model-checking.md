@@ -9,7 +9,7 @@ description: Caesar can export models to the JANI format.
 import Link from '@docusaurus/Link';
 ```
 
-Caesar has some support to export probabilistic programs written in (an executable fragment of) HeyVL to [the *jani-model* format](https://jani-spec.org/).
+Caesar can export HeyVL programs to the [*jani-model* format](https://jani-spec.org/) so they can be analyzed using probabilistic model checkers.
 The JANI project defines exchange formats for quantitative model checking problems (and more).
 Caesar outputs [Markov chains](https://en.wikipedia.org/wiki/Markov_chain) (MCs) or [Markov decision processes](https://en.wikipedia.org/wiki/Markov_decision_process) (MDPs), depending on which HeyVL language features are used.
 
@@ -22,7 +22,8 @@ In contrast to Caesar, these do not need user annotations like [invariants](./pr
 On the other hand, probabilistic model checkers often struggle with large or infinite state spaces.
 Thus, the two approaches complement each other.
 
-Caesar's developers recommend the [probabilistic model checker *Storm*](https://www.stormchecker.org/).
+We like the [probabilistic model checker *Storm*](https://www.stormchecker.org/).
+Caesar has a dedicated [backend for Storm](#caesars-storm-backend) to automatically run Storm and extract the results.
 
 <small>
   Note: Caesar should not be confused with the set of tools in the <Link to="https://cadp.inria.fr/">CADP toolbox</Link> by INRIA, which includes tools like CAESAR, CAESAR.ADT, or OPEN/CAESAR.
@@ -36,10 +37,10 @@ For a simple example, consider the HeyVL program below.
 
 ```heyvl
 @wp
-proc geo_mc(init_c: UInt) -> (c: UInt, cont: Bool)
+proc geo_mc() -> (c: UInt, cont: Bool)
     post [!cont]
 {
-    c = init_c
+    c = 0
     cont = true
     while cont && c <= 20 {
         var prob_choice: Bool = flip(0.5)
@@ -48,7 +49,48 @@ proc geo_mc(init_c: UInt) -> (c: UInt, cont: Bool)
 }
 ```
 
-### Generating JANI Files
+You can either use Caesar's [automatic *Storm* backend](#caesars-storm-backend) or [generate JANI manually](#generating-jani-manually) to use them however you wish.
+
+Caesar will assign arbitrary initial values to *output parameters* and assumes that they are never read before they are written to.
+To disable this or learn more, read the section on [initial values of output parameters](#initial-values-of-output-parameters).
+In addition, note that we always [use least-fixed point semantics for loops in the JANI translation](#loop-semantics), therefore [`wlp` semantics](./proof-rules/calculi.md) is not supported.
+
+The generated Markov chain model is *finite-state* and has a single initial state (no input parameters).
+You'll usually want to maintain these restrictions when using a model checker.
+Read more about [infinite-state and parametric models](#parametric-and-infinite-state-models) below.
+
+### Option A: Caesar's *Storm* Backend {#caesars-storm-backend}
+
+Caesar can automatically generate JANI files and run the [probabilistic model checker *Storm*](https://stormchecker.org).
+
+To enable it, pass the `--run-storm OPTION` parameter to the command-line with one of the following values for `OPTION`:
+ * `path`: Search for the Storm binary on the [`PATH`](https://en.wikipedia.org/wiki/PATH_(variable)).
+ * `docker-stable`: Run Storm via the [`movesrwth/storm:stable` Docker image](https://www.stormchecker.org/documentation/obtain-storm/docker.html).
+ * `docker-ci`: Run Storm via the [`movesrwth/storm:ci` Docker image](https://www.stormchecker.org/documentation/obtain-storm/docker.html).
+
+The latter two options need to have [Docker](https://www.docker.com/) installed and running.
+If the images are not installed, Docker will download them automatically.
+This might take a while.
+<small>
+Caesar does not automatically update these images.
+To update the `:ci` image for example, run `docker pull movesrwth/storm:ci`.
+</small>
+
+The above flag can be used with Caesar's `to-jani` command:
+For example:
+```bash
+caesar to-jani --run-storm path example.heyvl
+```
+The result will look like this:
+```
+Expected reward from Storm: ≈ 0.9999995232
+```
+The result is approximate because it was computed via floating-point arithmetic.
+To get exact results at the expense of slower computation, you can add the `--storm-exact` flag.
+
+You can also use the `--run-storm` parameter with the [`verify` command](./caesar/README.md#subcommand-caesar-verify) or with [our LSP server](./caesar/vscode-and-lsp.md).
+
+### Option B: Generating JANI Manually {#generating-jani-manually}
 
 To export JANI files for the model checker, run Caesar with the `to-jani` subcommand and the `--jani-dir DIR` option to instruct it to save all translateable (co)procs to `.jani` files in the directory `DIR`:
 
@@ -64,10 +106,9 @@ The output JANI files will have the following structure that you can use:
  * Constants:
    * One constant for each input variable of the (co)proc (constant has same name as variable).
 
+Now you can use your favorite model checker with the resulting JANI files.
 
-### Model Checking with Storm
-
-We use the [probabilistic model checker *Storm*](https://www.stormchecker.org).
+#### Running Storm Manually
 
 <details>
     <summary>Quick Start: Using Storm via Docker.</summary>
@@ -87,10 +128,9 @@ We use the [probabilistic model checker *Storm*](https://www.stormchecker.org).
 </details>
 
 Running Storm on the produced file computes the expected reward.[^1]
-Caesar translates procedure inputs to JANI's *constants*, and values for constants can be given to Storm via the flag `--constants init_c=0` (any other initial value can be chosen).
 
 ```bash
-storm --jani DIR/FILE.jani -jprop reward --exact --sound --constants init_c=0
+storm --jani DIR/FILE.jani -jprop reward --exact --sound
 ```
 
 Part of the output:
@@ -100,25 +140,101 @@ Model checking property "reward": R[exp]{"reward"}min=? [C] ...
 Result (for initial states): 2097151/2097152 (approx. 0.9999995232)
 ```
 
-:::info Infinite-State Programs
+## Parametric and Infinite-State Models
 
-Model checkers usually work with finite-state models, therefore programs with an infinite state space often just lead to nontermination of the model checker.
- * **Bounded model checking:** Since [PR #521](https://github.com/moves-rwth/storm/pull/521) (nightly only), Storm can be used with a state limit so that the model generation will just stop at some number of states. Use the `--build:state number <limit>` command-line flag.
- * **Parametric models:** If the program has input variables, [Storm's parametric model checking](https://www.stormchecker.org/documentation/usage/running-storm-on-parametric-models.html) may be of interest.
+Model checkers usually work with finite-state models with a single initial state, therefore programs that do not fit into this category are often not so simple to model check.
+We modified our original example and added  an input parameter `init_c` (multiple initial states, therefore "parametric") and removed the bound on the loop (infinite number of states).
 
-:::
+```heyvl
+@wp
+proc geo_mc(init_c: UInt) -> (c: UInt, cont: Bool) // added input parameter init_c
+    post [!cont]
+{
+    c = init_c
+    cont = true
+    while cont { // removed condition && c <= 20
+        var prob_choice: Bool = flip(0.5)
+        if prob_choice { cont = false } else { c = c + 1 }
+    }
+}
+```
 
-:::note
+With Caesar, we could run the following command to approximate the expected reward for the program with `init_c = 5` with 10000 states:
 
-In this particular case, we can obtain the optimal lower bound in Caesar by using the [unrolling proof rule](./proof-rules/unrolling.md).
-The annotation `@unroll(22, 0)` for unrolling depth 22 finds the fixpoint in this case.
-But this is only exact if we can bound the number of loop iterations statically.
+```bash
+caesar to-jani --run-storm <VALUE> example.heyvl --storm-constants init_c=5 --storm-state-limit 10000
+```
+And we get a result like this:
+```
+Expected reward from Storm: ⪆ 0.9999847412
+```
 
-:::
+**Inputs Are Translated to Constants.**
+The input parameters of the program are translated by Caesar to constants in the JANI model.
+
+ * For the [Caesar's Storm backend](#caesars-storm-backend) can fix values with the `--storm-constants <name>=<value>,...,<name>=<value>` command-line flag.
+  * Storm itself uses the `--constants <name>=<value>,...,<name>=<value>` command-line flag.
+
+**State Limits to Approximate Infinite-State Models.**
+Storm can be used with a state limit so that the model generation will stop its exploration at some number of states.
+This will yield a correct *under*-approximation of the expected reward.
+
+ * For [Caesar's Storm backend](#caesars-storm-backend), this as the `--storm-state-limit <limit>` command-line flag.
+ * Storm itself uses the `--state-limit <limit>` command-line flag.
+
+<small>
+  This feature is available since Storm 1.9.0 ([PR #521](https://github.com/moves-rwth/storm/pull/521)).
+</small>
+
+**Parametric Model Checking.**
+If the program has input variables, [Storm's parametric model checking](https://www.stormchecker.org/documentation/usage/running-storm-on-parametric-models.html) may be of interest.
+
+## Relation to Caesar's Unrolling Proof Rule
+
+Caesar's [unrolling proof rule](./proof-rules/unrolling.md) can also be used to obtain sound bounds on expected rewards.
+The unrolling proof rule is also sometimes called *bounded model checking*.
+However, that proof rule is a bounded unrolling of the weakest pre-expectation semantics and therefore essentially an unrolling of all possible *paths* in the Markov chain.
+In contrast, the complexity of probabilistic model checking scales only in the number of *states* and not in the number of paths.
+Therefore, these techniques are somewhat related, but distinct.
+
+For the original non-parametric example from the [Usage section](#usage), we obtain the optimal lower bound in Caesar without using a model checker.
+The annotation `@unroll(22, 0)` for unrolling depth 22 finds the optimal value in this case.
+
+<details>
+    <summary>Unrolling Proof Rule Example</summary>
+
+    ```heyvl
+    @wp
+    proc geo_mc() -> (c: UInt, cont: Bool)
+        post [!cont]
+    {
+        c = 0
+        cont = true
+        @unroll(22, 0)
+        while cont && c <= 20 {
+            var prob_choice: Bool = flip(0.5)
+            if prob_choice { cont = false } else { c = c + 1 }
+        }
+    }
+    ```
+
+    Because we gave no `pre`, Caesar will try to verify whether $\infty$ is a lower bound to the expected value.
+    We get a counter-example:
+    ```
+    Counter-example to verification found!
+
+    the pre-quantity evaluated to:
+        0.99999... (2097151/2097152)
+    ```
+
+</details>
 
 ## Supported Programs
 
-The currently implemented translation only supports a subset of the executable fragment of HeyVL.
+The translation to JANI supports a large subset of the HeyVL language.
+You can use for example assignments, loops, conditionals, and probabilistic choices.
+Nondeterministic choices and assertions are also supported, as well as Boolean `assume` statements.
+[Not supported right now](#not-supported) is local unbounded nondeterminism (`havoc` or uninitialized local variables), procedure calls or quantitative `assume` statements.
 
 ### Supported Declarations
 
@@ -148,7 +264,7 @@ In the body, statements:
  * [Assumptions](./heyvl/statements.md#assert-and-assume) of the form `assume ?(b)` and `coassume !?(b)`,
  * Annotations, in particular [proof rule annotations](./proof-rules/), will be ignored.
 
-#### Initial Values of Output Variables
+#### Initial Values of Output Parameters
 
 Caesar will try to choose valid initial values for variables of built-in types such as `Bool`.
 This reduces the number of initial states the model checker has to check.

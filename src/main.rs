@@ -26,6 +26,7 @@ use ast::{DeclKind, Diagnostic, FileId};
 use clap::{crate_description, Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
+use mc::run_storm::{run_storm, storm_result_to_diagnostic};
 use proof_rules::init_encodings;
 use regex::Regex;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
@@ -185,6 +186,17 @@ pub struct ResourceLimitOptions {
     pub mem_limit: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+pub enum RunWhichStorm {
+    /// Look for the Storm binary in the PATH.
+    #[default]
+    Path,
+    /// Run Storm using Docker, with the `movesrwth/storm:stable` image.
+    DockerStable,
+    /// Run Storm using Docker, with the `movesrwth/storm:ci` image.
+    DockerCI,
+}
+
 #[derive(Debug, Default, Clone, Args)]
 #[command(next_help_heading = "JANI Output Options")]
 pub struct JaniOptions {
@@ -204,6 +216,26 @@ pub struct JaniOptions {
     /// checking quite a bit. To disable this behavior, use this flag.
     #[arg(long)]
     pub jani_uninit_outputs: bool,
+
+    /// Run Storm, indicating which version to execute.
+    #[arg(long)]
+    pub run_storm: Option<RunWhichStorm>,
+
+    /// Pass the `--exact` flag to Storm. Otherwise Storm will use floating
+    /// point numbers, which may be arbitrarily imprecise (but are usually good
+    /// enough).
+    #[arg(long)]
+    pub storm_exact: bool,
+
+    /// Pass the `--state-limit [number]` option to Storm. This is useful to
+    /// approximate infinite-state models.
+    #[arg(long)]
+    pub storm_state_limit: Option<usize>,
+
+    /// Pass the `--constants [constants]` option to Storm, containing values
+    /// for constants in the model.
+    #[arg(long)]
+    pub storm_constants: Option<String>,
 }
 
 #[derive(Debug, Default, Args)]
@@ -717,15 +749,13 @@ fn verify_files_main(
     }
 
     // write to JANI if requested
-    for source_unit in &mut source_units {
-        let source_unit = source_unit.enter();
-        let jani_res = source_unit.write_to_jani_if_requested(&options.jani_options, &tcx);
-        match jani_res {
-            Err(VerifyError::Diagnostic(diagnostic)) => server.add_diagnostic(diagnostic)?,
-            Err(err) => Err(err)?,
-            _ => (),
-        }
-    }
+    to_jani_main(
+        &options.jani_options,
+        &mut source_units,
+        server,
+        &tcx,
+        false,
+    )?;
 
     // Desugar encodings from source units. They might generate new source
     // units (for side conditions).
@@ -883,36 +913,78 @@ fn run_to_jani_main(options: ToJaniCommand) -> ExitCode {
         Ok(value) => value,
         Err(value) => return value,
     };
-    let res = to_jani_main(&options, user_files, &server).map(|_| true);
+    let res = to_jani_loader(&options, user_files, &server).map(|_| true);
     finalize_verify_result(server, &options.rlimit_options, res)
 }
 
-fn to_jani_main(
+fn to_jani_loader(
     options: &ToJaniCommand,
     user_files: Vec<FileId>,
-    server: &SharedServer,
+    server: &Mutex<dyn Server>,
 ) -> Result<(), VerifyError> {
-    let mut server = server.lock().unwrap();
+    let mut server_lock = server.lock().unwrap();
     let (mut source_units, tcx) = parse_and_tycheck(
         &options.input_options,
         &options.debug_options,
-        &mut *server,
+        &mut *server_lock,
         &user_files,
     )?;
-    if options.jani_options.jani_dir.is_none() {
-        return Err(VerifyError::UserError(
-            "--jani-dir is required for the to-jani command.".into(),
-        ));
+    to_jani_main(
+        &options.jani_options,
+        &mut source_units,
+        server_lock.deref_mut(),
+        &tcx,
+        true,
+    )
+}
+
+fn to_jani_main(
+    options: &JaniOptions,
+    source_units: &mut Vec<Item<SourceUnit>>,
+    server: &mut dyn Server,
+    tcx: &TyCtx,
+    is_jani_command: bool,
+) -> Result<(), VerifyError> {
+    let mut options = options.clone();
+
+    let mut temp_dir = None;
+    if options.jani_dir.is_none() {
+        if is_jani_command && options.run_storm.is_none() {
+            return Err(VerifyError::UserError(
+                "--jani-dir is required for the to-jani command.".into(),
+            ));
+        } else {
+            temp_dir = Some(tempfile::tempdir().map_err(|err| {
+                VerifyError::UserError(
+                    format!("Could not create temporary directory: {}", err).into(),
+                )
+            })?);
+            options.jani_dir = temp_dir.as_ref().map(|dir| dir.path().to_owned());
+        }
     }
-    for source_unit in &mut source_units {
+    for source_unit in source_units {
         let source_unit = source_unit.enter();
-        let jani_res = source_unit.write_to_jani_if_requested(&options.jani_options, &tcx);
+        let jani_res = source_unit.write_to_jani_if_requested(&options, tcx);
         match jani_res {
             Err(VerifyError::Diagnostic(diagnostic)) => server.add_diagnostic(diagnostic)?,
             Err(err) => Err(err)?,
-            Ok(()) => (),
+            Ok(Some(path)) => {
+                tracing::debug!(file=?path.display(), "wrote JANI file");
+                if let Some(which_storm) = options.run_storm {
+                    let res = run_storm(&options, which_storm, &path, vec!["reward".to_owned()]);
+                    server.add_diagnostic(storm_result_to_diagnostic(
+                        &res,
+                        source_unit.diagnostic_span(),
+                    ))?;
+                }
+            }
+            Ok(None) => (),
         }
     }
+
+    // only drop (and thus remove) the temp dir after we're done using it.
+    drop(temp_dir);
+
     Ok(())
 }
 

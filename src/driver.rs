@@ -111,10 +111,6 @@ impl SourceUnitName {
         };
         PathBuf::from(file_name)
     }
-
-    pub fn to_string(&self) -> String {
-        format!("{}", self)
-    }
 }
 
 impl fmt::Display for SourceUnitName {
@@ -263,6 +259,14 @@ impl SourceUnit {
         }
     }
 
+    /// The span where to report diagnostics.
+    pub fn diagnostic_span(&self) -> Span {
+        match self {
+            SourceUnit::Decl(decl) => decl.name().span,
+            SourceUnit::Raw(block) => block.span,
+        }
+    }
+
     pub fn parse(file: &StoredFile, raw: bool) -> Result<Vec<Item<Self>>, ParseError> {
         if raw {
             let name = SourceUnitName::new_raw(&file.path);
@@ -372,7 +376,7 @@ impl SourceUnit {
         &self,
         options: &crate::JaniOptions,
         tcx: &TyCtx,
-    ) -> Result<(), VerifyError> {
+    ) -> Result<Option<PathBuf>, VerifyError> {
         if let Some(jani_dir) = &options.jani_dir {
             match self {
                 SourceUnit::Decl(decl) => {
@@ -381,13 +385,17 @@ impl SourceUnit {
                             .map_err(|err| VerifyError::Diagnostic(err.diagnostic()))?;
                         let file_path = jani_dir.join(format!("{}.jani", decl.name()));
                         create_dir_all(file_path.parent().unwrap())?;
-                        std::fs::write(file_path, jani::to_string(&jani_model))?;
+                        std::fs::write(&file_path, jani::to_string(&jani_model))?;
+                        Ok(Some(file_path))
+                    } else {
+                        Ok(None)
                     }
                 }
                 SourceUnit::Raw(_) => panic!("raw code not supported with --jani-dir"),
             }
+        } else {
+            Ok(None)
         }
-        Ok(())
     }
 
     /// Apply encodings from annotations.

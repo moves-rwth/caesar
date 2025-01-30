@@ -3,14 +3,10 @@
 // TODO: handle name conflicts
 
 mod opsem;
+pub mod run_storm;
 mod specs;
 
-use std::{
-    cell::RefCell,
-    collections::HashSet,
-    convert::TryInto,
-    mem,
-};
+use std::{cell::RefCell, collections::HashSet, convert::TryInto, mem};
 
 use ariadne::ReportKind;
 use jani::{
@@ -27,9 +23,8 @@ use crate::{
     ast::{
         util::{is_bot_lit, is_top_lit},
         visit::VisitorMut,
-        BinOpKind, DeclKind, DeclRef, Diagnostic, Expr, ExprBuilder, ExprData,
-        ExprKind, Ident, Label, LitKind, ProcDecl, Shared, Span, Spanned, Stmt, TyKind, UnOpKind,
-        VarDecl,
+        BinOpKind, DeclKind, DeclRef, Diagnostic, Expr, ExprBuilder, ExprData, ExprKind, Ident,
+        Label, LitKind, ProcDecl, Shared, Span, Spanned, Stmt, TyKind, UnOpKind, VarDecl,
     },
     procs::proc_verify::verify_proc,
     tyctx::TyCtx,
@@ -139,11 +134,7 @@ pub fn proc_to_model(
 
     // translate the statements
     let next = op_automaton.spec_part.end_location();
-    let start = translate_block(
-        &mut op_automaton,
-        &verify_unit.block,
-        next,
-    )?;
+    let start = translate_block(&mut op_automaton, &verify_unit.block, next)?;
 
     // now finish building the automaton
     let automaton_name = Identifier(proc.name.to_string());

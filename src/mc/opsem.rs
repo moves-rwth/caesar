@@ -93,13 +93,9 @@ fn translate_stmt(
         StmtKind::Var(decl_ref) => {
             let decl = decl_ref.borrow();
             match &decl.init {
-                Some(init) if !is_constant(init) => translate_assign(
-                    automaton,
-                    span,
-                    translate_ident(decl.name),
-                    init,
-                    next,
-                ),
+                Some(init) if !is_constant(init) => {
+                    translate_assign(automaton, span, translate_ident(decl.name), init, next)
+                }
                 Some(_) => Ok(next),
                 None => Err(JaniConversionError::NondetSelection(decl.span)),
             }
@@ -110,13 +106,7 @@ fn translate_stmt(
             }
             let lhs = lhs[0];
 
-            translate_assign(
-                automaton,
-                span,
-                translate_ident(lhs),
-                rhs,
-                next,
-            )
+            translate_assign(automaton, span, translate_ident(lhs), rhs, next)
         }
         StmtKind::Assert(dir, expr) => {
             if *dir != automaton.spec_part.direction {
@@ -216,9 +206,7 @@ fn translate_stmt(
 
             Ok(start)
         }
-        StmtKind::Annotation(_, _, _, stmt) => {
-            translate_stmt(automaton, stmt, next)
-        }
+        StmtKind::Annotation(_, _, _, stmt) => translate_stmt(automaton, stmt, next),
         StmtKind::Label(_) => Ok(next),
     }
 }
