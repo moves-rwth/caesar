@@ -19,6 +19,7 @@ More information in our [installation guide](../getting-started/installation.mdx
 **Print tracing messages:**
 Caesar uses the [`tracing` library](https://github.com/tokio-rs/tracing) to print (debugging) information during its operation.
 Set the `RUST_LOG` environment variable to specify a filter, e.g. `export RUST_LOG="caesar=debug"` or `export RUST_LOG="caesar::smt=trace"`.
+You can disable ANSI colors in the output with [`export NO_COLOR=1`](https://no-color.org/).
 
 ## Subcommand `caesar verify`
 
