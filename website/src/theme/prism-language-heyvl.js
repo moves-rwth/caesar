@@ -8,5 +8,5 @@ Prism.languages.heyvl = {
 	},
 	'punctuation': /[{}[\],]/,
 	'operator': /[*\/%^!=]=?|\+[=+]?|-[=-]?|\|[=|]?|&(?:=|&|\^=?)?|>(?:>=?|=)?|<(?:<=?|=|-)?|:=|\.\.\.|forall|exists|\?/,
-	'builtin': /\b(Bool|Int|UInt|Real|UReal|EUReal|ite|let)\b/
+	'builtin': /\b(Bool|Int|UInt|Real|UReal|EUReal|Type|ite|let)\b/
 };
