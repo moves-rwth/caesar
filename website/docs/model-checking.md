@@ -254,7 +254,7 @@ In the body, statements:
  * [Sampling from distributions](./stdlib/distributions.md),
  * [If-then-else statements](./heyvl/statements.md#boolean-choices),
  * While loops (with least-fixed point semantics &mdash; [see below for semantics details](#loop-semantics)),
- * [`reward` statements](./heyvl/statements.md#reward-formerly-tick),
+ * [`reward` statements](./heyvl/statements.md#reward),
  * In `proc`s:
    * [`assert` statements](./heyvl/statements.md#assert-and-assume),
    * [Binary demonic choices](./heyvl/statements.md#nondeterministic-choices),
