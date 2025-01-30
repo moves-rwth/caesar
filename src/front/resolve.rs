@@ -85,6 +85,7 @@ impl ResolveError {
                 .with_message("Expression must be an identifier")
                 .with_label(Label::new(span).with_message("found expression instead")),
         }
+        .with_code(lsp_types::NumberOrString::String("resolve".to_owned()))
     }
 }
 

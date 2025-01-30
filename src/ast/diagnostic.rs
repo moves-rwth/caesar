@@ -10,7 +10,9 @@ use std::{
 };
 
 use ariadne::{Cache, Report, ReportBuilder, ReportKind, Source};
-use lsp_types::{DiagnosticTag, TextDocumentIdentifier, VersionedTextDocumentIdentifier};
+use lsp_types::{
+    DiagnosticTag, NumberOrString, TextDocumentIdentifier, VersionedTextDocumentIdentifier,
+};
 use pathdiff::diff_paths;
 
 use crate::pretty::{Doc, SimplePretty};
@@ -421,7 +423,7 @@ pub struct Diagnostic(Box<DiagnosticInner>);
 #[derive(Debug)]
 struct DiagnosticInner {
     kind: ReportKind<'static>,
-    code: Option<u32>,
+    code: Option<NumberOrString>,
     msg: Option<String>,
     note: Option<String>,
     location: Span,
@@ -449,8 +451,8 @@ impl Diagnostic {
         self
     }
 
-    /// Give this diagnostic a numerical code that may be used to more precisely look up the error in documentation.
-    pub fn with_code(mut self, code: u32) -> Self {
+    /// Give this diagnostic a code.
+    pub fn with_code(mut self, code: NumberOrString) -> Self {
         self.0.code = Some(code);
         self
     }
@@ -499,6 +501,10 @@ impl Diagnostic {
         let span = files.char_span(self.0.location);
         let mut builder = Report::build(self.0.kind, span);
         if let Some(code) = self.0.code {
+            let code = match code {
+                NumberOrString::Number(code) => code.to_string(),
+                NumberOrString::String(code) => code,
+            };
             builder = builder.with_code(code);
         }
         if let Some(msg) = self.0.msg {
@@ -522,13 +528,10 @@ impl Diagnostic {
         let severity = match self.0.kind {
             ReportKind::Error => lsp_types::DiagnosticSeverity::ERROR,
             ReportKind::Warning => lsp_types::DiagnosticSeverity::WARNING,
-            ReportKind::Advice => lsp_types::DiagnosticSeverity::HINT,
+            ReportKind::Advice => lsp_types::DiagnosticSeverity::INFORMATION,
             _ => lsp_types::DiagnosticSeverity::ERROR,
         };
-        let code = self
-            .0
-            .code
-            .map(|code| lsp_types::NumberOrString::Number(code as i32));
+        let code = self.0.code.clone();
         let message = self
             .0
             .msg
@@ -597,7 +600,11 @@ impl Diagnostic {
 /// exists to make debugging easier.
 impl Display for Diagnostic {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(code) = self.0.code {
+        if let Some(code) = &self.0.code {
+            let code = match code {
+                NumberOrString::Number(code) => &code.to_string(),
+                NumberOrString::String(code) => code,
+            };
             write!(f, "[{}] ", code)?;
         }
         write!(f, "{}: ", self.0.kind)?;

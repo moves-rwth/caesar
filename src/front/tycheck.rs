@@ -384,6 +384,7 @@ impl TycheckError {
                 "Procedures must only be called on as the immediate right-hand side expression in an assignment. This makes execution order of assignments with side-effects explicit."
             ),
         }
+        .with_code(lsp_types::NumberOrString::String("tycheck".to_owned()))
     }
 }
 
