@@ -88,7 +88,8 @@ Expected reward from Storm: ≈ 0.9999995232
 The result is approximate because it was computed via floating-point arithmetic.
 To get exact results at the expense of slower computation, you can add the `--storm-exact` flag.
 
-You can also use the `--run-storm` parameter with the [`verify` command](./caesar/README.md#subcommand-caesar-verify) or with [our LSP server](./caesar/vscode-and-lsp.md).
+You can also use the `--run-storm` flag with the [`verify` command](./caesar/README.md#subcommand-caesar-verify) or with [our LSP server](./caesar/vscode-and-lsp.md).
+Furthermore, you can set the `--no-verify` flag to only run model checking and not run Caesar's deductive verification.
 
 ### Option B: Generating JANI Manually {#generating-jani-manually}
 

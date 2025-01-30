@@ -773,6 +773,15 @@ fn verify_files_main(
         }
     }
 
+    // If `--no-verify` is set and we don't need to print SMT-LIB or explain the
+    // core VC, we can return early.
+    if options.debug_options.no_verify
+        && !options.debug_options.print_smt
+        && !options.lsp_options.explain_core_vc
+    {
+        return Ok(true);
+    }
+
     let mut verify_units: Vec<Item<VerifyUnit>> = source_units
         .into_iter()
         .flat_map(|item| item.flat_map(SourceUnit::into_verify_unit))
