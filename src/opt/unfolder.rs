@@ -286,7 +286,7 @@ mod test {
             let tcx = fuzz_test::mk_tcx();
             let z3_ctx = z3::Context::new(&z3::Config::default());
             let smt_ctx = SmtCtx::new(&z3_ctx, &tcx);
-            let limits_ref = LimitsRef::new(None);
+            let limits_ref = LimitsRef::new(None, None);
             let mut unfolder = Unfolder::new(limits_ref, &smt_ctx);
             unfolder.visit_expr(&mut expr).unwrap();
             expr

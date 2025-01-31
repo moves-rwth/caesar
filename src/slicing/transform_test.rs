@@ -110,7 +110,7 @@ fn prove_equiv(
     let builder = ExprBuilder::new(Span::dummy_span());
 
     let deadline = Instant::now() + Duration::from_millis(1);
-    let mut vcgen = Vcgen::new(tcx, &LimitsRef::new(Some(deadline)), None);
+    let mut vcgen = Vcgen::new(tcx, &LimitsRef::new(Some(deadline), None), None);
     let stmt1_vc = vcgen
         .vcgen_stmts(stmt1, transform_tcx.post.clone())
         .unwrap();

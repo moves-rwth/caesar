@@ -1,5 +1,7 @@
 use std::{
-    error::Error, process::ExitCode, sync::{Arc, Mutex}
+    error::Error,
+    process::ExitCode,
+    sync::{Arc, Mutex},
 };
 
 use crate::{

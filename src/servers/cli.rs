@@ -1,5 +1,8 @@
 use std::{
-    io::{self, IsTerminal}, path::PathBuf, process::ExitCode, sync::{Arc, Mutex}
+    io::{self, IsTerminal},
+    path::PathBuf,
+    process::ExitCode,
+    sync::{Arc, Mutex},
 };
 
 use ariadne::ReportKind;
