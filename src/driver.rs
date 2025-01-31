@@ -60,9 +60,10 @@ use ariadne::ReportKind;
 use itertools::Itertools;
 use z3::{
     ast::{Ast, Bool},
-    Config, Context,
+    Config, Context, Goal,
 };
 use z3rro::{
+    probes::ProbeSummary,
     prover::{ProveResult, Prover},
     smtlib::Smtlib,
     util::{PrefixWriter, ReasonUnknown},
@@ -695,6 +696,18 @@ impl<'ctx> SmtVcUnit<'ctx> {
         let _entered = span.enter();
 
         let prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc);
+
+        if options.debug_options.probe {
+            let goal = Goal::new(ctx, false, false, false);
+            for assertion in prover.solver().get_assertions() {
+                goal.assert(&assertion);
+            }
+            eprintln!(
+                "Probe results for {}:\n{}",
+                name,
+                ProbeSummary::probe(ctx, &goal)
+            );
+        }
 
         let smtlib = get_smtlib(options, &prover);
         if let Some(smtlib) = &smtlib {

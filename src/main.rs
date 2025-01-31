@@ -370,6 +370,10 @@ pub struct DebugOptions {
     /// Enable Z3 tracing for the final SAT check.
     #[arg(long)]
     pub z3_trace: bool,
+
+    /// Run a bunch of probes on the SMT solver.
+    #[arg(long)]
+    pub probe: bool,
 }
 
 #[derive(Debug, Default, Args)]
@@ -815,9 +819,10 @@ fn verify_files_main(
     // If `--no-verify` is set and we don't need to print SMT-LIB or explain the
     // core VC, we can return early.
     if options.debug_options.no_verify
+        && !options.lsp_options.explain_core_vc
+        && !options.debug_options.probe
         && !options.debug_options.print_smt
         && options.debug_options.smt_dir.is_none()
-        && !options.lsp_options.explain_core_vc
     {
         return Ok(true);
     }

@@ -44,6 +44,7 @@ Set a memory limit of 16000 megabytes with `--mem 16000`.
 * With the `--print-theorem` flag, Caesar prints the theorem that is encoded into SMT.
 * With the `--print-smt` flag, Caesar prints the SMT-LIB query for each verification task. You can also use `--smt-dir DIR` with a directory `DIR` to have Caesar write the SMT-LIB queries to files in `DIR`.
   * If [`raco read`](https://docs.racket-lang.org/raco/read.html) is installed, Caesar will auto-format the SMT-LIB code with it. This is very useful as Z3's default formatting is really confusing sometimes.
+* With the `--probe` flag, [Caesar will print information from Z3 probes](./debugging.md#z3-probes) to standard error.
 
 ## More Topics
 

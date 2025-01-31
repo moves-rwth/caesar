@@ -23,7 +23,7 @@ E.g. `axiom unsound ?(false)` behaves like `assume ?(false)`, making everything 
 :::tip Incompleteness from Quantifiers
 
 Note that axioms with quantifiers quickly introduce *incompleteness* of Caesar, making it unable to prove or disprove verification.
-Read the documentation section on [SMT Theories and Incompleteness](./expressions.md#incompleteness) for more information.
+Read the documentation section on [SMT Theories and Incompleteness](../caesar/debugging.md#incompleteness) for more information.
 
 :::
 

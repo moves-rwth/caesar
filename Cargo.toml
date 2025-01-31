@@ -76,8 +76,6 @@ libtest-mimic = "0.8.1"
 name = "integration"
 path = "tests/integration.rs"
 harness = false
-
-[profile.release]
 # Unfortunately, adding debug information to release binaries incurs
 # an unacceptable overhead of about 450 megabytes. So we disable it.
 # debug = "line-tables-only"

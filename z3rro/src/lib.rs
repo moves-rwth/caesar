@@ -23,6 +23,7 @@ pub mod model;
 pub mod prover;
 pub mod smtlib;
 mod uint;
+pub mod probes;
 pub use uint::UInt;
 mod ureal;
 pub use ureal::UReal;

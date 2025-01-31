@@ -120,7 +120,7 @@ impl<'a> VisitorMut for Subst<'a> {
 ///
 /// As said in the module description [`crate::vc::subst`], this is the "strict"
 /// and simpler version of the [`crate::opt::unfolder`].
-#[instrument(skip(tcx, e))]
+#[instrument(skip_all)]
 pub fn apply_subst(tcx: &TyCtx, e: &mut Expr, limits_ref: &LimitsRef) -> Result<(), LimitError> {
     let mut subst = Subst::new(tcx, limits_ref);
     subst.visit_expr(e)
