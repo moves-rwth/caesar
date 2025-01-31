@@ -216,7 +216,7 @@ pub fn proc_to_model(
 
 fn check_calculus_annotation(proc: &ProcDecl) -> Result<(), JaniConversionError> {
     if let Some(calculus) = proc.calculus {
-        if &calculus.name != "wp" || &calculus.name != "ert"
+        if &calculus.name != "wp" && &calculus.name != "ert"
         // yeah that's ugly
         {
             return Err(JaniConversionError::UnsupportedCalculus {

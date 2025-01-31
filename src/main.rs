@@ -11,6 +11,7 @@ use std::{
     path::PathBuf,
     process::ExitCode,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -29,7 +30,7 @@ use intrinsic::{annotations::init_calculi, distributions::init_distributions, li
 use mc::run_storm::{run_storm, storm_result_to_diagnostic};
 use proof_rules::init_encodings;
 use regex::Regex;
-use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
+use resource_limits::{await_with_resource_limits, LimitError, LimitsRef, MemorySize};
 use servers::{run_lsp_server, CliServer, LspServer, Server, ServerError};
 use slicing::init_slicing;
 use thiserror::Error;
@@ -183,7 +184,17 @@ pub struct ResourceLimitOptions {
 
     /// Memory usage limit in megabytes.
     #[arg(long = "mem", default_value = "8192")]
-    pub mem_limit: u64,
+    pub mem_limit: usize,
+}
+
+impl ResourceLimitOptions {
+    fn timeout(&self) -> Duration {
+        Duration::from_secs(self.timeout)
+    }
+
+    fn mem_limit(&self) -> MemorySize {
+        MemorySize::megabytes(self.mem_limit)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -239,6 +250,19 @@ pub struct JaniOptions {
     /// for constants in the model.
     #[arg(long)]
     pub storm_constants: Option<String>,
+
+    /// Timeout in seconds for running Storm.
+    ///
+    /// Caesar uses the minimum of this value and the remaining time from the
+    /// `--timeout` option.
+    #[arg(long)]
+    pub storm_timeout: Option<u64>,
+}
+
+impl JaniOptions {
+    pub fn storm_timeout(&self) -> Option<Duration> {
+        self.storm_timeout.map(Duration::from_secs)
+    }
 }
 
 #[derive(Debug, Default, Args)]
@@ -454,7 +478,7 @@ fn finalize_verify_result(
     rlimit_options: &ResourceLimitOptions,
     verify_result: Result<bool, VerifyError>,
 ) -> ExitCode {
-    let (timeout, mem_limit) = (rlimit_options.timeout, rlimit_options.mem_limit);
+    let (timeout, mem_limit) = (rlimit_options.timeout(), rlimit_options.mem_limit());
     match verify_result {
         #[allow(clippy::bool_to_int_with_if)]
         Ok(all_verified) => ExitCode::from(if all_verified { 0 } else { 1 }),
@@ -467,11 +491,14 @@ fn finalize_verify_result(
             ExitCode::from(1)
         }
         Err(VerifyError::LimitError(LimitError::Timeout)) => {
-            tracing::error!("Timed out after {} seconds, exiting.", timeout);
+            tracing::error!("Timed out after {} seconds, exiting.", timeout.as_secs());
             std::process::exit(2); // exit ASAP
         }
         Err(VerifyError::LimitError(LimitError::Oom)) => {
-            tracing::error!("Exhausted {} megabytes of memory, exiting.", mem_limit);
+            tracing::error!(
+                "Exhausted {} megabytes of memory, exiting.",
+                mem_limit.as_megabytes()
+            );
             std::process::exit(3); // exit ASAP
         }
         Err(VerifyError::UserError(err)) => {
@@ -587,8 +614,8 @@ pub async fn verify_files(
     };
     // Unpacking lots of Results with `.await??` :-)
     await_with_resource_limits(
-        Some(options.rlimit_options.timeout),
-        Some(options.rlimit_options.mem_limit),
+        Some(options.rlimit_options.timeout()),
+        Some(options.rlimit_options.mem_limit()),
         handle,
     )
     .await??
@@ -671,7 +698,7 @@ pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, servers::
         .id;
 
     let options = Arc::new(options);
-    let limits_ref = LimitsRef::new(None);
+    let limits_ref = LimitsRef::new(None, None);
     let res = verify_files_main(&options, limits_ref, &mut server, &[file_id]);
     (res, server)
 }
@@ -756,6 +783,7 @@ fn verify_files_main(
         &options.jani_options,
         &mut source_units,
         server,
+        &limits_ref,
         &tcx,
         false,
     )?;
@@ -942,10 +970,14 @@ fn to_jani_loader(
         &mut *server_lock,
         &user_files,
     )?;
+    let timeout = Instant::now() + options.rlimit_options.timeout();
+    let mem_limit = options.rlimit_options.mem_limit();
+    let limits_ref = LimitsRef::new(Some(timeout), Some(mem_limit));
     to_jani_main(
         &options.jani_options,
         &mut source_units,
         server_lock.deref_mut(),
+        &limits_ref,
         &tcx,
         true,
     )
@@ -955,6 +987,7 @@ fn to_jani_main(
     options: &JaniOptions,
     source_units: &mut Vec<Item<SourceUnit>>,
     server: &mut dyn Server,
+    limits_ref: &LimitsRef,
     tcx: &TyCtx,
     is_jani_command: bool,
 ) -> Result<(), VerifyError> {
@@ -985,8 +1018,8 @@ fn to_jani_main(
             Err(err) => Err(err)?,
             Ok(Some(path)) => {
                 tracing::debug!(file=?path.display(), "wrote JANI file");
-                if let Some(which_storm) = options.run_storm {
-                    let res = run_storm(&options, which_storm, &path, vec!["reward".to_owned()]);
+                if options.run_storm.is_some() {
+                    let res = run_storm(&options, &path, vec!["reward".to_owned()], limits_ref);
                     server.add_diagnostic(storm_result_to_diagnostic(
                         &res,
                         source_unit.diagnostic_span(),

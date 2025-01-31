@@ -4,17 +4,20 @@ use std::{
     io,
     path::Path,
     process::{Command, ExitStatus},
+    time::Duration,
 };
 
 use ariadne::ReportKind;
 use indexmap::IndexMap;
 use lsp_types::NumberOrString;
 use num::BigRational;
+use regex::Regex;
 use thiserror::Error;
 use z3rro::util::PrettyRational;
 
 use crate::{
     ast::{Diagnostic, Label, Span},
+    resource_limits::LimitsRef,
     JaniOptions, RunWhichStorm,
 };
 
@@ -62,23 +65,35 @@ pub enum StormError {
     Io(#[from] io::Error),
     #[error("{0}: {1}")]
     StormFailed(ExitStatus, String),
+    #[error("State exploration aborted after {} seconds, explored {} states", .0.as_secs(), .1)]
+    StateExplorationAborted(Duration, usize),
     #[error("Docker is not running")]
     DockerNotRunning,
 }
 
 /// Run Storm on the given JANI file and look for output for the given properties.
+///
+/// Panics if `options.run_storm` is `None`.
 pub fn run_storm(
     options: &JaniOptions,
-    option: RunWhichStorm,
     mut jani_file: &Path,
     properties: Vec<String>,
+    limits_ref: &LimitsRef,
 ) -> Result<StormOutput, StormError> {
-    let mut command = match option {
-        RunWhichStorm::Path => Command::new("storm"),
+    let which_storm = options.run_storm.unwrap();
+    let mut command = match which_storm {
+        RunWhichStorm::Path => {
+            if limits_ref.memory_limit().is_some() {
+                tracing::debug!("Memory limit is ignored when running Storm from path");
+            }
+
+            Command::new("storm")
+        }
         RunWhichStorm::DockerStable | RunWhichStorm::DockerCI => {
             let mut command = Command::new("docker");
             let jani_file_dir = jani_file.parent().unwrap().canonicalize().unwrap();
-            let image_name = match option {
+            jani_file = jani_file.file_name().unwrap().as_ref();
+            let image_name = match which_storm {
                 RunWhichStorm::DockerStable => "movesrwth/storm:stable",
                 RunWhichStorm::DockerCI => "movesrwth/storm:ci",
                 _ => unreachable!(),
@@ -89,13 +104,28 @@ pub fn run_storm(
                 .arg("-v")
                 .arg(format!("{}:/mnt", jani_file_dir.display()))
                 .arg("-w")
-                .arg("/mnt")
-                .arg(image_name)
-                .arg("storm");
-            jani_file = jani_file.file_name().unwrap().as_ref();
+                .arg("/mnt");
+
+            if let Some(mem_limit) = limits_ref.memory_limit() {
+                command
+                    .arg("--memory")
+                    .arg(format!("{}m", mem_limit.as_megabytes()));
+            }
+
+            command.arg(image_name).arg("storm");
             command
         }
     };
+
+    let caesar_timeout = limits_ref.time_left();
+    let storm_specific_timeout = options.storm_timeout();
+    let timeout = caesar_timeout
+        .and_then(|ct| storm_specific_timeout.map(|st| ct.min(st)))
+        .or(caesar_timeout)
+        .or(storm_specific_timeout);
+    if let Some(timeout) = timeout {
+        command.arg("--timeout").arg(timeout.as_secs().to_string());
+    }
 
     if options.storm_exact {
         command.arg("--exact");
@@ -125,7 +155,7 @@ pub fn run_storm(
     if !output.status.success() {
         if output.status.code() == Some(125)
             && matches!(
-                option,
+                which_storm,
                 RunWhichStorm::DockerStable | RunWhichStorm::DockerCI
             )
         {
@@ -142,6 +172,17 @@ pub fn run_storm(
                     .collect(),
             });
         }
+
+        let re = Regex::new(r"Explored (\d+) states in (\d+) seconds before abort").unwrap();
+        if let Some(captures) = re.captures(&output_str) {
+            let states_explored: usize = captures[1].parse().unwrap();
+            let time_taken: u64 = captures[2].parse().unwrap();
+            return Err(StormError::StateExplorationAborted(
+                Duration::from_secs(time_taken),
+                states_explored,
+            ));
+        }
+
         Err(StormError::StormFailed(output.status, output_str))
     } else {
         let results = parse_property_results(options, properties, &output_str);

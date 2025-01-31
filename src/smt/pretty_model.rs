@@ -79,7 +79,7 @@ pub fn pretty_vc_value<'smt, 'ctx>(
         let _ = apply_subst(
             translate.ctx.tcx(),
             &mut res,
-            &LimitsRef::new(Some(deadline)),
+            &LimitsRef::new(Some(deadline), None),
         );
         res
     };
