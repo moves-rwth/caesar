@@ -92,7 +92,7 @@ impl Cli {
         match &self.command {
             Command::Verify(verify_options) => Some(&verify_options.debug_options),
             Command::Lsp(verify_options) => Some(&verify_options.debug_options),
-            Command::ToJani(to_jani_options) => Some(&to_jani_options.debug_options),
+            Command::Mc(mc_options) => Some(&mc_options.debug_options),
             Command::ShellCompletions(_) => None,
             Command::Other(_vec) => unreachable!(),
         }
@@ -103,8 +103,9 @@ impl Cli {
 pub enum Command {
     /// Verify HeyVL files with Caesar.
     Verify(VerifyCommand),
-    /// Convert HeyVL files to JANI files.
-    ToJani(ToJaniCommand),
+    /// Model checking via JANI, can run Storm directly.
+    #[clap(visible_alias = "to-jani")]
+    Mc(ToJaniCommand),
     /// Run Caesar's LSP server.
     Lsp(VerifyCommand),
     /// Generate shell completions for the Caesar binary.
@@ -124,7 +125,7 @@ pub struct VerifyCommand {
     pub rlimit_options: ResourceLimitOptions,
 
     #[command(flatten)]
-    pub jani_options: JaniOptions,
+    pub model_checking_options: ModelCheckingOptions,
 
     #[command(flatten)]
     pub opt_options: OptimizationOptions,
@@ -148,7 +149,7 @@ pub struct ToJaniCommand {
     pub rlimit_options: ResourceLimitOptions,
 
     #[command(flatten)]
-    pub jani_options: JaniOptions,
+    pub model_checking_options: ModelCheckingOptions,
 
     #[command(flatten)]
     pub debug_options: DebugOptions,
@@ -209,7 +210,7 @@ pub enum RunWhichStorm {
 
 #[derive(Debug, Default, Clone, Args)]
 #[command(next_help_heading = "JANI Output Options")]
-pub struct JaniOptions {
+pub struct ModelCheckingOptions {
     /// Export declarations to JANI files in the provided directory.
     #[arg(long)]
     pub jani_dir: Option<PathBuf>,
@@ -259,7 +260,7 @@ pub struct JaniOptions {
     pub storm_timeout: Option<u64>,
 }
 
-impl JaniOptions {
+impl ModelCheckingOptions {
     pub fn storm_timeout(&self) -> Option<Duration> {
         self.storm_timeout.map(Duration::from_secs)
     }
@@ -449,7 +450,7 @@ async fn main() -> ExitCode {
 
     match options.command {
         Command::Verify(options) => run_cli(options).await,
-        Command::ToJani(options) => run_to_jani_main(options),
+        Command::Mc(options) => run_model_checking_main(options),
         Command::Lsp(options) => run_server(options).await,
         Command::ShellCompletions(options) => run_generate_completions(options),
         Command::Other(_) => unreachable!(),
@@ -779,8 +780,8 @@ fn verify_files_main(
     }
 
     // write to JANI if requested
-    to_jani_main(
-        &options.jani_options,
+    run_model_checking(
+        &options.model_checking_options,
         &mut source_units,
         server,
         &limits_ref,
@@ -949,16 +950,16 @@ fn verify_files_main(
     Ok(num_failures == 0)
 }
 
-fn run_to_jani_main(options: ToJaniCommand) -> ExitCode {
+fn run_model_checking_main(options: ToJaniCommand) -> ExitCode {
     let (user_files, server) = match mk_cli_server(&options.input_options) {
         Ok(value) => value,
         Err(value) => return value,
     };
-    let res = to_jani_loader(&options, user_files, &server).map(|_| true);
+    let res = model_checking_main(&options, user_files, &server).map(|_| true);
     finalize_verify_result(server, &options.rlimit_options, res)
 }
 
-fn to_jani_loader(
+fn model_checking_main(
     options: &ToJaniCommand,
     user_files: Vec<FileId>,
     server: &Mutex<dyn Server>,
@@ -973,8 +974,8 @@ fn to_jani_loader(
     let timeout = Instant::now() + options.rlimit_options.timeout();
     let mem_limit = options.rlimit_options.mem_limit();
     let limits_ref = LimitsRef::new(Some(timeout), Some(mem_limit));
-    to_jani_main(
-        &options.jani_options,
+    run_model_checking(
+        &options.model_checking_options,
         &mut source_units,
         server_lock.deref_mut(),
         &limits_ref,
@@ -983,8 +984,8 @@ fn to_jani_loader(
     )
 }
 
-fn to_jani_main(
-    options: &JaniOptions,
+fn run_model_checking(
+    options: &ModelCheckingOptions,
     source_units: &mut Vec<Item<SourceUnit>>,
     server: &mut dyn Server,
     limits_ref: &LimitsRef,

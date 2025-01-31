@@ -30,7 +30,7 @@ use crate::{
     procs::proc_verify::verify_proc,
     tyctx::TyCtx,
     version::caesar_version_info,
-    JaniOptions,
+    ModelCheckingOptions,
 };
 
 use self::{
@@ -125,7 +125,7 @@ impl JaniConversionError {
 }
 
 pub fn proc_to_model(
-    options: &JaniOptions,
+    options: &ModelCheckingOptions,
     tcx: &TyCtx,
     proc: &ProcDecl,
 ) -> Result<Model, JaniConversionError> {
@@ -231,7 +231,7 @@ fn check_calculus_annotation(proc: &ProcDecl) -> Result<(), JaniConversionError>
 /// Translate variable declarations, including local variable declarations, as
 /// well as input and output parameters.
 fn translate_var_decls(
-    options: &JaniOptions,
+    options: &ModelCheckingOptions,
     expr_translator: &ExprTranslator<'_>,
     proc: &ProcDecl,
 ) -> Result<(Vec<ConstantDeclaration>, Vec<VariableDeclaration>), JaniConversionError> {

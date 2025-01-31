@@ -374,7 +374,7 @@ impl SourceUnit {
     /// Encode the source unit as a JANI file if requested.
     pub fn write_to_jani_if_requested(
         &self,
-        options: &crate::JaniOptions,
+        options: &crate::ModelCheckingOptions,
         tcx: &TyCtx,
     ) -> Result<Option<PathBuf>, VerifyError> {
         if let Some(jani_dir) = &options.jani_dir {

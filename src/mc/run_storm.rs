@@ -18,7 +18,7 @@ use z3rro::util::PrettyRational;
 use crate::{
     ast::{Diagnostic, Label, Span},
     resource_limits::LimitsRef,
-    JaniOptions, RunWhichStorm,
+    ModelCheckingOptions, RunWhichStorm,
 };
 
 pub type StormResult = Result<StormOutput, StormError>;
@@ -40,9 +40,9 @@ pub fn storm_result_to_diagnostic(result: &StormResult, span: Span) -> Diagnosti
                 .with_code(NumberOrString::String("model checking".to_owned())),
         },
         Err(err) => Diagnostic::new(ReportKind::Error, span)
-            .with_message(format!("Error running Storm: {}", err))
+            .with_message(err)
             .with_label(Label::new(span))
-            .with_code(NumberOrString::String("model checking".to_owned())),
+            .with_code(NumberOrString::String("storm".to_owned())),
     }
 }
 
@@ -75,7 +75,7 @@ pub enum StormError {
 ///
 /// Panics if `options.run_storm` is `None`.
 pub fn run_storm(
-    options: &JaniOptions,
+    options: &ModelCheckingOptions,
     mut jani_file: &Path,
     properties: Vec<String>,
     limits_ref: &LimitsRef,
@@ -194,7 +194,7 @@ pub fn run_storm(
 }
 
 fn parse_property_results(
-    options: &JaniOptions,
+    options: &ModelCheckingOptions,
     properties: Vec<String>,
     output: &str,
 ) -> IndexMap<String, StormValue> {
@@ -207,7 +207,11 @@ fn parse_property_results(
         .collect()
 }
 
-fn find_property_result(options: &JaniOptions, output: &str, property: &str) -> StormValue {
+fn find_property_result(
+    options: &ModelCheckingOptions,
+    output: &str,
+    property: &str,
+) -> StormValue {
     const RESULT_TEXT: &str = "Result (for initial states):";
 
     let search_string = format!("Model checking property \"{}\"", property);
