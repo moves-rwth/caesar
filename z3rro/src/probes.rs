@@ -6,23 +6,20 @@ use enum_map::{Enum, EnumMap};
 use itertools::Itertools;
 use z3::{Context, Goal, Probe};
 
-fn run_bool_probe<'ctx>(name: &str, ctx: &'ctx Context, goal: &Goal) -> bool {
+fn run_bool_probe(name: &str, ctx: &Context, goal: &Goal) -> bool {
     let probe = Probe::new(ctx, name);
-    match probe.apply(goal) {
-        0.0 => false,
-        _ => true,
-    }
+    probe.apply(goal) != 0.0
 }
 
 /// Run the `has-quantifiers` probe: it returns true if the goal contains
 /// quantifiers.
-pub fn has_quantifiers<'ctx>(ctx: &'ctx Context, goal: &Goal) -> bool {
+pub fn has_quantifiers(ctx: &Context, goal: &Goal) -> bool {
     run_bool_probe("has-quantifiers", ctx, goal)
 }
 
 /// Run the `has-patterns` probe: it returns true if the goal contains
 /// quantifiers with patterns.
-pub fn has_patterns<'ctx>(ctx: &'ctx Context, goal: &Goal) -> bool {
+pub fn has_patterns(ctx: &Context, goal: &Goal) -> bool {
     run_bool_probe("has-patterns", ctx, goal)
 }
 
@@ -58,7 +55,7 @@ impl Display for TheoryProbe {
 }
 
 /// Run the appropriate probe based on the given theory.
-pub fn is_theory<'ctx>(ctx: &'ctx Context, goal: &Goal, theory: TheoryProbe) -> bool {
+pub fn is_theory(ctx: &Context, goal: &Goal, theory: TheoryProbe) -> bool {
     let probe_name = match theory {
         TheoryProbe::Lia => "is-lia",
         TheoryProbe::Lira => "is-lira",
@@ -72,11 +69,11 @@ pub fn is_theory<'ctx>(ctx: &'ctx Context, goal: &Goal, theory: TheoryProbe) -> 
 
 /// Run the `is-unbounded` probe: it returns true if the goal contains
 /// integer/real constants that do not have lower/upper bounds.
-pub fn is_unbounded<'ctx>(ctx: &'ctx Context, goal: &Goal) -> bool {
+pub fn is_unbounded(ctx: &Context, goal: &Goal) -> bool {
     run_bool_probe("is-unbounded", ctx, goal)
 }
 
-fn run_int_probe<'ctx>(name: &str, ctx: &'ctx Context, goal: &Goal) -> usize {
+fn run_int_probe(name: &str, ctx: &Context, goal: &Goal) -> usize {
     let probe = Probe::new(ctx, name);
     let float_res = probe.apply(goal);
     assert!(float_res.fract() == 0.0, "expected integer result");
@@ -85,31 +82,31 @@ fn run_int_probe<'ctx>(name: &str, ctx: &'ctx Context, goal: &Goal) -> usize {
 
 /// Run the `num-arith-consts` probe: it returns the number of arithmetic
 /// constants in the given goal.
-pub fn num_arith_consts<'ctx>(ctx: &'ctx Context, goal: &Goal) -> usize {
+pub fn num_arith_consts(ctx: &Context, goal: &Goal) -> usize {
     run_int_probe("num-arith-consts", ctx, goal)
 }
 
 /// Run the `num-bool-consts` probe: it returns the number of Boolean
 /// constants in the given goal.
-pub fn num_bool_consts<'ctx>(ctx: &'ctx Context, goal: &Goal) -> usize {
+pub fn num_bool_consts(ctx: &Context, goal: &Goal) -> usize {
     run_int_probe("num-bool-consts", ctx, goal)
 }
 
 /// Run the `num-bv-consts` probe: it returns the number of bit-vector
 /// constants in the given goal.
-pub fn num_bv_consts<'ctx>(ctx: &'ctx Context, goal: &Goal) -> usize {
+pub fn num_bv_consts(ctx: &Context, goal: &Goal) -> usize {
     run_int_probe("num-bv-consts", ctx, goal)
 }
 
 /// Run the `num-consts` probe: it returns the number of non-Boolean
 /// constants in the given goal.
-pub fn num_consts<'ctx>(ctx: &'ctx Context, goal: &Goal) -> usize {
+pub fn num_consts(ctx: &Context, goal: &Goal) -> usize {
     run_int_probe("num-consts", ctx, goal)
 }
 
 /// Run the `num-exprs` probe: it returns the number of expressions/terms
 /// in the given goal.
-pub fn num_exprs<'ctx>(ctx: &'ctx Context, goal: &Goal) -> usize {
+pub fn num_exprs(ctx: &Context, goal: &Goal) -> usize {
     run_int_probe("num-exprs", ctx, goal)
 }
 
@@ -129,7 +126,7 @@ pub struct ProbeSummary {
 
 impl ProbeSummary {
     /// Run a bunch of slected probes on the goal.
-    pub fn probe<'ctx>(ctx: &'ctx Context, goal: &Goal) -> Self {
+    pub fn probe(ctx: &Context, goal: &Goal) -> Self {
         Self {
             has_quantifiers: has_quantifiers(ctx, goal),
             has_patterns: has_patterns(ctx, goal),
