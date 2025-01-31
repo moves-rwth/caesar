@@ -1,6 +1,5 @@
 use std::{
-    error::Error,
-    sync::{Arc, Mutex},
+    error::Error, process::ExitCode, sync::{Arc, Mutex}
 };
 
 use crate::{
@@ -81,6 +80,13 @@ pub trait Server: Send {
 
     /// Sends an unknown verification result for the not checked proc with the given span.
     fn handle_not_checked(&mut self, span: Span) -> Result<(), ServerError>;
+
+    /// Return an exit code for the process.
+    ///
+    /// Default implementation returns `ExitCode::SUCCESS`.
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::SUCCESS
+    }
 }
 
 fn unless_fatal_error(werr: bool, diagnostic: Diagnostic) -> Result<Diagnostic, VerifyError> {

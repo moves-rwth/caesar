@@ -482,7 +482,13 @@ fn finalize_verify_result(
     let (timeout, mem_limit) = (rlimit_options.timeout(), rlimit_options.mem_limit());
     match verify_result {
         #[allow(clippy::bool_to_int_with_if)]
-        Ok(all_verified) => ExitCode::from(if all_verified { 0 } else { 1 }),
+        Ok(all_verified) => {
+            let server_exit_code = server.lock().unwrap().exit_code();
+            if server_exit_code != ExitCode::SUCCESS {
+                return server_exit_code;
+            }
+            ExitCode::from(if all_verified { 0 } else { 1 })
+        }
         Err(VerifyError::Diagnostic(diagnostic)) => {
             server.lock().unwrap().add_diagnostic(diagnostic).unwrap();
             ExitCode::from(1)
