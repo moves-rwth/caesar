@@ -176,6 +176,8 @@ The input parameters of the program are translated by Caesar to constants in the
  * For the [Caesar's Storm backend](#caesars-storm-backend) can fix values with the `--storm-constants <name>=<value>,...,<name>=<value>` command-line flag.
   * Storm itself uses the `--constants <name>=<value>,...,<name>=<value>` command-line flag.
 
+Caesar can also be instructed to translate inputs to variables instead of constants with the `--jani-no-constants` flag.
+
 **State Limits to Approximate Infinite-State Models.**
 Storm can be used with a state limit so that the model generation will stop its exploration at some number of states.
 This will yield a correct *under*-approximation of the expected reward.

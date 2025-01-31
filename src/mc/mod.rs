@@ -185,8 +185,6 @@ pub fn proc_to_model(
     }
 
     // Declare the proc inputs as model parameters
-    // TODO: add an option to instead declare the proc parameters as
-    // (indeterminate) inputs to the automaton
     model.constants.extend(constants);
 
     // Make all of the automaton's variables public so they can be accessed by
@@ -239,15 +237,25 @@ fn translate_var_decls(
 ) -> Result<(Vec<ConstantDeclaration>, Vec<VariableDeclaration>), JaniConversionError> {
     let mut vars = translate_local_decls(expr_translator, proc)?;
 
-    // we declare proc inputs as constants, not variables
+    // by default, proc inputs are translated as constants
     let mut constants = vec![];
     for param in proc.inputs.node.iter() {
-        constants.push(ConstantDeclaration {
-            name: Identifier(param.name.to_string()),
-            typ: translate_type(&param.ty, param.span)?,
-            value: None,
-            comment: None,
-        });
+        if !options.jani_no_constants {
+            constants.push(ConstantDeclaration {
+                name: Identifier(param.name.to_string()),
+                typ: translate_type(&param.ty, param.span)?,
+                value: None,
+                comment: None,
+            });
+        } else {
+            vars.push(VariableDeclaration {
+                name: Identifier(param.name.to_string()),
+                typ: translate_type(&param.ty, param.span)?,
+                transient: false,
+                initial_value: None,
+                comment: None,
+            });
+        }
     }
 
     // proc outputs are normal variables

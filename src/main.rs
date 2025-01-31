@@ -208,6 +208,10 @@ pub struct JaniOptions {
     #[arg(long)]
     pub jani_skip_quant_pre: bool,
 
+    /// Declare procedure inputs as JANI variables, not constants.
+    #[arg(long)]
+    pub jani_no_constants: bool,
+
     /// By default, Caesar assigns arbitrary initial values to output variables.
     /// This means that the model does not reflect the possible effects of
     /// initial values of output variables on the program. Usually, this is not
