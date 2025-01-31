@@ -23,6 +23,13 @@ impl Symbol {
     }
 }
 
+impl PartialEq<str> for Symbol {
+    fn eq(&self, other: &str) -> bool {
+        let interned = INTERNED_STRINGS.lock().unwrap();
+        interned.resolve(self.0).unwrap() == other
+    }
+}
+
 impl fmt::Debug for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let interned = INTERNED_STRINGS.lock().unwrap();

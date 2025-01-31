@@ -96,7 +96,7 @@ impl SourceUnitName {
         res
     }
 
-    /// Create a filne name for this source unit with the given file extension.
+    /// Create a file name for this source unit with the given file extension.
     ///
     /// This is used to create e.g. SMT-LIB output files for debugging. It is
     /// not necessarily related to the actual file name of the source unit.

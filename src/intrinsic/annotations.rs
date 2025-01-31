@@ -151,7 +151,6 @@ pub struct Calculus {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-
 pub enum CalculusType {
     Wp,
     Wlp,

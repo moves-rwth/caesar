@@ -18,6 +18,7 @@ use jani::{
     types::{BasicType, BoundedType, BoundedTypeBase, Type},
     Identifier,
 };
+use lsp_types::NumberOrString;
 
 use crate::{
     ast::{
@@ -45,10 +46,12 @@ pub enum JaniConversionError {
     UnsupportedPre(Expr),
     UnsupportedAssume(Expr),
     UnsupportedAssert(Expr),
+    UnsupportedHavoc { stmt: Stmt, can_eliminate: bool },
     UnsupportedInftyPost(Expr),
     NondetSelection(Span),
     MismatchedDirection(Span),
     UnsupportedCall(Span, Ident),
+    UnsupportedCalculus { proc: Ident, calculus: Ident },
 }
 
 impl JaniConversionError {
@@ -85,6 +88,16 @@ impl JaniConversionError {
                     .with_message("JANI: Assertion must be a Boolean expression")
                     .with_label(Label::new(expr.span).with_message("expected ?(b) here"))
             }
+            JaniConversionError::UnsupportedHavoc {stmt, can_eliminate} => {
+                let diagnostic = Diagnostic::new(ReportKind::Error, stmt.span)
+                    .with_message("JANI: Havoc is not supported")
+                    .with_label(Label::new(stmt.span).with_message("here"));
+                if *can_eliminate {
+                    diagnostic.with_note("You can replace the havoc with a re-declaration of its variables.")
+                } else {
+                    diagnostic
+                }
+            }
             JaniConversionError::UnsupportedInftyPost(expr) => {
                 Diagnostic::new(ReportKind::Error, expr.span)
                     .with_message("JANI: Post that evaluates to ∞ is not supported")
@@ -103,7 +116,11 @@ impl JaniConversionError {
                     .with_message(format!("JANI: Cannot call '{}'", ident.name))
                     .with_label(Label::new(*span).with_message("must be a func with a body"))
             }
+            JaniConversionError::UnsupportedCalculus { proc, calculus }=> Diagnostic::new(ReportKind::Error, proc.span)
+                .with_message(format!("JANI: Calculus '{}' is not supported", calculus))
+                .with_label(Label::new(proc.span).with_message("here")),
         }
+        .with_code(NumberOrString::String("model checking".to_owned()))
     }
 }
 
@@ -112,6 +129,8 @@ pub fn proc_to_model(
     tcx: &TyCtx,
     proc: &ProcDecl,
 ) -> Result<Model, JaniConversionError> {
+    check_calculus_annotation(proc)?;
+
     let expr_translator = ExprTranslator::new(tcx);
 
     // initialize the spec automaton
@@ -195,6 +214,20 @@ pub fn proc_to_model(
     model.automata.push(automaton);
 
     Ok(model)
+}
+
+fn check_calculus_annotation(proc: &ProcDecl) -> Result<(), JaniConversionError> {
+    if let Some(calculus) = proc.calculus {
+        if &calculus.name != "wp" || &calculus.name != "ert"
+        // yeah that's ugly
+        {
+            return Err(JaniConversionError::UnsupportedCalculus {
+                proc: proc.name,
+                calculus,
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Translate variable declarations, including local variable declarations, as
