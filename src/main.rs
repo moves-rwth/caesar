@@ -777,6 +777,7 @@ fn verify_files_main(
     // core VC, we can return early.
     if options.debug_options.no_verify
         && !options.debug_options.print_smt
+        && options.debug_options.smt_dir.is_none()
         && !options.lsp_options.explain_core_vc
     {
         return Ok(true);
