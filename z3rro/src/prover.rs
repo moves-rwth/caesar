@@ -71,19 +71,6 @@ impl<'ctx> Prover<'ctx> {
         set_solver_timeout(&self.solver, duration);
     }
 
-    pub fn enforce_ematching(&mut self) {
-        let mut params = Params::new(self.solver.get_context());
-        // params.set_bool("auto-config", false);
-        params.set_bool("smt.mbqi", false);
-        self.solver.set_params(&params);
-    }
-
-    pub fn seed(&mut self, seed: u32) {
-        let mut params = Params::new(self.solver.get_context());
-        params.set_u32("smt.random_seed", seed);
-        self.solver.set_params(&params);
-    }
-
     /// Add an assumption to this prover.
     pub fn add_assumption(&mut self, value: &Bool<'ctx>) {
         self.solver.assert(value);

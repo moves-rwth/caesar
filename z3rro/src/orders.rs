@@ -217,7 +217,7 @@ pub trait SmtCompleteLattice<'ctx>: SmtFresh<'ctx> + SmtLattice<'ctx> {
 
         // infimum is a lower bound to all self
         let inf_is_lower_bound = &inf_vars.forall(
-            "inf_lower_bound",
+            "mbqi_inf_lower_bound",
             WEIGHT_DEFAULT,
             patterns,
             &inf.smt_le(self),
@@ -228,7 +228,7 @@ pub trait SmtCompleteLattice<'ctx>: SmtFresh<'ctx> + SmtLattice<'ctx> {
         let mut inf_vars_and_other = inf_vars.clone();
         let other_lb = Self::fresh(&factory, &mut inf_vars_and_other, "bound");
         let other_is_lb = inf_vars.forall(
-            "inf_other_lower_bound",
+            "mbqi_inf_other_lower_bound",
             WEIGHT_DEFAULT,
             patterns,
             &other_lb.smt_le(self),
@@ -236,7 +236,7 @@ pub trait SmtCompleteLattice<'ctx>: SmtFresh<'ctx> + SmtLattice<'ctx> {
         // infimum is the greatest lower bound, i.e. `other_lb <= inf`
         let inf_glb = other_is_lb.implies(&other_lb.smt_le(&inf));
         ctx.add_constraint(&inf_vars_and_other.forall(
-            "inf_greatest lower bound",
+            "mbqi_inf_greatest_lower_bound",
             WEIGHT_DEFAULT,
             &[],
             &inf_glb,

@@ -682,13 +682,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
         let span = info_span!("SAT check");
         let _entered = span.enter();
 
-        let mut prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc);
-        if options.opt_options.force_ematching {
-            prover.enforce_ematching();
-        }
-        if let Some(seed) = options.debug_options.z3_seed {
-            prover.seed(seed);
-        }
+        let prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc);
 
         let smtlib = get_smtlib(options, &prover);
         if let Some(smtlib) = &smtlib {
@@ -705,7 +699,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
             });
         }
 
-        let mut slice_solver = SliceSolver::new(slice_vars.clone(), translate, prover);
+        let slice_solver = SliceSolver::new(slice_vars.clone(), translate, prover);
         let failing_slice_options = SliceSolveOptions {
             globally_optimal: !options.slice_options.slice_error_first,
             continue_on_unknown: false,

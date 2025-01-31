@@ -14,6 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::smt::SmtCtxOptions;
 use crate::{
     ast::TyKind,
     driver::mk_z3_ctx,
@@ -35,8 +36,6 @@ use thiserror::Error;
 use timing::DispatchBuilder;
 use tokio::task::JoinError;
 use tracing::{error, info, warn};
-
-use crate::smt::SmtCtxOptions;
 use vc::explain::VcExplanation;
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
@@ -653,6 +652,9 @@ fn verify_files_main(
         warn!("Z3 tracing is enabled with multiple verification units. Intermediate tracing results will be overwritten.");
     }
 
+    // set requested global z3 options
+    set_global_z3_options(options, &limits_ref);
+
     let mut num_proven: usize = 0;
     let mut num_failures: usize = 0;
 
@@ -798,4 +800,23 @@ fn print_timings() {
         .map(|(key, value)| (*key, format!("{}", value.as_nanos())))
         .collect();
     eprintln!("Timings: {:?}", timings);
+}
+
+fn set_global_z3_options(options: &Options, limits_ref: &LimitsRef) {
+    // the parameters are set as globals since params set via (Solver::set_params) sometimes get ignored.
+
+    // default
+    z3::set_global_param("smt.qi.eager_threshold", "100");
+    z3::set_global_param("smt.qi.lazy_threshold", "1000");
+    if options.opt_options.force_ematching {
+        // z3::set_global_param("auto-config", "false");
+        // z3::set_global_param("smt.mbqi", "false");
+        z3::set_global_param("smt.mbqi.id", "mbqi");
+    }
+    if let Some(seed) = options.debug_options.z3_seed {
+        z3::set_global_param("smt.random_seed", &seed.to_string());
+    }
+    if let Some(timeout) = limits_ref.time_left() {
+        z3::set_global_param("timeout", &timeout.as_millis().to_string())
+    }
 }

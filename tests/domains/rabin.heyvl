@@ -1,10 +1,7 @@
-// RUN: @caesar @file
+// RUN: @caesar @file --force-ematching --limited-functions --lit-wrap
 
 domain Exponentials {
-    func rec_pown_2(exponent: UInt): UReal
-
-    axiom rec_pown_2_base rec_pown_2(0) == 1
-    axiom rec_pown_2_step forall exponent: UInt. rec_pown_2(exponent + 1) == rec_pown_2(exponent) / 2
+    func rec_pown_2(exponent: UInt): UReal = ite(exponent == 0, 1, rec_pown_2(exponent - 1) / 2)
 }
 
 proc rabin(init_i: UInt, init_n: UInt, init_d: UInt) -> (i: UInt, n: UInt, d: UInt)

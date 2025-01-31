@@ -651,7 +651,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                     let fuel_arg: Dynamic<'ctx> = match &self.fuel_context {
                         FuelContext::Head(qf) => Fuel::succ(qf.get_or_init(self.ctx)).as_dynamic(),
                         FuelContext::Body(qf) => qf.get_or_init(self.ctx).as_dynamic(),
-                        FuelContext::Call => Fuel::new(self.ctx.fuel_factory(), 1).as_dynamic(),
+                        FuelContext::Call => Fuel::new(self.ctx.fuel_factory(), 2).as_dynamic(),
                     };
                     vec![fuel_arg]
                 } else {

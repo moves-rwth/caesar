@@ -1,4 +1,4 @@
-// RUN: @caesar @file
+// RUN: @caesar @file --limited-functions --force-ematching --lit-wrap
 
 domain Arith {
     func exp(b: UReal, i: UInt): UReal = ite(i == 0, 1, b * exp(b, i - 1))
