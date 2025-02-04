@@ -440,32 +440,38 @@ async fn handle_verify_request(
     };
 
     let result = verify(&[file_id]).await;
-    let res = match &result {
-        Ok(_) => Response::new_ok(id, Value::Null),
-        Err(err) => Response::new_err(id, 0, format!("{}", err)),
-    };
 
     match result {
-        Ok(()) => {}
-        Err(VerifyError::Diagnostic(diagnostic)) => {
-            server.lock().unwrap().add_diagnostic(diagnostic)?;
+        Ok(()) => {
+            let response = Message::Response(Response::new_ok(id, Value::Null));
+            sender
+                .send(response)
+                .map_err(|e| VerifyError::ServerError(e.into()))?;
         }
-        Err(VerifyError::Interrupted) | Err(VerifyError::LimitError(_)) => {
-            // If the verification is interrupted or a limit is reached before the verification starts, no verification statuses are published yet.
-            // In this case, the client needs to be notified about the registered source units that are not checked yet (marked with VerifyResult::Todo).
-            // This acts as a fallback mechanism for this case.
-            server
-                .lock()
-                .unwrap()
-                .publish_verify_statuses()
-                .map_err(VerifyError::ServerError)?;
+
+        Err(err) => {
+            let response = Response::new_err(id, 0, format!("{}", err));
+            match err {
+                VerifyError::Diagnostic(diagnostic) => {
+                    server.lock().unwrap().add_diagnostic(diagnostic)?;
+                }
+                VerifyError::Interrupted | VerifyError::LimitError(_) => {
+                    // If the verification is interrupted or a limit is reached before the verification starts, no verification statuses are published yet.
+                    // In this case, the client needs to be notified about the registered source units that are not checked yet (marked with VerifyResult::Todo).
+                    // This acts as a fallback mechanism for this case.
+                    server
+                        .lock()
+                        .unwrap()
+                        .publish_verify_statuses()
+                        .map_err(VerifyError::ServerError)?;
+                }
+                _ => {}
+            }
+
+            sender
+                .send(Message::Response(response))
+                .map_err(|e| VerifyError::ServerError(e.into()))?;
         }
-        Err(err) => Err(err)?,
     }
-
-    sender
-        .send(Message::Response(res))
-        .map_err(|e| VerifyError::ServerError(e.into()))?;
-
     Ok(())
 }
