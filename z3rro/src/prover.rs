@@ -4,7 +4,7 @@ use std::{fmt::Display, time::Duration};
 
 use z3::{
     ast::{forall_const, Ast, Bool, Dynamic},
-    Context, Model, Params, SatResult, Solver,
+    Context, Model, SatResult, Solver,
 };
 
 use crate::{
@@ -59,7 +59,6 @@ impl<'ctx> Prover<'ctx> {
     /// Create a new prover with the given [`Context`].
     pub fn new(ctx: &'ctx Context) -> Self {
         let solver = Solver::new(ctx);
-        solver.set_params(&default_params(ctx));
         Prover {
             solver,
             level: 0,
@@ -192,12 +191,6 @@ impl<'ctx> Prover<'ctx> {
     }
 }
 
-fn default_params<'ctx>(ctx: &'ctx Context) -> Params<'ctx> {
-    let mut params = Params::new(ctx);
-    params.set_f64("smt.qi.eager_threshold", 100.0);
-    params.set_f64("smt.qi.lazy_threshold", 1000.0);
-    params
-}
 
 #[cfg(test)]
 mod test {
