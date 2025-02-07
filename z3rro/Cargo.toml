@@ -17,3 +17,4 @@ im-rc = "15"
 [features]
 datatype-eureal = []
 datatype-eureal-funcs = ["datatype-eureal"]
+datatype-fuel = []

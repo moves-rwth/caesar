@@ -1,8 +1,8 @@
 use crate::scope::{SmtAlloc, SmtFresh};
 use crate::{Factory, SmtFactory, SmtInvariant};
 use std::rc::Rc;
-use z3::ast::{Ast, Bool, Datatype, Dynamic};
-use z3::{Context, DatatypeAccessor, DatatypeBuilder, FuncDecl, Sort, Symbol};
+use z3::ast::{Ast, Bool, Dynamic};
+use z3::{Context, FuncDecl, Sort, Symbol};
 
 #[derive(Debug)]
 pub struct FuelFactory<'ctx> {
@@ -13,7 +13,10 @@ pub struct FuelFactory<'ctx> {
 }
 
 impl<'ctx> FuelFactory<'ctx> {
+    #[cfg(feature = "datatype-fuel")]
     pub fn new(ctx: &'ctx Context) -> Rc<Self> {
+        use z3::{DatatypeAccessor, DatatypeBuilder};
+
         // Clashes with user defined code are avoided by `$` in names
         let datatype = DatatypeBuilder::new(ctx, "$Fuel")
             .variant("$Z", vec![])
@@ -36,6 +39,22 @@ impl<'ctx> FuelFactory<'ctx> {
         Rc::new(factory)
     }
 
+    #[cfg(not(feature = "datatype-fuel"))]
+    pub fn new(ctx: &'ctx Context) -> Rc<Self> {
+        // Clashes with user defined code are avoided by `$` in names
+        let fuel_sort = Sort::uninterpreted(ctx, Symbol::from("$Fuel"));
+        let zero = FuncDecl::new(ctx, "$Z", &[], &fuel_sort);
+        let succ = FuncDecl::new(ctx, "$S", &[&fuel_sort], &fuel_sort);
+
+        let factory = Self {
+            ctx,
+            sort: fuel_sort,
+            zero,
+            succ,
+        };
+        Rc::new(factory)
+    }
+
     pub fn sort(&self) -> &Sort<'ctx> {
         &self.sort
     }
@@ -52,7 +71,7 @@ impl<'ctx> FuelFactory<'ctx> {
 #[derive(Debug, Clone)]
 pub struct Fuel<'ctx> {
     factory: Rc<FuelFactory<'ctx>>,
-    value: Datatype<'ctx>,
+    value: Dynamic<'ctx>,
 }
 
 impl<'ctx> Fuel<'ctx> {
@@ -65,18 +84,14 @@ impl<'ctx> Fuel<'ctx> {
     }
 
     pub fn zero(factory: Factory<'ctx, Self>) -> Self {
-        let value = factory.zero.apply(&[]).as_datatype().unwrap();
+        let value = factory.zero.apply(&[]);
 
         Self { factory, value }
     }
 
     pub fn succ(fuel: Self) -> Self {
         let factory = fuel.factory;
-        let value = factory
-            .succ
-            .apply(&[&fuel.value as &dyn Ast<'ctx>])
-            .as_datatype()
-            .unwrap();
+        let value = factory.succ.apply(&[&fuel.value as &dyn Ast<'ctx>]);
 
         Self { factory, value }
     }
@@ -109,7 +124,7 @@ impl<'ctx> SmtFresh<'ctx> for Fuel<'ctx> {
         let datatype_factory = (factory.ctx, factory.sort.clone());
         Fuel {
             factory: factory.clone(),
-            value: Datatype::allocate(&datatype_factory, alloc, prefix),
+            value: Dynamic::allocate(&datatype_factory, alloc, prefix),
         }
     }
 }
