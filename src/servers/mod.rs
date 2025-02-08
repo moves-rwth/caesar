@@ -35,6 +35,7 @@ pub enum VerifyResult {
     Verified,
     Failed,
     Unknown,
+    Timeout,
 }
 
 impl VerifyResult {

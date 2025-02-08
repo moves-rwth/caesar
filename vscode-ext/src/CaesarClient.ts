@@ -25,7 +25,8 @@ export enum VerifyResult {
     Todo = "todo",
     Verified = "verified",
     Failed = "failed",
-    Unknown = "unknown"
+    Unknown = "unknown",
+    Timeout = "timeout"
 }
 
 export interface VerifyStatusNotification {

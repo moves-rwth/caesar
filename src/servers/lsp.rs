@@ -249,6 +249,17 @@ impl LspServer {
         Ok(())
     }
 
+    fn handle_timeout_for_results(&mut self) -> Result<(), ServerError> {
+        self.statuses.iter_mut().for_each(|(_, status)| {
+            // If status is Todo convert it to Timeout
+            if let VerifyResult::Todo = status {
+                *status = VerifyResult::Timeout;
+            }
+        });
+        self.publish_verify_statuses()?;
+        Ok(())
+    }
+
     fn clear_file_information(&mut self, file_id: &FileId) -> Result<(), ServerError> {
         if let Some(diag) = self.diagnostics.get_mut(file_id) {
             diag.clear();
@@ -317,6 +328,8 @@ impl Server for LspServer {
 
     fn register_source_unit(&mut self, span: Span) -> Result<(), VerifyError> {
         self.statuses.insert(span, VerifyResult::Todo);
+        self.publish_verify_statuses()
+            .map_err(VerifyError::ServerError)?;
         Ok(())
     }
 
@@ -456,13 +469,10 @@ async fn handle_verify_request(
                     server.lock().unwrap().add_diagnostic(diagnostic)?;
                 }
                 VerifyError::Interrupted | VerifyError::LimitError(_) => {
-                    // If the verification is interrupted or a limit is reached before the verification starts, no verification statuses are published yet.
-                    // In this case, the client needs to be notified about the registered source units that are not checked yet (marked with VerifyResult::Todo).
-                    // This acts as a fallback mechanism for this case.
                     server
                         .lock()
                         .unwrap()
-                        .publish_verify_statuses()
+                        .handle_timeout_for_results()
                         .map_err(VerifyError::ServerError)?;
                 }
                 _ => {}
