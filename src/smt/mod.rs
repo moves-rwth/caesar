@@ -2,14 +2,12 @@
 
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
 use crate::ast::{DeclKind, FuncDecl};
-use crate::smt::limited::{
-    build_func_domain, computation_axiom, defining_axiom, fuel_synonym_axiom,
-    is_eligible_for_limited_function, return_value_invariant,
-};
+use crate::smt::limited::{is_eligible_for_limited_function, EncodingFuel};
 use crate::{
     ast::{DeclRef, DomainDecl, DomainSpec, Ident, TyKind},
     tyctx::TyCtx,
 };
+use itertools::Itertools;
 use std::fmt::Debug;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use z3::ast::{Ast, Dynamic};
@@ -20,7 +18,7 @@ use z3rro::{
 };
 
 mod limited;
-pub use limited::LiteralExprCollector;
+pub use limited::{FuelEncoding, LiteralExprCollector};
 
 pub mod pretty_model;
 pub mod symbolic;
@@ -32,6 +30,7 @@ mod uninterpreted;
 pub struct SmtCtxOptions {
     pub use_limited_functions: bool,
     pub lit_wrap: bool,
+    pub static_fuel: bool,
 }
 
 pub struct SmtCtx<'ctx> {
@@ -42,8 +41,8 @@ pub struct SmtCtx<'ctx> {
     lists: RefCell<HashMap<TyKind, Rc<ListFactory<'ctx>>>>,
     lits: RefCell<Vec<(Sort<'ctx>, LitDecl<'ctx>)>>,
     uninterpreteds: Uninterpreteds<'ctx>,
-    use_limited_functions: bool,
-    lit_wrap: bool,
+    fuel_encoding: FuelEncoding<'ctx>,
+    options: SmtCtxOptions,
 }
 
 impl<'ctx> SmtCtx<'ctx> {
@@ -57,6 +56,19 @@ impl<'ctx> SmtCtx<'ctx> {
                     .function_decls()
                     .any(|func| is_eligible_for_limited_function(&func.borrow()))
             });
+        let options = SmtCtxOptions {
+            lit_wrap,
+            ..options
+        };
+
+        let fuel_encoding = if !options.use_limited_functions {
+            FuelEncoding::none()
+        } else if options.static_fuel {
+            FuelEncoding::static_()
+        } else {
+            FuelEncoding::dynamic(options.lit_wrap)
+        };
+
         let mut res = SmtCtx {
             ctx,
             tcx,
@@ -65,8 +77,8 @@ impl<'ctx> SmtCtx<'ctx> {
             lists: RefCell::new(HashMap::new()),
             lits: RefCell::new(Vec::new()),
             uninterpreteds: Uninterpreteds::new(ctx),
-            use_limited_functions: options.use_limited_functions,
-            lit_wrap,
+            fuel_encoding,
+            options,
         };
         res.declare_domains(domains.as_slice());
         res
@@ -84,11 +96,10 @@ impl<'ctx> SmtCtx<'ctx> {
             for spec in &decl.body {
                 if let DomainSpec::Function(func_ref) = &spec {
                     let func = func_ref.borrow();
-
-                    let domain = build_func_domain(self, &func);
-                    let domain: Vec<&Sort<'_>> = domain.iter().collect();
-                    let range = ty_to_sort(self, &func.output);
-                    self.uninterpreteds.add_function(func.name, &domain, &range);
+                    for (name, domain, range) in self.fuel_encoding.declare_function(self, &func) {
+                        let domain = domain.iter().collect_vec();
+                        self.uninterpreteds.add_function(name, &domain, &range)
+                    }
                 }
             }
         }
@@ -101,8 +112,8 @@ impl<'ctx> SmtCtx<'ctx> {
         // is a problem when dealing with more complex types such as the
         // pair::realplus representation which needs to quantify over two
         // variables (a Boolean and a Real).
-        let mut axioms: Vec<(Ident, Bool<'ctx>)> = Vec::new();
         let mut translate = TranslateExprs::new(self);
+        let mut axioms: Vec<(Ident, Bool<'ctx>)> = Vec::new();
         for decl_ref in domains {
             let decl = decl_ref.borrow();
             for spec in &decl.body {
@@ -118,16 +129,10 @@ impl<'ctx> SmtCtx<'ctx> {
 
                         // TODO: create a new name for the axioms
                         axioms.extend(
-                            return_value_invariant(&mut translate, &func).map(with_name(func.name)),
-                        );
-                        axioms.extend(
-                            defining_axiom(&mut translate, &func).map(with_name(func.name)),
-                        );
-                        axioms.extend(
-                            fuel_synonym_axiom(&mut translate, &func).map(with_name(func.name)),
-                        );
-                        axioms.extend(
-                            computation_axiom(&mut translate, &func).map(with_name(func.name)),
+                            self.fuel_encoding
+                                .axioms(&mut translate, &func)
+                                .into_iter()
+                                .map(with_name(func.name)),
                         );
                     }
                     DomainSpec::Axiom(axiom_ref) => {
@@ -190,6 +195,11 @@ impl<'ctx> SmtCtx<'ctx> {
         &self.uninterpreteds
     }
 
+    #[must_use]
+    pub fn uninterpreteds_mut(&mut self) -> &mut Uninterpreteds<'ctx> {
+        &mut self.uninterpreteds
+    }
+
     pub fn add_lit_axioms_to_prover(&self, prover: &mut Prover<'ctx>) {
         for (_, lit) in self.lits.borrow().iter() {
             for axiom in lit.defining_axiom() {
@@ -199,7 +209,7 @@ impl<'ctx> SmtCtx<'ctx> {
     }
 
     pub fn is_limited_function(&self, ident: Ident) -> bool {
-        if !self.use_limited_functions {
+        if !self.options.use_limited_functions {
             return false;
         }
         self.tcx
@@ -212,7 +222,11 @@ impl<'ctx> SmtCtx<'ctx> {
     }
 
     pub fn is_limited_function_decl(&self, func: &FuncDecl) -> bool {
-        self.use_limited_functions && is_eligible_for_limited_function(func)
+        self.options.use_limited_functions && is_eligible_for_limited_function(func)
+    }
+
+    pub fn fuel_encoding(&self) -> &FuelEncoding<'ctx> {
+        &self.fuel_encoding
     }
 
     pub fn functions_with_def(&self) -> Vec<Ident> {
@@ -227,7 +241,7 @@ impl<'ctx> SmtCtx<'ctx> {
 
 impl<'ctx> LitFactory<'ctx> for SmtCtx<'ctx> {
     fn lit_wrap_dynamic(&self, arg: &Dynamic<'ctx>) -> Dynamic<'ctx> {
-        if !self.lit_wrap {
+        if !self.options.lit_wrap {
             return arg.clone();
         }
 

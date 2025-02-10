@@ -172,6 +172,11 @@ pub struct OptimizationOptions {
     /// when using `limited-functions`.
     #[arg(long)]
     pub lit_wrap: bool,
+
+    /// For each function f Generate multiple function f_n (f_2, f_1, f_0) that each respectively
+    /// can only be instantiated n times. Requires `limited-functions`
+    #[arg(long)]
+    pub static_fuel: bool,
 }
 
 #[derive(Debug, Default, Args)]
@@ -725,6 +730,7 @@ fn verify_files_main(
             SmtCtxOptions {
                 use_limited_functions: options.opt_options.limited_functions,
                 lit_wrap: options.opt_options.lit_wrap,
+                static_fuel: options.opt_options.static_fuel,
             },
         );
         let mut translate = TranslateExprs::new(&smt_ctx);

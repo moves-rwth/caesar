@@ -213,6 +213,7 @@ impl_into_try_from_symbolic!(UReal, UReal, into_ureal);
 impl_into_try_from_symbolic!(EUReal, EUReal, into_eureal);
 impl_into_try_from_symbolic!(List, List, into_list);
 impl_into_try_from_symbolic!(Dynamic, Uninterpreted, into_uninterpreted);
+impl_into_try_from_symbolic!(Fuel, Fuel, into_fuel);
 
 #[derive(Debug)]
 pub enum SymbolicPair<'ctx> {

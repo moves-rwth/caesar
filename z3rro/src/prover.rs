@@ -191,7 +191,6 @@ impl<'ctx> Prover<'ctx> {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use z3::{ast::Bool, Config, Context, SatResult};

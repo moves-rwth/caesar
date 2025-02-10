@@ -2,7 +2,6 @@
 
 use itertools::Itertools;
 use ref_cast::RefCast;
-use std::cell::OnceCell;
 use std::{collections::HashMap, convert::TryFrom, vec};
 use z3::{
     ast::{Ast, Bool, Dynamic, Int, Real},
@@ -22,7 +21,7 @@ use super::{
     SmtCtx,
 };
 use crate::ast::{ExprData, PointerHashShared};
-use crate::smt::limited::LiteralExprs;
+use crate::smt::limited::{EncodingFuel, LiteralExprs};
 use z3rro::scope::WEIGHT_DEFAULT;
 use z3rro::{
     eureal::EUReal,
@@ -31,7 +30,7 @@ use z3rro::{
         SmtPartialOrd,
     },
     scope::SmtScope,
-    Fuel, List, LitWrap, SmtBranch, SmtEq, UInt, UReal,
+    List, LitWrap, SmtBranch, SmtEq, UInt, UReal,
 };
 
 /// Translates caesar expressions to Z3 formulas.
@@ -43,7 +42,6 @@ pub struct TranslateExprs<'smt, 'ctx> {
     limits_stack: Vec<SmtScope<'ctx>>,
     locals: ScopeMap<Ident, ScopeSymbolic<'ctx>>,
     cache: TranslateCache<'ctx>,
-    fuel_context: FuelContext<'ctx>,
     literal_exprs: LiteralExprs,
 }
 
@@ -54,7 +52,6 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             limits_stack: vec![SmtScope::new()],
             locals: ScopeMap::new(),
             cache: TranslateCache::new(),
-            fuel_context: FuelContext::call(),
             literal_exprs: LiteralExprs::default(),
         }
     }
@@ -76,24 +73,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     pub fn local_scope(&self) -> SmtScope<'ctx> {
         let mut scope = self.limits_stack.last().unwrap().clone();
         scope.extend(self.locals.local_iter().map(|(_ident, local)| &local.scope));
-        scope.extend(
-            self.fuel_context
-                .quantified_fuel()
-                .and_then(|qf| qf.scope()),
-        );
         scope
-    }
-
-    pub fn set_fuel_context(&mut self, fuel_context: FuelContext<'ctx>) {
-        self.fuel_context = fuel_context;
-    }
-
-    pub fn fuel_context(&self) -> &FuelContext<'ctx> {
-        &self.fuel_context
-    }
-
-    pub fn fuel_context_mut(&mut self) -> &mut FuelContext<'ctx> {
-        &mut self.fuel_context
     }
 
     /// Defines what expressions should be considered literal from now (until reset
@@ -647,23 +627,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     fn t_call(&mut self, name: Ident, args: &[Expr]) -> Symbolic<'ctx> {
         match self.ctx.tcx().get(name).as_deref() {
             Some(DeclKind::FuncDecl(func)) => {
-                let mut args_vec = if self.ctx.is_limited_function(name) {
-                    let fuel_arg: Dynamic<'ctx> = match &self.fuel_context {
-                        FuelContext::Head(qf) => Fuel::succ(qf.get_or_init(self.ctx)).as_dynamic(),
-                        FuelContext::Body(qf) => qf.get_or_init(self.ctx).as_dynamic(),
-                        FuelContext::Call => Fuel::new(self.ctx.fuel_factory(), 2).as_dynamic(),
-                    };
-                    vec![fuel_arg]
-                } else {
-                    vec![]
-                };
-                args_vec.extend(
-                    args.iter()
-                        .map(|arg| self.t_symbolic(arg).into_dynamic(self.ctx)),
-                );
-                let args = args_vec.iter().map(|d| d as &dyn Ast<'ctx>).collect_vec();
-                let res_dynamic = self.ctx.uninterpreteds().apply_function(name, &args);
-                Symbolic::from_dynamic(self.ctx, &func.borrow().output, &res_dynamic)
+                let args = args.iter().map(|arg| self.t_symbolic(arg)).collect_vec();
+                self.ctx
+                    .fuel_encoding()
+                    .call_function(self.ctx, &func.borrow(), args)
             }
             Some(DeclKind::FuncIntrin(intrin)) => intrin.translate_call(self, args),
             res => panic!("cannot call {:?}", res),
@@ -741,104 +708,6 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 Pattern::new(self.ctx.ctx, &terms_ref)
             })
             .collect()
-    }
-}
-
-/// Type that determines how the fuel parameter for uninterpreted functions should be synthesised.
-pub enum FuelContext<'ctx> {
-    Head(QuantifiedFuel<'ctx>),
-    Body(QuantifiedFuel<'ctx>),
-    Call,
-}
-
-impl<'ctx> FuelContext<'ctx> {
-    /// In the head of a defining axiom a non-zero universally quantified fuel parameter is
-    /// synthesised i.e. `Succ(fuel)`.
-    pub fn head() -> Self {
-        Self::Head(QuantifiedFuel::default())
-    }
-
-    /// In the body of a defining axiom a universally quantified fuel parameter is
-    /// synthesised i.e. `fuel`.
-    pub fn body() -> Self {
-        Self::Body(QuantifiedFuel::default())
-    }
-
-    pub fn body_with_fuel(quantified_fuel: QuantifiedFuel<'ctx>) -> Self {
-        Self::Body(quantified_fuel)
-    }
-
-    /// In other positions the function application represents a call. A fixed fuel
-    /// parameter is synthesized that determines how often the function definition can
-    /// be instantiated i.e. `Succ(Zero)`.
-    pub fn call() -> Self {
-        Self::Call
-    }
-
-    pub fn quantified_fuel_scope(&self) -> Option<&SmtScope<'ctx>> {
-        self.quantified_fuel().and_then(|qf| qf.scope())
-    }
-
-    fn quantified_fuel(&self) -> Option<&QuantifiedFuel<'ctx>> {
-        match self {
-            Self::Head(qf) => Some(qf),
-            Self::Body(qf) => Some(qf),
-            Self::Call => None,
-        }
-    }
-
-    pub fn take_quantified_fuel(&mut self) -> Option<QuantifiedFuel<'ctx>> {
-        let do_take = |qf: &mut QuantifiedFuel<'ctx>| QuantifiedFuel::new(qf.lazy_fuel.take());
-        match self {
-            Self::Head(qf) => Some(do_take(qf)),
-            Self::Body(qf) => Some(do_take(qf)),
-            Self::Call => None,
-        }
-    }
-}
-
-/// Lazily initialised [ScopeSymbolic] of type [Fuel]. It is initialised when a limited function is
-/// encountered in context that requires a fresh quantified fuel variable ([FuelContext::Head],
-/// [FuelContext::Body]). It is discarded when the context changes back to [FuelContext::Call]
-/// (see [TranslateExprs::set_fuel_context]). The lazy initialisation ensures that the fuel variable
-/// is only added to the quantifier if it is actually used.
-#[derive(Default)]
-pub struct QuantifiedFuel<'ctx> {
-    lazy_fuel: OnceCell<ScopeSymbolic<'ctx>>,
-}
-
-impl<'ctx> QuantifiedFuel<'ctx> {
-    pub fn new(value: Option<ScopeSymbolic<'ctx>>) -> Self {
-        Self {
-            lazy_fuel: match value {
-                Some(s) => {
-                    let cell = OnceCell::new();
-                    cell.set(s)
-                        .unwrap_or_else(|_| unreachable!("Cell was newly constructed"));
-                    cell
-                }
-                None => OnceCell::new(),
-            },
-        }
-    }
-
-    fn get_or_init(&self, ctx: &SmtCtx<'ctx>) -> Fuel<'ctx> {
-        self.lazy_fuel
-            .get_or_init(|| ScopeSymbolic::fresh_fuel(ctx))
-            .symbolic
-            .clone()
-            .into_fuel()
-            .unwrap()
-    }
-
-    pub fn get(&self) -> Option<Fuel<'ctx>> {
-        self.lazy_fuel
-            .get()
-            .and_then(|s| s.symbolic.clone().into_fuel())
-    }
-
-    pub fn scope(&self) -> Option<&SmtScope<'ctx>> {
-        self.lazy_fuel.get().map(|s| &s.scope)
     }
 }
 
