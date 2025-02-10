@@ -48,7 +48,9 @@ Let us decompose the example into its parts:
  3. We have one **output parameter** `x` of type [`UInt`](../stdlib/numbers.md#uint).
     - There may be multiple parameters (input and output), which can be separated by commas (e.g. `init_x: UInt, init_y: UInt`).
  4. The `pre` declares the **pre-expectation** `init_x + 0.5`. It is evaluated in the *initial state* (when calling the proc). This is why it is called "pre" (= before running the proc).
+    - The `pre` is an expression of type [`EUReal`](../stdlib/numbers.md#eureal) over the input parameters.
  5. The `post` is the **post-expectation** `x` and evaluated in the final states of the proc (post = after running the proc). We always compare its expected value against the pre.
+    - The `post` is an expression of type [`EUReal`](../stdlib/numbers.md#eureal) over the input and output parameters.
  6. The **body of the proc** assigns `init_x` to `x`. We then do a [probabilistic coin flip](../stdlib/distributions.md#symbolic-with-probabilities) and assign `true` to `prob_choice` with probability `0.5` (and `false` with probability `0.5`). It determines the expected value ($\mathbb{E}$) we look at.
     - See [documentation on statements](./statements.md) for more information.
     - [The body is optional](#procs-without-body).

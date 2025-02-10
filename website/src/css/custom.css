@@ -41,15 +41,15 @@
 }
 
 /* Link decorations */
-p a, .markdown ul a {
+.markdown p a, .markdown ul a {
   --ifm-link-decoration: underline;
 }
 
-p a:hover, .markdown ul a:hover {
+.markdown p a:hover, .markdown ul a:hover {
   text-decoration: none;
 }
 
-a.button {
+.markdown a.button {
   text-decoration: none;
 }
 
