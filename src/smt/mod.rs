@@ -64,7 +64,7 @@ impl<'ctx> SmtCtx<'ctx> {
         let fuel_encoding = if !options.use_limited_functions {
             FuelEncoding::none()
         } else if options.static_fuel {
-            FuelEncoding::static_()
+            FuelEncoding::static_(options.lit_wrap)
         } else {
             FuelEncoding::dynamic(options.lit_wrap)
         };

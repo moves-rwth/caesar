@@ -35,6 +35,7 @@ const INITIAL_FUEL: u8 = 2;
 /// (higher) weight that is used to deprioritize the computation axiom.
 const WEIGHT_COMP: u32 = 3;
 
+/// Base trait that contains functionality common to the different encodings
 trait EncodingBase<'ctx> {
     fn call_scope<'smt>(
         &self,
@@ -95,17 +96,24 @@ trait EncodingBase<'ctx> {
 
 type FunctionDeclaration<'ctx> = (Ident, Vec<Sort<'ctx>>, Sort<'ctx>);
 
+/// A specific strategy for encoding custom interpreted functions
 pub trait EncodingFuel<'ctx> {
+
+    /// Generate the necessary function declaration(s) on the SMT-level
     fn declare_function(
         &self,
         ctx: &SmtCtx<'ctx>,
         func: &FuncDecl,
     ) -> Vec<FunctionDeclaration<'ctx>>;
+
+    /// Generate all axioms related to the function
     fn axioms<'smt>(
         &self,
         translate: &mut TranslateExprs<'smt, 'ctx>,
         func: &FuncDecl,
     ) -> Vec<Bool<'ctx>>;
+
+    /// Call the function in the current context
     fn call_function(
         &self,
         ctx: &SmtCtx<'ctx>,
@@ -120,6 +128,7 @@ enum FuelEncodingInner<'ctx> {
     Static(FuelEncodingStatic),
 }
 
+/// A value that represents one of the possible encodings
 pub struct FuelEncoding<'ctx>(FuelEncodingInner<'ctx>);
 
 impl<'ctx> Default for FuelEncoding<'ctx> {
@@ -180,9 +189,10 @@ impl<'ctx> FuelEncoding<'ctx> {
         }))
     }
 
-    pub fn static_() -> Self {
+    pub fn static_(computation: bool) -> Self {
         Self(FuelEncodingInner::Static(FuelEncodingStatic {
             none_encoding: FuelEncodingNone,
+            computation,
             fuel_value: Cell::new(INITIAL_FUEL),
         }))
     }
@@ -515,6 +525,7 @@ impl<'ctx> FuelEncodingDynamic<'ctx> {
 
 struct FuelEncodingStatic {
     none_encoding: FuelEncodingNone,
+    computation: bool,
     fuel_value: Cell<u8>,
 }
 
@@ -566,6 +577,13 @@ impl<'ctx> EncodingFuel<'ctx> for FuelEncodingStatic {
                 .rev()
                 .map(|fuel| self.fuel_synonym_axiom(translate, func, fuel.try_into().unwrap())),
         );
+        if self.computation {
+            axioms.extend(
+            (1..=INITIAL_FUEL)
+                .rev()
+                .map(|fuel| self.computation_axiom(translate, func, fuel.try_into().unwrap())),
+            )
+        }
         axioms
     }
 
@@ -684,6 +702,60 @@ impl FuelEncodingStatic {
             WEIGHT_DEFAULT,
         );
         // reset to default
+        self.fuel_value.set(old_fuel_value);
+
+        axiom
+    }
+
+    fn computation_axiom<'smt, 'ctx>(
+        &self,
+        translate: &mut TranslateExprs<'smt, 'ctx>,
+        func: &FuncDecl,
+        non_zero_fuel_value: NonZeroU8,
+    ) -> Bool<'ctx> {
+        let fuel_value = non_zero_fuel_value.into();
+        let old_fuel_value = self.fuel_value.get();
+        let mut app = build_call(translate.ctx.tcx, func);
+
+        self.fuel_value.set(fuel_value);
+        {
+            let literal_vars = func
+                .inputs
+                .node
+                .iter()
+                .map(|param| param.name)
+                .collect_vec();
+            let mut literal_exprs = LiteralExprCollector::new()
+                .with_functions_with_def(translate.ctx.functions_with_def().as_slice())
+                .with_literal_vars(literal_vars.as_slice())
+                .collect(func.body.borrow_mut().as_mut().unwrap());
+
+            // Add arguments to ensure that they are lit-wrapped in the trigger
+            literal_exprs.extend(LiteralExprs(
+                app.children_mut()
+                    .into_iter()
+                    .map(|c| HashExpr::new(c.clone()))
+                    .collect(),
+            ));
+            translate.set_literal_exprs(literal_exprs);
+        }
+
+        let body_ref = func.body.borrow();
+        let body = body_ref.as_ref().unwrap();
+
+        let app_z3 = translate.t_symbolic(&app).into_dynamic(translate.ctx);
+        let body_z3 = translate.t_symbolic(body).into_dynamic(translate.ctx);
+
+        let axiom = self.build_axiom(
+            translate,
+            func,
+            &app_z3,
+            &body_z3,
+            &format!("{}(computation)", func.name),
+            WEIGHT_COMP,
+        );
+        // reset to default
+        translate.clear_literal_exprs();
         self.fuel_value.set(old_fuel_value);
 
         axiom
