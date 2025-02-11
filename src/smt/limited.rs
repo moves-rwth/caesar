@@ -1,8 +1,6 @@
-//! This module contains all functions related to fuel encoding from the paper
-//! "Computing with an SMT Solver". The goal is to limit the number of quantifier instantiation
-//! of a functions defining axiom. This is done by including an extra [z3rro::Fuel] parameter and
-//! only providing axioms for non-zero fuel parameters. The fuel parameter is decremented in every
-//! instantiation.
+//! This module contains all functions related to limited functions.
+//! The goal is to limit the number of quantifier instantiation
+//! of a functions defining axiom.
 //!
 //! # Note
 //! For this to work the SMT solver is not allowed to synthesis fuel values itself.
@@ -23,7 +21,7 @@ use std::collections::HashSet;
 use std::convert::Infallible;
 use std::fmt::{Display, Formatter};
 use std::mem;
-use std::num::NonZeroU8;
+use std::num::NonZero;
 use tracing::info_span;
 use z3::ast::{Ast, Bool, Dynamic};
 use z3::{Pattern, Sort};
@@ -97,8 +95,7 @@ trait EncodingBase<'ctx> {
 type FunctionDeclaration<'ctx> = (Ident, Vec<Sort<'ctx>>, Sort<'ctx>);
 
 /// A specific strategy for encoding custom interpreted functions
-pub trait EncodingFuel<'ctx> {
-
+pub trait LimitedFunctionEncoder<'ctx> {
     /// Generate the necessary function declaration(s) on the SMT-level
     fn declare_function(
         &self,
@@ -122,31 +119,31 @@ pub trait EncodingFuel<'ctx> {
     ) -> Symbolic<'ctx>;
 }
 
-enum FuelEncodingInner<'ctx> {
-    None(FuelEncodingNone),
-    Dynamic(FuelEncodingDynamic<'ctx>),
-    Static(FuelEncodingStatic),
+enum LimitedFunctionEncodingInner<'ctx> {
+    None(LimitedFunctionNoneEncoding),
+    Dynamic(LimitedFunctionDynamicEncoding<'ctx>),
+    Static(LimitedFunctionStaticEncoding),
 }
 
 /// A value that represents one of the possible encodings
-pub struct FuelEncoding<'ctx>(FuelEncodingInner<'ctx>);
+pub struct LimitedFunctionEncoding<'ctx>(LimitedFunctionEncodingInner<'ctx>);
 
-impl<'ctx> Default for FuelEncoding<'ctx> {
+impl<'ctx> Default for LimitedFunctionEncoding<'ctx> {
     fn default() -> Self {
         Self::none()
     }
 }
 
-impl<'ctx> EncodingFuel<'ctx> for FuelEncoding<'ctx> {
+impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionEncoding<'ctx> {
     fn declare_function(
         &self,
         ctx: &SmtCtx<'ctx>,
         func: &FuncDecl,
     ) -> Vec<FunctionDeclaration<'ctx>> {
         match &self.0 {
-            FuelEncodingInner::None(enc) => enc.declare_function(ctx, func),
-            FuelEncodingInner::Dynamic(enc) => enc.declare_function(ctx, func),
-            FuelEncodingInner::Static(enc) => enc.declare_function(ctx, func),
+            LimitedFunctionEncodingInner::None(enc) => enc.declare_function(ctx, func),
+            LimitedFunctionEncodingInner::Dynamic(enc) => enc.declare_function(ctx, func),
+            LimitedFunctionEncodingInner::Static(enc) => enc.declare_function(ctx, func),
         }
     }
 
@@ -156,9 +153,9 @@ impl<'ctx> EncodingFuel<'ctx> for FuelEncoding<'ctx> {
         func: &FuncDecl,
     ) -> Vec<Bool<'ctx>> {
         match &self.0 {
-            FuelEncodingInner::None(enc) => enc.axioms(translate, func),
-            FuelEncodingInner::Dynamic(enc) => enc.axioms(translate, func),
-            FuelEncodingInner::Static(enc) => enc.axioms(translate, func),
+            LimitedFunctionEncodingInner::None(enc) => enc.axioms(translate, func),
+            LimitedFunctionEncodingInner::Dynamic(enc) => enc.axioms(translate, func),
+            LimitedFunctionEncodingInner::Static(enc) => enc.axioms(translate, func),
         }
     }
 
@@ -169,40 +166,54 @@ impl<'ctx> EncodingFuel<'ctx> for FuelEncoding<'ctx> {
         args: Vec<Symbolic<'ctx>>,
     ) -> Symbolic<'ctx> {
         match &self.0 {
-            FuelEncodingInner::None(enc) => enc.call_function(ctx, func, args),
-            FuelEncodingInner::Dynamic(enc) => enc.call_function(ctx, func, args),
-            FuelEncodingInner::Static(enc) => enc.call_function(ctx, func, args),
+            LimitedFunctionEncodingInner::None(enc) => enc.call_function(ctx, func, args),
+            LimitedFunctionEncodingInner::Dynamic(enc) => enc.call_function(ctx, func, args),
+            LimitedFunctionEncodingInner::Static(enc) => enc.call_function(ctx, func, args),
         }
     }
 }
 
-impl<'ctx> FuelEncoding<'ctx> {
+impl<'ctx> LimitedFunctionEncoding<'ctx> {
+    /// Apply no special encoding
     pub fn none() -> Self {
-        Self(FuelEncodingInner::None(FuelEncodingNone))
+        Self(LimitedFunctionEncodingInner::None(
+            LimitedFunctionNoneEncoding,
+        ))
     }
 
+    /// Perform limited function encoding by including an extra [z3rro::Fuel] parameter and
+    /// only providing axioms for non-zero fuel parameters. The fuel parameter is decremented in every
+    /// instantiation.
+    /// Based on the paper "Computing with an SMT Solver".
     pub fn dynamic(computation: bool) -> Self {
-        Self(FuelEncodingInner::Dynamic(FuelEncodingDynamic {
-            computation,
-            none_encoding: FuelEncodingNone,
-            fuel_context: RefCell::new(FuelContext::call()),
-        }))
+        Self(LimitedFunctionEncodingInner::Dynamic(
+            LimitedFunctionDynamicEncoding {
+                computation,
+                none_encoding: LimitedFunctionNoneEncoding,
+                fuel_context: RefCell::new(FuelContext::call()),
+            },
+        ))
     }
 
+    /// Perform limited function encoding by introducing n versions of the function.
+    /// Version x only references x - 1. There is no definition for version 0.
     pub fn static_(computation: bool) -> Self {
-        Self(FuelEncodingInner::Static(FuelEncodingStatic {
-            none_encoding: FuelEncodingNone,
-            computation,
-            fuel_value: Cell::new(INITIAL_FUEL),
-        }))
+        Self(LimitedFunctionEncodingInner::Static(
+            LimitedFunctionStaticEncoding {
+                none_encoding: LimitedFunctionNoneEncoding,
+                computation,
+                fuel_value: Cell::new(INITIAL_FUEL.try_into().unwrap()),
+                fuel_context: Cell::new(INITIAL_FUEL),
+            },
+        ))
     }
 }
 
-struct FuelEncodingNone;
+struct LimitedFunctionNoneEncoding;
 
-impl<'ctx> EncodingBase<'ctx> for FuelEncodingNone {}
+impl<'ctx> EncodingBase<'ctx> for LimitedFunctionNoneEncoding {}
 
-impl<'ctx> EncodingFuel<'ctx> for FuelEncodingNone {
+impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionNoneEncoding {
     fn declare_function(
         &self,
         ctx: &SmtCtx<'ctx>,
@@ -240,7 +251,7 @@ impl<'ctx> EncodingFuel<'ctx> for FuelEncodingNone {
     }
 }
 
-impl FuelEncodingNone {
+impl LimitedFunctionNoneEncoding {
     fn definitional_axiom<'smt, 'ctx>(
         &self,
         translate: &mut TranslateExprs<'smt, 'ctx>,
@@ -260,6 +271,132 @@ impl FuelEncodingNone {
             &format!("{}(definitional)", func.name),
             WEIGHT_DEFAULT,
         )
+    }
+}
+
+/// Functionality common to the fuel encodings
+trait EncodingFuel<'ctx>: EncodingBase<'ctx> {
+    fn use_head_context(&self, ctx: &SmtCtx<'ctx>);
+    fn use_body_context(&self, ctx: &SmtCtx<'ctx>);
+    fn to_body_context(&self, ctx: &SmtCtx<'ctx>);
+    fn reset_context(&self, ctx: &SmtCtx<'ctx>);
+
+    fn definitional_axiom<'smt>(
+        &self,
+        translate: &mut TranslateExprs<'smt, 'ctx>,
+        func: &FuncDecl,
+    ) -> Bool<'ctx> {
+        let body_ref = func.body.borrow();
+        let body = body_ref.as_ref().unwrap();
+
+        let app = build_call(translate.ctx.tcx, func);
+
+        self.use_head_context(translate.ctx);
+        let symbolic_app = translate.t_symbolic(&app).into_dynamic(translate.ctx);
+        // reuse same fuel in body
+        self.to_body_context(translate.ctx);
+        let symbolic_body = translate.t_symbolic(body).into_dynamic(translate.ctx);
+        let axiom = self.build_axiom(
+            translate,
+            func,
+            &symbolic_app,
+            &symbolic_body,
+            &format!("{}(definitional)", func.name),
+            WEIGHT_DEFAULT,
+        );
+
+        self.reset_context(translate.ctx);
+        axiom
+    }
+
+    fn return_invariant<'smt>(
+        &self,
+        translate: &mut TranslateExprs<'smt, 'ctx>,
+        func: &FuncDecl,
+    ) -> Option<Bool<'ctx>> {
+        self.use_body_context(translate.ctx);
+        let axiom = self.build_return_invariant(
+            translate,
+            func,
+            &format!("{}(return_invariant)", func.name),
+        );
+        self.reset_context(translate.ctx);
+        axiom
+    }
+
+    fn fuel_synonym_axiom<'smt>(
+        &self,
+        translate: &mut TranslateExprs<'smt, 'ctx>,
+        func: &FuncDecl,
+    ) -> Bool<'ctx> {
+        let app = build_call(translate.ctx.tcx, func);
+
+        self.use_head_context(translate.ctx);
+        let symbolic_app = translate.t_symbolic(&app).into_dynamic(translate.ctx);
+        // reuse same fuel in body
+        self.to_body_context(translate.ctx);
+        let symbolic_body = translate.t_symbolic(&app).into_dynamic(translate.ctx);
+        let axiom = self.build_axiom(
+            translate,
+            func,
+            &symbolic_app,
+            &symbolic_body,
+            &format!("{}(fuel_synonym)", func.name),
+            WEIGHT_DEFAULT,
+        );
+
+        self.reset_context(translate.ctx);
+        axiom
+    }
+
+    fn computation_axiom<'smt>(
+        &self,
+        translate: &mut TranslateExprs<'smt, 'ctx>,
+        func: &FuncDecl,
+    ) -> Bool<'ctx> {
+        let mut app = build_call(translate.ctx.tcx, func);
+
+        self.use_body_context(translate.ctx);
+        {
+            let literal_vars = func
+                .inputs
+                .node
+                .iter()
+                .map(|param| param.name)
+                .collect_vec();
+            let mut literal_exprs = LiteralExprCollector::new()
+                .with_functions_with_def(translate.ctx.functions_with_def().as_slice())
+                .with_literal_vars(literal_vars.as_slice())
+                .collect(func.body.borrow_mut().as_mut().unwrap());
+
+            // Add arguments to ensure that they are lit-wrapped in the trigger
+            literal_exprs.extend(LiteralExprs(
+                app.children_mut()
+                    .into_iter()
+                    .map(|c| HashExpr::new(c.clone()))
+                    .collect(),
+            ));
+            translate.set_literal_exprs(literal_exprs);
+        }
+
+        let body_ref = func.body.borrow();
+        let body = body_ref.as_ref().unwrap();
+
+        let app_z3 = translate.t_symbolic(&app).into_dynamic(translate.ctx);
+        let body_z3 = translate.t_symbolic(body).into_dynamic(translate.ctx);
+
+        let axiom = self.build_axiom(
+            translate,
+            func,
+            &app_z3,
+            &body_z3,
+            &format!("{}(computation)", func.name),
+            WEIGHT_COMP,
+        );
+        translate.clear_literal_exprs();
+        self.reset_context(translate.ctx);
+
+        axiom
     }
 }
 
@@ -293,13 +430,38 @@ impl<'ctx> FuelContext<'ctx> {
     }
 }
 
-struct FuelEncodingDynamic<'ctx> {
-    none_encoding: FuelEncodingNone,
+/// # Definitional Axiom
+/// It has the form:
+/// ```txt
+/// forall fuel: Fuel, <args...> @trigger(func_name(Succ(fuel), <args...>)) . func_name(Succ(fuel), <args...>) = <body>
+/// ```
+/// The trigger requires a non-zero fuel value to match. For recursive calls inside `<body>`
+/// `fuel` is used, i.e. the fuel value is decremented.
+///
+/// # Fuel Synonym Axiom
+/// It states that the result of the function is independent of the fuel parameter. It has the form:
+/// ```txt
+/// forall fuel: Fuel, <args...> @trigger(func_name(Succ(fuel), <args...>)) . func_name(Succ(fuel), <args...>) = func_name(fuel, <args...>)
+/// ```
+/// # Computation Axiom
+/// It allows instantiation with literal arguments without consuming fuel. It is very similar to
+/// the definitional axiom. The only differences are that
+///  - all arguments must be known literal values (marked with [z3rro::LitDecl]),
+///  - the fuel value can be zero,
+///  - the fuel value is not decreased in the body
+///  - and the literal information is also propagated in the body.
+///
+/// It has the form:
+/// ```txt
+/// forall fuel: Fuel, <args...> @trigger(func_name(fuel, Lit(<args...>))) . func_name(fuel, Lit(<args...>)) = <body>
+/// ```
+struct LimitedFunctionDynamicEncoding<'ctx> {
+    none_encoding: LimitedFunctionNoneEncoding,
     computation: bool,
     fuel_context: RefCell<FuelContext<'ctx>>,
 }
 
-impl<'ctx> EncodingBase<'ctx> for FuelEncodingDynamic<'ctx> {
+impl<'ctx> EncodingBase<'ctx> for LimitedFunctionDynamicEncoding<'ctx> {
     fn call_scope<'smt>(
         &self,
         translate: &mut TranslateExprs<'smt, 'ctx>,
@@ -317,7 +479,25 @@ impl<'ctx> EncodingBase<'ctx> for FuelEncodingDynamic<'ctx> {
     }
 }
 
-impl<'ctx> EncodingFuel<'ctx> for FuelEncodingDynamic<'ctx> {
+impl<'ctx> EncodingFuel<'ctx> for LimitedFunctionDynamicEncoding<'ctx> {
+    fn use_head_context(&self, ctx: &SmtCtx<'ctx>) {
+        *self.fuel_context.borrow_mut() = FuelContext::head(ctx);
+    }
+
+    fn use_body_context(&self, ctx: &SmtCtx<'ctx>) {
+        *self.fuel_context.borrow_mut() = FuelContext::body(ctx);
+    }
+
+    fn to_body_context(&self, ctx: &SmtCtx<'ctx>) {
+        self.fuel_context.borrow_mut().replace_with_body(ctx);
+    }
+
+    fn reset_context(&self, _ctx: &SmtCtx<'ctx>) {
+        *self.fuel_context.borrow_mut() = FuelContext::call();
+    }
+}
+
+impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionDynamicEncoding<'ctx> {
     fn declare_function(
         &self,
         ctx: &SmtCtx<'ctx>,
@@ -373,165 +553,34 @@ impl<'ctx> EncodingFuel<'ctx> for FuelEncodingDynamic<'ctx> {
     }
 }
 
-impl<'ctx> FuelEncodingDynamic<'ctx> {
-    /// Creates the default defining axiom for a function. It has the form:
-    /// ```txt
-    /// forall fuel: Fuel, <args...> @trigger(func_name(Succ(fuel), <args...>)) . func_name(Succ(fuel), <args...>) = <body>
-    /// ```
-    /// The trigger requires a non-zero fuel value to match. For recursive calls inside `<body>`
-    /// `fuel` is used, i.e. the fuel value is decremented.
-    fn definitional_axiom<'smt>(
-        &self,
-        translate: &mut TranslateExprs<'smt, 'ctx>,
-        func: &FuncDecl,
-    ) -> Bool<'ctx> {
-        let body_ref = func.body.borrow();
-        let body = body_ref.as_ref().unwrap();
-
-        let app = build_call(translate.ctx.tcx, func);
-
-        *self.fuel_context.borrow_mut() = FuelContext::head(translate.ctx);
-        let symbolic_app = translate.t_symbolic(&app).into_dynamic(translate.ctx);
-        // reuse same fuel in body
-        self.fuel_context
-            .borrow_mut()
-            .replace_with_body(translate.ctx);
-        let symbolic_body = translate.t_symbolic(body).into_dynamic(translate.ctx);
-
-        let axiom = self.build_axiom(
-            translate,
-            func,
-            &symbolic_app,
-            &symbolic_body,
-            &format!("{}(definitional)", func.name),
-            WEIGHT_DEFAULT,
-        );
-        // reset to default
-        *self.fuel_context.borrow_mut() = FuelContext::call();
-
-        axiom
-    }
-
-    fn return_invariant<'smt>(
-        &self,
-        translate: &mut TranslateExprs<'smt, 'ctx>,
-        func: &FuncDecl,
-    ) -> Option<Bool<'ctx>> {
-        *self.fuel_context.borrow_mut() = FuelContext::body(translate.ctx);
-        let axiom = self.build_return_invariant(
-            translate,
-            func,
-            &format!("{}(return_invariant)", func.name),
-        );
-        *self.fuel_context.borrow_mut() = FuelContext::call();
-        axiom
-    }
-
-    /// Creates the fuel synonym axiom that states that the result of the function is independent
-    /// of the fuel parameter. It has the form:
-    /// ```txt
-    /// forall fuel: Fuel, <args...> @trigger(func_name(Succ(fuel), <args...>)) . func_name(Succ(fuel), <args...>) = func_name(fuel, <args...>)
-    /// ```
-    fn fuel_synonym_axiom<'smt>(
-        &self,
-        translate: &mut TranslateExprs<'smt, 'ctx>,
-        func: &FuncDecl,
-    ) -> Bool<'ctx> {
-        let app = build_call(translate.ctx.tcx, func);
-
-        *self.fuel_context.borrow_mut() = FuelContext::head(translate.ctx);
-        let symbolic_app = translate.t_symbolic(&app).into_dynamic(translate.ctx);
-        // reuse same fuel in body
-        self.fuel_context
-            .borrow_mut()
-            .replace_with_body(translate.ctx);
-        let symbolic_body = translate.t_symbolic(&app).into_dynamic(translate.ctx);
-
-        let axiom = self.build_axiom(
-            translate,
-            func,
-            &symbolic_app,
-            &symbolic_body,
-            &format!("{}(fuel_synonym)", func.name),
-            WEIGHT_DEFAULT,
-        );
-        // reset to default
-        *self.fuel_context.borrow_mut() = FuelContext::call();
-
-        axiom
-    }
-
-    /// Creates the computation axiom that allows instantiation with literal arguments without
-    /// consuming fuel. It is very similar to the [defining_axiom]. The only differences are that
-    ///  - all arguments must be known literal values (marked with [z3rro::LitDecl]),
-    ///  - the fuel value can be zero,
-    ///  - the fuel value is not decreased in the body
-    ///  - and the literal information is also propagated in the body.
-    ///
-    /// It has the form:
-    /// ```txt
-    /// forall fuel: Fuel, <args...> @trigger(func_name(fuel, Lit(<args...>))) . func_name(fuel, Lit(<args...>)) = <body>
-    /// ```
-    fn computation_axiom<'smt>(
-        &self,
-        translate: &mut TranslateExprs<'smt, 'ctx>,
-        func: &FuncDecl,
-    ) -> Bool<'ctx> {
-        let mut app = build_call(translate.ctx.tcx, func);
-
-        *self.fuel_context.borrow_mut() = FuelContext::body(translate.ctx);
-        {
-            let literal_vars = func
-                .inputs
-                .node
-                .iter()
-                .map(|param| param.name)
-                .collect_vec();
-            let mut literal_exprs = LiteralExprCollector::new()
-                .with_functions_with_def(translate.ctx.functions_with_def().as_slice())
-                .with_literal_vars(literal_vars.as_slice())
-                .collect(func.body.borrow_mut().as_mut().unwrap());
-
-            // Add arguments to ensure that they are lit-wrapped in the trigger
-            literal_exprs.extend(LiteralExprs(
-                app.children_mut()
-                    .into_iter()
-                    .map(|c| HashExpr::new(c.clone()))
-                    .collect(),
-            ));
-            translate.set_literal_exprs(literal_exprs);
-        }
-
-        let body_ref = func.body.borrow();
-        let body = body_ref.as_ref().unwrap();
-
-        let app_z3 = translate.t_symbolic(&app).into_dynamic(translate.ctx);
-        let body_z3 = translate.t_symbolic(body).into_dynamic(translate.ctx);
-
-        let axiom = self.build_axiom(
-            translate,
-            func,
-            &app_z3,
-            &body_z3,
-            &format!("{}(computation)", func.name),
-            WEIGHT_COMP,
-        );
-        translate.clear_literal_exprs();
-        *self.fuel_context.borrow_mut() = FuelContext::call();
-
-        axiom
-    }
-}
-
-struct FuelEncodingStatic {
-    none_encoding: FuelEncodingNone,
+struct LimitedFunctionStaticEncoding {
+    none_encoding: LimitedFunctionNoneEncoding,
     computation: bool,
-    fuel_value: Cell<u8>,
+    fuel_context: Cell<u8>, // The current contex. This value is in function calls
+    fuel_value: Cell<NonZero<u8>>, // The current fuel value that axioms are generated for. Head/Body is relative to this value
 }
 
-impl<'ctx> EncodingBase<'ctx> for FuelEncodingStatic {}
+impl<'ctx> EncodingBase<'ctx> for LimitedFunctionStaticEncoding {}
 
-impl<'ctx> EncodingFuel<'ctx> for FuelEncodingStatic {
+impl<'ctx> EncodingFuel<'ctx> for LimitedFunctionStaticEncoding {
+    fn use_head_context(&self, _ctx: &SmtCtx<'ctx>) {
+        self.fuel_context.set(self.fuel_value.get().get());
+    }
+
+    fn use_body_context(&self, _ctx: &SmtCtx<'ctx>) {
+        self.fuel_context.set(self.fuel_value.get().get() - 1);
+    }
+
+    fn to_body_context(&self, _ctx: &SmtCtx<'ctx>) {
+        self.fuel_context.set(self.fuel_value.get().get() - 1);
+    }
+
+    fn reset_context(&self, _ctx: &SmtCtx<'ctx>) {
+        self.fuel_context.set(INITIAL_FUEL);
+    }
+}
+
+impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionStaticEncoding {
     fn declare_function(
         &self,
         ctx: &SmtCtx<'ctx>,
@@ -579,9 +628,9 @@ impl<'ctx> EncodingFuel<'ctx> for FuelEncodingStatic {
         );
         if self.computation {
             axioms.extend(
-            (1..=INITIAL_FUEL)
-                .rev()
-                .map(|fuel| self.computation_axiom(translate, func, fuel.try_into().unwrap())),
+                (1..=INITIAL_FUEL)
+                    .rev()
+                    .map(|fuel| self.computation_axiom(translate, func, fuel.try_into().unwrap())),
             )
         }
         axioms
@@ -599,14 +648,14 @@ impl<'ctx> EncodingFuel<'ctx> for FuelEncodingStatic {
 
         apply_function(
             ctx,
-            Self::ident_with_fuel(func, self.fuel_value.get()),
+            Self::ident_with_fuel(func, self.fuel_context.get()),
             &func.output,
             args.into_iter().collect(),
         )
     }
 }
 
-impl FuelEncodingStatic {
+impl LimitedFunctionStaticEncoding {
     fn ident_with_fuel(func: &FuncDecl, fuel: u8) -> Ident {
         Ident {
             name: Symbol::intern(&format!("{}${}", func.name.name, fuel)),
@@ -618,38 +667,16 @@ impl FuelEncodingStatic {
     /// ```txt
     /// forall <args...> @trigger(func_name$n(<args...>)) . func_name$n(<args...>) = <body>
     /// ```
-    /// The axiom is only generated for n > 0 (non-zero fuel values). Recursive calls inside `body`
-    /// are replaced with `func_name$n`, i.e. the fuel value is decremented.
+    /// The axiom is only generated for n > 0 (non-zero fuel values). Recursive calls inside `<body>`
+    /// are replaced with `func_name$n-1`, i.e. the fuel value is decremented.
     fn definitional_axiom<'smt, 'ctx>(
         &self,
         translate: &mut TranslateExprs<'smt, 'ctx>,
         func: &FuncDecl,
-        non_zero_fuel_value: NonZeroU8,
+        fuel_value: NonZero<u8>,
     ) -> Bool<'ctx> {
-        let fuel_value = non_zero_fuel_value.into();
-        let old_fuel_value = self.fuel_value.get();
-        let body_ref = func.body.borrow();
-        let body = body_ref.as_ref().unwrap();
-        let func_ident = Self::ident_with_fuel(func, fuel_value);
-        let app = build_call(translate.ctx.tcx, func);
-
         self.fuel_value.set(fuel_value);
-        let symbolic_app = translate.t_symbolic(&app).into_dynamic(translate.ctx);
-        self.fuel_value.set(fuel_value - 1);
-        let symbolic_body = translate.t_symbolic(body).into_dynamic(translate.ctx);
-
-        let axiom = self.build_axiom(
-            translate,
-            func,
-            &symbolic_app,
-            &symbolic_body,
-            &format!("{}(definitional)", func_ident),
-            WEIGHT_DEFAULT,
-        );
-        // reset to default
-        self.fuel_value.set(old_fuel_value);
-
-        axiom
+        EncodingFuel::definitional_axiom(self, translate, func)
     }
 
     fn return_invariant<'smt, 'ctx>(
@@ -658,18 +685,8 @@ impl FuelEncodingStatic {
         func: &FuncDecl,
         fuel_value: u8,
     ) -> Option<Bool<'ctx>> {
-        let old_fuel_value = self.fuel_value.get();
-        self.fuel_value.set(fuel_value);
-        let axiom = self.build_return_invariant(
-            translate,
-            func,
-            &format!(
-                "{}(return_invariant)",
-                Self::ident_with_fuel(func, fuel_value)
-            ),
-        );
-        self.fuel_value.set(old_fuel_value);
-        axiom
+        self.fuel_value.set((fuel_value + 1).try_into().unwrap());
+        EncodingFuel::return_invariant(self, translate, func)
     }
 
     /// Creates the fuel synonym axiom that states that the result of the function is independent
@@ -681,84 +698,20 @@ impl FuelEncodingStatic {
         &self,
         translate: &mut TranslateExprs<'smt, 'ctx>,
         func: &FuncDecl,
-        non_zero_fuel_value: NonZeroU8,
+        fuel_value: NonZero<u8>,
     ) -> Bool<'ctx> {
-        let fuel_value = non_zero_fuel_value.into();
-        let old_fuel_value = self.fuel_value.get();
-        let func_ident = Self::ident_with_fuel(func, fuel_value);
-        let app = build_call(translate.ctx.tcx, func);
-
         self.fuel_value.set(fuel_value);
-        let symbolic_app = translate.t_symbolic(&app).into_dynamic(translate.ctx);
-        self.fuel_value.set(fuel_value - 1);
-        let symbolic_body = translate.t_symbolic(&app).into_dynamic(translate.ctx);
-
-        let axiom = self.build_axiom(
-            translate,
-            func,
-            &symbolic_app,
-            &symbolic_body,
-            &format!("{}(fuel_synonym)", func_ident),
-            WEIGHT_DEFAULT,
-        );
-        // reset to default
-        self.fuel_value.set(old_fuel_value);
-
-        axiom
+        EncodingFuel::fuel_synonym_axiom(self, translate, func)
     }
 
     fn computation_axiom<'smt, 'ctx>(
         &self,
         translate: &mut TranslateExprs<'smt, 'ctx>,
         func: &FuncDecl,
-        non_zero_fuel_value: NonZeroU8,
+        fuel_value: NonZero<u8>,
     ) -> Bool<'ctx> {
-        let fuel_value = non_zero_fuel_value.into();
-        let old_fuel_value = self.fuel_value.get();
-        let mut app = build_call(translate.ctx.tcx, func);
-
         self.fuel_value.set(fuel_value);
-        {
-            let literal_vars = func
-                .inputs
-                .node
-                .iter()
-                .map(|param| param.name)
-                .collect_vec();
-            let mut literal_exprs = LiteralExprCollector::new()
-                .with_functions_with_def(translate.ctx.functions_with_def().as_slice())
-                .with_literal_vars(literal_vars.as_slice())
-                .collect(func.body.borrow_mut().as_mut().unwrap());
-
-            // Add arguments to ensure that they are lit-wrapped in the trigger
-            literal_exprs.extend(LiteralExprs(
-                app.children_mut()
-                    .into_iter()
-                    .map(|c| HashExpr::new(c.clone()))
-                    .collect(),
-            ));
-            translate.set_literal_exprs(literal_exprs);
-        }
-
-        let body_ref = func.body.borrow();
-        let body = body_ref.as_ref().unwrap();
-
-        let app_z3 = translate.t_symbolic(&app).into_dynamic(translate.ctx);
-        let body_z3 = translate.t_symbolic(body).into_dynamic(translate.ctx);
-
-        let axiom = self.build_axiom(
-            translate,
-            func,
-            &app_z3,
-            &body_z3,
-            &format!("{}(computation)", func.name),
-            WEIGHT_COMP,
-        );
-        // reset to default
-        translate.clear_literal_exprs();
-        self.fuel_value.set(old_fuel_value);
-
-        axiom
+        EncodingFuel::computation_axiom(self, translate, func)
     }
 }
 

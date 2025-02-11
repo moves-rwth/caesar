@@ -2,7 +2,7 @@
 
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
 use crate::ast::{DeclKind, FuncDecl};
-use crate::smt::limited::{is_eligible_for_limited_function, EncodingFuel};
+use crate::smt::limited::is_eligible_for_limited_function;
 use crate::{
     ast::{DeclRef, DomainDecl, DomainSpec, Ident, TyKind},
     tyctx::TyCtx,
@@ -18,7 +18,7 @@ use z3rro::{
 };
 
 mod limited;
-pub use limited::{FuelEncoding, LiteralExprCollector};
+pub use limited::{LimitedFunctionEncoder, LimitedFunctionEncoding, LiteralExprCollector};
 
 pub mod pretty_model;
 pub mod symbolic;
@@ -41,7 +41,7 @@ pub struct SmtCtx<'ctx> {
     lists: RefCell<HashMap<TyKind, Rc<ListFactory<'ctx>>>>,
     lits: RefCell<Vec<(Sort<'ctx>, LitDecl<'ctx>)>>,
     uninterpreteds: Uninterpreteds<'ctx>,
-    fuel_encoding: FuelEncoding<'ctx>,
+    limited_function_encoding: LimitedFunctionEncoding<'ctx>,
     options: SmtCtxOptions,
 }
 
@@ -62,11 +62,11 @@ impl<'ctx> SmtCtx<'ctx> {
         };
 
         let fuel_encoding = if !options.use_limited_functions {
-            FuelEncoding::none()
+            LimitedFunctionEncoding::none()
         } else if options.static_fuel {
-            FuelEncoding::static_(options.lit_wrap)
+            LimitedFunctionEncoding::static_(options.lit_wrap)
         } else {
-            FuelEncoding::dynamic(options.lit_wrap)
+            LimitedFunctionEncoding::dynamic(options.lit_wrap)
         };
 
         let mut res = SmtCtx {
@@ -77,7 +77,7 @@ impl<'ctx> SmtCtx<'ctx> {
             lists: RefCell::new(HashMap::new()),
             lits: RefCell::new(Vec::new()),
             uninterpreteds: Uninterpreteds::new(ctx),
-            fuel_encoding,
+            limited_function_encoding: fuel_encoding,
             options,
         };
         res.declare_domains(domains.as_slice());
@@ -96,7 +96,9 @@ impl<'ctx> SmtCtx<'ctx> {
             for spec in &decl.body {
                 if let DomainSpec::Function(func_ref) = &spec {
                     let func = func_ref.borrow();
-                    for (name, domain, range) in self.fuel_encoding.declare_function(self, &func) {
+                    for (name, domain, range) in
+                        self.limited_function_encoding.declare_function(self, &func)
+                    {
                         let domain = domain.iter().collect_vec();
                         self.uninterpreteds.add_function(name, &domain, &range)
                     }
@@ -129,7 +131,7 @@ impl<'ctx> SmtCtx<'ctx> {
 
                         // TODO: create a new name for the axioms
                         axioms.extend(
-                            self.fuel_encoding
+                            self.limited_function_encoding
                                 .axioms(&mut translate, &func)
                                 .into_iter()
                                 .map(with_name(func.name)),
@@ -225,8 +227,8 @@ impl<'ctx> SmtCtx<'ctx> {
         self.options.use_limited_functions && is_eligible_for_limited_function(func)
     }
 
-    pub fn fuel_encoding(&self) -> &FuelEncoding<'ctx> {
-        &self.fuel_encoding
+    pub fn limited_function_encoding(&self) -> &LimitedFunctionEncoding<'ctx> {
+        &self.limited_function_encoding
     }
 
     pub fn functions_with_def(&self) -> Vec<Ident> {
