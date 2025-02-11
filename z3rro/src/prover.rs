@@ -1,6 +1,10 @@
 //! Not a SAT solver, but a prover. There's a difference.
 
-use std::{fmt::Display, time::Duration};
+//use std::{fmt::Display, time::Duration};
+
+use std::{collections::VecDeque, fmt::Display, io::Write, path::Path, process::Command, time::Duration};
+
+use tempfile::NamedTempFile;
 
 use z3::{
     ast::{forall_const, Ast, Bool, Dynamic},
@@ -19,6 +23,68 @@ pub enum ProveResult<'ctx> {
     Proof,
     Counterexample(InstrumentedModel<'ctx>),
     Unknown(ReasonUnknown),
+}
+
+/// Find the swine-z3 file located under the dir directory, and execute swine-z3 on the file located at file_path
+fn execute_swine(dir: &Path, file_path: &Path) {
+    let swine = "swine-z3";
+
+    let find_output = Command::new("find")
+        .arg(dir)
+        .arg("-name")
+        .arg(swine)
+        .output().unwrap();
+
+    if find_output.status.success() {
+        let stdout = String::from_utf8_lossy(&find_output.stdout);
+
+        for line in stdout.lines().rev() {
+            let path = Path::new(line);
+
+            if path.exists() && path.is_file() {
+                let cmd_output = Command::new(path)
+                    .arg(file_path) 
+                    .output().unwrap();
+
+                if cmd_output.status.success() {
+                    println!("{}", String::from_utf8_lossy(&cmd_output.stdout));
+                    break;
+                } else {
+                    eprintln!("Failed to execute swine({}) command with status: {}", line, cmd_output.status);
+                }
+            }
+        }
+    } else {
+        eprintln!("Find command execution failed");
+    }
+}
+
+fn remove_lines_for_swine(input: &str) -> String {
+    let mut output = String::new();
+    let mut tmp_buffer: VecDeque<char> = VecDeque::new();
+    let mut input_buffer: VecDeque<char> = input.chars().collect();
+    let mut cnt = 0;
+
+    while let Some(c) = input_buffer.pop_front() {
+        tmp_buffer.push_back(c);
+        match c {
+            '(' => {
+                cnt += 1;
+            }
+            ')' => {
+                cnt -= 1;
+                if cnt == 0 {
+                    let tmp: String = tmp_buffer.iter().collect();
+                    if !tmp.contains("declare-fun exp") && !tmp.contains("forall") {
+                        output.push_str(&tmp);
+                    }
+                    tmp_buffer.clear();
+                }
+            }
+            _ => {}
+        }
+    }
+    output
 }
 
 impl Display for ProveResult<'_> {
@@ -94,6 +160,21 @@ impl<'ctx> Prover<'ctx> {
         if self.min_level_with_provables.is_none() {
             return ProveResult::Proof;
         }
+
+        let mut smtlib = self.get_smtlib();
+
+        smtlib.add_check_sat();
+        
+        let smtlib = smtlib.into_string();
+        let mut smt_file: NamedTempFile = NamedTempFile::new().unwrap();
+
+        smt_file.write_all(remove_lines_for_swine(&smtlib).as_bytes()).unwrap();
+
+        let file_path = smt_file.path();
+        let start_dir = Path::new("../"); 
+
+        execute_swine(start_dir, file_path);
+        
         let res = if assumptions.is_empty() {
             self.solver.check()
         } else {
