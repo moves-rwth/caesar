@@ -12,7 +12,7 @@ coproc main(init_elow: UInt, init_ehigh: UInt, init_n: UInt, init_v: UInt, init_
     c = init_c
     running = init_running
     i = init_i
-    @unroll(2, ([(((((((elow + 1) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * 0.49) + ([!((((((((elow + 1) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh))] * 1))
+    @unroll(2, 0)
     while running == 0 {
         v = 2 * v
         prob_choice = flip(0.5)

@@ -7,7 +7,7 @@ coproc main(init_c: UInt, init_f: UInt) -> (c: UInt, f: UInt)
     var prob_choice: Bool
     c = init_c
     f = init_f
-    @unroll(47, c + 0.999999999999)
+    @unroll(47, 0)
     while f == 1 {
         prob_choice = flip(0.5)
         if prob_choice {

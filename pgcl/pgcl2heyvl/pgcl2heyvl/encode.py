@@ -171,17 +171,19 @@ def encode_bounded_mc(program: Program, post: Expr, pre: Expr,
     # Replace the variables with their initial versions before encoding
     hey_init_pre = _encode_expr(_to_init_expr(pre))
 
-    global _encode_direction
 
+    global _encode_direction
     if calculus == Calculus.WLP:
         _encode_direction = Direction.DOWN
+        terminator = HeyExpr("1")
     elif calculus == Calculus.WP or calculus == Calculus.ERT:
         _encode_direction = Direction.UP
+        terminator = HeyExpr("0")
     else:
         raise Exception("unsupported calculus.")
 
-    loop_annotation_stack = [(Encoding.UNROLL,  [k, _encode_expr(inv)])
-                              for (k, inv) in loop_annotations]
+    loop_annotation_stack = [(Encoding.UNROLL,  [k, terminator])
+                              for (k, _) in loop_annotations]
 
     prob_choice_decl = []
     if _has_prob_choices(program):
