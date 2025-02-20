@@ -102,7 +102,7 @@ coproc main(init_i: UInt, init_d: UInt, init_s: UInt, init_l: UInt, init_g: UInt
     l = init_l
     g = init_g
     n = init_n
-    @k_induction(1, 5 * n)
+    @invariant(5 * n)
     while 0 < n {
         prob_choice = flip(0.3)
         if prob_choice {

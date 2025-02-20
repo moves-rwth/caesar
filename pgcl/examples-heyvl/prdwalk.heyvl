@@ -56,7 +56,7 @@ coproc main(init_x: UInt, init_n: UInt, init_r: UInt) -> (x: UInt, n: UInt, r: U
     x = init_x
     n = init_n
     r = init_r
-    @k_induction(1, 1.14286 * ((n + 4) - x))
+    @invariant(1.14286 * ((n + 4) - x))
     while x < n {
         prob_choice = flip((1/2))
         if prob_choice {

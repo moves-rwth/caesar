@@ -48,7 +48,7 @@ coproc main(init_x: UInt, init_y: UInt, init_m: UInt, init_n: UInt, init_r: UInt
     m = init_m
     n = init_n
     r = init_r
-    @k_induction(1, (2 * (m - y)) + (0.666667 * (n - x)))
+    @invariant((2 * (m - y)) + (0.666667 * (n - x)))
     while (x + 3) <= n {
         if y < m {
             prob_choice = flip((1/2))

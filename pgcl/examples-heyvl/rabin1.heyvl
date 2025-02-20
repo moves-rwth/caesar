@@ -38,7 +38,7 @@ coproc main(init_i: UInt, init_n: UInt, init_d: UInt, init_phase: UInt) -> (i: U
     n = init_n
     d = init_d
     phase = init_phase
-    @k_induction(1, ([((1 < i) && (i < 2)) && (phase == 0)] * (2/3)) + ([!(((1 < i) && (i < 2)) && (phase == 0))] * 1))
+    @invariant(([((1 < i) && (i < 2)) && (phase == 0)] * (2/3)) + ([!(((1 < i) && (i < 2)) && (phase == 0))] * 1))
     while (1 < i) || (phase == 1) {
         if phase == 0 {
             n = i

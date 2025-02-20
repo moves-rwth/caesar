@@ -18,7 +18,7 @@ proc main(init_x: UInt) -> (x: UInt)
 {
     var prob_choice: Bool
     x = init_x
-    @ast(true, x, v, 1/(v+1), 1)
+    @ast(true, x, v, 1 / (v + 1), 1)
     while 0 < x {
         prob_choice = flip(1 / (x + 1))
         if prob_choice {

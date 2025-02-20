@@ -24,7 +24,7 @@ coproc main(init_x: UInt, init_n: UInt) -> (x: UInt, n: UInt)
     var prob_choice: Bool
     x = init_x
     n = init_n
-    @k_induction(1, 2 * ((n + 1) - x))
+    @invariant(2 * ((n + 1) - x))
     while x < n {
         prob_choice = flip((1/2))
         if prob_choice {

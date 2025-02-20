@@ -200,7 +200,7 @@ coproc main(init_x: UInt, init_y: UInt, init_d: UInt, init_n: UInt) -> (x: UInt,
     y = init_y
     d = init_d
     n = init_n
-    @k_induction(1, 2 * ((n + 1) - d))
+    @invariant(2 * ((n + 1) - d))
     while d < n {
         if 0 < x {
             if 0 < y {

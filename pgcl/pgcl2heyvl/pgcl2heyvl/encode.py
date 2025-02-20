@@ -108,7 +108,8 @@ def encode_k_ind(program: Program, post: Expr, pre: Expr, calculus: Calculus,
     else:
         raise Exception("unsupported calculus.")
 
-    loop_annotation_stack = [(Encoding.K_INDUCTION, [k, _encode_expr(inv)]) for (k, inv) in loop_annotations]
+    
+    loop_annotation_stack = [(Encoding.INVARIANT, [_encode_expr(inv)]) if k == 1 else (Encoding.K_INDUCTION, [k, _encode_expr(inv)]) for (k, inv) in loop_annotations]
 
     prob_choice_decl = []
     if _has_prob_choices(program):
