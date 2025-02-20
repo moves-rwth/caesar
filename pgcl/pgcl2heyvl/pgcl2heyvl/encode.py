@@ -136,13 +136,6 @@ def encode_k_ind(program: Program, post: Expr, pre: Expr, calculus: Calculus,
         return_object = HeyCalculusAnnotation(calculus, return_object)
 
     return [
-        HeyComment(
-            "HeyVL file to show\n" +
-            f"    {str(_encode_expr(pre))} {'>=' if _encode_direction == Direction.UP else '<='} {calculus}[C]({str(hey_post)})\n"
-            +
-            f"using k-induction with {', '.join([f'k = {k} and invariant = {_encode_expr(inv)}' for (k,inv) in loop_annotations])}\n"
-            + "for the pGCL program C:\n\n" +
-            f"{indent(str(program), '    ')}"),
         return_object
     ]
 
@@ -211,13 +204,6 @@ def encode_bounded_mc(program: Program, post: Expr, pre: Expr,
                      post=hey_post)
 
     return [
-        HeyComment(
-            "HeyVL file to show that\n" +
-            f"    {str(_encode_expr(pre))} {'>=' if _encode_direction == Direction.UP else '<='} {calculus}[C]({str(hey_post)})\n"
-            + "DOES NOT HOLD\n" +
-            f"using bounded model checking with {', '.join([f'k = {k} and invariant = {_encode_expr(inv)}' for (k,inv) in loop_annotations])}\n"
-            + "for the pGCL program C:\n\n" +
-            f"{indent(str(program), '    ')}"),
         return_object
     ]
 
@@ -289,14 +275,7 @@ def encode_ast_mciver(program: Program, invariant: Expr, variant: Expr,
                      direction=_encode_direction,
                     )
     
-
     return [
-        HeyComment(
-            "HeyVL file to show that C is almost-surely terminating\n" +
-            "using AST rule by McIver et al. (2018) with\n" +
-            f"invariant = {_encode_expr(invariant)}, variant = {hey_variant}, probability function p(v) = {_encode_expr(prob)}, decrease function d(v) = {_encode_expr(decrease)}\n"
-            + "for the pGCL program C:\n\n" +
-            f"{indent(str(program), '    ')}"),
         return_object
     ]
 
@@ -360,12 +339,6 @@ def encode_past(program: Program, invariant: Expr, eps: Expr,
     
 
     return [
-        HeyComment(
-            "HeyVL file to show that C is positively almost-surely terminating\n"
-            + "using PAST rule by Chakarov et al. (2013) with\n" +
-            f"invariant = {_encode_expr(invariant)} eps = {_encode_expr(eps)} and k = {_encode_expr(k)}\n"
-            + "for the pGCL program C:\n\n" +
-            f"{indent(str(program), '    ')}"),
         return_object
     ]
 
@@ -422,16 +395,6 @@ def encode_optional_stopping(program: Program, post: Expr, invariant: Expr,
                     )
 
     return [
-        HeyComment(
-            "HeyVL file to show that\n" +
-            f"    {_encode_expr(invariant)} <= wp[C]({_encode_expr(post)})\n" +
-            "using the Optional Stopping Theorem from Aiming Low is Harder paper with\n"
-            +
-            f"invariant = {_encode_expr(invariant)}, c = {_encode_expr(c)} and\n"
-            +
-            f"past-invariant = {_encode_expr(past_inv)} is used to show that C is PAST by showing\n "
-            + f"    {_encode_expr(past_inv)} >= ert[C](0)\n" +
-            "for the pGCL program C:\n\n" + f"{indent(str(program), '    ')}"),
         return_object
     ]
 
