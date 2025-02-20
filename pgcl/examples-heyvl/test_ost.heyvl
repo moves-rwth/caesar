@@ -20,22 +20,14 @@
 //         k := k + 1;
 //     }
 
-// past_I < ∞
-proc lt_infinity(a: Bool, b: UInt, k: UInt) -> ()
-{
-    assert ?(2 * [a] < ?(true))
-}
-
-// \Phi_{0}(past_I) <= past_I, so ert[P](0) <= past_I
-coproc past(init_a: Bool, init_b: UInt, init_k: UInt) -> (a: Bool, b: UInt, k: UInt)
-    pre 2 * [init_a]
-    post 0
+proc main(init_a: Bool, init_b: UInt, init_k: UInt) -> (a: Bool, b: UInt, k: UInt)
 {
     var prob_choice: Bool
     a = init_a
     b = init_b
     k = init_k
-    if a {
+    @ost(b + [a], 2 * [a], 1, b)
+    while a {
         prob_choice = flip(0.5)
         if prob_choice {
             a = false
@@ -43,78 +35,5 @@ coproc past(init_a: Bool, init_b: UInt, init_k: UInt) -> (a: Bool, b: UInt, k: U
             b = b + 1
         }
         k = k + 1
-        tick 1
-        assert 2 * [a]
-        assume 0
-    } else {}
-}
-
-// wp[P](|I(s)-I|)(s) <= c
-coproc conditional_difference_bounded(init_a: Bool, init_b: UInt, init_k: UInt) -> (a: Bool, b: UInt, k: UInt)
-    pre 1
-    post ite((init_b + [init_a]) <= (b + [a]),(b + [a]) - (init_b + [init_a]),(init_b + [init_a]) - (b + [a]))
-{
-    var prob_choice: Bool
-    a = init_a
-    b = init_b
-    k = init_k
-    prob_choice = flip(0.5)
-    if prob_choice {
-        a = false
-    } else {
-        b = b + 1
     }
-    k = k + 1
-}
-
-// I <= \Phi_{post}(I)
-proc lower_bound(init_a: Bool, init_b: UInt, init_k: UInt) -> (a: Bool, b: UInt, k: UInt)
-    pre init_b + [init_a]
-    post b
-{
-    var prob_choice: Bool
-    a = init_a
-    b = init_b
-    k = init_k
-    if a {
-        prob_choice = flip(0.5)
-        if prob_choice {
-            a = false
-        } else {
-            b = b + 1
-        }
-        k = k + 1
-        assert b + [a]
-        assume 0
-    } else {}
-}
-
-// !guard ==> (I = f)
-proc harmonize_I_f(a: Bool, b: UInt, k: UInt) -> ()
-{
-    assert ?(!a ==> (b + [a] == b))
-}
-
-// \Phi_f(I) < ∞
-coproc loopiter_lt_infty(init_a: Bool, init_b: UInt, init_k: UInt) -> (a: Bool, b: UInt, k: UInt)
-    pre 0
-    post b
-{
-    validate
-    assume \infty
-    var prob_choice: Bool
-    a = init_a
-    b = init_b
-    k = init_k
-    if a {
-        prob_choice = flip(0.5)
-        if prob_choice {
-            a = false
-        } else {
-            b = b + 1
-        }
-        k = k + 1
-        assert b + [a]
-        assume 0
-    } else {}
 }

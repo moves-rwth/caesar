@@ -16,18 +16,16 @@
 //         tick(1);
 //     }
 
-coproc k_induction(init_n: UInt, init_m: UInt) -> (n: UInt, m: UInt)
+@ert
+coproc main(init_n: UInt, init_m: UInt) -> (n: UInt, m: UInt)
     pre init_m + init_n
     post 0
 {
     var prob_choice: Bool
     n = init_n
     m = init_m
-    coassert m + n
-    cohavoc m, n
-    covalidate
-    coassume m + n
-    if (0 < n) && (0 < m) {
+    @k_induction(1, m + n)
+    while (0 < n) && (0 < m) {
         prob_choice = flip((1/2))
         if prob_choice {
             n = n - 1
@@ -35,7 +33,5 @@ coproc k_induction(init_n: UInt, init_m: UInt) -> (n: UInt, m: UInt)
             m = m - 1
         }
         tick 1
-        assert m + n
-        assume 0
-    } else {}
+    }
 }

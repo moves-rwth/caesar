@@ -68,8 +68,6 @@ def _read_args_from_code(group: click.Group, ctx: click.Context, code: str):
     # Parse the command line args to overwrite file ARGS (if present)
     sysargs, _, _ = encoding_parser.parse_args(
         _list_after_first_match(sys.argv[2:], lambda x: x.startswith("--")))
-    # Add "encoding" to the params to be able to invoke the corresponding function later im cmd.py
-    ctx.params["encoding"] = encoding_command.name
 
     used_defaults = dict()
     for param in opts_values:

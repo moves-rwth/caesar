@@ -15,17 +15,15 @@
 //         tick(1);
 //     }
 
-coproc k_induction(init_x: UInt) -> (x: UInt)
+@ert
+coproc main(init_x: UInt) -> (x: UInt)
     pre 0.6 * init_x
     post 0
 {
     var prob_choice: Bool
     x = init_x
-    coassert 0.6 * x
-    cohavoc x
-    covalidate
-    coassume 0.6 * x
-    if 2 <= x {
+    @k_induction(1, 0.6 * x)
+    while 2 <= x {
         prob_choice = flip((1/3))
         if prob_choice {
             x = x - 1
@@ -33,7 +31,5 @@ coproc k_induction(init_x: UInt) -> (x: UInt)
             x = x - 2
         }
         tick 1
-        assert 0.6 * x
-        assume 0
-    } else {}
+    }
 }

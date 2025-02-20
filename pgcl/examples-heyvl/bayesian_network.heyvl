@@ -90,7 +90,8 @@
 //         n := n - 1;
 //     }
 
-coproc k_induction(init_i: UInt, init_d: UInt, init_s: UInt, init_l: UInt, init_g: UInt, init_n: UInt) -> (i: UInt, d: UInt, s: UInt, l: UInt, g: UInt, n: UInt)
+@ert
+coproc main(init_i: UInt, init_d: UInt, init_s: UInt, init_l: UInt, init_g: UInt, init_n: UInt) -> (i: UInt, d: UInt, s: UInt, l: UInt, g: UInt, n: UInt)
     pre 5 * init_n
     post 0
 {
@@ -101,11 +102,8 @@ coproc k_induction(init_i: UInt, init_d: UInt, init_s: UInt, init_l: UInt, init_
     l = init_l
     g = init_g
     n = init_n
-    coassert 5 * n
-    cohavoc d, g, i, l, n, s
-    covalidate
-    coassume 5 * n
-    if 0 < n {
+    @k_induction(1, 5 * n)
+    while 0 < n {
         prob_choice = flip(0.3)
         if prob_choice {
             i = 1
@@ -192,7 +190,5 @@ coproc k_induction(init_i: UInt, init_d: UInt, init_s: UInt, init_l: UInt, init_
             tick 1
         }
         n = n - 1
-        assert 5 * n
-        assume 0
-    } else {}
+    }
 }

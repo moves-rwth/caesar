@@ -190,7 +190,8 @@
 //         tick(1);
 //     }
 
-coproc k_induction(init_x: UInt, init_y: UInt, init_d: UInt, init_n: UInt) -> (x: UInt, y: UInt, d: UInt, n: UInt)
+@ert
+coproc main(init_x: UInt, init_y: UInt, init_d: UInt, init_n: UInt) -> (x: UInt, y: UInt, d: UInt, n: UInt)
     pre 2 * ((init_n + 1) - init_d)
     post 0
 {
@@ -199,11 +200,8 @@ coproc k_induction(init_x: UInt, init_y: UInt, init_d: UInt, init_n: UInt) -> (x
     y = init_y
     d = init_d
     n = init_n
-    coassert 2 * ((n + 1) - d)
-    cohavoc d, x, y
-    covalidate
-    coassume 2 * ((n + 1) - d)
-    if d < n {
+    @k_induction(1, 2 * ((n + 1) - d))
+    while d < n {
         if 0 < x {
             if 0 < y {
                 prob_choice = flip((1/4))
@@ -409,7 +407,5 @@ coproc k_induction(init_x: UInt, init_y: UInt, init_d: UInt, init_n: UInt) -> (x
             }
         }
         tick 1
-        assert 2 * ((n + 1) - d)
-        assume 0
-    } else {}
+    }
 }

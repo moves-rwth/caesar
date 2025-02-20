@@ -36,7 +36,8 @@
 //         }
 //     }
 
-proc k_induction(init_elow: UInt, init_ehigh: UInt, init_n: UInt, init_v: UInt, init_c: UInt, init_running: UInt, init_i: UInt) -> (elow: UInt, ehigh: UInt, n: UInt, v: UInt, c: UInt, running: UInt, i: UInt)
+@wlp
+proc main(init_elow: UInt, init_ehigh: UInt, init_n: UInt, init_v: UInt, init_c: UInt, init_running: UInt, init_i: UInt) -> (elow: UInt, ehigh: UInt, n: UInt, v: UInt, c: UInt, running: UInt, i: UInt)
     pre [(((((((init_elow + 3) == init_ehigh) && (init_n == ((init_ehigh - init_elow) + 1))) && (init_v == 1)) && (init_c == 0)) && (init_running == 0)) && !(init_i < init_elow)) && (init_i <= init_ehigh)] * (1/4)
     post [c == i]
 {
@@ -48,11 +49,8 @@ proc k_induction(init_elow: UInt, init_ehigh: UInt, init_n: UInt, init_v: UInt, 
     c = init_c
     running = init_running
     i = init_i
-    assert [(((((((elow + 3) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * (1/4)
-    havoc c, running, v
-    validate
-    assume [(((((((elow + 3) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * (1/4)
-    if running == 0 {
+    @k_induction(3, [(((((((elow + 3) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * (1/4))
+    while running == 0 {
         v = 2 * v
         prob_choice = flip(0.5)
         if prob_choice {
@@ -71,49 +69,5 @@ proc k_induction(init_elow: UInt, init_ehigh: UInt, init_n: UInt, init_v: UInt, 
         if !(running == 0) {
             c = elow + c
         } else {}
-        coassert [(((((((elow + 3) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * (1/4)
-        if running == 0 {
-            v = 2 * v
-            prob_choice = flip(0.5)
-            if prob_choice {
-                c = (2 * c) + 1
-            } else {
-                c = 2 * c
-            }
-            if !(v < n) {
-                if !(n == c) && !(n < c) {
-                    running = 1
-                } else {
-                    v = v - n
-                    c = c - n
-                }
-            } else {}
-            if !(running == 0) {
-                c = elow + c
-            } else {}
-            coassert [(((((((elow + 3) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * (1/4)
-            if running == 0 {
-                v = 2 * v
-                prob_choice = flip(0.5)
-                if prob_choice {
-                    c = (2 * c) + 1
-                } else {
-                    c = 2 * c
-                }
-                if !(v < n) {
-                    if !(n == c) && !(n < c) {
-                        running = 1
-                    } else {
-                        v = v - n
-                        c = c - n
-                    }
-                } else {}
-                if !(running == 0) {
-                    c = elow + c
-                } else {}
-                assert [(((((((elow + 3) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * (1/4)
-                assume 0
-            } else {}
-        } else {}
-    } else {}
+    }
 }

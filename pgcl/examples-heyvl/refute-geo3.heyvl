@@ -15,34 +15,21 @@
 //         }
 //     }
 
-coproc k_induction(init_c: UInt, init_f: UInt) -> (c: UInt, f: UInt)
+@wp
+coproc main(init_c: UInt, init_f: UInt) -> (c: UInt, f: UInt)
     pre init_c + 0.999999999999
     post c
 {
     var prob_choice: Bool
     c = init_c
     f = init_f
-    coassert c + 0.999999999999
-    cohavoc c, f
-    covalidate
-    coassume c + 0.999999999999
-    if f == 1 {
+    @k_induction(2, c + 0.999999999999)
+    while f == 1 {
         prob_choice = flip(0.5)
         if prob_choice {
             f = 0
         } else {
             c = c + 1
         }
-        assert c + 0.999999999999
-        if f == 1 {
-            prob_choice = flip(0.5)
-            if prob_choice {
-                f = 0
-            } else {
-                c = c + 1
-            }
-            assert c + 0.999999999999
-            assume 0
-        } else {}
-    } else {}
+    }
 }
