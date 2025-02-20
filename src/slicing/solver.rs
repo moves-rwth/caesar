@@ -1,5 +1,6 @@
 use std::{collections::HashSet, time::Duration};
 
+use itertools::Itertools;
 use tracing::{debug, info, info_span, instrument, warn};
 use z3::{
     ast::{Bool, Dynamic},
@@ -268,8 +269,36 @@ impl<'ctx> SliceSolver<'ctx> {
 
         // TODO: re-use the unsat core from the proof instead of starting fresh
         let mut slice_searcher = SliceModelSearch::new(active_toggle_values.clone());
-        let mut subset_explorer =
-            SubsetExploration::new(self.prover.solver().get_context(), active_toggle_values);
+
+        let context = self.prover.solver().get_context();
+        let mut subset_explorer = {
+            let active_toggle_values = active_toggle_values.iter().cloned().collect();
+            let extensive: HashSet<Bool<'_>> = self
+                .slice_stmts
+                .stmts
+                .iter()
+                .flat_map(|(slice_stmt, var)| {
+                    if slice_stmt.selection.concordant {
+                        Some(var.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let reductive: HashSet<Bool<'_>> = self
+                .slice_stmts
+                .stmts
+                .iter()
+                .flat_map(|(slice_stmt, var)| {
+                    if slice_stmt.selection.discordant {
+                        Some(var.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            SubsetExploration::new(context, active_toggle_values, extensive, reductive)
+        };
         while let Some(extremal_set) =
             slice_next_extremal_set(&mut subset_explorer, &mut self.prover, options, limits_ref)?
         {
@@ -536,8 +565,13 @@ fn slice_sat_binary_search<'ctx>(
     Ok(())
 }
 
+#[derive(Debug)]
 enum ExtremalSet<'ctx> {
+    /// This is a minimal unsat set in the following sense: we cannot remove any
+    /// more extensive statements without making the program fail to verify.
     MinimalUnsat(HashSet<Bool<'ctx>>),
+    /// This is a maximal sat set in the following sense: we cannot add any more
+    /// extensive statements without making the program verify.
     #[allow(unused)]
     MaximalSat(HashSet<Bool<'ctx>>),
 }
@@ -555,13 +589,11 @@ pub fn slice_next_extremal_set<'ctx>(
     while let Some(seed) = exploration.next_set() {
         limits_ref.check_limits()?;
 
-        match check_proof_seed(prover, limits_ref, &seed) {
+        match check_proof_seed(&all_variables, prover, limits_ref, &seed) {
             ProveResult::Proof => {
-                let seed = unsat_core_to_seed(prover, &all_variables);
-
                 // now start the shrinking, then block up
-                let res = exploration.shrink_block_up(seed, |seed| {
-                    match check_proof_seed(prover, limits_ref, seed) {
+                let res = exploration.shrink_block_unsat(seed, |seed| {
+                    match check_proof_seed(&all_variables, prover, limits_ref, seed) {
                         ProveResult::Proof => Some(unsat_core_to_seed(prover, &all_variables)),
                         ProveResult::Counterexample(_) | ProveResult::Unknown(_) => None,
                     }
@@ -570,8 +602,8 @@ pub fn slice_next_extremal_set<'ctx>(
             }
             ProveResult::Counterexample(_) => {
                 // grow the counterexample and then block down
-                let res = exploration.grow_block_down(seed, |seed| {
-                    match check_proof_seed(prover, limits_ref, seed) {
+                let res = exploration.grow_block_sat(seed, |seed| {
+                    match check_proof_seed(&all_variables, prover, limits_ref, seed) {
                         ProveResult::Counterexample(_) => true,
                         ProveResult::Proof | ProveResult::Unknown(_) => false,
                     }
@@ -594,6 +626,7 @@ pub fn slice_next_extremal_set<'ctx>(
 
 #[instrument(level = "trace", skip_all, ret)]
 fn check_proof_seed<'ctx>(
+    all_variables: &HashSet<Bool<'ctx>>,
     prover: &mut Prover<'ctx>,
     limits_ref: &LimitsRef,
     seed: &HashSet<Bool<'ctx>>,
@@ -604,14 +637,21 @@ fn check_proof_seed<'ctx>(
     }
     prover.set_timeout(timeout);
 
-    let seed: Vec<_> = seed.iter().cloned().collect();
-    prover.check_proof_assuming(&seed)
+    let (all_on, all_off): (HashSet<_>, HashSet<_>) = all_variables
+        .iter()
+        .cloned()
+        .partition(|var| seed.contains(var));
+    let all_on_assumptions = all_on.iter().cloned();
+    let all_off_assumptions = all_off.iter().map(Bool::not);
+    let all_assumptions = all_on_assumptions.chain(all_off_assumptions).collect_vec();
+
+    prover.check_proof_assuming(&all_assumptions)
 }
 
 fn unsat_core_to_seed<'ctx>(
     prover: &mut Prover<'ctx>,
     all_variables: &HashSet<Bool<'ctx>>,
 ) -> HashSet<Bool<'ctx>> {
-    let unsat_core = &prover.get_unsat_core().into_iter().collect();
-    all_variables.intersection(unsat_core).cloned().collect()
+    let unsat_core: HashSet<Bool<'ctx>> = prover.get_unsat_core().into_iter().collect();
+    all_variables.intersection(&unsat_core).cloned().collect()
 }
