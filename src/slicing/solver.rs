@@ -227,7 +227,7 @@ impl<'ctx> SliceSolver<'ctx> {
 
         self.prover.add_assumption(&self.slice_stmts.constraints);
         self.prover.add_assumption(&inactive_formula);
-        let res = self.prover.check_proof_assuming(&active_toggle_values);
+        let res = self.prover.check_proof_assuming(&active_toggle_values, z3rro::prover::SolverType::SWINE);
 
         let mut slice_searcher = SliceModelSearch::new(active_toggle_values.clone());
         if let ProveResult::Proof = res {
@@ -605,7 +605,7 @@ fn check_proof_seed<'ctx>(
     prover.set_timeout(timeout);
 
     let seed: Vec<_> = seed.iter().cloned().collect();
-    prover.check_proof_assuming(&seed)
+    prover.check_proof_assuming(&seed, z3rro::prover::SolverType::SWINE)
 }
 
 fn unsat_core_to_seed<'ctx>(

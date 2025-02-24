@@ -1,8 +1,7 @@
 //! Not a SAT solver, but a prover. There's a difference.
+use thiserror::Error;
 
-//use std::{fmt::Display, time::Duration};
-
-use std::{collections::VecDeque, fmt::Display, io::Write, path::Path, process::Command, time::Duration};
+use std::{collections::VecDeque, env, fmt::Display, io::{self, Write}, path::Path, process::{self, Command}, time::Duration};
 
 use tempfile::NamedTempFile;
 
@@ -17,6 +16,18 @@ use crate::{
     util::{set_solver_timeout, ReasonUnknown},
 };
 
+#[derive(Debug, Error)]
+pub enum CommandError {
+    #[error("Environment variable error: {0}")]
+    EnvVarError(#[from] env::VarError),
+    #[error("Process execution failed: {0}")]
+    ProcessError(#[from] io::Error),
+}
+pub enum SolverType {
+    Z3,
+    SWINE,
+}
+
 /// The result of a prove query.
 #[derive(Debug)]
 pub enum ProveResult<'ctx> {
@@ -25,40 +36,40 @@ pub enum ProveResult<'ctx> {
     Unknown(ReasonUnknown),
 }
 
-/// Find the swine-z3 file located under the dir directory, and execute swine-z3 on the file located at file_path
-fn execute_swine(dir: &Path, file_path: &Path) {
-    let swine = "swine-z3";
+/// Execute swine-z3 on the file located at file_path
+fn execute_swine(file_path: &Path) -> Result<SatResult, CommandError>{
+    match env::var("SWINE") {
+        // Use "export SWINE=<path_for_swine>" to set the path for swine in the SWINE variable.
+        Ok(swine) => {
+            let output = Command::new(swine)
+                .arg(file_path) 
+                .output();
 
-    let find_output = Command::new("find")
-        .arg(dir)
-        .arg("-name")
-        .arg(swine)
-        .output().unwrap();
+            match output {
+                Ok(output) => {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
 
-    if find_output.status.success() {
-        let stdout = String::from_utf8_lossy(&find_output.stdout);
-
-        for line in stdout.lines().rev() {
-            let path = Path::new(line);
-
-            if path.exists() && path.is_file() {
-                let cmd_output = Command::new(path)
-                    .arg(file_path) 
-                    .output().unwrap();
-
-                if cmd_output.status.success() {
-                    println!("{}", String::from_utf8_lossy(&cmd_output.stdout));
-                    break;
-                } else {
-                    eprintln!("Failed to execute swine({}) command with status: {}", line, cmd_output.status);
+                    if stdout.contains("unsat") {
+                        Ok(SatResult::Unsat)
+                    } else if stdout.contains("sat") {
+                        Ok(SatResult::Sat)
+                    } else {
+                        Ok(SatResult::Unknown)
+                    }
+                }
+                Err(e) => {
+                    Err(CommandError::ProcessError(e))
                 }
             }
         }
-    } else {
-        eprintln!("Find command execution failed");
+        Err(e) => {
+            Err(CommandError::EnvVarError(e))
+        }
     }
 }
 
+/// In order to execute the program, it is necessary to remove lines that 
+/// contain a forall quantifier or the declaration of the exponential function (exp).
 fn remove_lines_for_swine(input: &str) -> String {
     let mut output = String::new();
     let mut tmp_buffer: VecDeque<char> = VecDeque::new();
@@ -151,42 +162,59 @@ impl<'ctx> Prover<'ctx> {
     }
 
     pub fn check_proof(&mut self) -> ProveResult<'ctx> {
-        self.check_proof_assuming(&[])
+        self.check_proof_assuming(&[], SolverType::SWINE)
     }
 
     /// Do the SAT check, but consider a check with no provables to be a
     /// [`ProveResult::Proof`].
-    pub fn check_proof_assuming(&mut self, assumptions: &[Bool<'ctx>]) -> ProveResult<'ctx> {
+    pub fn check_proof_assuming(&mut self, assumptions: &[Bool<'ctx>], solver_type: SolverType) -> ProveResult<'ctx> {
         if self.min_level_with_provables.is_none() {
             return ProveResult::Proof;
         }
 
-        let mut smtlib = self.get_smtlib();
+        let res;
 
-        smtlib.add_check_sat();
+        match solver_type {
+            SolverType::SWINE => {
+                let mut smtlib = self.get_smtlib();
+                smtlib.add_check_sat();
+                let smtlib = smtlib.into_string();
+                let mut smt_file: NamedTempFile = NamedTempFile::new().unwrap();
+                smt_file.write_all(remove_lines_for_swine(&smtlib).as_bytes()).unwrap();
+                let file_path = smt_file.path();
         
-        let smtlib = smtlib.into_string();
-        let mut smt_file: NamedTempFile = NamedTempFile::new().unwrap();
-
-        smt_file.write_all(remove_lines_for_swine(&smtlib).as_bytes()).unwrap();
-
-        let file_path = smt_file.path();
-        let start_dir = Path::new("../"); 
-
-        execute_swine(start_dir, file_path);
-        
-        let res = if assumptions.is_empty() {
-            self.solver.check()
-        } else {
-            self.solver.check_assumptions(assumptions)
-        };
-        match res {
-            SatResult::Unsat => ProveResult::Proof,
-            SatResult::Unknown => ProveResult::Unknown(self.get_reason_unknown().unwrap()),
-            SatResult::Sat => {
-                let model = self.get_model().unwrap();
-                let model = InstrumentedModel::new(model);
-                ProveResult::Counterexample(model)
+                res = execute_swine(file_path).unwrap_or_else(|e| {
+                    eprintln!("{}", e);
+                    process::exit(1)
+                });
+                match res {
+                    SatResult::Unsat => ProveResult::Proof,
+                    SatResult::Unknown => {
+                        // TODO: Determine the correct reason for Unknown
+                        ProveResult::Unknown(ReasonUnknown::Other("unknown".to_string()))
+                    },
+                    SatResult::Sat => {
+                        // TODO: Get the model from the output of SWINE
+                        println!("The Result of SWINE: sat");
+                        process::exit(1)
+                    }
+                }
+            }
+            SolverType::Z3 => {
+                res = if assumptions.is_empty() {
+                    self.solver.check()
+                } else {
+                    self.solver.check_assumptions(assumptions)
+                };
+                match res {
+                    SatResult::Unsat => ProveResult::Proof,
+                    SatResult::Unknown => ProveResult::Unknown(self.get_reason_unknown().unwrap()),
+                    SatResult::Sat => {
+                        let model = self.get_model().unwrap();
+                        let model = InstrumentedModel::new(model);
+                        ProveResult::Counterexample(model)
+                    }
+                }
             }
         }
     }
