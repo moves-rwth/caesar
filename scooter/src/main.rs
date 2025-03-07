@@ -35,17 +35,24 @@ fn main() {
         outer_pb.set_message(prefix.to_owned());
         let mut args = shlex::split(args).unwrap();
         args.append(&mut more_args.clone());
-        println!(
-            "{}",
-            run_benchmark_slicing(
-                &BenchmarkTask {
-                    name: prefix.to_string(),
-                    args
-                },
-                &inner_pb
-            )
-            .unwrap()
+        let slicing_result = run_benchmark_slicing(
+            &BenchmarkTask {
+                name: prefix.to_string(),
+                args: args.clone(),
+            },
+            &inner_pb,
         );
+
+        match slicing_result {
+            Ok(result) => println!("{}", result),
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    panic!("Error: Benchmark task {:?} not found.", &args);
+                } else {
+                    panic!("Error: {}", e);
+                }
+            }
+        }
         inner_pb.reset();
     }
 }

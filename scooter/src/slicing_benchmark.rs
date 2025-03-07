@@ -133,6 +133,7 @@ fn parse_slicing_result(result: &BenchmarkResult, tracing_name: &str) -> Slicing
 #[derive(Debug)]
 pub struct SlicingBenchmarkResult {
     task: BenchmarkTask,
+    heyvl_loc: usize,
     first_cex_slice: SlicingResult,
     optimal_cex_slice: SlicingResult,
     core_slice: SlicingResult,
@@ -166,7 +167,7 @@ impl SlicingBenchmarkResult {
         ]
     }
 
-    pub fn num_statements(&self) -> usize {
+    pub fn num_sliceable_statements(&self) -> usize {
         self.first_cex_slice
             .as_success()
             .or(self.core_slice.as_success())
@@ -177,7 +178,13 @@ impl SlicingBenchmarkResult {
 
 impl Display for SlicingBenchmarkResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} & {}", self.task.name, self.num_statements())?;
+        write!(
+            f,
+            "{} & {} & {}",
+            self.task.name,
+            self.heyvl_loc,
+            self.num_sliceable_statements()
+        )?;
         let has_error = self.first_cex_slice.is_success();
         let iter = if has_error {
             self.all_error_results()
@@ -200,6 +207,8 @@ pub fn run_benchmark_slicing(
     task: &BenchmarkTask,
     progress: &ProgressBar,
 ) -> io::Result<SlicingBenchmarkResult> {
+    let heyvl_loc = task.get_loc()?;
+
     let first_cex_slice = thread::spawn({
         let task = task.clone();
         let progress = progress.clone();
@@ -302,6 +311,7 @@ pub fn run_benchmark_slicing(
 
     Ok(SlicingBenchmarkResult {
         task: task.clone(),
+        heyvl_loc,
         first_cex_slice,
         optimal_cex_slice,
         core_slice,
