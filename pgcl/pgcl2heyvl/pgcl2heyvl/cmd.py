@@ -3,6 +3,14 @@ import sys
 from typing import List, Union
 
 import click
+from pgcl2heyvl.direct_encode import (
+    direct_encode_ast_mciver,
+    direct_encode_bounded_mc,
+    direct_encode_k_ind,
+    direct_encode_omega_inv,
+    direct_encode_optional_stopping,
+    direct_encode_past,
+)
 import probably.pgcl.substitute as substitute
 from pgcl2heyvl.encode import (
     encode_ast_mciver,
@@ -19,6 +27,10 @@ from probably.pgcl.check import CheckFail
 from probably.pgcl.parser import parse_expectation, parse_pgcl
 from probably.util.ref import Mut
 
+
+# If this is set to True, the direct encoding will be used.
+# The direct encoding does not use HeyVL encoding annotations and directly encodes the proof rules.
+_direct = False
 
 @click.group(cls=CommentArgsCommand,
              help="""
@@ -121,14 +133,16 @@ def encode_omega_invariant(file, calculus: str, invariant: str, post: str):
         print("Error: unsupported calculus type")
         sys.exit(1)
 
+    encoded = encode_omega_inv(program, calculus_type, invariant_expr, post_expr) 
+
+
+    global _direct
+    if _direct:
+        encoded = direct_encode_omega_inv(program, calculus_type, invariant_expr, post_expr) 
+
     print(
         _auto_gen_comment(file) + hey_objects_str(
-            encode_omega_inv(
-                program,
-                calculus_type,
-                invariant_expr,
-                post_expr,
-            )))
+            encoded))
 
 
 @main.command(help="""
@@ -186,10 +200,17 @@ def encode_past_rule(file, invariant: str, eps: str, k: str):
     if isinstance(k_expr, CheckFail):
         print("Error: Cannot parse k:", k_expr)
         return
+    
+
+    encoded = encode_past(program, invariant_expr, eps_expr, k_expr)
+
+    global _direct
+    if _direct:
+        encoded = direct_encode_past(program, invariant_expr, eps_expr, k_expr)
 
     print(
         _auto_gen_comment(file) +
-        hey_objects_str(encode_past(program, invariant_expr, eps_expr, k_expr))
+        hey_objects_str(encoded)
     )
 
 
@@ -270,10 +291,16 @@ def encode_ost_rule(file, post: str, invariant: str, past_invariant: str,
         print("Error: Cannot parse c:", c_expr)
         return
 
+    encoded = encode_optional_stopping(program, post_expr, invariant_expr,
+                                     past_invariant_expr, c_expr)
+    
+    global _direct
+    if _direct: 
+        encoded = direct_encode_optional_stopping(program, post_expr, invariant_expr,
+                                     past_invariant_expr, c_expr)
     print(
-        _auto_gen_comment(file) + hey_objects_str(
-            encode_optional_stopping(program, post_expr, invariant_expr,
-                                     past_invariant_expr, c_expr)))
+        _auto_gen_comment(file) + hey_objects_str(encoded
+            ))
 
 
 @main.command(help="""
@@ -348,10 +375,17 @@ def encode_ast(file, invariant: str, variant: str, prob: str, decrease: str):
         print("Error: Cannot parse decrease expression:", decrease_expr)
         return
 
+
+    encoded = encode_ast_mciver(program, invariant_expr, variant_expr, prob_expr,
+                                decrease_expr)
+    
+    global _direct
+    if _direct:
+        encoded = direct_encode_ast_mciver(program, invariant_expr, variant_expr, prob_expr,
+                                decrease_expr)
     print(
         _auto_gen_comment(file) + hey_objects_str(
-            encode_ast_mciver(program, invariant_expr, variant_expr, prob_expr,
-                              decrease_expr)))
+            encoded))
 
 
 @main.command(help="""
@@ -377,7 +411,7 @@ def encode_ast(file, invariant: str, variant: str, prob: str, decrease: str):
 @click.option('--calculus',
               type=click.STRING,
               help="The calculus for the encoding.",
-              metavar="EXPR")
+              metavar="STRING")
 @click.option('--k',
               type=click.INT,
               multiple=True,
@@ -444,10 +478,17 @@ def encode_k_induction(file, post: str, pre: str, k: List[int], calculus: str,
 
     loop_annotations = list(zip(k, invariant_expr))
 
+    encoded = encode_k_ind(program, post_expr, pre_expr, calculus_type,
+                            loop_annotations)
+    
+    global _direct
+    if _direct:
+        encoded = direct_encode_k_ind(program, post_expr, pre_expr, calculus_type,
+                            loop_annotations)
+
     print(
         _auto_gen_comment(file) + hey_objects_str(
-            encode_k_ind(program, post_expr, pre_expr, calculus_type,
-                         loop_annotations)))
+            encoded))
 
 
 @main.command(help="""
@@ -542,10 +583,17 @@ def encode_bmc(file, post: str, pre: str, k: List[int], calculus: str,
 
     loop_annotations = list(zip(k, invariant_expr))
 
+
+    encoded = encode_bounded_mc(program, post_expr, pre_expr, calculus_type,
+                                loop_annotations)
+    global _direct
+    if _direct:
+        encoded = direct_encode_bounded_mc(program, post_expr, pre_expr, calculus_type,
+                                loop_annotations)
+        
     print(
         _auto_gen_comment(file) + hey_objects_str(
-            encode_bounded_mc(program, post_expr, pre_expr, calculus_type,
-                              loop_annotations)))
+            encoded))
 
 
 def parse_expectation_with_constants(program: Program,

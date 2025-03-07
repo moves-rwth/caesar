@@ -4,12 +4,12 @@ from typing import Union
 
 import probably.pgcl.substitute as substitute
 import pytest
-from pgcl2heyvl.encode import (
-    encode_ast_mciver,
-    encode_k_ind,
-    encode_omega_inv,
-    encode_optional_stopping,
-    encode_past,
+from pgcl2heyvl.direct_encode import (
+    direct_encode_ast_mciver,
+    direct_encode_k_ind,
+    direct_encode_omega_inv,
+    direct_encode_optional_stopping,
+    direct_encode_past,
 )
 from pgcl2heyvl.heyvl import Calculus, hey_objects_str
 from probably.pgcl.ast import Expr, Program
@@ -63,7 +63,7 @@ def test_encode_ast_mciver(save):
     prob = _parse_expectation_with_constants(program, "1/(v+1)")
     decrease = _parse_expectation_with_constants(program, "1")
     return hey_objects_str(
-        encode_ast_mciver(program, invariant, variant, prob, decrease))
+       direct_encode_ast_mciver(program, invariant, variant, prob, decrease))
 
 
 @golden_test()
@@ -78,7 +78,7 @@ def test_encode_k_ind(save):
     k = 5
     loop_annotations = [(k, pre_expr)]
     return hey_objects_str(
-        encode_k_ind(program=program,
+        direct_encode_k_ind(program=program,
                      post=post_expr,
                      pre=pre_expr,
                      calculus=Calculus.WP,
@@ -93,7 +93,7 @@ def test_encode_omega_inv(save):
     invariant = _parse_expectation_with_constants(program, "[x <= n] * x")
     post = _parse_expectation_with_constants(program, "0")
     return hey_objects_str(
-        encode_omega_inv(program, Calculus.ERT, invariant, post))
+       direct_encode_omega_inv(program, Calculus.ERT, invariant, post))
 
 
 @golden_test()
@@ -106,7 +106,7 @@ def test_encode_optional_stopping(save):
     past_inv = _parse_expectation_with_constants(program, "2 * [a]")
     post_expr = _parse_expectation_with_constants(program, "b")
     return hey_objects_str(
-        encode_optional_stopping(program, post_expr, invariant, past_inv, c))
+        direct_encode_optional_stopping(program, post_expr, invariant, past_inv, c))
 
 
 @golden_test()
@@ -117,7 +117,7 @@ def test_encode_past(save):
     invariant = _parse_expectation_with_constants(program, "x+1")
     eps = _parse_expectation_with_constants(program, "0.5")
     k = _parse_expectation_with_constants(program, "1")
-    return hey_objects_str(encode_past(program, invariant, eps, k))
+    return hey_objects_str(direct_encode_past(program, invariant, eps, k))
 
 
 def _parse_expectation_with_constants(program: Program,
