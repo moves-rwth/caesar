@@ -1,5 +1,6 @@
-use std::{collections::HashSet, time::Duration};
+use std::time::Duration;
 
+use indexmap::IndexSet;
 use itertools::Itertools;
 use tracing::{debug, info, info_span, instrument, warn};
 use z3::{
@@ -271,7 +272,7 @@ impl<'ctx> SliceSolver<'ctx> {
         let context = self.prover.get_context();
         let mut subset_explorer = {
             let active_toggle_values = active_toggle_values.iter().cloned().collect();
-            let extensive: HashSet<Bool<'_>> = self
+            let extensive: IndexSet<Bool<'_>> = self
                 .slice_stmts
                 .stmts
                 .iter()
@@ -283,7 +284,7 @@ impl<'ctx> SliceSolver<'ctx> {
                     }
                 })
                 .collect();
-            let reductive: HashSet<Bool<'_>> = self
+            let reductive: IndexSet<Bool<'_>> = self
                 .slice_stmts
                 .stmts
                 .iter()
@@ -570,11 +571,11 @@ fn slice_sat_binary_search<'ctx>(
 enum ExtremalSet<'ctx> {
     /// This is a minimal unsat set in the following sense: we cannot remove any
     /// more extensive statements without making the program fail to verify.
-    MinimalUnsat(HashSet<Bool<'ctx>>),
+    MinimalUnsat(IndexSet<Bool<'ctx>>),
     /// This is a maximal sat set in the following sense: we cannot add any more
     /// extensive statements without making the program verify.
     #[allow(unused)]
-    MaximalSat(HashSet<Bool<'ctx>>),
+    MaximalSat(IndexSet<Bool<'ctx>>),
 }
 
 /// Find the next extremal set of assumptions in this prover.
@@ -627,10 +628,10 @@ pub fn slice_next_extremal_set<'ctx>(
 
 #[instrument(level = "trace", skip_all, ret)]
 fn check_proof_seed<'ctx>(
-    all_variables: &HashSet<Bool<'ctx>>,
+    all_variables: &IndexSet<Bool<'ctx>>,
     prover: &mut Prover<'ctx>,
     limits_ref: &LimitsRef,
-    seed: &HashSet<Bool<'ctx>>,
+    seed: &IndexSet<Bool<'ctx>>,
 ) -> ProveResult<'ctx> {
     let mut timeout = Duration::from_millis(100);
     if let Some(time_left) = limits_ref.time_left() {
@@ -639,7 +640,7 @@ fn check_proof_seed<'ctx>(
 
     prover.set_timeout(timeout);
 
-    let (all_on, all_off): (HashSet<_>, HashSet<_>) = all_variables
+    let (all_on, all_off): (IndexSet<_>, IndexSet<_>) = all_variables
         .iter()
         .cloned()
         .partition(|var| seed.contains(var));
@@ -655,8 +656,8 @@ fn check_proof_seed<'ctx>(
 
 fn unsat_core_to_seed<'ctx>(
     prover: &mut Prover<'ctx>,
-    all_variables: &HashSet<Bool<'ctx>>,
-) -> HashSet<Bool<'ctx>> {
-    let unsat_core: HashSet<Bool<'ctx>> = prover.get_unsat_core().into_iter().collect();
+    all_variables: &IndexSet<Bool<'ctx>>,
+) -> IndexSet<Bool<'ctx>> {
+    let unsat_core: IndexSet<Bool<'ctx>> = prover.get_unsat_core().into_iter().collect();
     all_variables.intersection(&unsat_core).cloned().collect()
 }
