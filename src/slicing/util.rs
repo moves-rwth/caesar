@@ -5,7 +5,7 @@ use std::{
 };
 
 use itertools::Itertools;
-use tracing::instrument;
+use tracing::{instrument, trace};
 use z3::{ast::Bool, Context, SatResult, Solver};
 
 /// A result of a test during the partial minimization. Either we accept all
@@ -179,7 +179,7 @@ impl<'ctx> SubsetExploration<'ctx> {
     pub fn next_set(&mut self) -> Option<HashSet<Bool<'ctx>>> {
         match self.solver.check() {
             SatResult::Unsat => None,
-            SatResult::Unknown => None,
+            SatResult::Unknown => panic!("solver returned unknown"),
             SatResult::Sat => {
                 let model = self.solver.get_model().unwrap();
                 Some(HashSet::from_iter(
@@ -196,6 +196,23 @@ impl<'ctx> SubsetExploration<'ctx> {
         }
     }
 
+    /// Block all models which have size at least `size`.
+    pub fn block_at_least(&mut self, size: usize) {
+        let variables = self.variables.iter().map(|v| (v, 1)).collect_vec();
+        self.solver
+            .assert(&Bool::pb_ge(self.solver.get_context(), &variables, size as i32).not())
+    }
+
+    /// Block all models which are not subsets of the given set.
+    pub fn block_non_subset(&mut self, set: &HashSet<Bool<'ctx>>) {
+        let ctx = self.solver.get_context();
+        let constraint = Bool::and(
+            ctx,
+            &self.variables.difference(set).map(Bool::not).collect_vec(),
+        );
+        self.solver.assert(&constraint);
+    }
+
     /// Block a set of models where all variables `all_off` are set to `false`
     /// and all variables `all_on` are set to `true`.
     fn block(&mut self, all_on: &HashSet<Bool<'ctx>>, all_off: &HashSet<Bool<'ctx>>) {
@@ -203,13 +220,17 @@ impl<'ctx> SubsetExploration<'ctx> {
         let all_on_constraint = Bool::and(ctx, &all_on.iter().collect_vec());
         let all_off_constraint = Bool::and(ctx, &all_off.iter().map(Bool::not).collect_vec());
         let both_constraints = Bool::and(ctx, &[all_on_constraint, all_off_constraint]);
-        self.solver.assert(&both_constraints.not());
+        let constraint = both_constraints.not();
+        tracing::trace!(constraint = ?constraint, "Adding blocking constraint");
+        self.solver.assert(&constraint);
     }
 
     /// Block an exact variable assignment, we do not want to see it again, where
     /// all variables in `set` are set to `true` and all other variables are set
     /// to `false`.
     pub fn block_this(&mut self, set: &HashSet<Bool<'ctx>>) {
+        tracing::trace!(set = ?set, "Blocking exact set");
+
         let (all_on, all_off): (HashSet<_>, HashSet<_>) = self
             .variables
             .iter()
@@ -229,6 +250,8 @@ impl<'ctx> SubsetExploration<'ctx> {
     /// `reductive` variable set to true *or* a currently enabled `extensive`
     /// variable set to false.
     fn block_unsat(&mut self, all_true: &HashSet<Bool<'ctx>>) {
+        tracing::trace!(all_true = ?all_true, "Blocking unsat");
+
         let all_false: HashSet<Bool<'ctx>> = self
             .variables
             .clone()
@@ -255,7 +278,10 @@ impl<'ctx> SubsetExploration<'ctx> {
     /// Phrased differently: a new model must have a currently disabled
     /// `extensive` variable set to true *or* a currently enabled `reductive`
     /// variable set to false.
+    #[instrument(level = "trace", skip_all, fields(all_true.len = all_true.len()))]
     fn block_sat(&mut self, all_true: &HashSet<Bool<'ctx>>) {
+        trace!(all_true = ?all_true, "Blocking sat");
+
         let all_false: HashSet<Bool<'ctx>> = self
             .variables
             .clone()

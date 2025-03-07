@@ -301,13 +301,16 @@ impl<'ctx> SliceSolver<'ctx> {
             slice_next_extremal_set(&mut subset_explorer, &mut self.prover, options, limits_ref)?
         {
             if let ExtremalSet::MinimalUnsat(minimal_unsat) = extremal_set {
+                if options.globally_optimal {
+                    subset_explorer.block_at_least(minimal_unsat.len());
+                } else {
+                    // if looking for locally optimal results, we only want subsets
+                    // of this in the future
+                    subset_explorer.block_non_subset(&minimal_unsat);
+                }
+
                 let minimal_unsat: Vec<_> = minimal_unsat.into_iter().collect();
                 slice_searcher.found_active(minimal_unsat);
-
-                // stop at the first nontrivial result if requested
-                if !options.globally_optimal {
-                    break;
-                }
             } else {
                 // continue
             }
@@ -511,8 +514,8 @@ fn slice_sat_binary_search<'ctx>(
 
                 minimize.add_result(num_actually_true, PartialMinimizeResult::AcceptUpwards);
 
-                // stop at the first nontrivial result if requested
-                if !options.globally_optimal && n < slice_vars.len() {
+                // stop at the first result if requested
+                if !options.globally_optimal {
                     break;
                 }
             }
@@ -633,6 +636,7 @@ fn check_proof_seed<'ctx>(
     if let Some(time_left) = limits_ref.time_left() {
         timeout = timeout.min(time_left);
     }
+
     prover.set_timeout(timeout);
 
     let (all_on, all_off): (HashSet<_>, HashSet<_>) = all_variables
@@ -643,7 +647,10 @@ fn check_proof_seed<'ctx>(
     let all_off_assumptions = all_off.iter().map(Bool::not);
     let all_assumptions = all_on_assumptions.chain(all_off_assumptions).collect_vec();
 
-    prover.check_proof_assuming(&all_assumptions)
+    // prover.push();
+    let res = prover.check_proof_assuming(&all_assumptions);
+    // prover.pop();
+    res
 }
 
 fn unsat_core_to_seed<'ctx>(
