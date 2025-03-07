@@ -25,7 +25,7 @@
 use std::ops::DerefMut;
 
 use z3::SatResult;
-use z3rro::prover::Prover;
+use z3rro::prover::{IncrementalMode, Prover};
 
 use crate::{
     ast::{
@@ -63,7 +63,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
             limits_ref: limits_ref.clone(),
             subst: Subst::new(ctx.tcx(), &limits_ref),
             translate: TranslateExprs::new(ctx),
-            prover: Prover::new(ctx.ctx()),
+            prover: Prover::new(ctx.ctx(), IncrementalMode::Native),
         }
     }
 
@@ -97,7 +97,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
             // expression is e.g. `false`, then we want to get `Unsat` from the
             // solver and not `Proof`!
             if this.prover.check_sat() == SatResult::Unsat {
-                tracing::trace!(solver=%this.prover.solver(), "eliminated zero expr");
+                tracing::trace!(solver=?this.prover, "eliminated zero expr");
                 None
             } else {
                 Some(callback(this))

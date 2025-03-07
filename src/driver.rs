@@ -64,7 +64,7 @@ use z3::{
 };
 use z3rro::{
     probes::ProbeSummary,
-    prover::{ProveResult, Prover},
+    prover::{IncrementalMode, ProveResult, Prover},
     smtlib::Smtlib,
     util::{PrefixWriter, ReasonUnknown},
 };
@@ -699,7 +699,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
 
         if options.debug_options.probe {
             let goal = Goal::new(ctx, false, false, false);
-            for assertion in prover.solver().get_assertions() {
+            for assertion in prover.get_assertions() {
                 goal.assert(&assertion);
             }
             eprintln!(
@@ -799,7 +799,7 @@ fn mk_valid_query_prover<'smt, 'ctx>(
     valid_query: &Bool<'ctx>,
 ) -> Prover<'ctx> {
     // create the prover and set the params
-    let mut prover = Prover::new(ctx);
+    let mut prover = Prover::new(ctx, IncrementalMode::Native);
     if let Some(remaining) = limits_ref.time_left() {
         prover.set_timeout(remaining);
     }

@@ -139,7 +139,7 @@ impl<'ctx> SliceSolver<'ctx> {
         let (active, inactive) = self.slice_stmts.split_by_selection(selection);
 
         // inactive statements must be enabled in the slice
-        let inactive_formula = Bool::and(self.prover.solver().get_context(), &inactive);
+        let inactive_formula = Bool::and(self.prover.get_context(), &inactive);
 
         debug!(
             active = active.len(),
@@ -184,8 +184,6 @@ impl<'ctx> SliceSolver<'ctx> {
         let (active_toggle_values, inactive_formula) = self.translate_selection(&selection);
 
         let (prover, universally_bound) = (&mut self.prover, &self.universally_bound);
-
-        tracing::warn!("The --slice-verify option is unsound if uninterpreted functions are used."); // TODO
 
         prover.add_assumption(&self.slice_stmts.constraints);
         let mut exists_forall_solver = prover.to_exists_forall(universally_bound);
@@ -270,7 +268,7 @@ impl<'ctx> SliceSolver<'ctx> {
         // TODO: re-use the unsat core from the proof instead of starting fresh
         let mut slice_searcher = SliceModelSearch::new(active_toggle_values.clone());
 
-        let context = self.prover.solver().get_context();
+        let context = self.prover.get_context();
         let mut subset_explorer = {
             let active_toggle_values = active_toggle_values.iter().cloned().collect();
             let extensive: HashSet<Bool<'_>> = self
@@ -455,7 +453,7 @@ fn slice_sat_binary_search<'ctx>(
         prover.pop();
         prover.push();
 
-        let ctx = prover.solver().get_context();
+        let ctx = prover.get_context();
         let at_most_n_true = Bool::pb_le(ctx, &slice_vars, at_most_n as i32);
         prover.add_assumption(&at_most_n_true);
     };

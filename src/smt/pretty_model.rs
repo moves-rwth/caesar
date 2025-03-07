@@ -259,7 +259,7 @@ pub fn pretty_unaccessed(model: &InstrumentedModel<'_>) -> Option<Doc> {
     let mut lines: Vec<Doc> = vec![Doc::text("extra definitions:")];
     for decl in unaccessed {
         let line = if decl.arity() == 0 {
-            let value = model.eval(&decl.apply(&[]), true).unwrap();
+            let value = model.eval_ast(&decl.apply(&[]), true).unwrap();
             format!("{}: {}", decl.name(), value)
         } else {
             let interp = model.get_func_interp(&decl).unwrap();

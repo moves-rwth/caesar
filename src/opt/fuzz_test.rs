@@ -2,7 +2,7 @@ use proptest::{
     prelude::*,
     test_runner::{TestCaseResult, TestRunner},
 };
-use z3rro::prover::{ProveResult, Prover};
+use z3rro::prover::{IncrementalMode, ProveResult, Prover};
 
 use crate::{
     ast::{
@@ -201,7 +201,7 @@ fn prove_equiv(expr: Expr, optimized: Expr, tcx: &TyCtx) -> TestCaseResult {
     let smt_ctx = SmtCtx::new(&ctx, tcx);
     let mut translate = TranslateExprs::new(&smt_ctx);
     let eq_expr_z3 = translate.t_bool(&eq_expr);
-    let mut prover = Prover::new(&ctx);
+    let mut prover = Prover::new(&ctx, IncrementalMode::Native);
     translate
         .local_scope()
         .add_assumptions_to_prover(&mut prover);

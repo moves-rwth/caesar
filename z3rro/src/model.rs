@@ -55,7 +55,7 @@ impl<'ctx> InstrumentedModel<'ctx> {
     /// Evaluate the given ast node in this model. `model_completion` indicates
     /// whether the node should be assigned a value even if it is not present in
     /// the model.
-    pub fn eval<T: Ast<'ctx>>(&self, ast: &T, model_completion: bool) -> Option<T> {
+    pub fn eval_ast<T: Ast<'ctx>>(&self, ast: &T, model_completion: bool) -> Option<T> {
         self.add_children_accessed(Dynamic::from_ast(ast));
         let res = self.model.eval(ast, model_completion)?;
         Some(res)
@@ -133,11 +133,11 @@ impl<'ctx> SmtEval<'ctx> for Bool<'ctx> {
     type Value = bool;
 
     fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<bool, SmtEvalError> {
-        model
-            .eval(self, true)
+        Ok(model
+            .eval_ast(self, false)
             .ok_or(SmtEvalError::EvalError)?
             .as_bool()
-            .ok_or(SmtEvalError::ParseError)
+            .unwrap_or(true))
     }
 }
 
@@ -147,7 +147,7 @@ impl<'ctx> SmtEval<'ctx> for Int<'ctx> {
     fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<BigInt, SmtEvalError> {
         // TODO: Z3's as_i64 only returns an i64 value. is there something more complete?
         let value = model
-            .eval(self, true)
+            .eval_ast(self, true)
             .ok_or(SmtEvalError::EvalError)?
             .as_i64()
             .ok_or(SmtEvalError::ParseError)?;
@@ -160,7 +160,7 @@ impl<'ctx> SmtEval<'ctx> for Real<'ctx> {
 
     fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
         let res = model
-            .eval(self, false) // TODO
+            .eval_ast(self, false) // TODO
             .ok_or(SmtEvalError::EvalError)?;
 
         // The .as_real() method only returns a pair of i64 values. If the
