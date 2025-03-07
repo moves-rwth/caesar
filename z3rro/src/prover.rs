@@ -45,7 +45,7 @@ pub enum IncrementalMode {
 
 #[derive(Debug)]
 enum StackSolver<'ctx> {
-    Native(Solver<'ctx>, Vec<bool>),
+    Native(Solver<'ctx>),
     Emulated(Solver<'ctx>, Vec<Vec<Bool<'ctx>>>),
 }
 
@@ -66,6 +66,10 @@ pub struct Prover<'ctx> {
     ctx: &'ctx Context,
     timeout: Option<Duration>,
     solver: StackSolver<'ctx>,
+    /// Number of times push was called minus number of times pop was called.
+    level: usize,
+    /// The minimum level where an assertion was added to the solver.
+    min_level_with_provables: Option<usize>,
 }
 
 impl<'ctx> Prover<'ctx> {
@@ -75,11 +79,13 @@ impl<'ctx> Prover<'ctx> {
             ctx,
             timeout: None,
             solver: match mode {
-                IncrementalMode::Native => StackSolver::Native(Solver::new(ctx), vec![false]),
+                IncrementalMode::Native => StackSolver::Native(Solver::new(ctx)),
                 IncrementalMode::Emulated => {
                     StackSolver::Emulated(Solver::new(ctx), vec![Vec::new()])
                 }
             },
+            level: 0,
+            min_level_with_provables: None,
         }
     }
 
@@ -90,7 +96,7 @@ impl<'ctx> Prover<'ctx> {
 
     fn get_solver(&self) -> &Solver<'ctx> {
         match &self.solver {
-            StackSolver::Native(solver, _) => solver,
+            StackSolver::Native(solver) => solver,
             StackSolver::Emulated(solver, _) => solver,
         }
     }
@@ -109,9 +115,8 @@ impl<'ctx> Prover<'ctx> {
     /// Add an assumption to this prover.
     pub fn add_assumption(&mut self, value: &Bool<'ctx>) {
         match &mut self.solver {
-            StackSolver::Native(solver, stack) => {
+            StackSolver::Native(solver) => {
                 solver.assert(value);
-                *stack.last_mut().unwrap() = true;
             }
             StackSolver::Emulated(solver, stack) => {
                 solver.assert(value);
@@ -121,12 +126,14 @@ impl<'ctx> Prover<'ctx> {
     }
 
     /// Add a proof obligation to this prover. It adds the negated formula to
-    /// the underlying SAT solver's assertions.
+    /// the underlying SAT solver's assertions. In addition, the prover will
+    /// never return a counterexample unless a provable has been added.
     ///
     /// We call it `provable` to avoid confusion between the Z3 solver's
     /// `assert` methods.
     pub fn add_provable(&mut self, value: &Bool<'ctx>) {
         self.add_assumption(&value.not());
+        self.min_level_with_provables.get_or_insert(self.level);
     }
 
     /// `self.check_proof_assuming(&[])`.
@@ -137,12 +144,12 @@ impl<'ctx> Prover<'ctx> {
     /// Do the SAT check, but consider a check with no provables to be a
     /// [`ProveResult::Proof`].
     pub fn check_proof_assuming(&mut self, assumptions: &[Bool<'ctx>]) -> ProveResult<'ctx> {
-        match &mut self.solver {
-            StackSolver::Native(solver, stack) => {
-                if stack.iter().all(|v| !*v) {
-                    return ProveResult::Proof;
-                }
+        if self.min_level_with_provables.is_none() {
+            return ProveResult::Proof;
+        }
 
+        match &mut self.solver {
+            StackSolver::Native(solver) => {
                 let res = if assumptions.is_empty() {
                     solver.check()
                 } else {
@@ -158,11 +165,7 @@ impl<'ctx> Prover<'ctx> {
                     }
                 }
             }
-            StackSolver::Emulated(solver, stack) => {
-                if stack.iter().all(|level| level.is_empty()) {
-                    return ProveResult::Proof;
-                }
-
+            StackSolver::Emulated(solver, _) => {
                 let res = if assumptions.is_empty() {
                     solver.check()
                 } else {
@@ -205,26 +208,28 @@ impl<'ctx> Prover<'ctx> {
 
     /// See [`Solver::push`].
     pub fn push(&mut self) {
+        self.level += 1;
         match &mut self.solver {
-            StackSolver::Native(solver, stack) => {
-                solver.push();
-                stack.push(false)
-            }
+            StackSolver::Native(solver) => solver.push(),
             StackSolver::Emulated(_, stack) => stack.push(Vec::new()),
         }
     }
 
     /// See [`Solver::pop`].
     pub fn pop(&mut self) {
-        match &mut self.solver {
-            StackSolver::Native(solver, stack) => {
-                solver.pop(1);
-                stack.pop();
-                assert!(!stack.is_empty())
+        self.level = self.level.checked_sub(1).expect("cannot pop level 0");
+        if let Some(prev_min_level) = self.min_level_with_provables {
+            // if there are no assertions at this level, remove the counter
+            if prev_min_level > self.level {
+                self.min_level_with_provables.take();
             }
+        }
+
+        match &mut self.solver {
+            StackSolver::Native(solver) => solver.pop(1),
             StackSolver::Emulated(ref mut solver, stack) => {
                 stack.pop();
-                assert!(!stack.is_empty());
+                debug_assert_eq!(stack.len(), self.level + 1);
                 *solver = Solver::new(self.ctx);
                 for level in stack.iter().flatten() {
                     solver.assert(level);
@@ -235,16 +240,16 @@ impl<'ctx> Prover<'ctx> {
 
     /// Retrieve the current stack level. Useful for debug assertions.
     pub fn level(&self) -> usize {
-        match &self.solver {
-            StackSolver::Native(_, stack) => stack.len() - 1,
-            StackSolver::Emulated(_, stack) => stack.len() - 1,
+        if let StackSolver::Emulated(_, stack) = &self.solver {
+            debug_assert_eq!(stack.len(), self.level + 1);
         }
+        self.level
     }
 
     /// Turns this prover into a regular [`Solver`].
     pub fn into_solver(self) -> Solver<'ctx> {
         match self.solver {
-            StackSolver::Native(solver, _) => solver,
+            StackSolver::Native(solver) => solver,
             StackSolver::Emulated(solver, _) => solver,
         }
     }
@@ -272,11 +277,7 @@ impl<'ctx> Prover<'ctx> {
 
     /// Return the SMT-LIB that represents the solver state.
     pub fn get_smtlib(&self) -> Smtlib {
-        let solver = match &self.solver {
-            StackSolver::Native(solver, _) => solver,
-            StackSolver::Emulated(solver, _stack) => solver,
-        };
-        Smtlib::from_solver(solver)
+        Smtlib::from_solver(self.get_solver())
     }
 }
 
@@ -290,18 +291,20 @@ mod test {
 
     #[test]
     fn test_prover() {
-        let ctx = Context::new(&Config::default());
-        let mut prover = Prover::new(&ctx, IncrementalMode::Native);
-        assert!(matches!(prover.check_proof(), ProveResult::Proof));
-        assert_eq!(prover.check_sat(), SatResult::Sat);
+        for mode in [IncrementalMode::Native, IncrementalMode::Emulated] {
+            let ctx = Context::new(&Config::default());
+            let mut prover = Prover::new(&ctx, mode);
+            assert!(matches!(prover.check_proof(), ProveResult::Proof));
+            assert_eq!(prover.check_sat(), SatResult::Sat);
 
-        prover.push();
-        prover.add_assumption(&Bool::from_bool(&ctx, true));
-        assert!(matches!(prover.check_proof(), ProveResult::Proof));
-        assert_eq!(prover.check_sat(), SatResult::Sat);
-        prover.pop();
+            prover.push();
+            prover.add_assumption(&Bool::from_bool(&ctx, true));
+            assert!(matches!(prover.check_proof(), ProveResult::Proof));
+            assert_eq!(prover.check_sat(), SatResult::Sat);
+            prover.pop();
 
-        assert!(matches!(prover.check_proof(), ProveResult::Proof));
-        assert_eq!(prover.check_sat(), SatResult::Sat);
+            assert!(matches!(prover.check_proof(), ProveResult::Proof));
+            assert_eq!(prover.check_sat(), SatResult::Sat);
+        }
     }
 }
