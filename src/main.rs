@@ -822,6 +822,8 @@ fn verify_files_main(
         && !options.lsp_options.explain_core_vc
         && !options.debug_options.probe
         && !options.debug_options.print_smt
+        && !options.debug_options.print_core
+        && !options.debug_options.print_core_procs
         && options.debug_options.smt_dir.is_none()
     {
         return Ok(true);
