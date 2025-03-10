@@ -45,29 +45,23 @@ pub enum ProveResult<'ctx> {
     Unknown(ReasonUnknown),
 }
 
-/// Execute swine-z3 on the file located at file_path
+/// Execute swine on the file located at file_path
 fn execute_swine(file_path: &Path) -> Result<SatResult, CommandError> {
-    match env::var("SWINE") {
-        // Use "export SWINE=<path_for_swine>" to set the path for swine in the SWINE variable.
-        Ok(swine) => {
-            let output = Command::new(swine).arg(file_path).output();
+    let output = Command::new("swine").arg(file_path).output();
 
-            match output {
-                Ok(output) => {
-                    let stdout = String::from_utf8_lossy(&output.stdout);
+    match output {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
 
-                    if stdout.contains("unsat") {
-                        Ok(SatResult::Unsat)
-                    } else if stdout.contains("sat") {
-                        Ok(SatResult::Sat)
-                    } else {
-                        Ok(SatResult::Unknown)
-                    }
-                }
-                Err(e) => Err(CommandError::ProcessError(e)),
+            if stdout.contains("unsat") {
+                Ok(SatResult::Unsat)
+            } else if stdout.contains("sat") {
+                Ok(SatResult::Sat)
+            } else {
+                Ok(SatResult::Unknown)
             }
         }
-        Err(e) => Err(CommandError::EnvVarError(e)),
+        Err(e) => Err(CommandError::ProcessError(e)),
     }
 }
 
