@@ -227,7 +227,9 @@ impl<'ctx> SliceSolver<'ctx> {
 
         self.prover.add_assumption(&self.slice_stmts.constraints);
         self.prover.add_assumption(&inactive_formula);
-        let res = self.prover.check_proof_assuming(&active_toggle_values, z3rro::prover::SolverType::SWINE);
+        let res = self
+            .prover
+            .check_proof_assuming(&active_toggle_values, z3rro::prover::SolverType::SWINE);
 
         let mut slice_searcher = SliceModelSearch::new(active_toggle_values.clone());
         if let ProveResult::Proof = res {

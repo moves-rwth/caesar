@@ -1,7 +1,15 @@
 //! Not a SAT solver, but a prover. There's a difference.
 use thiserror::Error;
 
-use std::{collections::VecDeque, env, fmt::Display, io::{self, Write}, path::Path, process::{self, Command}, time::Duration};
+use std::{
+    collections::VecDeque,
+    env,
+    fmt::Display,
+    io::{self, Write},
+    path::Path,
+    process::{self, Command},
+    time::Duration,
+};
 
 use tempfile::NamedTempFile;
 
@@ -23,6 +31,7 @@ pub enum CommandError {
     #[error("Process execution failed: {0}")]
     ProcessError(#[from] io::Error),
 }
+
 pub enum SolverType {
     Z3,
     SWINE,
@@ -37,13 +46,11 @@ pub enum ProveResult<'ctx> {
 }
 
 /// Execute swine-z3 on the file located at file_path
-fn execute_swine(file_path: &Path) -> Result<SatResult, CommandError>{
+fn execute_swine(file_path: &Path) -> Result<SatResult, CommandError> {
     match env::var("SWINE") {
         // Use "export SWINE=<path_for_swine>" to set the path for swine in the SWINE variable.
         Ok(swine) => {
-            let output = Command::new(swine)
-                .arg(file_path) 
-                .output();
+            let output = Command::new(swine).arg(file_path).output();
 
             match output {
                 Ok(output) => {
@@ -57,18 +64,14 @@ fn execute_swine(file_path: &Path) -> Result<SatResult, CommandError>{
                         Ok(SatResult::Unknown)
                     }
                 }
-                Err(e) => {
-                    Err(CommandError::ProcessError(e))
-                }
+                Err(e) => Err(CommandError::ProcessError(e)),
             }
         }
-        Err(e) => {
-            Err(CommandError::EnvVarError(e))
-        }
+        Err(e) => Err(CommandError::EnvVarError(e)),
     }
 }
 
-/// In order to execute the program, it is necessary to remove lines that 
+/// In order to execute the program, it is necessary to remove lines that
 /// contain a forall quantifier or the declaration of the exponential function (exp).
 fn remove_lines_for_swine(input: &str) -> String {
     let mut output = String::new();
@@ -167,7 +170,11 @@ impl<'ctx> Prover<'ctx> {
 
     /// Do the SAT check, but consider a check with no provables to be a
     /// [`ProveResult::Proof`].
-    pub fn check_proof_assuming(&mut self, assumptions: &[Bool<'ctx>], solver_type: SolverType) -> ProveResult<'ctx> {
+    pub fn check_proof_assuming(
+        &mut self,
+        assumptions: &[Bool<'ctx>],
+        solver_type: SolverType,
+    ) -> ProveResult<'ctx> {
         if self.min_level_with_provables.is_none() {
             return ProveResult::Proof;
         }
@@ -180,9 +187,11 @@ impl<'ctx> Prover<'ctx> {
                 smtlib.add_check_sat();
                 let smtlib = smtlib.into_string();
                 let mut smt_file: NamedTempFile = NamedTempFile::new().unwrap();
-                smt_file.write_all(remove_lines_for_swine(&smtlib).as_bytes()).unwrap();
+                smt_file
+                    .write_all(remove_lines_for_swine(&smtlib).as_bytes())
+                    .unwrap();
                 let file_path = smt_file.path();
-        
+
                 res = execute_swine(file_path).unwrap_or_else(|e| {
                     eprintln!("{}", e);
                     process::exit(1)
@@ -192,7 +201,7 @@ impl<'ctx> Prover<'ctx> {
                     SatResult::Unknown => {
                         // TODO: Determine the correct reason for Unknown
                         ProveResult::Unknown(ReasonUnknown::Other("unknown".to_string()))
-                    },
+                    }
                     SatResult::Sat => {
                         // TODO: Get the model from the output of SWINE
                         println!("The Result of SWINE: sat");
