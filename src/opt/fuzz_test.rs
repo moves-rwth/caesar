@@ -208,10 +208,13 @@ fn prove_equiv(expr: Expr, optimized: Expr, tcx: &TyCtx) -> TestCaseResult {
     prover.add_provable(&eq_expr_z3);
     let x = match prover.check_proof() {
         ProveResult::Proof => Ok(()),
-        ProveResult::Counterexample(model) => Err(TestCaseError::fail(format!(
-            "rewrote {} ...into... {}, but those are not equivalent:\n{}",
-            expr, optimized, model
-        ))),
+        ProveResult::Counterexample => {
+            let model = prover.get_model().unwrap();
+            Err(TestCaseError::fail(format!(
+                "rewrote {} ...into... {}, but those are not equivalent:\n{}",
+                expr, optimized, model
+            )))
+        }
         ProveResult::Unknown(reason) => {
             Err(TestCaseError::fail(format!("unknown result ({})", reason)))
         }

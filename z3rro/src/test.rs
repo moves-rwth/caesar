@@ -28,9 +28,9 @@ pub fn test_prove(f: impl for<'ctx> FnOnce(&'ctx Context, &mut SmtScope<'ctx>) -
 
     prover.add_provable(&theorem);
     match prover.check_proof() {
-        ProveResult::Counterexample(model) => panic!(
+        ProveResult::Counterexample => panic!(
             "counter-example: {:?}\nassertions:\n{:?}",
-            model,
+            prover.get_model(),
             prover.get_assertions()
         ),
         ProveResult::Unknown(reason) => panic!("solver returned unknown ({})", reason),

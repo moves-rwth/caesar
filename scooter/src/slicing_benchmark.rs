@@ -228,7 +228,7 @@ pub fn run_benchmark_slicing(
         move || {
             let task_optimal_cex = task.clone();
             let res = run_benchmark(task_optimal_cex).unwrap();
-            let result = parse_slicing_result(&res, "slice_while_failing");
+            let result = parse_slicing_result(&res, "slice_failing_binary_search");
             progress.inc(1);
             result
         }
@@ -245,7 +245,7 @@ pub fn run_benchmark_slicing(
                 "core".to_string(),
             ]);
             let res = run_benchmark(task_core).unwrap();
-            let result = parse_slicing_result(&res, "verified_slice_unsat_core");
+            let result = parse_slicing_result(&res, "slice_verifying_unsat_core");
             progress.inc(1);
             result
         }
@@ -262,7 +262,7 @@ pub fn run_benchmark_slicing(
                 "mus".to_string(),
             ]);
             let res = run_benchmark(task_mus).unwrap();
-            let result = parse_slicing_result(&res, "verified_slice_mus");
+            let result = parse_slicing_result(&res, "slice_verifying_enumerate");
             progress.inc(1);
             result
         }
@@ -279,7 +279,7 @@ pub fn run_benchmark_slicing(
                 "sus".to_string(),
             ]);
             let res = run_benchmark(task_sus).unwrap();
-            let result = parse_slicing_result(&res, "verified_slice_mus");
+            let result = parse_slicing_result(&res, "slice_verifying_enumerate");
             progress.inc(1);
             result
         }
@@ -296,7 +296,7 @@ pub fn run_benchmark_slicing(
                 "exists-forall".to_string(),
             ]);
             let res = run_benchmark(task_exists_forall).unwrap();
-            let result = parse_slicing_result(&res, "exists_verified_slice");
+            let result = parse_slicing_result(&res, "slice_verifying_ef_binary_search");
             progress.inc(1);
             result
         }

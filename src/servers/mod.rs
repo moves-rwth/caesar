@@ -42,7 +42,7 @@ impl VerifyResult {
     pub fn from_prove_result(result: &ProveResult) -> Self {
         match &result {
             ProveResult::Proof => VerifyResult::Verified,
-            ProveResult::Counterexample(_) => VerifyResult::Failed,
+            ProveResult::Counterexample => VerifyResult::Failed,
             ProveResult::Unknown(_) => VerifyResult::Unknown,
         }
     }

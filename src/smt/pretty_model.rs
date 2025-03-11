@@ -8,7 +8,7 @@ use std::{
 };
 
 use itertools::Itertools;
-use z3rro::model::{InstrumentedModel, SmtEvalError};
+use z3rro::model::{InstrumentedModel, ModelConsistency, SmtEvalError};
 
 use crate::{
     ast::{
@@ -29,7 +29,7 @@ pub fn pretty_model<'smt, 'ctx>(
     slice_model: &SliceModel,
     vc_expr: &QuantVcUnit,
     translate: &mut TranslateExprs<'smt, 'ctx>,
-    model: &mut InstrumentedModel<'ctx>,
+    model: &InstrumentedModel<'ctx>,
 ) -> Doc {
     let mut res: Vec<Doc> = vec![];
 
@@ -245,7 +245,11 @@ pub fn pretty_slice(files: &Files, slice_model: &SliceModel) -> Option<Doc> {
         return None;
     }
 
-    lines.insert(0, Doc::text("program slice:"));
+    let title = match slice_model.consistency() {
+        ModelConsistency::Consistent => "program slice:",
+        ModelConsistency::Unknown => "program slice (based on unknown solver state):",
+    };
+    lines.insert(0, Doc::text(title));
 
     Some(Doc::intersperse(lines, Doc::line_()).nest(4))
 }

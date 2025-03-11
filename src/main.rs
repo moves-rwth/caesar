@@ -388,6 +388,13 @@ pub struct SliceOptions {
     #[arg(long)]
     pub slice_error_first: bool,
 
+    /// If the SMT solver provides a model for an "unknown" result, use that to
+    /// obtain an error slice. The slice is not guaranteed to be an actual error
+    /// slice, because the model might not be a real counterexample. However, it
+    /// is often a helpful indicator of where the SMT solver got stuck.
+    #[arg(long)]
+    pub slice_error_inconsistent: bool,
+
     /// Enable slicing tick/reward statements during slicing for errors.
     #[arg(long)]
     pub slice_ticks: bool,
@@ -943,7 +950,7 @@ fn verify_files_main(
         // Increment counters
         match result.prove_result {
             ProveResult::Proof => num_proven += 1,
-            ProveResult::Counterexample(_) | ProveResult::Unknown(_) => num_failures += 1,
+            ProveResult::Counterexample | ProveResult::Unknown(_) => num_failures += 1,
         }
     }
 

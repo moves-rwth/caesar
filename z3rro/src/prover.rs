@@ -4,28 +4,28 @@ use std::{fmt::Display, time::Duration};
 
 use z3::{
     ast::{forall_const, Ast, Bool, Dynamic},
-    Context, Model, SatResult, Solver,
+    Context, SatResult, Solver,
 };
 
 use crate::{
-    model::InstrumentedModel,
+    model::{InstrumentedModel, ModelConsistency},
     smtlib::Smtlib,
     util::{set_solver_timeout, ReasonUnknown},
 };
 
 /// The result of a prove query.
 #[derive(Debug)]
-pub enum ProveResult<'ctx> {
+pub enum ProveResult {
     Proof,
-    Counterexample(InstrumentedModel<'ctx>),
+    Counterexample,
     Unknown(ReasonUnknown),
 }
 
-impl Display for ProveResult<'_> {
+impl Display for ProveResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ProveResult::Proof => f.write_str("Proof"),
-            ProveResult::Counterexample(_) => f.write_str("Counterexample"),
+            ProveResult::Counterexample => f.write_str("Counterexample"),
             ProveResult::Unknown(reason) => {
                 f.write_fmt(format_args!("Unknown (reason: {})", reason))
             }
@@ -70,6 +70,7 @@ pub struct Prover<'ctx> {
     level: usize,
     /// The minimum level where an assertion was added to the solver.
     min_level_with_provables: Option<usize>,
+    model_consistency: Option<ModelConsistency>,
 }
 
 impl<'ctx> Prover<'ctx> {
@@ -86,6 +87,7 @@ impl<'ctx> Prover<'ctx> {
             },
             level: 0,
             min_level_with_provables: None,
+            model_consistency: None,
         }
     }
 
@@ -137,61 +139,56 @@ impl<'ctx> Prover<'ctx> {
     }
 
     /// `self.check_proof_assuming(&[])`.
-    pub fn check_proof(&mut self) -> ProveResult<'ctx> {
+    pub fn check_proof(&mut self) -> ProveResult {
         self.check_proof_assuming(&[])
     }
 
     /// Do the SAT check, but consider a check with no provables to be a
     /// [`ProveResult::Proof`].
-    pub fn check_proof_assuming(&mut self, assumptions: &[Bool<'ctx>]) -> ProveResult<'ctx> {
+    pub fn check_proof_assuming(&mut self, assumptions: &[Bool<'ctx>]) -> ProveResult {
         if self.min_level_with_provables.is_none() {
             return ProveResult::Proof;
         }
 
-        match &mut self.solver {
-            StackSolver::Native(solver) => {
-                let res = if assumptions.is_empty() {
-                    solver.check()
-                } else {
-                    solver.check_assumptions(assumptions)
-                };
-                match res {
-                    SatResult::Unsat => ProveResult::Proof,
-                    SatResult::Unknown => ProveResult::Unknown(self.get_reason_unknown().unwrap()),
-                    SatResult::Sat => {
-                        let model = self.get_model().unwrap();
-                        let model = InstrumentedModel::new(model);
-                        ProveResult::Counterexample(model)
-                    }
-                }
-            }
-            StackSolver::Emulated(solver, _) => {
-                let res = if assumptions.is_empty() {
-                    solver.check()
-                } else {
-                    solver.check_assumptions(assumptions)
-                };
-                match res {
-                    SatResult::Unsat => ProveResult::Proof,
-                    SatResult::Unknown => ProveResult::Unknown(self.get_reason_unknown().unwrap()),
-                    SatResult::Sat => {
-                        let model = self.get_model().unwrap();
-                        let model = InstrumentedModel::new(model);
-                        ProveResult::Counterexample(model)
-                    }
-                }
-            }
+        let solver = self.get_solver();
+        let res = if assumptions.is_empty() {
+            solver.check()
+        } else {
+            solver.check_assumptions(assumptions)
+        };
+        self.set_model_consistency(res);
+        match res {
+            SatResult::Unsat => ProveResult::Proof,
+            SatResult::Unknown => ProveResult::Unknown(self.get_reason_unknown().unwrap()),
+            SatResult::Sat => ProveResult::Counterexample,
         }
     }
 
     /// Do the regular SAT check.
     pub fn check_sat(&mut self) -> SatResult {
-        self.get_solver().check()
+        let res = self.get_solver().check();
+        self.set_model_consistency(res);
+        res
     }
 
-    /// Retrieve the model from the solver.
-    pub fn get_model(&self) -> Option<Model<'ctx>> {
-        self.get_solver().get_model()
+    fn set_model_consistency(&mut self, sat_result: SatResult) {
+        self.model_consistency = match sat_result {
+            SatResult::Sat => Some(ModelConsistency::Consistent),
+            SatResult::Unknown => Some(ModelConsistency::Unknown),
+            SatResult::Unsat => None,
+        };
+    }
+
+    /// Retrieve the model from the solver. If the result of the latest check
+    /// was [`ProveResult::Counterexample`] or [`SatResult::Sat`], then the
+    /// model is guaranteed to be consistent with the assertions
+    /// ([`ModelConsistency::Consistent`]). After a
+    /// [`ProveResult::Unknown`]/[`SatResult::Unknown`], the model is
+    /// [`ModelConsistency::Inconsistent`].
+    pub fn get_model(&self) -> Option<InstrumentedModel<'ctx>> {
+        let consistency = self.model_consistency?;
+        let model = self.get_solver().get_model()?;
+        Some(InstrumentedModel::new(consistency, model))
     }
 
     /// Retrieve the UNSAT core. See [`Solver::get_unsat_core()`].
