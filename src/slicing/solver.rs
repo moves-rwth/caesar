@@ -349,7 +349,7 @@ impl<'ctx> SliceSolver<'ctx> {
         slice_sat_binary_search(&mut self.prover, &active_toggle_values, options, limits_ref)?;
         let res = self.prover.check_proof();
         let model = if let Some(model) = self.prover.get_model() {
-            assert!(matches!(res, ProveResult::Proof | ProveResult::Unknown(_)));
+            assert!(matches!(res, ProveResult::Counterexample | ProveResult::Unknown(_)));
             let slice_model =
                 SliceModel::from_model(SliceMode::Error, &self.slice_stmts, selection, &model);
             Some((model, slice_model))

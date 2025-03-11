@@ -737,7 +737,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
                 UnknownHandling::Accept
             } else {
                 UnknownHandling::Stop
-            }
+            },
         };
 
         // this is the main call to the SMT solver for the verification task!
@@ -759,14 +759,16 @@ impl<'ctx> SmtVcUnit<'ctx> {
                         minimality: SliceMinimality::Subset,
                         unknown: UnknownHandling::Stop,
                     };
-                    slice_model = slice_solver.slice_verifying_enumerate(&slice_options, limits_ref)?;
+                    slice_model =
+                        slice_solver.slice_verifying_enumerate(&slice_options, limits_ref)?;
                 }
                 SliceVerifyMethod::SmallestUnsatSubset => {
                     let slice_options = SliceSolveOptions {
                         minimality: SliceMinimality::Size,
                         unknown: UnknownHandling::Continue,
                     };
-                    slice_model = slice_solver.slice_verifying_enumerate(&slice_options, limits_ref)?;
+                    slice_model =
+                        slice_solver.slice_verifying_enumerate(&slice_options, limits_ref)?;
                 }
                 SliceVerifyMethod::ExistsForall => {
                     let slice_options = SliceSolveOptions {
@@ -774,8 +776,8 @@ impl<'ctx> SmtVcUnit<'ctx> {
                         unknown: UnknownHandling::Stop,
                     };
                     if translate.ctx.uninterpreteds().is_empty() {
-                        slice_model =
-                            slice_solver.slice_verifying_ef_binary_search(&slice_options, limits_ref)?;
+                        slice_model = slice_solver
+                            .slice_verifying_ef_binary_search(&slice_options, limits_ref)?;
                     } else {
                         tracing::warn!("There are uninterpreted sorts, functions, or axioms present. Slicing for correctness is disabled because it does not support them.");
                     }
@@ -932,7 +934,7 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
             ProveResult::Unknown(reason) => {
                 println!("{}: Unknown result! (reason: {})", name, reason);
                 if let Some(slice_model) = &self.slice_model {
-                    let doc = pretty_slice(&files, &slice_model);
+                    let doc = pretty_slice(&files, slice_model);
                     if let Some(doc) = doc {
                         let mut w = Vec::new();
                         doc.nest(4).render(120, &mut w).unwrap();
