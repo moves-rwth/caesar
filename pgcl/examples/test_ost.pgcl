@@ -5,7 +5,7 @@
 # with I = b + [a], c = 1, past_I = 2 * [a], and post = b
 
 bool a;
-nat b;†
+nat b;
 nat k;
 
 while(a){
