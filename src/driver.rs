@@ -757,7 +757,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
                 SliceVerifyMethod::MinimalUnsatSubset => {
                     let slice_options = SliceSolveOptions {
                         minimality: SliceMinimality::Subset,
-                        unknown: UnknownHandling::Stop,
+                        unknown: UnknownHandling::Continue,
                     };
                     slice_model =
                         slice_solver.slice_verifying_enumerate(&slice_options, limits_ref)?;

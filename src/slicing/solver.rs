@@ -334,6 +334,10 @@ impl<'ctx> SliceSolver<'ctx> {
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
     ) -> Result<(ProveResult, Option<(InstrumentedModel<'ctx>, SliceModel)>), VerifyError> {
+        if !self.prover.has_provables() {
+            return Ok((ProveResult::Proof, None));
+        }
+
         assert_eq!(self.prover.level(), 2);
         self.prover.pop();
         self.prover.pop();
@@ -349,7 +353,10 @@ impl<'ctx> SliceSolver<'ctx> {
         slice_sat_binary_search(&mut self.prover, &active_toggle_values, options, limits_ref)?;
         let res = self.prover.check_proof();
         let model = if let Some(model) = self.prover.get_model() {
-            assert!(matches!(res, ProveResult::Counterexample | ProveResult::Unknown(_)));
+            assert!(matches!(
+                res,
+                ProveResult::Counterexample | ProveResult::Unknown(_)
+            ));
             let slice_model =
                 SliceModel::from_model(SliceMode::Error, &self.slice_stmts, selection, &model);
             Some((model, slice_model))
@@ -517,7 +524,10 @@ fn slice_sat_binary_search<'ctx>(
                     );
                 }
 
+                cur_solver_n = Some(num_actually_true);
                 minimize.add_result(num_actually_true, PartialMinimizeResult::AcceptUpwards);
+
+                done = true;
 
                 // TODO: for subset inclusion we also want to add
                 // constraints on the next model so that we only find a subset
@@ -525,8 +535,6 @@ fn slice_sat_binary_search<'ctx>(
                     SliceMinimality::Any => break,
                     SliceMinimality::Subset | SliceMinimality::Size => {}
                 }
-
-                done = true;
             }
         }
 
@@ -622,6 +630,7 @@ pub fn slice_unsat_search<'ctx>(
                 match options.unknown {
                     UnknownHandling::Continue => {}
                     UnknownHandling::Stop => {
+                        tracing::trace!("stopping search because of unknown result");
                         break;
                     }
                     UnknownHandling::Accept => {

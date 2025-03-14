@@ -49,6 +49,19 @@ enum StackSolver<'ctx> {
     Emulated(Solver<'ctx>, Vec<Vec<Bool<'ctx>>>),
 }
 
+#[derive(Debug)]
+struct LastSatResult {
+    /// Whether the current model is consistent with the assertions. If the SMT
+    /// solver returned [`SatResult::Unknown`], it is
+    /// [`ModelConsistency::Unknown`].
+    model_consistency: Option<ModelConsistency>,
+    /// The last result of a SAT/proof check so we can return a chached result.
+    /// It is reset any time the assertions on the solver are modified.
+    /// Sometimes Z3 caches on its own, but it is not reliable. Therefore, we do
+    /// it here as well to be sure.
+    last_result: SatResult,
+}
+
 /// A prover wraps a SAT solver, but it's used to prove validity of formulas.
 /// It's a bit of a more explicit API to distinguish between assumptions for a
 /// proof ([`Prover::add_assumption`]) and provables ([`Prover::add_provable`]).
@@ -70,10 +83,8 @@ pub struct Prover<'ctx> {
     level: usize,
     /// The minimum level where an assertion was added to the solver.
     min_level_with_provables: Option<usize>,
-    /// Whether the current model is consistent with the assertions. If the SMT
-    /// solver returned [`SatResult::Unknown`], it is
-    /// [`ModelConsistency::Unknown`].
-    model_consistency: Option<ModelConsistency>,
+    /// Cached information about the last SAT/proof check call.
+    last_result: Option<LastSatResult>,
 }
 
 impl<'ctx> Prover<'ctx> {
@@ -90,7 +101,7 @@ impl<'ctx> Prover<'ctx> {
             },
             level: 0,
             min_level_with_provables: None,
-            model_consistency: None,
+            last_result: None,
         }
     }
 
@@ -128,6 +139,7 @@ impl<'ctx> Prover<'ctx> {
                 stack.last_mut().unwrap().push(value.clone());
             }
         }
+        self.last_result = None;
     }
 
     /// Add a proof obligation to this prover. It adds the negated formula to
@@ -153,13 +165,19 @@ impl<'ctx> Prover<'ctx> {
             return ProveResult::Proof;
         }
 
-        let solver = self.get_solver();
-        let res = if assumptions.is_empty() {
-            solver.check()
-        } else {
-            solver.check_assumptions(assumptions)
+        let res = match &self.last_result {
+            Some(cached_result) if assumptions.is_empty() => cached_result.last_result,
+            _ => {
+                let solver = self.get_solver();
+                let res = if assumptions.is_empty() {
+                    solver.check()
+                } else {
+                    solver.check_assumptions(assumptions)
+                };
+                self.cache_result(res);
+                res
+            }
         };
-        self.set_model_consistency(res);
         match res {
             SatResult::Unsat => ProveResult::Proof,
             SatResult::Unknown => ProveResult::Unknown(self.get_reason_unknown().unwrap()),
@@ -177,17 +195,25 @@ impl<'ctx> Prover<'ctx> {
 
     /// Do the regular SAT check.
     pub fn check_sat(&mut self) -> SatResult {
+        if let Some(cached_result) = &self.last_result {
+            return cached_result.last_result;
+        }
         let res = self.get_solver().check();
-        self.set_model_consistency(res);
+        self.cache_result(res);
         res
     }
 
-    fn set_model_consistency(&mut self, sat_result: SatResult) {
-        self.model_consistency = match sat_result {
+    /// Save the result of the last SAT/proof check.
+    fn cache_result(&mut self, sat_result: SatResult) {
+        let model_consistency = match sat_result {
             SatResult::Sat => Some(ModelConsistency::Consistent),
             SatResult::Unknown => Some(ModelConsistency::Unknown),
             SatResult::Unsat => None,
         };
+        self.last_result = Some(LastSatResult {
+            model_consistency,
+            last_result: sat_result,
+        });
     }
 
     /// Retrieve the model from the solver. If the result of the latest check
@@ -197,7 +223,7 @@ impl<'ctx> Prover<'ctx> {
     /// [`ProveResult::Unknown`]/[`SatResult::Unknown`], the model is
     /// [`ModelConsistency::Inconsistent`].
     pub fn get_model(&self) -> Option<InstrumentedModel<'ctx>> {
-        let consistency = self.model_consistency?;
+        let consistency = self.last_result.as_ref()?.model_consistency?;
         let model = self.get_solver().get_model()?;
         Some(InstrumentedModel::new(consistency, model))
     }
@@ -234,10 +260,22 @@ impl<'ctx> Prover<'ctx> {
         }
 
         match &mut self.solver {
-            StackSolver::Native(solver) => solver.pop(1),
+            StackSolver::Native(solver) => {
+                // we don't know if the pop will change the state, so reset in
+                // every case
+                self.last_result = None;
+                solver.pop(1)
+            }
             StackSolver::Emulated(ref mut solver, stack) => {
-                stack.pop();
+                let old_top = stack.pop().expect("stack was empty, cannot call pop");
                 debug_assert_eq!(stack.len(), self.level + 1);
+
+                // if we didn't change the solver state, we do not need to reset
+                if old_top.is_empty() {
+                    return;
+                }
+
+                self.last_result = None;
                 *solver = Solver::new(self.ctx);
                 for level in stack.iter().flatten() {
                     solver.assert(level);

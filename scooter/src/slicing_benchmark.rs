@@ -5,7 +5,7 @@
 use std::{fmt::Display, io, time::Duration};
 
 use indicatif::ProgressBar;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::thread;
 
@@ -14,7 +14,7 @@ use crate::{
     traces::TracingEventFields,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum SlicingResult {
     Success {
         info: SlicingSuccessfulFields,
@@ -22,7 +22,7 @@ pub enum SlicingResult {
     },
     Failure {
         original_size: usize,
-        time: Duration,
+        time: Option<Duration>,
     },
     NotFound,
     AmbiguousProcs,
@@ -36,6 +36,14 @@ impl SlicingResult {
     pub fn as_success(&self) -> Option<(&SlicingSuccessfulFields, Duration)> {
         match self {
             SlicingResult::Success { info, time } => Some((info, *time)),
+            _ => None,
+        }
+    }
+
+    pub fn num_sliceable_statements(&self) -> Option<usize> {
+        match self {
+            SlicingResult::Success { info, .. } => Some(info.slice_size + info.removed_statements),
+            SlicingResult::Failure { original_size, .. } => Some(*original_size),
             _ => None,
         }
     }
@@ -76,7 +84,7 @@ struct TranslatedSliceSelectionFields {
     inactive: usize,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SlicingSuccessfulFields {
     pub slice_size: usize,
     pub removed_statements: usize,
@@ -121,7 +129,7 @@ fn parse_slicing_result(result: &BenchmarkResult, tracing_name: &str) -> Slicing
             Ok(SlicingTraceFields::SlicingFailed) => {
                 return SlicingResult::Failure {
                     original_size: active.unwrap(),
-                    time: total_time.unwrap(),
+                    time: total_time,
                 };
             }
             _ => {}
@@ -168,11 +176,11 @@ impl SlicingBenchmarkResult {
     }
 
     pub fn num_sliceable_statements(&self) -> usize {
-        self.first_cex_slice
-            .as_success()
-            .or(self.core_slice.as_success())
-            .map(|(info, _time)| info.slice_size + info.removed_statements)
-            .unwrap()
+        if self.first_cex_slice.is_success() {
+            self.first_cex_slice.num_sliceable_statements().unwrap()
+        } else {
+            self.core_slice.num_sliceable_statements().unwrap()
+        }
     }
 }
 
@@ -193,9 +201,14 @@ impl Display for SlicingBenchmarkResult {
         };
         for result in iter {
             if let Some((info, time)) = result.as_success() {
-                write!(f, " & {} & {}", info.slice_size, time.as_millis())?;
+                let mut millis = time.as_millis();
+                if time - Duration::from_millis(millis as u64) >= Duration::from_millis(500) {
+                    millis += 1;
+                }
+                write!(f, " && {} & {}", info.slice_size, millis)?;
             } else {
-                write!(f, " & - & -")?;
+                dbg!(self, result);
+                write!(f, " && - & -")?;
             }
         }
         write!(f, " \\\\")?;
