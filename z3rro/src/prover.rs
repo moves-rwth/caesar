@@ -70,6 +70,9 @@ pub struct Prover<'ctx> {
     level: usize,
     /// The minimum level where an assertion was added to the solver.
     min_level_with_provables: Option<usize>,
+    /// Whether the current model is consistent with the assertions. If the SMT
+    /// solver returned [`SatResult::Unknown`], it is
+    /// [`ModelConsistency::Unknown`].
     model_consistency: Option<ModelConsistency>,
 }
 
@@ -146,7 +149,7 @@ impl<'ctx> Prover<'ctx> {
     /// Do the SAT check, but consider a check with no provables to be a
     /// [`ProveResult::Proof`].
     pub fn check_proof_assuming(&mut self, assumptions: &[Bool<'ctx>]) -> ProveResult {
-        if self.min_level_with_provables.is_none() {
+        if !self.has_provables() {
             return ProveResult::Proof;
         }
 
@@ -162,6 +165,14 @@ impl<'ctx> Prover<'ctx> {
             SatResult::Unknown => ProveResult::Unknown(self.get_reason_unknown().unwrap()),
             SatResult::Sat => ProveResult::Counterexample,
         }
+    }
+
+    /// Whether this prover has any provables added (excluding assumptions). If
+    /// so, then any call to [`Self::check_proof`] or
+    /// [`Self::check_proof_assuming`] will return [`ProveResult::Proof`]
+    /// immediately.
+    pub fn has_provables(&mut self) -> bool {
+        self.min_level_with_provables.is_some()
     }
 
     /// Do the regular SAT check.

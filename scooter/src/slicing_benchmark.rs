@@ -216,7 +216,7 @@ pub fn run_benchmark_slicing(
             let mut task_first_cex = task.clone();
             task_first_cex.args.push("--slice-error-first".to_string());
             let res = run_benchmark(task_first_cex).unwrap();
-            let result = parse_slicing_result(&res, "slice_while_failing");
+            let result = parse_slicing_result(&res, "slice_failing_binary_search");
             progress.inc(1);
             result
         }
