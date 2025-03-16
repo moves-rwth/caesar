@@ -6,7 +6,7 @@ use std::io::BufRead;
 
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use runner::{build_caesar, BenchmarkTask};
-use slicing_benchmark::run_benchmark_slicing;
+use slicing_benchmark::{run_benchmark_task_all_slices, write_csv_results};
 
 fn main() {
     build_caesar().expect("Could not build caesar.");
@@ -19,23 +19,24 @@ fn main() {
     let stdin_reader = std::io::BufReader::new(stdin);
     let lines: Vec<Result<String, _>> = stdin_reader.lines().collect();
 
-    println!("Running benchmarks...");
+    eprintln!("Running benchmarks...");
 
     let mpb = indicatif::MultiProgress::new();
     let outer_pb = mpb.add(ProgressBar::new(lines.len() as u64));
     let style = ProgressStyle::with_template("[{pos}/{len}] {bar:40.cyan/blue} {msg}").unwrap();
     outer_pb.set_style(style);
-    let inner_pb = mpb.add(ProgressBar::new(8));
+    let inner_pb = mpb.add(ProgressBar::new(0));
     let style = ProgressStyle::with_template("[{pos}/{len}] {bar:40.green/red} {msg}").unwrap();
     inner_pb.set_style(style);
 
+    let mut results = vec![];
     for item in lines.into_iter().progress_with(outer_pb.clone()) {
         let line = item.unwrap();
         let (prefix, args) = line.split_once(':').unwrap();
         outer_pb.set_message(prefix.to_owned());
         let mut args = shlex::split(args).unwrap();
         args.append(&mut more_args.clone());
-        let slicing_result = run_benchmark_slicing(
+        let slicing_result = run_benchmark_task_all_slices(
             &BenchmarkTask {
                 name: prefix.to_string(),
                 args: args.clone(),
@@ -44,7 +45,9 @@ fn main() {
         );
 
         match slicing_result {
-            Ok(result) => println!("{}", result),
+            Ok(result) => {
+                results.push(result);
+            }
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     panic!("Error: Benchmark task {:?} not found.", &args);
@@ -53,6 +56,11 @@ fn main() {
                 }
             }
         }
-        inner_pb.reset();
     }
+
+    inner_pb.finish();
+    outer_pb.finish();
+
+    eprintln!("Done. Writing results.");
+    write_csv_results(&results, &mut std::io::stdout()).unwrap();
 }

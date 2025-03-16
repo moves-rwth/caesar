@@ -777,7 +777,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
                     };
                     if translate.ctx.uninterpreteds().is_empty() {
                         slice_model = slice_solver
-                            .slice_verifying_ef_binary_search(&slice_options, limits_ref)?;
+                            .slice_verifying_exists_forall(&slice_options, limits_ref)?;
                     } else {
                         tracing::warn!("There are uninterpreted sorts, functions, or axioms present. Slicing for correctness is disabled because it does not support them.");
                     }

@@ -192,7 +192,7 @@ impl<'ctx> SliceSolver<'ctx> {
     /// Minimize the number of statements while the program still verifies using
     /// an exists-forall encoding.
     #[instrument(level = "info", skip_all)]
-    pub fn slice_verifying_ef_binary_search(
+    pub fn slice_verifying_exists_forall(
         &mut self,
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
