@@ -785,6 +785,11 @@ impl<'ctx> SmtVcUnit<'ctx> {
             }
         }
 
+        if options.debug_options.print_z3_stats {
+            let stats = slice_solver.get_statistics();
+            eprintln!("Z3 statistics for {}: {:?}", name, stats);
+        }
+
         if let Some(smtlib) = &smtlib {
             // only print to the directory again
             let options = DebugOptions {

@@ -371,6 +371,10 @@ pub struct DebugOptions {
     #[arg(long)]
     pub z3_trace: bool,
 
+    /// Print Z3's statistics after the final SAT check.
+    #[arg(long)]
+    pub print_z3_stats: bool,
+
     /// Run a bunch of probes on the SMT solver.
     #[arg(long)]
     pub probe: bool,

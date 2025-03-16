@@ -5,7 +5,7 @@ use itertools::Itertools;
 use tracing::{debug, info, info_span, instrument, warn};
 use z3::{
     ast::{Bool, Dynamic},
-    SatResult,
+    SatResult, Statistics,
 };
 use z3rro::{
     model::{InstrumentedModel, ModelConsistency},
@@ -364,6 +364,11 @@ impl<'ctx> SliceSolver<'ctx> {
             None
         };
         Ok((res, model))
+    }
+
+    /// Retrieve the underlying prover's statistics.
+    pub fn get_statistics(&self) -> Statistics {
+        self.prover.get_statistics()
     }
 }
 

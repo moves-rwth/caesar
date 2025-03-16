@@ -4,7 +4,7 @@ use std::{fmt::Display, time::Duration};
 
 use z3::{
     ast::{forall_const, Ast, Bool, Dynamic},
-    Context, SatResult, Solver,
+    Context, SatResult, Solver, Statistics,
 };
 
 use crate::{
@@ -290,6 +290,11 @@ impl<'ctx> Prover<'ctx> {
             debug_assert_eq!(stack.len(), self.level + 1);
         }
         self.level
+    }
+
+    /// Return the solver's statistics.
+    pub fn get_statistics(&self) -> Statistics {
+        self.get_solver().get_statistics()
     }
 
     /// Turns this prover into a regular [`Solver`].

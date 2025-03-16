@@ -58,6 +58,10 @@ For example, the presence of quantifiers means that the problem can not be assoc
 Similarly, the number of expressions or constants can sometimes be useful indicators to *compare* different problems, but on their own they are often not very informative.
 In general, it is seldom useful to micro-optimize these metrics.
 
+### Z3 Statistics
+
+With the `--print-z3-stats` command-line flag, Caesar will print Z3 statistics to standard error.
+
 ## Debugging Quantifier Instantiations with SMTscope
 
 The [SMTscope tool](https://viperproject.github.io/smt-scope/) by the [Viper project](https://viper.ethz.ch/) can be used to debug quantifier instantiations in SMT queries.
