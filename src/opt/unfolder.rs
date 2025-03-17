@@ -42,8 +42,6 @@ use crate::{
 use crate::smt::translate_exprs::TranslateExprs;
 
 pub struct Unfolder<'smt, 'ctx> {
-    limits_ref: LimitsRef,
-
     /// The expressions may contain substitutions. We keep track of those.
     subst: Subst<'smt>,
 
@@ -59,11 +57,15 @@ pub struct Unfolder<'smt, 'ctx> {
 
 impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
     pub fn new(limits_ref: LimitsRef, ctx: &'smt SmtCtx<'ctx>) -> Self {
+        // it's important that we use the native incremental mode here, because
+        // the performance benefit from the unfolder relies on many very fast
+        // SAT checks.
+        let prover = Prover::new(ctx.ctx(), IncrementalMode::Native);
+
         Unfolder {
-            limits_ref: limits_ref.clone(),
             subst: Subst::new(ctx.tcx(), &limits_ref),
             translate: TranslateExprs::new(ctx),
-            prover: Prover::new(ctx.ctx(), IncrementalMode::Native),
+            prover,
         }
     }
 
@@ -147,7 +149,7 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
     type Err = LimitError;
 
     fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
-        self.limits_ref.check_limits()?;
+        self.subst.limits_ref.check_limits()?;
 
         let span = e.span;
         let ty = e.ty.clone().unwrap();
