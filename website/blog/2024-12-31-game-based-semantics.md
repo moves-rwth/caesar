@@ -5,7 +5,7 @@ tags: [publications]
 
 # A Game-Based Operational Semantics for HeyVL
 
-The publication [_"A Game-Based Semantics for the Probabilistic
+The paper [_"A Game-Based Semantics for the Probabilistic
 Intermediate Verification Language HeyVL"_](https://doi.org/10.1007/978-3-031-75434-0_17) by Christoph Matheja was published at [AISoLA 2024](https://2024-isola.isola-conference.org/) and is now available online.
 
 <!-- truncate -->

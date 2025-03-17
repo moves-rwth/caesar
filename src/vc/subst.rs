@@ -15,6 +15,7 @@ use crate::{
         visit::{walk_expr, VisitorMut},
         Expr, ExprBuilder, ExprKind, Ident, QuantVar, Span, SpanVariant, VarKind,
     },
+    resource_limits::{LimitError, LimitsRef},
     tyctx::TyCtx,
 };
 
@@ -28,14 +29,16 @@ pub struct Subst<'a> {
     tcx: &'a TyCtx,
     cur: SubstLevel,
     stack: Vec<SubstLevel>,
+    limits_ref: LimitsRef,
 }
 
 impl<'a> Subst<'a> {
-    pub fn new(tcx: &'a TyCtx) -> Self {
+    pub fn new(tcx: &'a TyCtx, limits_ref: &LimitsRef) -> Self {
         Subst {
             tcx,
             cur: SubstLevel::default(),
             stack: Vec::new(),
+            limits_ref: limits_ref.clone(),
         }
     }
 
@@ -80,9 +83,11 @@ impl<'a> Subst<'a> {
 }
 
 impl<'a> VisitorMut for Subst<'a> {
-    type Err = ();
+    type Err = LimitError;
 
     fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
+        self.limits_ref.check_limits()?;
+
         let span = e.span;
         match &mut e.deref_mut().kind {
             ExprKind::Var(ident) => {
@@ -115,8 +120,8 @@ impl<'a> VisitorMut for Subst<'a> {
 ///
 /// As said in the module description [`crate::vc::subst`], this is the "strict"
 /// and simpler version of the [`crate::opt::unfolder`].
-#[instrument(skip(tcx, e))]
-pub fn apply_subst(tcx: &TyCtx, e: &mut Expr) {
-    let mut subst = Subst::new(tcx);
-    subst.visit_expr(e).unwrap()
+#[instrument(skip_all)]
+pub fn apply_subst(tcx: &TyCtx, e: &mut Expr, limits_ref: &LimitsRef) -> Result<(), LimitError> {
+    let mut subst = Subst::new(tcx, limits_ref);
+    subst.visit_expr(e)
 }

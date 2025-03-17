@@ -1,9 +1,14 @@
 //! Pretty-printing an SMT model.
 
-use std::{collections::BTreeMap, fmt::Display, rc::Rc};
+use std::{
+    collections::BTreeMap,
+    fmt::Display,
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use itertools::Itertools;
-use z3rro::model::{InstrumentedModel, SmtEvalError};
+use z3rro::model::{InstrumentedModel, ModelConsistency, SmtEvalError};
 
 use crate::{
     ast::{
@@ -12,6 +17,7 @@ use crate::{
     },
     driver::QuantVcUnit,
     pretty::Doc,
+    resource_limits::LimitsRef,
     slicing::model::{SliceModel, SliceResult},
     smt::translate_exprs::TranslateExprs,
     vc::subst::apply_subst,
@@ -23,7 +29,7 @@ pub fn pretty_model<'smt, 'ctx>(
     slice_model: &SliceModel,
     vc_expr: &QuantVcUnit,
     translate: &mut TranslateExprs<'smt, 'ctx>,
-    model: &mut InstrumentedModel<'ctx>,
+    model: &InstrumentedModel<'ctx>,
 ) -> Doc {
     let mut res: Vec<Doc> = vec![];
 
@@ -65,7 +71,16 @@ pub fn pretty_vc_value<'smt, 'ctx>(
             |_ident| expr_true.clone(),
         );
         let mut res = subst_expr;
-        apply_subst(translate.ctx.tcx(), &mut res);
+
+        // This deadline is not actually used. It is used to create a dummy [`LimitsRef`] object below
+        let deadline = Instant::now() + Duration::from_millis(1);
+
+        // The limit error is not handled here, therefore discard the result
+        let _ = apply_subst(
+            translate.ctx.tcx(),
+            &mut res,
+            &LimitsRef::new(Some(deadline), None),
+        );
         res
     };
 
@@ -230,7 +245,11 @@ pub fn pretty_slice(files: &Files, slice_model: &SliceModel) -> Option<Doc> {
         return None;
     }
 
-    lines.insert(0, Doc::text("program slice:"));
+    let title = match slice_model.consistency() {
+        ModelConsistency::Consistent => "program slice:",
+        ModelConsistency::Unknown => "program slice (based on unknown solver state):",
+    };
+    lines.insert(0, Doc::text(title));
 
     Some(Doc::intersperse(lines, Doc::line_()).nest(4))
 }
@@ -244,7 +263,7 @@ pub fn pretty_unaccessed(model: &InstrumentedModel<'_>) -> Option<Doc> {
     let mut lines: Vec<Doc> = vec![Doc::text("extra definitions:")];
     for decl in unaccessed {
         let line = if decl.arity() == 0 {
-            let value = model.eval(&decl.apply(&[]), true).unwrap();
+            let value = model.eval_ast(&decl.apply(&[]), true).unwrap();
             format!("{}: {}", decl.name(), value)
         } else {
             let interp = model.get_func_interp(&decl).unwrap();

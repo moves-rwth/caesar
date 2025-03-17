@@ -144,8 +144,8 @@ impl SliceAnnotation {
 /// by a logical or.
 #[derive(Debug, Clone, Default)]
 pub struct SliceSelection {
-    concordant: bool,
-    discordant: bool,
+    pub(super) concordant: bool,
+    pub(super) discordant: bool,
     pub in_slice_verify_annotation: bool,
     pub in_slice_error_annotation: bool,
     pub slice_ticks: bool,

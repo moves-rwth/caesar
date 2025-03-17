@@ -1,15 +1,18 @@
 use std::{
     io::{self, IsTerminal},
     path::PathBuf,
+    process::ExitCode,
     sync::{Arc, Mutex},
 };
+
+use ariadne::ReportKind;
 
 use crate::{
     ast::{Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
     driver::{SmtVcCheckResult, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
-    Options, VerifyError,
+    InputOptions, VerifyError,
 };
 
 use super::{unless_fatal_error, Server, ServerError};
@@ -17,13 +20,15 @@ use super::{unless_fatal_error, Server, ServerError};
 pub struct CliServer {
     werr: bool,
     files: Arc<Mutex<Files>>,
+    has_emitted_errors: bool,
 }
 
 impl CliServer {
-    pub fn new(options: &Options) -> Self {
+    pub fn new(input_options: &InputOptions) -> Self {
         CliServer {
-            werr: options.input_options.werr,
+            werr: input_options.werr,
             files: Default::default(),
+            has_emitted_errors: false,
         }
     }
 
@@ -62,6 +67,8 @@ impl Server for CliServer {
     }
 
     fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+        self.has_emitted_errors =
+            self.has_emitted_errors || self.werr || diagnostic.kind() == ReportKind::Error;
         let files = self.files.lock().unwrap();
         print_diagnostic(&files, diagnostic)?;
         Ok(())
@@ -77,6 +84,11 @@ impl Server for CliServer {
         Ok(())
     }
 
+    fn register_source_unit(&mut self, _span: Span) -> Result<(), VerifyError> {
+        // Not relevant for CLI
+        Ok(())
+    }
+
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
         name: &SourceUnitName,
@@ -86,6 +98,19 @@ impl Server for CliServer {
     ) -> Result<(), ServerError> {
         result.print_prove_result(self, translate, name);
         Ok(())
+    }
+
+    fn handle_not_checked(&mut self, _span: Span) -> Result<(), ServerError> {
+        // Not relevant for CLI
+        Ok(())
+    }
+
+    fn exit_code(&self) -> ExitCode {
+        if self.has_emitted_errors {
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        }
     }
 }
 

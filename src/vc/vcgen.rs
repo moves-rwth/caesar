@@ -11,7 +11,9 @@ use crate::{
         Label, QuantOpKind, Span, SpanVariant, Stmt, StmtKind, UnOpKind,
     },
     intrinsic::annotations::AnnotationKind,
+    resource_limits::LimitsRef,
     tyctx::TyCtx,
+    VerifyError,
 };
 
 use super::explain::{explain_annotated_while, explain_proc_call, explain_subst, VcExplanation};
@@ -19,16 +21,25 @@ use super::explain::{explain_annotated_while, explain_proc_call, explain_subst, 
 pub struct Vcgen<'tcx> {
     pub(super) tcx: &'tcx TyCtx,
     pub explanation: Option<VcExplanation>,
+    pub limits_ref: LimitsRef,
 }
 
 impl<'tcx> Vcgen<'tcx> {
     /// Create a new `Vcgen` instance. Initialize with an optional
     /// `VcExplanation` structure to enable explanations.
-    pub fn new(tcx: &'tcx TyCtx, explanation: Option<VcExplanation>) -> Self {
-        Vcgen { tcx, explanation }
+    pub fn new(
+        tcx: &'tcx TyCtx,
+        limits_ref: &LimitsRef,
+        explanation: Option<VcExplanation>,
+    ) -> Self {
+        Vcgen {
+            explanation,
+            limits_ref: limits_ref.clone(),
+            tcx,
+        }
     }
 
-    pub fn vcgen_block(&mut self, block: &Block, post: Expr) -> Result<Expr, Diagnostic> {
+    pub fn vcgen_block(&mut self, block: &Block, post: Expr) -> Result<Expr, VerifyError> {
         let prev_block_span = if let Some(ref mut explanation) = self.explanation {
             let prev_block_span = explanation.set_block_span(Some(block.span));
             let mut end_span = block.span;
@@ -45,14 +56,16 @@ impl<'tcx> Vcgen<'tcx> {
         res
     }
 
-    pub fn vcgen_stmts(&mut self, stmts: &[Stmt], post: Expr) -> Result<Expr, Diagnostic> {
+    pub fn vcgen_stmts(&mut self, stmts: &[Stmt], post: Expr) -> Result<Expr, VerifyError> {
         stmts
             .iter()
             .rev()
             .try_fold(post, |acc, x| self.vcgen_stmt(x, acc))
     }
 
-    fn vcgen_stmt(&mut self, stmt: &Stmt, post: Expr) -> Result<Expr, Diagnostic> {
+    fn vcgen_stmt(&mut self, stmt: &Stmt, post: Expr) -> Result<Expr, VerifyError> {
+        self.limits_ref.check_limits()?;
+
         let builder = ExprBuilder::new(stmt.span.variant(SpanVariant::VC));
         let spec_ty = Some(self.tcx.spec_ty().clone());
         let res = match &stmt.node {
@@ -60,13 +73,13 @@ impl<'tcx> Vcgen<'tcx> {
             StmtKind::Var(var_def) => {
                 let var_def = var_def.borrow();
                 if let Some(init) = &var_def.init {
-                    self.generate_assign(stmt.span, init, builder, &[var_def.name], post)
+                    self.generate_assign(stmt.span, init, builder, &[var_def.name], post)?
                 } else {
                     post
                 }
             }
             StmtKind::Assign(lhses, rhs) => {
-                self.generate_assign(stmt.span, rhs, builder, lhses, post)
+                self.generate_assign(stmt.span, rhs, builder, lhses, post)?
             }
             StmtKind::Havoc(dir, idents) => {
                 let quant_op = match dir {
@@ -157,7 +170,7 @@ impl<'tcx> Vcgen<'tcx> {
                 let post2 = self.vcgen_block(block2, post)?;
                 builder.ite(spec_ty, cond.clone(), post1, post2)
             }
-            StmtKind::While(_, _) => return Err(unsupported_while_loop_diagnostic(stmt)),
+            StmtKind::While(_, _) => return Err(unsupported_while_loop_diagnostic(stmt).into()),
             StmtKind::Annotation(_, ident, _, inner_stmt) => {
                 // there may be still slicing annotations left, which we just
                 // walk through. this may happen if the slicing transformer
@@ -173,7 +186,7 @@ impl<'tcx> Vcgen<'tcx> {
                 if self.explanation.is_some() {
                     explain_annotated_while(self, stmt, &post)?
                 } else {
-                    return Err(unsupported_stmt_diagnostic(stmt));
+                    return Err(unsupported_stmt_diagnostic(stmt).into());
                 }
             }
             StmtKind::Label(_ident) => {
@@ -196,20 +209,20 @@ impl<'tcx> Vcgen<'tcx> {
         builder: ExprBuilder,
         lhses: &[Ident],
         post: Expr,
-    ) -> Expr {
+    ) -> Result<Expr, VerifyError> {
         if let ExprKind::Call(ident, args) = &rhs.kind {
             match self.tcx.get(*ident).as_deref() {
                 Some(DeclKind::ProcIntrin(proc_intrin)) => {
                     let mut res = proc_intrin.vcgen(builder, args, lhses, post);
-                    explain_subst(self, span, &mut res);
-                    return res;
+                    explain_subst(self, span, &mut res)?;
+                    return Ok(res);
                 }
                 // only if explanations are enabled, return a simple explanation
                 // for proc calls.
                 Some(DeclKind::ProcDecl(decl_ref)) if self.explanation.is_some() => {
                     let mut res = explain_proc_call(decl_ref, args, &builder);
-                    explain_subst(self, span, &mut res);
-                    return res;
+                    explain_subst(self, span, &mut res)?;
+                    return Ok(res);
                 }
                 Some(DeclKind::FuncDecl(_)) | Some(DeclKind::FuncIntrin(_)) => {}
                 Some(decl) => panic!("cannot do vc generation for {:?}", decl),
@@ -218,8 +231,8 @@ impl<'tcx> Vcgen<'tcx> {
         };
         if let [lhs] = lhses {
             let mut res = builder.subst(post, [(*lhs, rhs.clone())]);
-            explain_subst(self, span, &mut res);
-            res
+            explain_subst(self, span, &mut res)?;
+            Ok(res)
         } else {
             panic!("for vc generation, there must be exactly one lhs in an assignment");
         }

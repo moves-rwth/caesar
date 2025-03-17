@@ -22,6 +22,7 @@ export enum ServerStatus {
 }
 
 export enum VerifyResult {
+    Todo = "todo",
     Verified = "verified",
     Failed = "failed",
     Unknown = "unknown"
@@ -160,6 +161,7 @@ export class CaesarClient {
 
         context.subscriptions.push(client);
 
+
         // set up listeners for our custom events
         context.subscriptions.push(client.onNotification("custom/verifyStatus", (params: VerifyStatusNotification) => {
             for (const listener of this.updateListeners) {
@@ -228,7 +230,7 @@ export class CaesarClient {
                         serverExecutable = pathRes;
                     }
                 }
-                args.push('--language-server');
+                args.push('lsp');
             }
                 break;
             case ConfigurationConstants.userBinaryOption:
@@ -240,7 +242,7 @@ export class CaesarClient {
                     });
                     throw new Error("Installation path is not set");
                 }
-                args.push('--language-server');
+                args.push('lsp');
                 break;
             case ConfigurationConstants.sourceCodeOption:
                 serverDirectory = ServerConfig.get(ConfigurationConstants.sourcePath);
@@ -260,7 +262,7 @@ export class CaesarClient {
                     throw new Error("Cargo.toml file is not found in the path");
                 }
                 serverExecutable = "cargo";
-                args.push('run', '--', '--language-server');
+                args.push('run', '--', 'lsp');
                 break;
             default:
                 this.logger.error("Client: unknown installation choice config setting", installationChoice);
@@ -399,6 +401,7 @@ export class CaesarClient {
         try {
             await this.client.sendRequest('custom/verify', { text_document: documentItem });
             this.notifyStatusUpdate(ServerStatus.Ready);
+
             this.logger.info("Client: completed verification.", document.uri);
             await this.walkthrough.setVerifiedHeyVL(true);
         } catch (error) {
@@ -416,7 +419,13 @@ export class CaesarClient {
             return;
         }
         const command = '"' + executable.command.replace(/(["'$`\\])/g, '\\$1') + '"';
-        const args = executable.args!.filter(arg => !["--language-server", "--debug"].includes(arg));
+        const args = executable.args!.filter(arg => !["--debug"].includes(arg));
+        { // replace lsp by verify
+            const index = args.indexOf('lsp');
+            if (index !== -1) {
+                args[index] = 'verify';
+            }
+        }
         let line = `${command} ${args.join(" ")}`;
         let cwd = executable.options && executable.options.cwd;
         if (cwd !== undefined) {
@@ -443,4 +452,5 @@ export class CaesarClient {
     public onComputedPre(callback: (update: ComputedPreNotification) => void) {
         this.computedPreListeners.push(callback);
     }
+
 }

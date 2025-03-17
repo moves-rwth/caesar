@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2
+sidebar_position: 3
 description: Caesar supports program slicing on the HeyVL intermediate verification language.
 ---
 

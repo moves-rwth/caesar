@@ -11,30 +11,19 @@ proc rabin(init_i: UInt, init_n: UInt, init_d: UInt) -> (i: UInt, n: UInt, d: UI
     i = init_i
     n = init_n
     d = init_d
-    var prob_choice: Bool;
-    assert ([1 == i] + ([1 < i] * (2/3)));
-    havoc d, i, n;
-    compare ([1 == i] + ([1 < i] * (2/3)));
-    if 1 < i {
-        n = i;
-        assert ([(0 <= n) && (n <= i)]) * (((2/3) * (1 - ((([i == n] * (n + 1)) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n))))) + ((([i == n] * n) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n))));
-        havoc d, i, n;
-        compare ([(0 <= n) && (n <= i)]) * (((2/3) * (1 - ((([i == n] * (n + 1)) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n))))) + ((([i == n] * n) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n))));
-        if 0 < n {
-            prob_choice = ber(1, 1);
+    @invariant(([1 == i] + ([1 < i] * (2/3))))
+    while 1 < i {
+        n = i
+        @invariant(([(0 <= n) && (n <= i)]) * (((2/3) * (1 - ((([i == n] * (n + 1)) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n))))) + ((([i == n] * n) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n)))))
+        while 0 < n {
+            var prob_choice: Bool = ber(1, 1)
             if prob_choice {
-                d = 0;
+                d = 0
             } else {
-                d = 1;
-            };
-            i = i - d;
-            n = n - 1;
-            assert ([(0 <= n) && (n <= i)]) * (((2/3) * (1 - ((([i == n] * (n + 1)) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n))))) + ((([i == n] * n) * rec_pown_2(n)) + ([i == (n + 1)] * rec_pown_2(n))));
-            assume 0;
-        } else {
-        };
-        assert ([1 == i] + ([1 < i] * (2/3)));
-        assume 0;
-    } else {
-    };
+                d = 1
+            }
+            i = i - d
+            n = n - 1
+        }
+    }
 }

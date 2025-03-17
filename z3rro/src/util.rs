@@ -166,6 +166,12 @@ impl PrettyRational<'_> {
     const DECIMAL_EXPANSION_LIMIT: usize = 5;
 }
 
+impl From<BigRational> for PrettyRational<'_> {
+    fn from(value: BigRational) -> Self {
+        PrettyRational(Cow::Owned(value))
+    }
+}
+
 impl Display for PrettyRational<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.0.is_negative() {

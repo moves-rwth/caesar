@@ -25,7 +25,7 @@
 use std::ops::DerefMut;
 
 use z3::SatResult;
-use z3rro::prover::Prover;
+use z3rro::prover::{IncrementalMode, Prover};
 
 use crate::{
     ast::{
@@ -60,10 +60,10 @@ pub struct Unfolder<'smt, 'ctx> {
 impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
     pub fn new(limits_ref: LimitsRef, ctx: &'smt SmtCtx<'ctx>) -> Self {
         Unfolder {
-            limits_ref,
-            subst: Subst::new(ctx.tcx()),
+            limits_ref: limits_ref.clone(),
+            subst: Subst::new(ctx.tcx(), &limits_ref),
             translate: TranslateExprs::new(ctx),
-            prover: Prover::new(ctx.ctx()),
+            prover: Prover::new(ctx.ctx(), IncrementalMode::Native),
         }
     }
 
@@ -97,7 +97,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
             // expression is e.g. `false`, then we want to get `Unsat` from the
             // solver and not `Proof`!
             if this.prover.check_sat() == SatResult::Unsat {
-                tracing::trace!(solver=%this.prover.solver(), "eliminated zero expr");
+                tracing::trace!(solver=?this.prover, "eliminated zero expr");
                 None
             } else {
                 Some(callback(this))
@@ -287,7 +287,7 @@ mod test {
             let tcx = fuzz_test::mk_tcx();
             let z3_ctx = z3::Context::new(&z3::Config::default());
             let smt_ctx = SmtCtx::new(&z3_ctx, &tcx, SmtCtxOptions::default());
-            let limits_ref = LimitsRef::new(None);
+            let limits_ref = LimitsRef::new(None, None);
             let mut unfolder = Unfolder::new(limits_ref, &smt_ctx);
             unfolder.visit_expr(&mut expr).unwrap();
             expr

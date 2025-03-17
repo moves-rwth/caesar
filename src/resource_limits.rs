@@ -17,6 +17,28 @@ use tokio::{
 };
 use tracing::error;
 
+/// A memory size in bytes, with constructors to handle units.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct MemorySize(usize);
+
+impl MemorySize {
+    pub fn bytes(bytes: usize) -> Self {
+        MemorySize(bytes)
+    }
+
+    pub fn megabytes(mb: usize) -> Self {
+        MemorySize(mb * 1024 * 1024)
+    }
+
+    pub fn as_bytes(&self) -> usize {
+        self.0
+    }
+
+    pub fn as_megabytes(&self) -> usize {
+        self.0 / 1024 / 1024
+    }
+}
+
 const CHECK_MEM_USAGE_INTERVAL: Duration = Duration::from_millis(20);
 pub const HARD_TIMEOUT_SLACK: Duration = Duration::from_millis(500);
 
@@ -42,21 +64,20 @@ pub enum LimitError {
 /// Note that the memory limit is checked for the whole process by a background
 /// thread. Therefore, the memory limit is not specific to the given future.
 pub async fn await_with_resource_limits<T, F>(
-    timeout_secs: Option<u64>,
-    mem_limit_mb: Option<u64>,
+    duration: Option<Duration>,
+    mem_limit: Option<MemorySize>,
     fut: impl FnOnce(LimitsRef) -> F,
 ) -> Result<T, LimitError>
 where
     T: Unpin,
     F: Future<Output = T>,
 {
-    if let Some(timeout_secs) = timeout_secs {
-        let duration = Duration::from_secs(timeout_secs);
-        let limits_ref = LimitsRef::new(Some(Instant::now() + duration));
+    if let Some(duration) = duration {
+        let limits_ref = LimitsRef::new(Some(Instant::now() + duration), mem_limit);
 
         let hard_duration = duration + HARD_TIMEOUT_SLACK;
         let fut = timeout(hard_duration, fut(limits_ref.clone()));
-        let res = if let Some(mem_mbs) = mem_limit_mb {
+        let res = if let Some(mem_mbs) = mem_limit {
             select! {
                 _ = wait_for_oom(mem_mbs) => {
                     Err(LimitError::Oom)
@@ -72,8 +93,8 @@ where
             limits_ref.set_error(err);
         }
         res
-    } else if let Some(mem_mbs) = mem_limit_mb {
-        let limits_ref = LimitsRef::new(None);
+    } else if let Some(mem_mbs) = mem_limit {
+        let limits_ref = LimitsRef::new(None, mem_limit);
         select! {
             _ = wait_for_oom(mem_mbs) => {
                 limits_ref.set_error(LimitError::Oom);
@@ -84,12 +105,12 @@ where
             }
         }
     } else {
-        let limits_ref = LimitsRef::new(None);
+        let limits_ref = LimitsRef::new(None, mem_limit);
         Ok(fut(limits_ref).await)
     }
 }
 
-async fn wait_for_oom(mem_limit_mb: u64) {
+async fn wait_for_oom(mem_limit: MemorySize) {
     let mut interval = interval(CHECK_MEM_USAGE_INTERVAL);
     interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
     loop {
@@ -97,8 +118,8 @@ async fn wait_for_oom(mem_limit_mb: u64) {
         let process_stats_res = ProcessStats::get().await;
         match process_stats_res {
             Ok(process_stats) => {
-                let current_usage_mb = process_stats.memory_usage_bytes / 1024 / 1024;
-                if current_usage_mb > mem_limit_mb {
+                let current_usage = MemorySize::bytes(process_stats.memory_usage_bytes as usize);
+                if current_usage > mem_limit {
                     return;
                 }
             }
@@ -128,16 +149,19 @@ pub struct LimitsRef(Arc<LimitsRefData>);
 struct LimitsRefData {
     done: AtomicU8,
     timeout: Option<Instant>,
+    memory: Option<MemorySize>,
 }
 
 impl LimitsRef {
-    pub fn new(timeout: Option<Instant>) -> Self {
+    pub fn new(timeout: Option<Instant>, memory: Option<MemorySize>) -> Self {
         LimitsRef(Arc::new(LimitsRefData {
             done: AtomicU8::new(0),
             timeout,
+            memory,
         }))
     }
 
+    /// Check whether the monitoring thread has indicated a timeout or an OOM.
     pub fn check_limits(&self) -> Result<(), LimitError> {
         match self.0.done.load(Ordering::Relaxed) {
             0 => Ok(()),
@@ -151,6 +175,11 @@ impl LimitsRef {
     /// zero if the timeout has elapsed.
     pub fn time_left(&self) -> Option<Duration> {
         Some(self.0.timeout?.duration_since(Instant::now()))
+    }
+
+    /// Returns the stored memory limit.
+    pub fn memory_limit(&self) -> Option<MemorySize> {
+        self.0.memory
     }
 
     /// Sets an error. Will only store the first error, any subsequent errors

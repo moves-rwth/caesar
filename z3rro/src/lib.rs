@@ -25,6 +25,7 @@ pub mod orders;
 pub mod scope;
 
 pub mod model;
+pub mod probes;
 pub mod prover;
 pub mod smtlib;
 mod uint;
