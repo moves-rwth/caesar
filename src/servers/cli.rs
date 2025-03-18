@@ -82,6 +82,11 @@ impl Server for CliServer {
         Ok(())
     }
 
+    fn set_ongoing_unit(&mut self, _span: Span) -> Result<(), VerifyError> {
+        // Not relevant for CLI
+        Ok(())
+    }
+
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
         name: &SourceUnitName,
@@ -90,11 +95,6 @@ impl Server for CliServer {
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError> {
         result.print_prove_result(self, translate, name);
-        Ok(())
-    }
-
-    fn handle_not_checked(&mut self, _span: Span) -> Result<(), ServerError> {
-        // Not relevant for CLI
         Ok(())
     }
 }

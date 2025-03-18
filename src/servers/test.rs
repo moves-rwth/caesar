@@ -64,6 +64,10 @@ impl Server for TestServer {
         Ok(())
     }
 
+    fn set_ongoing_unit(&mut self, _span: Span) -> Result<(), VerifyError> {
+        Ok(())
+    }
+
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
         _name: &SourceUnitName,
@@ -73,11 +77,6 @@ impl Server for TestServer {
     ) -> Result<(), ServerError> {
         self.statuses
             .insert(span, VerifyResult::from_prove_result(&result.prove_result));
-        Ok(())
-    }
-
-    fn handle_not_checked(&mut self, span: Span) -> Result<(), ServerError> {
-        self.statuses.insert(span, VerifyResult::Unknown);
         Ok(())
     }
 }

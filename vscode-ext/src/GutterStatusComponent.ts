@@ -26,19 +26,21 @@ export class GutterStatusComponent {
         this.unknownDecType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath('images/unknown.png') });
         this.timeoutDecType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath('images/timeout.png') });
 
-        // Load the animation frames
-        let frameDecorationMap: Map<number, vscode.TextEditorDecorationType> = new Map();
-        for (let i = 0; i < 8; i++) {
-            let decType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath(`images/gutterAnimation/${i}.png`) });
-            frameDecorationMap.set(i, decType);
-        }
-
         // render if enabled
         this.enabled = GutterInformationViewConfig.get(ConfigurationConstants.showGutterIcons);
 
         this.status = new DocumentMap();
 
-        this.gutterAnimator = new GutterAnimator(frameDecorationMap);
+        this.gutterAnimator = new GutterAnimator();
+
+        // Load the animation frames
+        for (const theme of ["light", "dark"]) {
+            this.gutterAnimator.loadAnimationFrames(theme, createFrameDecorations(`images/gutterAnimation/${theme}-`, 8, verifier));
+        }
+
+        // Set the initial animation
+        this.gutterAnimator.changeAnimation(themeToAnimationName(vscode.window.activeColorTheme));
+
 
         // Editor context subscriptions:
         // ----------------------------
@@ -62,6 +64,11 @@ export class GutterStatusComponent {
             this.status.remove(documentIdentifier);
             this.render();
         }));
+
+        verifier.context.subscriptions.push(vscode.window.onDidChangeActiveColorTheme((newTheme) => {
+            this.gutterAnimator.changeAnimation(themeToAnimationName(newTheme));
+        }));
+
 
         // Server context subscriptions:
         // ----------------------------
@@ -111,23 +118,32 @@ export class GutterStatusComponent {
                                 if (this.serverStatus === ServerStatus.Ready) {
                                     // If the server stopped verfying, but this is still todo, mark as unknown
                                     // This should not happen since the server converts todos to timeouts when it stops verifying
-                                    unknownProcs.push({ range: gutterRange, hoverMessage: 'Unknown' });
+                                    unknownProcs.push({ range: gutterRange });
                                 }
 
                                 // Add to the todo list to be animated
                                 todoProcs.push(range);
                                 break;
+                            case VerifyResult.Ongoing:
+                                if (this.serverStatus === ServerStatus.Ready) {
+                                    // If the server stopped verfying, but this is still todo, mark as unknown
+                                    // This should not happen since the server converts todos to timeouts when it stops verifying
+                                    unknownProcs.push({ range: gutterRange });
+                                }
+                                // Add to the todo list to be animated
+                                todoProcs.push(range);
+                                break;
                             case VerifyResult.Verified:
-                                verifiedProcs.push({ range: gutterRange, hoverMessage: 'Verified' });
+                                verifiedProcs.push({ range: gutterRange });
                                 break;
                             case VerifyResult.Failed:
-                                failedProcs.push({ range: gutterRange, hoverMessage: 'Not Verified' });
+                                failedProcs.push({ range: gutterRange });
                                 break;
                             case VerifyResult.Unknown:
-                                unknownProcs.push({ range: gutterRange, hoverMessage: 'Unknown' });
+                                unknownProcs.push({ range: gutterRange });
                                 break;
                             case VerifyResult.Timeout:
-                                timeoutProcs.push({ range: gutterRange, hoverMessage: 'Timeout' });
+                                timeoutProcs.push({ range: gutterRange });
                         }
                     }
                 }
@@ -136,27 +152,40 @@ export class GutterStatusComponent {
                 editor.setDecorations(this.verifyDecType, verifiedProcs);
                 editor.setDecorations(this.failedDecType, failedProcs);
                 editor.setDecorations(this.unknownDecType, unknownProcs);
-                editor.setDecorations(this.timeoutDecType, timeoutProcs);
+                editor.setDecorations(this.unknownDecType, timeoutProcs);
             }
         }
         this.gutterAnimator.setEditorRangemap(loadingEditorRangeMap);
-
     }
 }
 
 class GutterAnimator {
     private frame = 0;
     private interval: NodeJS.Timeout | undefined;
+    private intervalSpeed: number;
 
     private editorRangeMap: Map<vscode.TextEditor, vscode.Range[]> = new Map();
+    private animationTypes: Map<string, vscode.TextEditorDecorationType[]> = new Map();
+    private currentAnimationName: string = "";
 
-    constructor(private readonly frameDecorationMap: Map<number, vscode.TextEditorDecorationType>, private readonly intervalSpeed: number = 75) {
+
+    constructor(intervalSpeed: number = 75) {
+        this.intervalSpeed = intervalSpeed;
+    }
+
+    loadAnimationFrames(name: string, frameDecorations: vscode.TextEditorDecorationType[]) {
+        this.animationTypes.set(name, frameDecorations);
+    }
+
+    getCurrentAnimationFrames(): vscode.TextEditorDecorationType[] {
+        return this.animationTypes.get(this.currentAnimationName) || [];
     }
 
     startAnimation() {
         if (this.interval === undefined) {
+            this.frame = 0;
             this.interval = setInterval(() => {
-                this.frame = (this.frame + 1) % this.frameDecorationMap.size;
+                this.frame = (this.frame + 1) % this.getCurrentAnimationFrames().length;
                 this.render();
             }, this.intervalSpeed);
         }
@@ -166,6 +195,21 @@ class GutterAnimator {
         if (this.interval !== undefined) {
             clearInterval(this.interval);
             this.interval = undefined;
+            this.clearAnimation();
+        }
+    }
+
+    changeAnimation(name: string) {
+        this.stopAnimation();
+        this.currentAnimationName = name;
+        this.startAnimation();
+    }
+
+    clearAnimation() {
+        for (const [frame, decType] of this.getCurrentAnimationFrames().entries()) {
+            for (const [editor, ranges] of this.editorRangeMap) {
+                editor.setDecorations(decType, []);
+            }
         }
     }
 
@@ -181,24 +225,46 @@ class GutterAnimator {
             // so it is safe to call startAnimation multiple times
             this.startAnimation();
         }
-
     }
 
     render() {
-        // const decorations = this.frameDecorationMap.get(this.frame) ?? [];
         // for each decoration type in the map
-        for (const [frame, decType] of this.frameDecorationMap) {
+        for (const [frame, decType] of this.getCurrentAnimationFrames().entries()) {
             for (const [editor, ranges] of this.editorRangeMap) {
                 // if the frame is the current frame
                 if (frame === this.frame) {
                     // set the decorations
-                    editor.setDecorations(decType, ranges.map(range => ({ range: range, hoverMessage: 'Pending' })));
+                    editor.setDecorations(decType, ranges.map(range => ({ range: range })));
                 } else {
                     // clear the decorations for other frames
                     editor.setDecorations(decType, []);
                 }
             }
-
         }
     }
+}
+
+function createFrameDecorations(path: string, frameCount: number, verifier: Verifier): vscode.TextEditorDecorationType[] {
+    // Create the decoration types for the animation frames
+    let frameDecorationList: vscode.TextEditorDecorationType[] = [];
+    for (let i = 0; i < frameCount; i++) {
+        let decType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath(`${path}${i}.png`) });
+        frameDecorationList.push(decType);
+    }
+    return frameDecorationList;
+}
+
+function themeToAnimationName(theme: vscode.ColorTheme): string {
+    let animTheme = "dark";
+    switch (theme.kind) {
+        case vscode.ColorThemeKind.Dark || vscode.ColorThemeKind.HighContrast:
+            animTheme = "dark";
+            break;
+        case vscode.ColorThemeKind.Light || vscode.ColorThemeKind.HighContrastLight:
+            animTheme = "light";
+            break;
+        default:
+            break;
+    }
+    return animTheme;
 }
