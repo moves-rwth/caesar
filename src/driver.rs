@@ -736,7 +736,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
             });
         }
 
-        let slice_solver = SliceSolver::new(slice_vars.clone(), translate, prover);
+        let mut slice_solver = SliceSolver::new(slice_vars.clone(), translate, prover);
         let failing_slice_options = SliceSolveOptions {
             minimality: if options.slice_options.slice_error_first {
                 SliceMinimality::Any

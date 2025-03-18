@@ -1112,18 +1112,18 @@ fn print_timings() {
     eprintln!("Timings: {:?}", timings);
 }
 
-fn set_global_z3_options(options: &Options, limits_ref: &LimitsRef) {
+fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
     // the parameters are set as globals since params set via (Solver::set_params) sometimes get ignored.
 
     // default
     z3::set_global_param("smt.qi.eager_threshold", "100");
     z3::set_global_param("smt.qi.lazy_threshold", "1000");
-    if options.opt_options.force_ematching {
+    if command.opt_options.force_ematching {
         // z3::set_global_param("auto-config", "false");
         // z3::set_global_param("smt.mbqi", "false");
         z3::set_global_param("smt.mbqi.id", "mbqi");
     }
-    if let Some(seed) = options.debug_options.z3_seed {
+    if let Some(seed) = command.debug_options.z3_seed {
         z3::set_global_param("smt.random_seed", &seed.to_string());
     }
     if let Some(timeout) = limits_ref.time_left() {

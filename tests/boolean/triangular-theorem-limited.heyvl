@@ -1,4 +1,4 @@
-// RUN: @caesar --limited-functions --force-ematching --lit-wrap @file
+// RUN: @caesar verify --limited-functions --force-ematching --lit-wrap @file
 
 domain Sum {
     func sum(n: UInt): UInt = ite(n == 0, 0, n + sum(n-1))
