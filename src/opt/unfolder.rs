@@ -25,7 +25,7 @@
 use std::ops::DerefMut;
 
 use z3::SatResult;
-use z3rro::prover::Prover;
+use z3rro::prover::{Prover, SolverType};
 
 use crate::{
     ast::{
@@ -63,7 +63,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
             limits_ref: limits_ref.clone(),
             subst: Subst::new(ctx.tcx(), &limits_ref),
             translate: TranslateExprs::new(ctx),
-            prover: Prover::new(ctx.ctx()),
+            prover: Prover::new(ctx.ctx(), SolverType::Z3),
         }
     }
 

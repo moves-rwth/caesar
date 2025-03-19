@@ -138,6 +138,9 @@ pub struct VerifyCommand {
 
     #[command(flatten)]
     pub debug_options: DebugOptions,
+
+    #[command(flatten)]
+    pub smt_solver_options: SMTSolverOptions,
 }
 
 #[derive(Debug, Args)]
@@ -374,6 +377,22 @@ pub struct DebugOptions {
     /// Run a bunch of probes on the SMT solver.
     #[arg(long)]
     pub probe: bool,
+}
+
+#[derive(Debug, Default, Args)]
+#[command(next_help_heading = "SMT Solver Options")]
+pub struct SMTSolverOptions {
+    #[arg(long, default_value = "z3")]
+    pub smt_solver: SMTSolverType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+pub enum SMTSolverType {
+    #[default]
+    #[value(name = "z3")]
+    Z3,
+    #[value(name = "swine")]
+    Swine,
 }
 
 #[derive(Debug, Default, Args)]

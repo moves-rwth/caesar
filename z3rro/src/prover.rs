@@ -32,6 +32,7 @@ pub enum CommandError {
     ProcessError(#[from] io::Error),
 }
 
+#[derive(Debug)]
 pub enum SolverType {
     Z3,
     SWINE,
@@ -127,15 +128,17 @@ pub struct Prover<'ctx> {
     level: usize,
     /// The minimum level where an assertion was added to the solver.
     min_level_with_provables: Option<usize>,
+    smt_solver: SolverType
 }
 
 impl<'ctx> Prover<'ctx> {
     /// Create a new prover with the given [`Context`].
-    pub fn new(ctx: &'ctx Context) -> Self {
+    pub fn new(ctx: &'ctx Context, solver_type:SolverType) -> Self {
         Prover {
             solver: Solver::new(ctx),
             level: 0,
             min_level_with_provables: None,
+            smt_solver: solver_type,
         }
     }
 
@@ -159,7 +162,7 @@ impl<'ctx> Prover<'ctx> {
     }
 
     pub fn check_proof(&mut self) -> ProveResult<'ctx> {
-        self.check_proof_assuming(&[], SolverType::SWINE)
+        self.check_proof_assuming(&[])
     }
 
     /// Do the SAT check, but consider a check with no provables to be a
@@ -167,7 +170,6 @@ impl<'ctx> Prover<'ctx> {
     pub fn check_proof_assuming(
         &mut self,
         assumptions: &[Bool<'ctx>],
-        solver_type: SolverType,
     ) -> ProveResult<'ctx> {
         if self.min_level_with_provables.is_none() {
             return ProveResult::Proof;
@@ -175,7 +177,7 @@ impl<'ctx> Prover<'ctx> {
 
         let res;
 
-        match solver_type {
+        match self.smt_solver {
             SolverType::SWINE => {
                 let mut smtlib = self.get_smtlib();
                 smtlib.add_check_sat();
@@ -198,7 +200,6 @@ impl<'ctx> Prover<'ctx> {
                     }
                     SatResult::Sat => {
                         // TODO: Get the model from the output of SWINE
-                        println!("The Result of SWINE: sat");
                         process::exit(1)
                     }
                 }
@@ -291,7 +292,7 @@ impl<'ctx> Prover<'ctx> {
             universal.iter().map(|v| v as &dyn Ast<'ctx>).collect();
         let assertions = self.solver.get_assertions();
         let theorem = forall_const(ctx, &universal, &[], &Bool::and(ctx, &assertions).not());
-        let mut res = Prover::new(ctx);
+        let mut res = Prover::new(ctx, SolverType::Z3);
         res.add_assumption(&theorem);
         res
     }
@@ -306,12 +307,14 @@ impl<'ctx> Prover<'ctx> {
 mod test {
     use z3::{ast::Bool, Config, Context, SatResult};
 
+    use crate::prover::SolverType;
+
     use super::{ProveResult, Prover};
 
     #[test]
     fn test_prover() {
         let ctx = Context::new(&Config::default());
-        let mut prover = Prover::new(&ctx);
+        let mut prover = Prover::new(&ctx, SolverType::Z3);
         assert!(matches!(prover.check_proof(), ProveResult::Proof));
         assert_eq!(prover.check_sat(), SatResult::Sat);
 
