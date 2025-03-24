@@ -257,10 +257,12 @@ function createFrameDecorations(path: string, frameCount: number, verifier: Veri
 function themeToAnimationName(theme: vscode.ColorTheme): string {
     let animTheme = "dark";
     switch (theme.kind) {
-        case vscode.ColorThemeKind.Dark || vscode.ColorThemeKind.HighContrast:
+        case vscode.ColorThemeKind.Dark:
+        case vscode.ColorThemeKind.HighContrast:
             animTheme = "dark";
             break;
-        case vscode.ColorThemeKind.Light || vscode.ColorThemeKind.HighContrastLight:
+        case vscode.ColorThemeKind.Light:
+        case vscode.ColorThemeKind.HighContrastLight:
             animTheme = "light";
             break;
         default:
