@@ -139,16 +139,17 @@ impl LimitsRef {
     }
 
     pub fn check_limits(&self) -> Result<(), LimitError> {
-        // check for timeout first by checking the remaining time
-        if let Some(timeout) = self.0.timeout {
-            if Instant::now() >= timeout {
-                self.set_error(LimitError::Timeout);
-                return Err(LimitError::Timeout);
-            }
-        }
-
         match self.0.done.load(Ordering::Relaxed) {
-            0 => Ok(()),
+            0 => {
+                // check for timeout first by checking the remaining time
+                if let Some(timeout) = self.0.timeout {
+                    if Instant::now() >= timeout {
+                        self.set_error(LimitError::Timeout);
+                        return Err(LimitError::Timeout);
+                    }
+                }
+                Ok(())
+            }
             1 => Err(LimitError::Timeout),
             2 => Err(LimitError::Oom),
             _ => unreachable!(),
