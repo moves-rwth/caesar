@@ -1,4 +1,4 @@
-// RUN: @caesar @file --no-simplify --lit-wrap --limited-functions --force-ematching
+// RUN: @caesar @file --no-simplify --limited-functions variable-fuel-computation --quantifier-instantiation e-matching
 
 domain Sums {
 

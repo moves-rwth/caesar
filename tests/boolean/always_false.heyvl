@@ -1,4 +1,4 @@
-// RUN: @caesar verify --limited-functions --force-ematching @file
+// RUN: @caesar verify --limited-functions variable-fuel --quantifier-instantiation e-matching @file
 // CHECK: Verified
 
 domain Dom {

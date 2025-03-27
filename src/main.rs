@@ -266,6 +266,55 @@ impl ModelCheckingOptions {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+pub enum QuantifierInstantiation {
+    /// Use both E-matching and MBQI for quantifier instantiation.
+    #[default]
+    Both,
+    /// Only use E-matching for quantifier instantiation.
+    EMatching,
+    /// Only use MBQI for quantifier instantiation.
+    MBQI,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+pub enum LimitedFunctionEncoding {
+    /// Apply no encoding.
+    #[default]
+    None,
+    /// Add version of the function for each fuel value (f_0, f_1, ...).
+    FixedFuel,
+    /// Add a fuel parameter to the function.
+    VariableFuel,
+    /// Like [LimitedFunctionEncoding::FixedFuel] with additionally allowing unbounded unfolding
+    /// if the parameter values are known.
+    FixedFuelComputation,
+    /// Like [LimitedFunctionEncoding::VariableFuel] with additionally allowing unbounded unfolding
+    /// if the parameter values are known.
+    VariableFuelComputation,
+}
+
+impl LimitedFunctionEncoding {
+    pub fn is_fuel_encoding(self) -> bool {
+        !matches!(self, LimitedFunctionEncoding::None)
+    }
+
+    pub fn is_fixed_encoding(self) -> bool {
+        matches!(
+            self,
+            LimitedFunctionEncoding::FixedFuel | LimitedFunctionEncoding::FixedFuelComputation
+        )
+    }
+
+    pub fn is_computation_encoding(self) -> bool {
+        matches!(
+            self,
+            LimitedFunctionEncoding::FixedFuelComputation
+                | LimitedFunctionEncoding::VariableFuelComputation
+        )
+    }
+}
+
 #[derive(Debug, Default, Args)]
 #[command(next_help_heading = "Optimization Options")]
 pub struct OptimizationOptions {
@@ -297,24 +346,20 @@ pub struct OptimizationOptions {
     #[arg(long)]
     pub no_simplify: bool,
 
-    /// Limit the number of times a function declaration can be recursively instantiated.
-    /// Requires that MBQI is disabled with `force-ematching`.
-    #[arg(long)]
-    pub limited_functions: bool,
+    /// Limit the number of times a function declaration can be recursively instantiated/unfolded by
+    /// choosing one of the fuel encodings.
+    /// Standard usage requires `--quantifier-instantiation e-matching`.
+    #[arg(long, default_value = "none")]
+    pub limited_functions: LimitedFunctionEncoding,
 
-    /// Force the SMT solver to only use emaching for quantifier instantiation, disabling mbqi.
-    #[arg(long)]
-    pub force_ematching: bool,
+    /// The number of times a function declaration can be recursively instantiated/unfolded when
+    /// using one of the fuel encodings.
+    #[arg(long, default_value = "2")]
+    pub max_fuel: u8,
 
-    /// Do not count applications to constant values towards the instantiation count
-    /// when using `limited-functions`.
-    #[arg(long)]
-    pub lit_wrap: bool,
-
-    /// For each function f Generate multiple function f_n (f_2, f_1, f_0) that each respectively
-    /// can only be instantiated n times. Requires `limited-functions`
-    #[arg(long)]
-    pub static_fuel: bool,
+    /// Select which heuristics for quantifier instantiation should be used by the SMT solver.
+    #[arg(long, default_value = "both")]
+    pub quantifier_instantiation: QuantifierInstantiation,
 }
 
 #[derive(Debug, Default, Args)]
@@ -944,9 +989,13 @@ fn verify_files_main(
             &ctx,
             &tcx,
             SmtCtxOptions {
-                use_limited_functions: options.opt_options.limited_functions,
-                lit_wrap: options.opt_options.lit_wrap,
-                static_fuel: options.opt_options.static_fuel,
+                use_limited_functions: options.opt_options.limited_functions.is_fuel_encoding(),
+                lit_wrap: options
+                    .opt_options
+                    .limited_functions
+                    .is_computation_encoding(),
+                fixed_fuel: options.opt_options.limited_functions.is_fixed_encoding(),
+                max_fuel: options.opt_options.max_fuel,
             },
         );
         let mut translate = TranslateExprs::new(&smt_ctx);
@@ -1118,10 +1167,16 @@ fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
     // default
     z3::set_global_param("smt.qi.eager_threshold", "100");
     z3::set_global_param("smt.qi.lazy_threshold", "1000");
-    if command.opt_options.force_ematching {
-        // z3::set_global_param("auto-config", "false");
-        // z3::set_global_param("smt.mbqi", "false");
-        z3::set_global_param("smt.mbqi.id", "mbqi");
+    match command.opt_options.quantifier_instantiation {
+        QuantifierInstantiation::EMatching => {
+            // z3::set_global_param("auto-config", "false");
+            // z3::set_global_param("smt.mbqi", "false");
+            z3::set_global_param("smt.mbqi.id", "mbqi");
+        }
+        QuantifierInstantiation::MBQI => {
+            z3::set_global_param("smt.ematching", "false");
+        }
+        QuantifierInstantiation::Both => {}
     }
     if let Some(seed) = command.debug_options.z3_seed {
         z3::set_global_param("smt.random_seed", &seed.to_string());

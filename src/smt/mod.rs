@@ -30,7 +30,8 @@ mod uninterpreted;
 pub struct SmtCtxOptions {
     pub use_limited_functions: bool,
     pub lit_wrap: bool,
-    pub static_fuel: bool,
+    pub fixed_fuel: bool,
+    pub max_fuel: u8,
 }
 
 pub struct SmtCtx<'ctx> {
@@ -63,10 +64,10 @@ impl<'ctx> SmtCtx<'ctx> {
 
         let fuel_encoding = if !options.use_limited_functions {
             LimitedFunctionEncoding::none()
-        } else if options.static_fuel {
-            LimitedFunctionEncoding::static_(options.lit_wrap)
+        } else if options.fixed_fuel {
+            LimitedFunctionEncoding::fixed(options.max_fuel, options.lit_wrap)
         } else {
-            LimitedFunctionEncoding::dynamic(options.lit_wrap)
+            LimitedFunctionEncoding::variable(options.max_fuel, options.lit_wrap)
         };
 
         let mut res = SmtCtx {

@@ -1,4 +1,4 @@
-// RUN: @caesar verify --limited-functions --force-ematching --lit-wrap @file
+// RUN: @caesar verify --limited-functions variable-fuel-computation --quantifier-instantiation e-matching @file
 
 // Factorial example form the paper "Computing with an SMT solver" (Section 5)
 
