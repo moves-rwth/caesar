@@ -1,5 +1,6 @@
 //! Main data structure in the compiler that keeps definitions and so on.
 
+use indexmap::IndexMap;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -8,8 +9,7 @@ use std::{
     rc::Rc,
 };
 
-use indexmap::IndexMap;
-
+use crate::ast::FuncDecl;
 use crate::{
     ast::{DeclKind, DeclRef, DomainDecl, Ident, LitKind, Span, Symbol, TyKind, VarKind},
     intrinsic::distributions::DistributionProc,
@@ -171,5 +171,19 @@ impl TyCtx {
             };
             None
         }))
+    }
+
+    pub fn get_function_decls(&self) -> HashMap<Ident, DeclRef<FuncDecl>> {
+        self.declarations
+            .borrow()
+            .iter()
+            .filter_map(|(ident, decl)| {
+                if let DeclKind::FuncDecl(func) = decl.deref() {
+                    Some((*ident, func.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }

@@ -1,7 +1,7 @@
 // RUN: @caesar @file
 
 domain Exponentials {
-    func ohnine_exp(exponent: UInt): EUReal
+    func ohnine_exp(exponent: UInt): UReal
 
     axiom ohnine_exp_base ohnine_exp(0) == 1
     axiom ohnine_exp_step forall exponent: UInt. ohnine_exp(exponent + 1) == 0.9 * ohnine_exp(exponent)
