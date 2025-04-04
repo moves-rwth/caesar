@@ -139,9 +139,11 @@ impl LimitsRef {
     }
 
     pub fn check_limits(&self) -> Result<(), LimitError> {
+        // Timeout flag is set to 1 by `await_with_resource_limits`, only if the hard timeout is reached.
         match self.0.done.load(Ordering::Relaxed) {
             0 => {
-                // check for timeout first by checking the remaining time
+                // Normal timeout might be reached even though the hard timeout is not reached yet.
+                // Check for timeout by checking the remaining time
                 if let Some(timeout) = self.0.timeout {
                     if Instant::now() >= timeout {
                         self.set_error(LimitError::Timeout);
