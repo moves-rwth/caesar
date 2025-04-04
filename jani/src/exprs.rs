@@ -184,7 +184,7 @@ pub struct NondetSelectionExpression {
     exp: Expression,
 }
 
-/// Function call (needs [`super::models::ModelFeature::FunctionCalls`]).
+/// Function call (needs [`super::models::ModelFeature::Functions`]).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(tag = "op", rename = "call")]
 pub struct CallExpression {
@@ -203,7 +203,7 @@ pub enum Expression {
     Binary(Box<BinaryExpression>),
     // TODO: DistributionSampling
     NondetSelection(Box<NondetSelectionExpression>),
-    /// Function calls need [`super::models::ModelFeature::FunctionCalls`].
+    /// Function calls need [`super::models::ModelFeature::Functions`].
     Call(Box<CallExpression>),
 }
 
