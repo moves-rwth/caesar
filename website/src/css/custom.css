@@ -41,15 +41,25 @@
 }
 
 /* Link decorations */
-p a, .markdown ul a {
+.markdown p a, .markdown ul a {
   --ifm-link-decoration: underline;
 }
 
-p a:hover, .markdown ul a:hover {
+.markdown p a:hover, .markdown ul a:hover {
   text-decoration: none;
 }
 
-a.button {
+.markdown a.button {
+  text-decoration: none;
+}
+
+/* external links are marked with dashed underlines.
+   we can spot them by the target="_blank" attribute that docusaurus adds. */
+article a[target="_blank"]:not(.button) {
+  text-decoration: dashed underline;
+}
+
+article a[target="_blank"]:not(.button):hover {
   text-decoration: none;
 }
 

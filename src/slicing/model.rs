@@ -3,7 +3,7 @@ use std::{collections::HashSet, iter::FromIterator};
 use itertools::Itertools;
 use lsp_types::DiagnosticTag;
 use z3::ast::Bool;
-use z3rro::model::{InstrumentedModel, SmtEval, SmtEvalError};
+use z3rro::model::{InstrumentedModel, ModelConsistency, SmtEval, SmtEvalError};
 
 use crate::ast::{Diagnostic, Ident, Label, Span, Symbol};
 
@@ -19,6 +19,7 @@ pub enum SliceMode {
 /// Extraction of models from the slicing solver.
 #[derive(Debug)]
 pub struct SliceModel {
+    consistency: ModelConsistency,
     mode: SliceMode,
     stmts: Vec<(SliceStmt, Result<bool, SmtEvalError>)>,
 }
@@ -50,7 +51,11 @@ impl SliceModel {
             // in the model output
             .filter(|(stmt, _var)| selection.enables(&stmt.selection))
             .collect_vec();
-        SliceModel { mode, stmts }
+        SliceModel {
+            consistency: model.consistency(),
+            mode,
+            stmts,
+        }
     }
 
     pub(super) fn from_enabled<'ctx>(
@@ -69,7 +74,16 @@ impl SliceModel {
                 (slice_stmt.clone(), status)
             })
             .collect_vec();
-        SliceModel { mode, stmts }
+        SliceModel {
+            consistency: ModelConsistency::Consistent,
+            mode,
+            stmts,
+        }
+    }
+
+    /// Get the consistency of this model.
+    pub fn consistency(&self) -> ModelConsistency {
+        self.consistency
     }
 
     /// Iterate over the results in this slice model.

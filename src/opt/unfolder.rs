@@ -25,7 +25,7 @@
 use std::ops::DerefMut;
 
 use z3::SatResult;
-use z3rro::prover::Prover;
+use z3rro::prover::{IncrementalMode, Prover};
 
 use crate::{
     ast::{
@@ -42,8 +42,6 @@ use crate::{
 use crate::smt::translate_exprs::TranslateExprs;
 
 pub struct Unfolder<'smt, 'ctx> {
-    limits_ref: LimitsRef,
-
     /// The expressions may contain substitutions. We keep track of those.
     subst: Subst<'smt>,
 
@@ -59,11 +57,15 @@ pub struct Unfolder<'smt, 'ctx> {
 
 impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
     pub fn new(limits_ref: LimitsRef, ctx: &'smt SmtCtx<'ctx>) -> Self {
+        // it's important that we use the native incremental mode here, because
+        // the performance benefit from the unfolder relies on many very fast
+        // SAT checks.
+        let prover = Prover::new(ctx.ctx(), IncrementalMode::Native);
+
         Unfolder {
-            limits_ref: limits_ref.clone(),
             subst: Subst::new(ctx.tcx(), &limits_ref),
             translate: TranslateExprs::new(ctx),
-            prover: Prover::new(ctx.ctx()),
+            prover,
         }
     }
 
@@ -97,7 +99,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
             // expression is e.g. `false`, then we want to get `Unsat` from the
             // solver and not `Proof`!
             if this.prover.check_sat() == SatResult::Unsat {
-                tracing::trace!(solver=%this.prover.solver(), "eliminated zero expr");
+                tracing::trace!(solver=?this.prover, "eliminated zero expr");
                 None
             } else {
                 Some(callback(this))
@@ -147,7 +149,7 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
     type Err = LimitError;
 
     fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
-        self.limits_ref.check_limits()?;
+        self.subst.limits_ref.check_limits()?;
 
         let span = e.span;
         let ty = e.ty.clone().unwrap();
@@ -286,7 +288,7 @@ mod test {
             let tcx = fuzz_test::mk_tcx();
             let z3_ctx = z3::Context::new(&z3::Config::default());
             let smt_ctx = SmtCtx::new(&z3_ctx, &tcx);
-            let limits_ref = LimitsRef::new(None);
+            let limits_ref = LimitsRef::new(None, None);
             let mut unfolder = Unfolder::new(limits_ref, &smt_ctx);
             unfolder.visit_expr(&mut expr).unwrap();
             expr

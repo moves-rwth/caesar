@@ -220,6 +220,9 @@ pub struct Model {
     pub typ: ModelType,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub features: Vec<ModelFeature>,
+    /// Function definitions need [`ModelFeature::Functions`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub functions: Vec<FunctionDefinition>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actions: Vec<ModelAction>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -242,6 +245,7 @@ impl Model {
             metadata: Default::default(),
             typ,
             features: Default::default(),
+            functions: Default::default(),
             actions: Default::default(),
             constants: Default::default(),
             variables: Default::default(),
@@ -273,6 +277,17 @@ pub struct Location {
     pub transient_values: Option<Vec<TransientValue>>,
 }
 
+impl Location {
+    /// Create a new location with the given name.
+    pub fn new(name: Identifier) -> Self {
+        Self {
+            name,
+            time_progress: None,
+            transient_values: None,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Assignment {
@@ -297,6 +312,19 @@ pub struct Destination {
     pub comment: Option<Box<str>>,
 }
 
+impl Destination {
+    /// Construct the destination that goes to a given location with probability
+    /// one and without any assignments.
+    pub fn goto(location: Identifier) -> Self {
+        Self {
+            location,
+            probability: None,
+            assignments: vec![],
+            comment: None,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Edge {
@@ -312,6 +340,50 @@ pub struct Edge {
     pub comment: Option<Box<str>>,
 }
 
+impl Edge {
+    /// Create a new edge that goes to the given location.
+    pub fn from_to(from: Identifier, to: Identifier) -> Self {
+        Self {
+            location: from,
+            action: None,
+            rate: None,
+            guard: None,
+            destinations: vec![Destination::goto(to)],
+            comment: None,
+        }
+    }
+
+    /// Create a new edge that goes to the given location with the given guard.
+    pub fn from_to_if(from: Identifier, to: Identifier, guard: Expression) -> Self {
+        Self {
+            location: from,
+            action: None,
+            rate: None,
+            guard: Some(guard.into()),
+            destinations: vec![Destination::goto(to)],
+            comment: None,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct ParameterDefinition {
+    pub name: Identifier,
+    #[serde(rename = "type")]
+    pub typ: Type,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct FunctionDefinition {
+    pub name: Identifier,
+    #[serde(rename = "type")]
+    pub typ: Type,
+    pub parameters: Vec<ParameterDefinition>,
+    pub body: Expression,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Automaton {
@@ -323,6 +395,9 @@ pub struct Automaton {
     pub locations: Vec<Location>,
     pub initial_locations: Vec<Identifier>,
     pub edges: Vec<Edge>,
+    /// Function definitions need [`ModelFeature::Functions`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub functions: Vec<FunctionDefinition>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<Box<str>>,
 }

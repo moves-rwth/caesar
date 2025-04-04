@@ -173,6 +173,11 @@ const config = {
         darkTheme: prismThemes.nightOwl,
         additionalLanguages: ['bash', 'shell-session'],
       },
+      algolia: {
+        appId: 'Q93W1TPDIE',
+        apiKey: '8dc15a6ca0d7a01e9f7ab673468d63a1',
+        indexName: 'caesarverifier',
+      }
     }),
 };
 

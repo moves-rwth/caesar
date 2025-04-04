@@ -25,22 +25,6 @@ pub fn build_caesar() -> io::Result<()> {
     spawn_res.wait().map(|_| ())
 }
 
-/// Counts the number of lines in the file specified by the first argument in the
-/// list, ignoring lines that start with `//`.
-fn get_loc(args: &[String]) -> io::Result<usize> {
-    let file_name = args.first().unwrap();
-    let file = File::open(file_name)?;
-    let lines = BufReader::new(file).lines();
-    let mut count = 0;
-    for line in lines {
-        let line = line?;
-        if !line.starts_with("//") {
-            count += 1;
-        }
-    }
-    Ok(count)
-}
-
 /// Caesar's exit status.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CaesarExitStatus {
@@ -104,19 +88,36 @@ pub struct BenchmarkTask {
     pub args: Vec<String>,
 }
 
+impl BenchmarkTask {
+    /// Counts the number of lines in the file specified by the first argument in the
+    /// list, ignoring lines that start with `//`.
+    pub fn get_loc(&self) -> io::Result<usize> {
+        let file_name = self.args.first().unwrap();
+        let file = File::open(file_name)?;
+        let lines = BufReader::new(file).lines();
+        let mut count = 0;
+        for line in lines {
+            let line = line?;
+            let line = line.trim();
+            if line.is_empty() || line.starts_with("//") {
+                continue;
+            }
+            count += 1;
+        }
+        Ok(count)
+    }
+}
+
 #[derive(Debug)]
 #[allow(unused)]
 pub struct BenchmarkResult {
     pub task: BenchmarkTask,
-    pub heyvl_loc: usize,
     pub exit_status: CaesarExitStatus,
     pub events: Vec<TracingEvent>,
     pub timings: Option<CaesarTimingSummary>,
 }
 
 pub fn run_benchmark(task: BenchmarkTask) -> io::Result<BenchmarkResult> {
-    let heyvl_loc = get_loc(&task.args)?;
-
     let mut args = task.args.clone();
     args.push("--timing".to_owned());
     args.push("--json".to_owned());
@@ -148,7 +149,6 @@ pub fn run_benchmark(task: BenchmarkTask) -> io::Result<BenchmarkResult> {
 
     Ok(BenchmarkResult {
         task,
-        heyvl_loc,
         exit_status,
         events,
         timings,

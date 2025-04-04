@@ -48,7 +48,9 @@ Let us decompose the example into its parts:
  3. We have one **output parameter** `x` of type [`UInt`](../stdlib/numbers.md#uint).
     - There may be multiple parameters (input and output), which can be separated by commas (e.g. `init_x: UInt, init_y: UInt`).
  4. The `pre` declares the **pre-expectation** `init_x + 0.5`. It is evaluated in the *initial state* (when calling the proc). This is why it is called "pre" (= before running the proc).
+    - The `pre` is an expression of type [`EUReal`](../stdlib/numbers.md#eureal) over the input parameters.
  5. The `post` is the **post-expectation** `x` and evaluated in the final states of the proc (post = after running the proc). We always compare its expected value against the pre.
+    - The `post` is an expression of type [`EUReal`](../stdlib/numbers.md#eureal) over the input and output parameters.
  6. The **body of the proc** assigns `init_x` to `x`. We then do a [probabilistic coin flip](../stdlib/distributions.md#symbolic-with-probabilities) and assign `true` to `prob_choice` with probability `0.5` (and `false` with probability `0.5`). It determines the expected value ($\mathbb{E}$) we look at.
     - See [documentation on statements](./statements.md) for more information.
     - [The body is optional](#procs-without-body).
@@ -157,10 +159,17 @@ But since *all* states satisfy $42 = 42$, e.g. the initial state $x = 0$ is a co
 One can understand this as an instance of *Reverse Hoare Logic* or *(Partial) Incorrectness Reasoning*, i.e. asking a question of the form: "Do all initial states that *reach* $y = 42$ satisfy $x = 41$?".
 
 <details>
-    <summary>How To: Obtaining the above formula via <code>caesar --print-theorem --no-slice-error</code>.</summary>
+    <summary>How To: Obtaining the above formula via <code>--print-theorem --no-slice-error</code>.</summary>
 
-    Using the <code>--print-theorem</code> command-line flag, you can print the theorem Caesar tries to prove about your (co)procedures. The result will have some optimizations applied, but it might be helpful to understand what exactly is being verified.
+    Using the <code>--print-theorem</code> command-line flag, you can print the theorem Caesar tries to prove about your (co)procedures.
+    The result will have some optimizations applied, but it might be helpful to understand what exactly is being verified.
     We recommend adding the <code>--no-slice-error</code> flag to obtain a simpler version that is not cluttered with stuff from slicing for error messages.
+    For example:
+
+    ```bash
+    caesar verify --print-theorem --no-slice-error example.heyvl
+    ```
+
 </details>
 
 #### Usually You Want `!?(b)` {#usually-you-want-coembed}
@@ -295,10 +304,15 @@ proc runPrimaryOrSpare() -> (working: Bool)
 ```
 
 <details>
-    <summary>How To: Obtaining intermediate encodings via <code>caesar --print-core</code>.</summary>
+    <summary>How To: Obtaining intermediate encodings via <code>--print-core</code>.</summary>
 
     To obtain the intermediate encodings from Caesar, we can use the <code>--print-core</code> command-line flag.
     This will print the fully desugared HeyVL code for each procedure to standard output.
+    For example:
+
+    ```bash
+    caesar verify  --print-core example.heyvl
+    ```
 </details>
 
 We can now read the encoding as follows:

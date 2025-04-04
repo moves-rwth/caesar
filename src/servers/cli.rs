@@ -1,8 +1,11 @@
 use std::{
     io::{self, IsTerminal},
     path::PathBuf,
+    process::ExitCode,
     sync::{Arc, Mutex},
 };
+
+use ariadne::ReportKind;
 
 use crate::{
     ast::{Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
@@ -17,6 +20,7 @@ use super::{unless_fatal_error, Server, ServerError};
 pub struct CliServer {
     werr: bool,
     files: Arc<Mutex<Files>>,
+    has_emitted_errors: bool,
 }
 
 impl CliServer {
@@ -24,6 +28,7 @@ impl CliServer {
         CliServer {
             werr: input_options.werr,
             files: Default::default(),
+            has_emitted_errors: false,
         }
     }
 
@@ -62,6 +67,8 @@ impl Server for CliServer {
     }
 
     fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+        self.has_emitted_errors =
+            self.has_emitted_errors || self.werr || diagnostic.kind() == ReportKind::Error;
         let files = self.files.lock().unwrap();
         print_diagnostic(&files, diagnostic)?;
         Ok(())
@@ -96,6 +103,14 @@ impl Server for CliServer {
     ) -> Result<(), ServerError> {
         result.print_prove_result(self, translate, name);
         Ok(())
+    }
+
+    fn exit_code(&self) -> ExitCode {
+        if self.has_emitted_errors {
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        }
     }
 }
 

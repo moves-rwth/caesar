@@ -11,6 +11,7 @@ use std::{
     path::PathBuf,
     process::ExitCode,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -26,8 +27,10 @@ use ast::{DeclKind, Diagnostic, FileId};
 use clap::{crate_description, Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
+use mc::run_storm::{run_storm, storm_result_to_diagnostic};
 use proof_rules::init_encodings;
-use resource_limits::{await_with_resource_limits, LimitError, LimitsRef};
+use regex::Regex;
+use resource_limits::{await_with_resource_limits, LimitError, LimitsRef, MemorySize};
 use servers::{run_lsp_server, CliServer, LspServer, Server, ServerError};
 use slicing::init_slicing;
 use thiserror::Error;
@@ -89,7 +92,7 @@ impl Cli {
         match &self.command {
             Command::Verify(verify_options) => Some(&verify_options.debug_options),
             Command::Lsp(verify_options) => Some(&verify_options.debug_options),
-            Command::ToJani(to_jani_options) => Some(&to_jani_options.debug_options),
+            Command::Mc(mc_options) => Some(&mc_options.debug_options),
             Command::ShellCompletions(_) => None,
             Command::Other(_vec) => unreachable!(),
         }
@@ -100,8 +103,9 @@ impl Cli {
 pub enum Command {
     /// Verify HeyVL files with Caesar.
     Verify(VerifyCommand),
-    /// Convert HeyVL files to JANI files.
-    ToJani(ToJaniCommand),
+    /// Model checking via JANI, can run Storm directly.
+    #[clap(visible_alias = "to-jani")]
+    Mc(ToJaniCommand),
     /// Run Caesar's LSP server.
     Lsp(VerifyCommand),
     /// Generate shell completions for the Caesar binary.
@@ -121,7 +125,7 @@ pub struct VerifyCommand {
     pub rlimit_options: ResourceLimitOptions,
 
     #[command(flatten)]
-    pub jani_options: JaniOptions,
+    pub model_checking_options: ModelCheckingOptions,
 
     #[command(flatten)]
     pub opt_options: OptimizationOptions,
@@ -145,7 +149,7 @@ pub struct ToJaniCommand {
     pub rlimit_options: ResourceLimitOptions,
 
     #[command(flatten)]
-    pub jani_options: JaniOptions,
+    pub model_checking_options: ModelCheckingOptions,
 
     #[command(flatten)]
     pub debug_options: DebugOptions,
@@ -165,6 +169,11 @@ pub struct InputOptions {
     /// Treat warnings as errors.
     #[arg(long)]
     pub werr: bool,
+
+    /// Only verify/translate (co)procs that match the given filter.
+    /// The filter is a regular expression.
+    #[arg(short, long)]
+    pub filter: Option<String>,
 }
 
 #[derive(Debug, Default, Args)]
@@ -176,12 +185,32 @@ pub struct ResourceLimitOptions {
 
     /// Memory usage limit in megabytes.
     #[arg(long = "mem", default_value = "8192")]
-    pub mem_limit: u64,
+    pub mem_limit: usize,
+}
+
+impl ResourceLimitOptions {
+    fn timeout(&self) -> Duration {
+        Duration::from_secs(self.timeout)
+    }
+
+    fn mem_limit(&self) -> MemorySize {
+        MemorySize::megabytes(self.mem_limit)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum RunWhichStorm {
+    /// Look for the Storm binary in the PATH.
+    Path,
+    /// Run Storm using Docker, with the `movesrwth/storm:stable` image.
+    DockerStable,
+    /// Run Storm using Docker, with the `movesrwth/storm:ci` image.
+    DockerCI,
 }
 
 #[derive(Debug, Default, Clone, Args)]
 #[command(next_help_heading = "JANI Output Options")]
-pub struct JaniOptions {
+pub struct ModelCheckingOptions {
     /// Export declarations to JANI files in the provided directory.
     #[arg(long)]
     pub jani_dir: Option<PathBuf>,
@@ -190,6 +219,51 @@ pub struct JaniOptions {
     /// pres (instead of failing with an error).
     #[arg(long)]
     pub jani_skip_quant_pre: bool,
+
+    /// Declare procedure inputs as JANI variables, not constants.
+    #[arg(long)]
+    pub jani_no_constants: bool,
+
+    /// By default, Caesar assigns arbitrary initial values to output variables.
+    /// This means that the model does not reflect the possible effects of
+    /// initial values of output variables on the program. Usually, this is not
+    /// the case anyway and assigning initial values speeds up the model
+    /// checking quite a bit. To disable this behavior, use this flag.
+    #[arg(long)]
+    pub jani_uninit_outputs: bool,
+
+    /// Run Storm, indicating which version to execute.
+    #[arg(long)]
+    pub run_storm: Option<RunWhichStorm>,
+
+    /// Pass the `--exact` flag to Storm. Otherwise Storm will use floating
+    /// point numbers, which may be arbitrarily imprecise (but are usually good
+    /// enough).
+    #[arg(long)]
+    pub storm_exact: bool,
+
+    /// Pass the `--state-limit [number]` option to Storm. This is useful to
+    /// approximate infinite-state models.
+    #[arg(long)]
+    pub storm_state_limit: Option<usize>,
+
+    /// Pass the `--constants [constants]` option to Storm, containing values
+    /// for constants in the model.
+    #[arg(long)]
+    pub storm_constants: Option<String>,
+
+    /// Timeout in seconds for running Storm.
+    ///
+    /// Caesar uses the minimum of this value and the remaining time from the
+    /// `--timeout` option.
+    #[arg(long)]
+    pub storm_timeout: Option<u64>,
+}
+
+impl ModelCheckingOptions {
+    pub fn storm_timeout(&self) -> Option<Duration> {
+        self.storm_timeout.map(Duration::from_secs)
+    }
 }
 
 #[derive(Debug, Default, Args)]
@@ -296,6 +370,14 @@ pub struct DebugOptions {
     /// Enable Z3 tracing for the final SAT check.
     #[arg(long)]
     pub z3_trace: bool,
+
+    /// Print Z3's statistics after the final SAT check.
+    #[arg(long)]
+    pub print_z3_stats: bool,
+
+    /// Run a bunch of probes on the SMT solver.
+    #[arg(long)]
+    pub probe: bool,
 }
 
 #[derive(Debug, Default, Args)]
@@ -309,6 +391,13 @@ pub struct SliceOptions {
     /// counterexample.
     #[arg(long)]
     pub slice_error_first: bool,
+
+    /// If the SMT solver provides a model for an "unknown" result, use that to
+    /// obtain an error slice. The slice is not guaranteed to be an actual error
+    /// slice, because the model might not be a real counterexample. However, it
+    /// is often a helpful indicator of where the SMT solver got stuck.
+    #[arg(long)]
+    pub slice_error_inconsistent: bool,
 
     /// Enable slicing tick/reward statements during slicing for errors.
     #[arg(long)]
@@ -376,7 +465,7 @@ async fn main() -> ExitCode {
 
     match options.command {
         Command::Verify(options) => run_cli(options).await,
-        Command::ToJani(options) => run_to_jani_main(options),
+        Command::Mc(options) => run_model_checking_main(options),
         Command::Lsp(options) => run_server(options).await,
         Command::ShellCompletions(options) => run_generate_completions(options),
         Command::Other(_) => unreachable!(),
@@ -405,10 +494,16 @@ fn finalize_verify_result(
     rlimit_options: &ResourceLimitOptions,
     verify_result: Result<bool, VerifyError>,
 ) -> ExitCode {
-    let (timeout, mem_limit) = (rlimit_options.timeout, rlimit_options.mem_limit);
+    let (timeout, mem_limit) = (rlimit_options.timeout(), rlimit_options.mem_limit());
     match verify_result {
         #[allow(clippy::bool_to_int_with_if)]
-        Ok(all_verified) => ExitCode::from(if all_verified { 0 } else { 1 }),
+        Ok(all_verified) => {
+            let server_exit_code = server.lock().unwrap().exit_code();
+            if server_exit_code != ExitCode::SUCCESS {
+                return server_exit_code;
+            }
+            ExitCode::from(if all_verified { 0 } else { 1 })
+        }
         Err(VerifyError::Diagnostic(diagnostic)) => {
             server.lock().unwrap().add_diagnostic(diagnostic).unwrap();
             ExitCode::from(1)
@@ -418,11 +513,14 @@ fn finalize_verify_result(
             ExitCode::from(1)
         }
         Err(VerifyError::LimitError(LimitError::Timeout)) => {
-            tracing::error!("Timed out after {} seconds, exiting.", timeout);
+            tracing::error!("Timed out after {} seconds, exiting.", timeout.as_secs());
             std::process::exit(2); // exit ASAP
         }
         Err(VerifyError::LimitError(LimitError::Oom)) => {
-            tracing::error!("Exhausted {} megabytes of memory, exiting.", mem_limit);
+            tracing::error!(
+                "Exhausted {} megabytes of memory, exiting.",
+                mem_limit.as_megabytes()
+            );
             std::process::exit(3); // exit ASAP
         }
         Err(VerifyError::UserError(err)) => {
@@ -538,8 +636,8 @@ pub async fn verify_files(
     };
     // Unpacking lots of Results with `.await??` :-)
     await_with_resource_limits(
-        Some(options.rlimit_options.timeout),
-        Some(options.rlimit_options.mem_limit),
+        Some(options.rlimit_options.timeout()),
+        Some(options.rlimit_options.mem_limit()),
         handle,
     )
     .await??
@@ -592,6 +690,15 @@ fn parse_and_tycheck(
             server.add_or_throw_diagnostic(err)?;
         }
     }
+
+    // filter source units if requested
+    if let Some(filter) = &input_options.filter {
+        let filter = Regex::new(filter).map_err(|err| {
+            VerifyError::UserError(format!("Invalid filter regex: {}", err).into())
+        })?;
+        source_units.retain(|source_unit| filter.is_match(&source_unit.name().to_string()));
+    };
+
     Ok((source_units, tcx))
 }
 
@@ -613,7 +720,7 @@ pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, servers::
         .id;
 
     let options = Arc::new(options);
-    let limits_ref = LimitsRef::new(None);
+    let limits_ref = LimitsRef::new(None, None);
     let res = verify_files_main(&options, limits_ref, &mut server, &[file_id]);
     (res, server)
 }
@@ -694,15 +801,14 @@ fn verify_files_main(
     }
 
     // write to JANI if requested
-    for source_unit in &mut source_units {
-        let source_unit = source_unit.enter();
-        let jani_res = source_unit.write_to_jani_if_requested(&options.jani_options, &tcx);
-        match jani_res {
-            Err(VerifyError::Diagnostic(diagnostic)) => server.add_diagnostic(diagnostic)?,
-            Err(err) => Err(err)?,
-            _ => (),
-        }
-    }
+    run_model_checking(
+        &options.model_checking_options,
+        &mut source_units,
+        server,
+        &limits_ref,
+        &tcx,
+        false,
+    )?;
 
     // Desugar encodings from source units. They might generate new source
     // units (for side conditions).
@@ -719,6 +825,19 @@ fn verify_files_main(
         for source_unit in &mut source_units {
             println!("{}", source_unit);
         }
+    }
+
+    // If `--no-verify` is set and we don't need to print SMT-LIB or explain the
+    // core VC, we can return early.
+    if options.debug_options.no_verify
+        && !options.lsp_options.explain_core_vc
+        && !options.debug_options.probe
+        && !options.debug_options.print_smt
+        && !options.debug_options.print_core
+        && !options.debug_options.print_core_procs
+        && options.debug_options.smt_dir.is_none()
+    {
+        return Ok(true);
     }
 
     let mut verify_units: Vec<Item<VerifyUnit>> = source_units
@@ -835,7 +954,7 @@ fn verify_files_main(
         // Increment counters
         match result.prove_result {
             ProveResult::Proof => num_proven += 1,
-            ProveResult::Counterexample(_) | ProveResult::Unknown(_) => num_failures += 1,
+            ProveResult::Counterexample | ProveResult::Unknown(_) => num_failures += 1,
         }
 
         limits_ref.check_limits()?;
@@ -861,41 +980,90 @@ fn verify_files_main(
     Ok(num_failures == 0)
 }
 
-fn run_to_jani_main(options: ToJaniCommand) -> ExitCode {
+fn run_model_checking_main(options: ToJaniCommand) -> ExitCode {
     let (user_files, server) = match mk_cli_server(&options.input_options) {
         Ok(value) => value,
         Err(value) => return value,
     };
-    let res = to_jani_main(&options, user_files, &server).map(|_| true);
+    let res = model_checking_main(&options, user_files, &server).map(|_| true);
     finalize_verify_result(server, &options.rlimit_options, res)
 }
 
-fn to_jani_main(
+fn model_checking_main(
     options: &ToJaniCommand,
     user_files: Vec<FileId>,
-    server: &SharedServer,
+    server: &Mutex<dyn Server>,
 ) -> Result<(), VerifyError> {
-    let mut server = server.lock().unwrap();
+    let mut server_lock = server.lock().unwrap();
     let (mut source_units, tcx) = parse_and_tycheck(
         &options.input_options,
         &options.debug_options,
-        &mut *server,
+        &mut *server_lock,
         &user_files,
     )?;
-    if options.jani_options.jani_dir.is_none() {
-        return Err(VerifyError::UserError(
-            "--jani-dir is required for the to-jani command.".into(),
-        ));
+    let timeout = Instant::now() + options.rlimit_options.timeout();
+    let mem_limit = options.rlimit_options.mem_limit();
+    let limits_ref = LimitsRef::new(Some(timeout), Some(mem_limit));
+    run_model_checking(
+        &options.model_checking_options,
+        &mut source_units,
+        server_lock.deref_mut(),
+        &limits_ref,
+        &tcx,
+        true,
+    )
+}
+
+fn run_model_checking(
+    options: &ModelCheckingOptions,
+    source_units: &mut Vec<Item<SourceUnit>>,
+    server: &mut dyn Server,
+    limits_ref: &LimitsRef,
+    tcx: &TyCtx,
+    is_jani_command: bool,
+) -> Result<(), VerifyError> {
+    let mut options = options.clone();
+
+    let mut temp_dir = None;
+    if options.jani_dir.is_none() {
+        if is_jani_command && options.run_storm.is_none() {
+            return Err(VerifyError::UserError(
+                "Either --jani-dir or --run-storm must be provided.".into(),
+            ));
+        }
+        if options.run_storm.is_some() {
+            temp_dir = Some(tempfile::tempdir().map_err(|err| {
+                VerifyError::UserError(
+                    format!("Could not create temporary directory: {}", err).into(),
+                )
+            })?);
+            options.jani_dir = temp_dir.as_ref().map(|dir| dir.path().to_owned());
+        }
     }
-    for source_unit in &mut source_units {
+
+    for source_unit in source_units {
         let source_unit = source_unit.enter();
-        let jani_res = source_unit.write_to_jani_if_requested(&options.jani_options, &tcx);
+        let jani_res = source_unit.write_to_jani_if_requested(&options, tcx);
         match jani_res {
             Err(VerifyError::Diagnostic(diagnostic)) => server.add_diagnostic(diagnostic)?,
             Err(err) => Err(err)?,
-            Ok(()) => (),
+            Ok(Some(path)) => {
+                tracing::debug!(file=?path.display(), "wrote JANI file");
+                if options.run_storm.is_some() {
+                    let res = run_storm(&options, &path, vec!["reward".to_owned()], limits_ref);
+                    server.add_diagnostic(storm_result_to_diagnostic(
+                        &res,
+                        source_unit.diagnostic_span(),
+                    ))?;
+                }
+            }
+            Ok(None) => (),
         }
     }
+
+    // only drop (and thus remove) the temp dir after we're done using it.
+    drop(temp_dir);
+
     Ok(())
 }
 

@@ -1,5 +1,6 @@
 use std::{
     error::Error,
+    process::ExitCode,
     sync::{Arc, Mutex},
 };
 
@@ -43,7 +44,7 @@ impl VerifyResult {
     pub fn from_prove_result(result: &ProveResult) -> Self {
         match &result {
             ProveResult::Proof => VerifyResult::Verified,
-            ProveResult::Counterexample(_) => VerifyResult::Failed,
+            ProveResult::Counterexample => VerifyResult::Failed,
             ProveResult::Unknown(_) => VerifyResult::Unknown,
         }
     }
@@ -83,6 +84,13 @@ pub trait Server: Send {
         result: &mut SmtVcCheckResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError>;
+
+    /// Return an exit code for the process.
+    ///
+    /// Default implementation returns `ExitCode::SUCCESS`.
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::SUCCESS
+    }
 }
 
 fn unless_fatal_error(werr: bool, diagnostic: Diagnostic) -> Result<Diagnostic, VerifyError> {
