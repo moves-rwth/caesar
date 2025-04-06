@@ -6,9 +6,16 @@ import { DocumentMap, Verifier } from "./Verifier";
 import { ConfigurationConstants } from "./constants";
 import { TextDocumentIdentifier } from "vscode-languageclient";
 
+
+const FRAME_COUNT = 8; // Number of frames in the animation
+const FRAME_INTERVAL = 75; // Interval between frames in milliseconds
+const ANIMATION_PATH = "images/gutterAnimation/"; // Path to the animation frames
+
+
 export class GutterStatusComponent {
 
     private enabled: boolean;
+    private animEnabled: boolean;
     private status: DocumentMap<[Range, VerifyResult][]>;
     private serverStatus: ServerStatus = ServerStatus.NotStarted;
     private gutterAnimator: GutterAnimator;
@@ -29,13 +36,16 @@ export class GutterStatusComponent {
         // render if enabled
         this.enabled = GutterInformationViewConfig.get(ConfigurationConstants.showGutterIcons);
 
+        this.animEnabled = GutterInformationViewConfig.get(ConfigurationConstants.showGutterAnimation);
+
         this.status = new DocumentMap();
 
         this.gutterAnimator = new GutterAnimator();
+        this.gutterAnimator.setEnabled(this.animEnabled);
 
         // Load the animation frames
         for (const theme of ["light", "dark"]) {
-            this.gutterAnimator.loadAnimationFrames(theme, createFrameDecorations(`images/gutterAnimation/${theme}-`, 8, verifier));
+            this.gutterAnimator.loadAnimationFrames(theme, createFrameDecorations(`${ANIMATION_PATH}/${theme}-`, FRAME_COUNT, verifier));
         }
 
         // Set the initial animation
@@ -49,6 +59,8 @@ export class GutterStatusComponent {
         verifier.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
             if (GutterInformationViewConfig.isAffected(e)) {
                 this.enabled = GutterInformationViewConfig.get(ConfigurationConstants.showGutterIcons);
+                this.animEnabled = GutterInformationViewConfig.get(ConfigurationConstants.showGutterAnimation);
+                this.gutterAnimator.setEnabled(this.animEnabled);
                 this.render();
             }
         }));
@@ -104,7 +116,6 @@ export class GutterStatusComponent {
                 const verifiedProcs: vscode.DecorationOptions[] = [];
                 const failedProcs: vscode.DecorationOptions[] = [];
                 const unknownProcs: vscode.DecorationOptions[] = [];
-                const timeoutProcs: vscode.DecorationOptions[] = [];
 
                 const todoProcs: Range[] = [];
 
@@ -143,7 +154,7 @@ export class GutterStatusComponent {
                                 unknownProcs.push({ range: gutterRange });
                                 break;
                             case VerifyResult.Timeout:
-                                timeoutProcs.push({ range: gutterRange });
+                                unknownProcs.push({ range: gutterRange });
                         }
                     }
                 }
@@ -152,7 +163,7 @@ export class GutterStatusComponent {
                 editor.setDecorations(this.verifyDecType, verifiedProcs);
                 editor.setDecorations(this.failedDecType, failedProcs);
                 editor.setDecorations(this.unknownDecType, unknownProcs);
-                editor.setDecorations(this.unknownDecType, timeoutProcs);
+
             }
         }
         this.gutterAnimator.setEditorRangemap(loadingEditorRangeMap);
@@ -160,6 +171,7 @@ export class GutterStatusComponent {
 }
 
 class GutterAnimator {
+    private enabled: boolean = false;
     private frame = 0;
     private interval: NodeJS.Timeout | undefined;
     private intervalSpeed: number;
@@ -169,12 +181,22 @@ class GutterAnimator {
     private currentAnimationName: string = "";
 
 
-    constructor(intervalSpeed: number = 75) {
+    constructor(intervalSpeed: number = FRAME_INTERVAL) {
+
         this.intervalSpeed = intervalSpeed;
     }
 
     loadAnimationFrames(name: string, frameDecorations: vscode.TextEditorDecorationType[]) {
         this.animationTypes.set(name, frameDecorations);
+        this.forceLoad(frameDecorations);
+    }
+
+    forceLoad(frameDecorations: vscode.TextEditorDecorationType[]) {
+        // Force the vscode to load the animation frame images by setting and clearing the decorations rapidly
+        for (const decType of frameDecorations) {
+            vscode.window.activeTextEditor?.setDecorations(decType, [new vscode.Range(0, 0, 0, 0)]);
+            vscode.window.activeTextEditor?.setDecorations(decType, []);
+        }
     }
 
     getCurrentAnimationFrames(): vscode.TextEditorDecorationType[] {
@@ -206,11 +228,15 @@ class GutterAnimator {
     }
 
     clearAnimation() {
-        for (const [frame, decType] of this.getCurrentAnimationFrames().entries()) {
-            for (const [editor, ranges] of this.editorRangeMap) {
+        for (const [_frame, decType] of this.getCurrentAnimationFrames().entries()) {
+            for (const [editor, _ranges] of this.editorRangeMap) {
                 editor.setDecorations(decType, []);
             }
         }
+    }
+
+    setEnabled(enabled: boolean) {
+        this.enabled = enabled;
     }
 
     setEditorRangemap(editorRangeMap: Map<vscode.TextEditor, vscode.Range[]>) {
@@ -228,17 +254,15 @@ class GutterAnimator {
     }
 
     render() {
+        if (!this.enabled) {
+            return;
+        }
         // for each decoration type in the map
         for (const [frame, decType] of this.getCurrentAnimationFrames().entries()) {
             for (const [editor, ranges] of this.editorRangeMap) {
-                // if the frame is the current frame
-                if (frame === this.frame) {
-                    // set the decorations
-                    editor.setDecorations(decType, ranges.map(range => ({ range: range })));
-                } else {
-                    // clear the decorations for other frames
-                    editor.setDecorations(decType, []);
-                }
+                // if the frame is the current frame, set the decoration
+                // else clear the decoration
+                editor.setDecorations(decType, frame === this.frame ? ranges : []);
             }
         }
     }
