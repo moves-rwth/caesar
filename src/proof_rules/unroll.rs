@@ -101,15 +101,16 @@ impl Encoding for UnrollAnnotation {
 
         let k: u128 = lit_u128(k);
 
+        // TODO: these should be warning diagnostics emitted to the user
         match enc_env.direction {
             Direction::Down => {
                 if !is_top_lit(terminator) {
-                    tracing::warn!("Top terminator is not used with down direction!");
+                    tracing::warn!("Unrolling terminator is not top element (down direction)");
                 }
             }
             Direction::Up => {
                 if !is_bot_lit(terminator) {
-                    tracing::warn!("Bottom terminator is not used with up direction!");
+                    tracing::warn!("Unrolling terminator is not bottom element (up direction)");
                 }
             }
         }
