@@ -6,7 +6,6 @@ export const enum LanguageClientConstants {
 
 
 export const enum ConfigurationConstants {
-
     installationOptions = "installationOptions",
     showGutterIcons = "showGutterIcons",
     showStatusBar = "showStatusBar",
