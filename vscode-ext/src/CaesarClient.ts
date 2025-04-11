@@ -23,9 +23,11 @@ export enum ServerStatus {
 
 export enum VerifyResult {
     Todo = "todo",
+    Ongoing = "ongoing",
     Verified = "verified",
     Failed = "failed",
-    Unknown = "unknown"
+    Unknown = "unknown",
+    Timeout = "timeout"
 }
 
 export interface VerifyStatusNotification {

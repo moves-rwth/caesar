@@ -856,6 +856,10 @@ fn verify_files_main(
         let (name, mut verify_unit) = verify_unit.enter_with_name();
 
         limits_ref.check_limits()?;
+
+        // Set the current unit as ongoing
+        server.set_ongoing_unit(verify_unit.span)?;
+
         // 4. Desugaring: transforming spec calls to procs
         verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
 
@@ -933,10 +937,6 @@ fn verify_files_main(
             &slice_vars,
         )?;
 
-        server
-            .handle_vc_check_result(name, verify_unit.span, &mut result, &mut translate)
-            .map_err(VerifyError::ServerError)?;
-
         if options.debug_options.z3_trace {
             info!("Z3 tracing output will be written to `z3.log`.");
         }
@@ -956,6 +956,12 @@ fn verify_files_main(
             ProveResult::Proof => num_proven += 1,
             ProveResult::Counterexample | ProveResult::Unknown(_) => num_failures += 1,
         }
+
+        limits_ref.check_limits()?;
+
+        server
+            .handle_vc_check_result(name, verify_unit.span, &mut result, &mut translate)
+            .map_err(VerifyError::ServerError)?;
     }
 
     if !options.lsp_options.language_server {

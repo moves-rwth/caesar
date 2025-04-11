@@ -178,6 +178,11 @@
           "default": true,
           "description": "Specifies whether to show icons on the gutter about the verification status."
         },
+        "caesar.userInterface.gutterIcons.showGutterAnimations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Specifies whether to show animations on the gutter about the verification status."
+        },
         "caesar.userInterface.inlineGhostText.showInlineGhostText": {
           "type": "boolean",
           "default": true,
