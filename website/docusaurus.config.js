@@ -56,6 +56,8 @@ const config = {
           showReadingTime: true,
           editUrl:
             'https://github.com/moves-rwth/caesar/tree/main/website/',
+          remarkPlugins: [remarkMath],
+          rehypePlugins: [rehypeKatex],
         },
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
