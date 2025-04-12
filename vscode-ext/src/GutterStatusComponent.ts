@@ -7,10 +7,12 @@ import { ConfigurationConstants } from "./constants";
 import { TextDocumentIdentifier } from "vscode-languageclient";
 
 
-const FRAME_COUNT = 8; // Number of frames in the animation
-const FRAME_INTERVAL = 75; // Interval between frames in milliseconds
+const FRAME_COUNT = 2; // Number of frames in the animation
+const FRAME_INTERVAL = 200; // Interval between frames in milliseconds
 const ANIMATION_PATH = "images/gutterAnimation/"; // Path to the animation frames
-
+const THEME_SENSITIVE = false;
+const ANIMATION_NAME = "laurel"; // Name of the animation
+const ANIMATION_EXT = "svg"; // Extension of the animation frames
 
 export class GutterStatusComponent {
 
@@ -43,10 +45,20 @@ export class GutterStatusComponent {
         this.gutterAnimator = new GutterAnimator();
         this.gutterAnimator.setEnabled(this.animEnabled);
 
-        // Load the animation frames
-        for (const theme of ["light", "dark"]) {
-            this.gutterAnimator.loadAnimationFrames(theme, createFrameDecorations(`${ANIMATION_PATH}/${theme}-`, FRAME_COUNT, verifier));
+
+        if (THEME_SENSITIVE) {
+            // Load the animation frames
+            for (const theme of ["light", "dark"]) {
+                const frameDecs = createFrameDecorations(`${ANIMATION_PATH}/${ANIMATION_NAME}-${theme}-`, ANIMATION_EXT, FRAME_COUNT, verifier);
+
+                this.gutterAnimator.loadAnimationFrames(`${ANIMATION_NAME}-${theme}`, frameDecs);
+            }
         }
+        else {
+            const frameDecs = createFrameDecorations(`${ANIMATION_PATH}/${ANIMATION_NAME}-`, ANIMATION_EXT, FRAME_COUNT, verifier);
+            this.gutterAnimator.loadAnimationFrames(ANIMATION_NAME, frameDecs);
+        }
+
 
         // Set the initial animation
         this.gutterAnimator.changeAnimation(themeToAnimationName(vscode.window.activeColorTheme));
@@ -182,7 +194,6 @@ class GutterAnimator {
 
 
     constructor(intervalSpeed: number = FRAME_INTERVAL) {
-
         this.intervalSpeed = intervalSpeed;
     }
 
@@ -268,11 +279,11 @@ class GutterAnimator {
     }
 }
 
-function createFrameDecorations(path: string, frameCount: number, verifier: Verifier): vscode.TextEditorDecorationType[] {
+function createFrameDecorations(path: string, file_ext: string, frameCount: number, verifier: Verifier): vscode.TextEditorDecorationType[] {
     // Create the decoration types for the animation frames
     let frameDecorationList: vscode.TextEditorDecorationType[] = [];
     for (let i = 0; i < frameCount; i++) {
-        let decType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath(`${path}${i}.png`) });
+        let decType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath(`${path}${i}.${file_ext}`) });
         frameDecorationList.push(decType);
     }
     return frameDecorationList;
