@@ -124,7 +124,7 @@ impl LspServer {
                 let params: DidChangeTextDocumentParams =
                     notification.extract("textDocument/didChange")?;
                 assert_eq!(params.content_changes.len(), 1);
-                let latest = params.content_changes.into_iter().last().unwrap();
+                let latest = params.content_changes.into_iter().next_back().unwrap();
                 let text_document = TextDocumentItem {
                     uri: params.text_document.uri,
                     language_id: Self::HEYVL_LANGUAGE_IDENTIFIER.to_owned(),

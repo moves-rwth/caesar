@@ -25,6 +25,17 @@ import TOCInline from '@theme/TOCInline';
 <TOCInline toc={toc} />
 ```
 
+## OOPSLA '25: Foundations for Deductive Verification of Continuous Probabilistic Programs
+
+The paper [_"Foundations for Deductive Verification of Continuous Probabilistic Programs: From Lebesgue to Riemann and Back"_](https://dl.acm.org/doi/10.1145/3720429) by Kevin Batz, Joost-Pieter Katoen, Francesca Randone, and Tobias Winkler was recently published at [OOPSLA 2025](https://2025.splashcon.org/track/OOPSLA). DOI: https://doi.org/10.1145/3720429.
+
+This paper lays out the formal foundations for us to verify probabilistic programs that sample from continuous distributions, with support for loops, and conditioning.
+One challenge is to integrate the integrals for the expected values that arise from continuous distributions into the deductive verification framework of Caesar.
+The key idea is to soundly under- or over-approximate these integrals via [Riemann sums](https://en.wikipedia.org/wiki/Riemann_sum).
+In addition to theoretical results such as convergence and completeness of the approach, the paper also provides case studies of continuous probabilistic programs that are encoded in HeyVL and verified with Caesar.
+
+[See our blog post for more details and examples](/blog/2025/11/04/foundations-continuous).
+
 ## AISoLA '24: A Game-Based Semantics for the Probabilistic Intermediate Verification Language HeyVL
 
 The publication [_"A Game-Based Semantics for the Probabilistic

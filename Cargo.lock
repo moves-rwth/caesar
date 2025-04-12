@@ -2568,7 +2568,7 @@ dependencies = [
 [[package]]
 name = "z3"
 version = "0.12.1"
-source = "git+https://github.com/Philipp15b/z3.rs.git?rev=bdd501ca1e50785365b875b3438a0cf953cffbfc#bdd501ca1e50785365b875b3438a0cf953cffbfc"
+source = "git+https://github.com/Philipp15b/z3.rs.git?rev=473cb83d85cbce92b837a1667693ca9ca38c046c#473cb83d85cbce92b837a1667693ca9ca38c046c"
 dependencies = [
  "log",
  "num",
@@ -2578,7 +2578,7 @@ dependencies = [
 [[package]]
 name = "z3-sys"
 version = "0.8.1"
-source = "git+https://github.com/Philipp15b/z3.rs.git?rev=bdd501ca1e50785365b875b3438a0cf953cffbfc#bdd501ca1e50785365b875b3438a0cf953cffbfc"
+source = "git+https://github.com/Philipp15b/z3.rs.git?rev=473cb83d85cbce92b837a1667693ca9ca38c046c#473cb83d85cbce92b837a1667693ca9ca38c046c"
 dependencies = [
  "bindgen",
  "cmake",
