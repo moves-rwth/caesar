@@ -8,7 +8,7 @@ import { TextDocumentIdentifier } from "vscode-languageclient";
 
 
 const FRAME_COUNT = 2; // Number of frames in the animation
-const FRAME_INTERVAL = 200; // Interval between frames in milliseconds
+const FRAME_INTERVAL = 300; // Interval between frames in milliseconds
 const ANIMATION_PATH = "images/gutterAnimation/"; // Path to the animation frames
 const THEME_SENSITIVE = false;
 const ANIMATION_NAME = "laurel"; // Name of the animation
@@ -52,16 +52,18 @@ export class GutterStatusComponent {
                 const frameDecs = createFrameDecorations(`${ANIMATION_PATH}/${ANIMATION_NAME}-${theme}-`, ANIMATION_EXT, FRAME_COUNT, verifier);
 
                 this.gutterAnimator.loadAnimationFrames(`${ANIMATION_NAME}-${theme}`, frameDecs);
+
+                // Set the initial animation
+                this.gutterAnimator.changeAnimation(`${ANIMATION_NAME}-${themeToAnimationName(vscode.window.activeColorTheme)}`);
             }
         }
         else {
             const frameDecs = createFrameDecorations(`${ANIMATION_PATH}/${ANIMATION_NAME}-`, ANIMATION_EXT, FRAME_COUNT, verifier);
             this.gutterAnimator.loadAnimationFrames(ANIMATION_NAME, frameDecs);
+
+            // Set the initial animation
+            this.gutterAnimator.changeAnimation(ANIMATION_NAME);
         }
-
-
-        // Set the initial animation
-        this.gutterAnimator.changeAnimation(themeToAnimationName(vscode.window.activeColorTheme));
 
 
         // Editor context subscriptions:
@@ -90,7 +92,9 @@ export class GutterStatusComponent {
         }));
 
         verifier.context.subscriptions.push(vscode.window.onDidChangeActiveColorTheme((newTheme) => {
-            this.gutterAnimator.changeAnimation(themeToAnimationName(newTheme));
+            if (THEME_SENSITIVE) {
+                this.gutterAnimator.changeAnimation(`${ANIMATION_NAME}-${themeToAnimationName(newTheme)}`);
+            }
         }));
 
 
@@ -199,15 +203,6 @@ class GutterAnimator {
 
     loadAnimationFrames(name: string, frameDecorations: vscode.TextEditorDecorationType[]) {
         this.animationTypes.set(name, frameDecorations);
-        this.forceLoad(frameDecorations);
-    }
-
-    forceLoad(frameDecorations: vscode.TextEditorDecorationType[]) {
-        // Force the vscode to load the animation frame images by setting and clearing the decorations rapidly
-        for (const decType of frameDecorations) {
-            vscode.window.activeTextEditor?.setDecorations(decType, [new vscode.Range(0, 0, 0, 0)]);
-            vscode.window.activeTextEditor?.setDecorations(decType, []);
-        }
     }
 
     getCurrentAnimationFrames(): vscode.TextEditorDecorationType[] {
