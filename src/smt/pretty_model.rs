@@ -73,7 +73,8 @@ pub fn pretty_vc_value<'smt, 'ctx>(
         let mut res = subst_expr;
 
         // The limit error is not handled here, therefore discard the result
-        let _ = apply_subst(translate.ctx.tcx(), &mut res, &LimitsRef::new(None, None));
+        apply_subst(translate.ctx.tcx(), &mut res, &LimitsRef::new(None, None)).unwrap();
+
         res
     };
 
