@@ -207,13 +207,16 @@ fn prove_equiv(expr: Expr, optimized: Expr, tcx: &TyCtx) -> TestCaseResult {
         .add_assumptions_to_prover(&mut prover);
     prover.add_provable(&eq_expr_z3);
     let x = match prover.check_proof() {
-        ProveResult::Proof => Ok(()),
-        ProveResult::Counterexample(model) => Err(TestCaseError::fail(format!(
+        Ok(ProveResult::Proof) => Ok(()),
+        Ok(ProveResult::Counterexample(model)) => Err(TestCaseError::fail(format!(
             "rewrote {} ...into... {}, but those are not equivalent:\n{}",
             expr, optimized, model
         ))),
-        ProveResult::Unknown(reason) => {
+        Ok(ProveResult::Unknown(reason)) => {
             Err(TestCaseError::fail(format!("unknown result ({})", reason)))
+        },
+        Err(err) => {
+            Err(TestCaseError::fail(format!("{}", err)))
         }
     };
     x

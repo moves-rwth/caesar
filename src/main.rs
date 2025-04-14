@@ -39,7 +39,7 @@ use tokio::task::JoinError;
 use tracing::{error, info, warn};
 
 use vc::explain::VcExplanation;
-use z3rro::{prover::ProveResult, util::ReasonUnknown};
+use z3rro::{prover::{ProveResult, ProverCommandError}, util::ReasonUnknown};
 
 pub mod ast;
 mod driver;
@@ -541,6 +541,10 @@ fn finalize_verify_result(
             tracing::error!("Interrupted");
             ExitCode::from(130) // 130 seems to be a standard exit code for CTRL+C
         }
+        Err(VerifyError::ProverError(err)) => {
+            eprintln!("{}", err.to_string());
+            ExitCode::from(1)
+        }
     }
 }
 
@@ -620,6 +624,8 @@ pub enum VerifyError {
     /// The verifier was interrupted.
     #[error("interrupted")]
     Interrupted,
+    #[error("{0}")]
+    ProverError(#[from] ProverCommandError),
 }
 
 /// Verify a list of `user_files`. The `options.files` value is ignored here.

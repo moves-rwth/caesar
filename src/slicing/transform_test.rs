@@ -138,14 +138,15 @@ fn prove_equiv(
     }
     prover.add_provable(&eq_expr_z3);
     let x = match prover.check_proof() {
-        ProveResult::Proof => Ok(()),
-        ProveResult::Counterexample(model) => Err(format!(
+        Ok(ProveResult::Proof) => Ok(()),
+        Ok(ProveResult::Counterexample(model)) => Err(format!(
                 "we want to rewrite {:?} ...into... {:?} under assumptions {:?}, but those are not equivalent:\n{}\n original evaluates to {}\n rewritten evaluates to {}",
             stmt1, stmt2, assumptions, model, translate.t_eureal(&stmt1_vc).eval(&model).unwrap(), translate.t_eureal(&stmt2_vc).eval(&model).unwrap()
         )),
-        ProveResult::Unknown(reason) => {
+        Ok(ProveResult::Unknown(reason)) => {
             Err(format!("unknown result ({})", reason))
-        }
+        },
+        Err(err) => Err(format!("{}", err))
     };
     x
 }

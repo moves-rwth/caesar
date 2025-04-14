@@ -7,13 +7,13 @@ use z3::{
 };
 use z3rro::{
     model::InstrumentedModel,
-    prover::{ProveResult, Prover},
+    prover::{ProveResult, Prover, ProverCommandError},
     util::ReasonUnknown,
 };
 
 use crate::{
     ast::{ExprBuilder, Span},
-    resource_limits::{LimitError, LimitsRef},
+    resource_limits::LimitsRef,
     slicing::{
         model::{SliceMode, SliceModel},
         util::{PartialMinimizeResult, SubsetExploration},
@@ -232,7 +232,7 @@ impl<'ctx> SliceSolver<'ctx> {
             .check_proof_assuming(&active_toggle_values);
 
         let mut slice_searcher = SliceModelSearch::new(active_toggle_values.clone());
-        if let ProveResult::Proof = res {
+        if let Ok(ProveResult::Proof) = res {
             slice_searcher.found_active(self.prover.get_unsat_core());
         }
 
@@ -322,14 +322,18 @@ impl<'ctx> SliceSolver<'ctx> {
 
         slice_sat_binary_search(&mut self.prover, &active_toggle_values, options, limits_ref)?;
         let res = self.prover.check_proof();
-        let slice_model = if let ProveResult::Counterexample(model) = &res {
-            let slice_model =
-                SliceModel::from_model(SliceMode::Error, &self.slice_stmts, selection, model);
-            Some(slice_model)
-        } else {
-            None
-        };
-        Ok((res, slice_model))
+
+        match res {
+            Err(err) => Err(VerifyError::ProverError(err)),
+            Ok(prove_result) => match &prove_result {
+                ProveResult::Counterexample(model) => {
+                    let slice_model =
+                    SliceModel::from_model(SliceMode::Error, &self.slice_stmts, selection, &model);
+                    Ok((prove_result, Some(slice_model)))
+                },
+                _ => Ok((prove_result, None)),
+            }
+        }
     }
 }
 
@@ -551,36 +555,39 @@ pub fn slice_next_extremal_set<'ctx>(
     prover: &mut Prover<'ctx>,
     options: &SliceSolveOptions,
     limits_ref: &LimitsRef,
-) -> Result<Option<ExtremalSet<'ctx>>, LimitError> {
+) -> Result<Option<ExtremalSet<'ctx>>, VerifyError> {
     let all_variables = exploration.variables().clone();
 
     while let Some(seed) = exploration.next_set() {
         limits_ref.check_limits()?;
 
         match check_proof_seed(prover, limits_ref, &seed) {
-            ProveResult::Proof => {
+            Ok(ProveResult::Proof) => {
                 let seed = unsat_core_to_seed(prover, &all_variables);
 
                 // now start the shrinking, then block up
-                let res = exploration.shrink_block_up(seed, |seed| {
-                    match check_proof_seed(prover, limits_ref, seed) {
-                        ProveResult::Proof => Some(unsat_core_to_seed(prover, &all_variables)),
-                        ProveResult::Counterexample(_) | ProveResult::Unknown(_) => None,
-                    }
-                });
+                let res_seed = match check_proof_seed(prover, limits_ref, &seed) {
+                    Ok(ProveResult::Proof) => Some(unsat_core_to_seed(prover, &all_variables)),
+                    Ok(ProveResult::Counterexample(_)) | Ok(ProveResult::Unknown(_)) => None,
+                    Err(err) => return Err(VerifyError::ProverError(err)),
+                };
+
+                let res = exploration.shrink_block_up(seed, |_| res_seed.clone());
                 return Ok(Some(ExtremalSet::MinimalUnsat(res)));
             }
-            ProveResult::Counterexample(_) => {
+            Ok(ProveResult::Counterexample(_)) => {
                 // grow the counterexample and then block down
-                let res = exploration.grow_block_down(seed, |seed| {
-                    match check_proof_seed(prover, limits_ref, seed) {
-                        ProveResult::Counterexample(_) => true,
-                        ProveResult::Proof | ProveResult::Unknown(_) => false,
-                    }
-                });
+
+                let res_seed = match check_proof_seed(prover, limits_ref, &seed) {
+                    Ok(ProveResult::Counterexample(_)) => true,
+                    Ok(ProveResult::Proof) | Ok(ProveResult::Unknown(_)) => false,
+                    Err(err) => return Err(VerifyError::ProverError(err)),
+                };
+
+                let res = exploration.grow_block_down(seed, |_| res_seed);
                 return Ok(Some(ExtremalSet::MaximalSat(res)));
             }
-            ProveResult::Unknown(_) => {
+            Ok(ProveResult::Unknown(_)) => {
                 if options.continue_on_unknown {
                     // for seeds that result in unknown, just block them to
                     // ensure progress.
@@ -589,6 +596,7 @@ pub fn slice_next_extremal_set<'ctx>(
                     return Ok(None);
                 }
             }
+            Err(err) => return Err(VerifyError::ProverError(err)),
         }
     }
     Ok(None)
@@ -599,7 +607,7 @@ fn check_proof_seed<'ctx>(
     prover: &mut Prover<'ctx>,
     limits_ref: &LimitsRef,
     seed: &HashSet<Bool<'ctx>>,
-) -> ProveResult<'ctx> {
+) -> Result<ProveResult<'ctx>, ProverCommandError>  {
     let mut timeout = Duration::from_millis(100);
     if let Some(time_left) = limits_ref.time_left() {
         timeout = timeout.min(time_left);

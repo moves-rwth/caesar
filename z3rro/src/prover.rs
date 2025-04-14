@@ -7,7 +7,7 @@ use std::{
     fmt::Display,
     io::{self, Write},
     path::Path,
-    process::{self, Command},
+    process::Command,
     time::Duration,
 };
 
@@ -25,7 +25,7 @@ use crate::{
 };
 
 #[derive(Debug, Error)]
-pub enum CommandError {
+pub enum ProverCommandError {
     #[error("Environment variable error: {0}")]
     EnvVarError(#[from] env::VarError),
     #[error("Process execution failed: {0}")]
@@ -47,7 +47,7 @@ pub enum ProveResult<'ctx> {
 }
 
 /// Execute swine on the file located at file_path
-fn execute_swine(file_path: &Path) -> Result<SatResult, CommandError> {
+fn execute_swine(file_path: &Path) -> Result<SatResult, ProverCommandError> {
     let output = Command::new("swine").arg(file_path).output();
 
     match output {
@@ -62,7 +62,7 @@ fn execute_swine(file_path: &Path) -> Result<SatResult, CommandError> {
                 Ok(SatResult::Unknown)
             }
         }
-        Err(e) => Err(CommandError::ProcessError(e)),
+        Err(e) => Err(ProverCommandError::ProcessError(e)),
     }
 }
 
@@ -161,7 +161,7 @@ impl<'ctx> Prover<'ctx> {
         self.min_level_with_provables.get_or_insert(self.level);
     }
 
-    pub fn check_proof(&mut self) -> ProveResult<'ctx> {
+    pub fn check_proof(&mut self) -> Result<ProveResult<'ctx>, ProverCommandError> {
         self.check_proof_assuming(&[])
     }
 
@@ -170,12 +170,10 @@ impl<'ctx> Prover<'ctx> {
     pub fn check_proof_assuming(
         &mut self,
         assumptions: &[Bool<'ctx>],
-    ) -> ProveResult<'ctx> {
+    ) -> Result<ProveResult<'ctx>, ProverCommandError> {
         if self.min_level_with_provables.is_none() {
-            return ProveResult::Proof;
+            return Ok(ProveResult::Proof);
         }
-
-        let res;
 
         match self.smt_solver {
             SolverType::SWINE => {
@@ -188,35 +186,33 @@ impl<'ctx> Prover<'ctx> {
                     .unwrap();
                 let file_path = smt_file.path();
 
-                res = execute_swine(file_path).unwrap_or_else(|e| {
-                    eprintln!("{}", e);
-                    process::exit(1)
-                });
+                let res = execute_swine(file_path);
                 match res {
-                    SatResult::Unsat => ProveResult::Proof,
-                    SatResult::Unknown => {
+                    Ok(SatResult::Unsat) => Ok(ProveResult::Proof),
+                    Ok(SatResult::Unknown) => {
                         // TODO: Determine the correct reason for Unknown
-                        ProveResult::Unknown(ReasonUnknown::Other("unknown".to_string()))
-                    }
-                    SatResult::Sat => {
+                        Ok(ProveResult::Unknown(ReasonUnknown::Other("unknown".to_string())))
+                    },
+                    Ok(SatResult::Sat) => {
                         // TODO: Get the model from the output of SWINE
-                        process::exit(1)
-                    }
+                        panic!("no counterexample for swine")
+                    },
+                    Err(err) => Err(err)
                 }
             }
             SolverType::Z3 => {
-                res = if assumptions.is_empty() {
+                let res = if assumptions.is_empty() {
                     self.solver.check()
                 } else {
                     self.solver.check_assumptions(assumptions)
                 };
                 match res {
-                    SatResult::Unsat => ProveResult::Proof,
-                    SatResult::Unknown => ProveResult::Unknown(self.get_reason_unknown().unwrap()),
+                    SatResult::Unsat => Ok(ProveResult::Proof),
+                    SatResult::Unknown => Ok(ProveResult::Unknown(self.get_reason_unknown().unwrap())),
                     SatResult::Sat => {
                         let model = self.get_model().unwrap();
                         let model = InstrumentedModel::new(model);
-                        ProveResult::Counterexample(model)
+                        Ok(ProveResult::Counterexample(model))
                     }
                 }
             }
@@ -315,16 +311,16 @@ mod test {
     fn test_prover() {
         let ctx = Context::new(&Config::default());
         let mut prover = Prover::new(&ctx, SolverType::Z3);
-        assert!(matches!(prover.check_proof(), ProveResult::Proof));
+        assert!(matches!(prover.check_proof(), Ok(ProveResult::Proof)));
         assert_eq!(prover.check_sat(), SatResult::Sat);
 
         prover.push();
         prover.add_assumption(&Bool::from_bool(&ctx, true));
-        assert!(matches!(prover.check_proof(), ProveResult::Proof));
+        assert!(matches!(prover.check_proof(), Ok(ProveResult::Proof)));
         assert_eq!(prover.check_sat(), SatResult::Sat);
         prover.pop();
 
-        assert!(matches!(prover.check_proof(), ProveResult::Proof));
+        assert!(matches!(prover.check_proof(), Ok(ProveResult::Proof)));
         assert_eq!(prover.check_sat(), SatResult::Sat);
     }
 }

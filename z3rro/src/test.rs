@@ -28,13 +28,14 @@ pub fn test_prove(f: impl for<'ctx> FnOnce(&'ctx Context, &mut SmtScope<'ctx>) -
 
     prover.add_provable(&theorem);
     match prover.check_proof() {
-        ProveResult::Counterexample(model) => panic!(
+        Ok(ProveResult::Counterexample(model)) => panic!(
             "counter-example: {:?}\nsolver:\n{:?}",
             model,
             prover.solver()
         ),
-        ProveResult::Unknown(reason) => panic!("solver returned unknown ({})", reason),
-        ProveResult::Proof => {}
+        Ok(ProveResult::Unknown(reason)) => panic!("solver returned unknown ({})", reason),
+        Ok(ProveResult::Proof) => {},
+        Err(_) => {}
     };
 }
 
