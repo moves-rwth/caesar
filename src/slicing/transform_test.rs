@@ -1,7 +1,5 @@
 //! *Prove* using the SMT solver that our transformations are correct.
 
-use std::time::{Duration, Instant};
-
 use itertools::Itertools;
 use z3rro::{
     model::SmtEval,

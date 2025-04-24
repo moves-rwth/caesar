@@ -1,11 +1,6 @@
 //! Pretty-printing an SMT model.
 
-use std::{
-    collections::BTreeMap,
-    fmt::Display,
-    rc::Rc,
-    time::{Duration, Instant},
-};
+use std::{collections::BTreeMap, fmt::Display, rc::Rc};
 
 use itertools::Itertools;
 use z3rro::model::{InstrumentedModel, ModelConsistency, SmtEvalError};
