@@ -1,11 +1,6 @@
 //! Pretty-printing an SMT model.
 
-use std::{
-    collections::BTreeMap,
-    fmt::Display,
-    rc::Rc,
-    time::{Duration, Instant},
-};
+use std::{collections::BTreeMap, fmt::Display, rc::Rc};
 
 use itertools::Itertools;
 use z3rro::model::{InstrumentedModel, ModelConsistency, SmtEvalError};
@@ -72,15 +67,9 @@ pub fn pretty_vc_value<'smt, 'ctx>(
         );
         let mut res = subst_expr;
 
-        // This deadline is not actually used. It is used to create a dummy [`LimitsRef`] object below
-        let deadline = Instant::now() + Duration::from_millis(1);
-
         // The limit error is not handled here, therefore discard the result
-        let _ = apply_subst(
-            translate.ctx.tcx(),
-            &mut res,
-            &LimitsRef::new(Some(deadline), None),
-        );
+        apply_subst(translate.ctx.tcx(), &mut res, &LimitsRef::new(None, None)).unwrap();
+
         res
     };
 

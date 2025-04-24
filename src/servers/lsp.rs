@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use ariadne::ReportKind;
 use crossbeam_channel::Sender;
 
 use lsp_server::{Connection, IoThreads, Message, Request, Response};
@@ -249,6 +250,40 @@ impl LspServer {
         Ok(())
     }
 
+    /// Convert `VerifyResult::Todo` and `VerifyResult::Verifying` statuses to `VerifyResult::Timeout`, send the results to the client and emit diagnostics for them.
+    fn handle_timeout_for_results(&mut self) -> Result<(), ServerError> {
+        let mut diagnostics: Vec<Diagnostic> = Vec::new();
+
+        // Transform results and collect diagnostics for timed out procedures
+        for (span, status) in &mut self.statuses {
+            match status {
+                VerifyResult::Ongoing => {
+                    diagnostics.push(
+                        Diagnostic::new(ReportKind::Error, *span)
+                            .with_message("Timed out while verifying this procedure"),
+                    );
+                    *status = VerifyResult::Timeout;
+                }
+                VerifyResult::Todo => {
+                    diagnostics.push(
+                        Diagnostic::new(ReportKind::Warning, *span)
+                            .with_message("Skipped this procedure due to timeout"),
+                    );
+                    *status = VerifyResult::Timeout;
+                }
+                _ => {}
+            }
+        }
+
+        // Add the collected diagnostics to the server
+        for diagnostic in diagnostics {
+            self.add_diagnostic(diagnostic)?;
+        }
+
+        self.publish_verify_statuses()?;
+        Ok(())
+    }
+
     fn clear_file_information(&mut self, file_id: &FileId) -> Result<(), ServerError> {
         if let Some(diag) = self.diagnostics.get_mut(file_id) {
             diag.clear();
@@ -317,6 +352,15 @@ impl Server for LspServer {
 
     fn register_source_unit(&mut self, span: Span) -> Result<(), VerifyError> {
         self.statuses.insert(span, VerifyResult::Todo);
+        self.publish_verify_statuses()
+            .map_err(VerifyError::ServerError)?;
+        Ok(())
+    }
+
+    fn set_ongoing_unit(&mut self, span: Span) -> Result<(), VerifyError> {
+        self.statuses.insert(span, VerifyResult::Ongoing);
+        self.publish_verify_statuses()
+            .map_err(VerifyError::ServerError)?;
         Ok(())
     }
 
@@ -331,13 +375,6 @@ impl Server for LspServer {
         let prev = self
             .statuses
             .insert(span, VerifyResult::from_prove_result(&result.prove_result));
-        assert!(prev.is_some());
-        self.publish_verify_statuses()?;
-        Ok(())
-    }
-
-    fn handle_not_checked(&mut self, span: Span) -> Result<(), ServerError> {
-        let prev = self.statuses.insert(span, VerifyResult::Unknown);
         assert!(prev.is_some());
         self.publish_verify_statuses()?;
         Ok(())
@@ -440,29 +477,29 @@ async fn handle_verify_request(
     };
 
     let result = verify(&[file_id]).await;
-    let res = match &result {
-        Ok(_) => Response::new_ok(id, Value::Null),
-        Err(err) => Response::new_err(id, 0, format!("{}", err)),
+
+    let response = match result {
+        Ok(()) => Response::new_ok(id.clone(), Value::Null),
+        Err(err) => match err {
+            VerifyError::Diagnostic(diagnostic) => {
+                server.lock().unwrap().add_diagnostic(diagnostic)?;
+                Response::new_ok(id.clone(), Value::Null)
+            }
+            VerifyError::Interrupted | VerifyError::LimitError(_) => {
+                server
+                    .lock()
+                    .unwrap()
+                    .handle_timeout_for_results()
+                    .map_err(VerifyError::ServerError)?;
+                Response::new_ok(id.clone(), Value::Null)
+            }
+            _ => Response::new_err(id, 0, format!("{}", err)),
+        },
     };
+
     sender
-        .send(Message::Response(res))
+        .send(Message::Response(response))
         .map_err(|e| VerifyError::ServerError(e.into()))?;
-    match result {
-        Ok(()) => {}
-        Err(VerifyError::Diagnostic(diagnostic)) => {
-            server.lock().unwrap().add_diagnostic(diagnostic)?;
-        }
-        Err(VerifyError::Interrupted) | Err(VerifyError::LimitError(_)) => {
-            // If the verification is interrupted or a limit is reached before the verification starts, no verification statuses are published yet.
-            // In this case, the client needs to be notified about the registered source units that are not checked yet (marked with VerifyResult::Todo).
-            // This acts as a fallback mechanism for this case.
-            server
-                .lock()
-                .unwrap()
-                .publish_verify_statuses()
-                .map_err(VerifyError::ServerError)?;
-        }
-        Err(err) => Err(err)?,
-    }
+
     Ok(())
 }
