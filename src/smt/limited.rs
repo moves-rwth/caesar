@@ -365,7 +365,7 @@ trait EncodingFuel<'ctx>: EncodingBase<'ctx> {
                 .map(|param| param.name)
                 .collect_vec();
             let mut literal_exprs = LiteralExprCollector::new()
-                .with_functions_with_def(translate.ctx.functions_with_def().as_slice())
+                .with_computable_functions(translate.ctx.computable_functions().as_slice())
                 .with_literal_vars(literal_vars.as_slice())
                 .collect(func.body.borrow_mut().as_mut().unwrap());
 
@@ -820,7 +820,7 @@ impl Display for LiteralExprs {
 pub struct LiteralExprCollector {
     literal_exprs: LiteralExprs,
     literal_vars: HashSet<Ident>,
-    functions_with_def: HashSet<Ident>,
+    computable_functions: HashSet<Ident>,
 }
 
 impl LiteralExprCollector {
@@ -839,9 +839,9 @@ impl LiteralExprCollector {
         }
     }
 
-    pub fn with_functions_with_def(self, functions_with_def: &[Ident]) -> Self {
+    pub fn with_computable_functions(self, computable_functions: &[Ident]) -> Self {
         Self {
-            functions_with_def: functions_with_def.iter().cloned().collect(),
+            computable_functions: computable_functions.iter().cloned().collect(),
             ..self
         }
     }
@@ -854,7 +854,7 @@ impl LiteralExprCollector {
         tracing::trace!(
             analized_expr=%expr,
             literal_vars=?self.literal_vars,
-            functions_with_def=?self.functions_with_def,
+            functions_with_def=?self.computable_functions,
             literal_exprs=%self.literal_exprs,
             "collected literal expressions"
         );
@@ -883,7 +883,7 @@ impl VisitorMut for LiteralExprCollector {
                 //     axiom collisionProb probCollision() <= 1
                 // is trivially always literal but performing any kind of computation with
                 // it is hopeless.
-                if self.functions_with_def.contains(func)
+                if self.computable_functions.contains(func)
                     && args.iter().all(|arg| self.is_literal(arg))
                 {
                     self.literal_exprs.insert(expr);
@@ -894,16 +894,12 @@ impl VisitorMut for LiteralExprCollector {
                 }
             }
             ExprKind::Ite(cond, then, other) => {
-                // TODO: maybe this should never be consider const?
-                //       If-then-else is used as a stopper for literal values and therefore itself
-                //       never considered literal. The paper mentions that this works well
-                //       in practise.
-                if self.is_literal(cond) && self.is_literal(then) && self.is_literal(other) {
-                    self.literal_exprs.insert(expr);
-                    self.literal_exprs.remove(cond);
-                    self.literal_exprs.remove(then);
-                    self.literal_exprs.remove(other);
-                }
+                // If-then-else is used as a stopper for literal values and therefore itself
+                // never considered literal. The paper mentions that this works well in practice.
+                // This is indeed the case. Otherwise, some computation examples hang.
+                self.literal_exprs.remove(cond);
+                self.literal_exprs.remove(then);
+                self.literal_exprs.remove(other);
             }
             ExprKind::Binary(_, lhs, rhs) => {
                 if self.is_literal(lhs) && self.is_literal(rhs) {

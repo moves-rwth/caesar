@@ -358,7 +358,7 @@ pub struct OptimizationOptions {
     pub max_fuel: u8,
 
     /// Select which heuristics for quantifier instantiation should be used by the SMT solver.
-    #[arg(long, default_value = "both")]
+    #[arg(long, alias="qi", default_value = "both")]
     pub quantifier_instantiation: QuantifierInstantiation,
 }
 

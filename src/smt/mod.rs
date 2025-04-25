@@ -232,11 +232,14 @@ impl<'ctx> SmtCtx<'ctx> {
         &self.limited_function_encoding
     }
 
-    pub fn functions_with_def(&self) -> Vec<Ident> {
+    pub fn computable_functions(&self) -> Vec<Ident> {
         self.tcx
             .get_function_decls()
             .values()
-            .filter(|func_decl| func_decl.borrow().body.borrow().is_some())
+            .filter(|func_decl| {
+                let decl =func_decl.borrow(); 
+                decl.computable || decl.body.borrow().is_some()
+            })
             .map(|func_decl| func_decl.borrow().name)
             .collect()
     }

@@ -3,14 +3,15 @@
 // Sum examples from the paper "Reasoning about Comprehensions with First-Order SMT Solvers" (Section 4.1)
 
 domain Sum {
-    // When using limited functions, although one axiom can be created from the other using the split_range axiom,
-    // both axioms are required. The fuel value of 1 does not allow for it.
 
     // Induction below axiom
     func elementSum(lo: UInt, hi: UInt, a: []Int): Int = ite(lo < hi, select(a, lo) + elementSum(lo + 1, hi, a), 0)
 
     axiom induction_above forall lo: UInt, hi: UInt, a: []Int @trigger(elementSum(lo, hi, a)) .
         elementSum(lo, hi, a) == ite(lo < hi, select(a, hi - 1) + elementSum(lo, hi - 1, a), 0)
+
+    // One of the above axiom can also be created from the other using the split_range axiom,
+    // This requires a fuel value greater than 1
 
     // Omitting triggers here is detrimental to the performance
     /* axiom split_range forall lo: UInt, mid: UInt, hi: UInt, a: []Int @trigger(elementSum(lo, mid, a), elementSum(mid, hi, a)) @trigger(elementSum(lo, mid, a), elementSum(lo, hi, a)) @trigger(elementSum(lo, hi, a), elementSum(mid, hi, a)) .

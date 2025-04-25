@@ -4,22 +4,21 @@
 
 // Peano numbers
 domain Nat {
-    func Z(): Nat
-    func S(N: Nat): Nat
+    @computable func Z(): Nat
+    @computable func S(N: Nat): Nat
 
-    // Todo: These Functions require "pattern matching", which currently can not be defined without explicit axioms??!
-    //       As a result these functions are currently not translated as limited functions.
-    func plus(n: Nat, m: Nat): Nat
-    axiom plus_rec forall n: Nat, m: Nat @trigger(plus(S(n), m)) . plus(S(n), m) == S(plus(n, m))
-    axiom plus_base forall m: Nat @trigger(plus(Z(), m)) . plus(Z(), m) == m
+    @computable func isZ(n: Nat): Bool
+    axiom isZ_true isZ(Z()) == true
+    axiom isZ_false forall n: Nat @trigger(isZ(S(n))). isZ(S(n)) == false
 
-    func mult(n: Nat, m: Nat): Nat
-    axiom mult_rec forall n: Nat, m: Nat @trigger(mult(S(n), m)) . mult(S(n), m) == plus(m, mult(n, m))
-    axiom mult_base forall m: Nat @trigger(mult(Z(), m)) . mult(Z(), m) == Z()
+    @computable func getPrev(n: Nat): Nat
+    axiom getPrev_def forall n: Nat @trigger(getPrev(S(n))). getPrev(S(n)) == n
 
-    func factorial(n: Nat): Nat
-    axiom fac_rec forall n: Nat @trigger(factorial(S(n))) . factorial(S(n)) == mult(S(n), factorial(n))
-    axiom fac_base factorial(Z()) == S(Z())
+    func plus(n: Nat, m: Nat): Nat = ite(isZ(n), m, S(plus(getPrev(n), m)))
+
+    func mult(n: Nat, m: Nat): Nat = ite(isZ(n), Z(), plus(m, mult(getPrev(n), m)))
+
+    func factorial(n: Nat): Nat = ite(isZ(n), S(Z()), mult(n, factorial(getPrev(n))))
 
     func toNat(n: UInt): Nat = ite(n == 0, Z(), S(toNat(n - 1)))
 }

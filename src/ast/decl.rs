@@ -493,6 +493,7 @@ pub struct FuncDecl {
     /// The body is in a [`RefCell`] so that we can have an exclusive reference
     /// to it while still retrieving a shared reference to the declaration
     pub body: RefCell<Option<Expr>>,
+    pub computable: bool,
     pub span: Span,
 }
 

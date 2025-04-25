@@ -1,8 +1,7 @@
-// RUN: @caesar @file
+// RUN: @caesar verify --limited-functions variable-fuel-computation --quantifier-instantiation e-matching @file
 
 domain Sum {
-    func sum(n: UInt): UInt
-    axiom sum_def forall n: UInt. sum(n) == ite(n == 0, 0, n + sum(n-1))
+    func sum(n: UInt): UInt = ite(n == 0, 0, n + sum(n-1))
 }
 
 proc gauss(n: UInt) -> ()

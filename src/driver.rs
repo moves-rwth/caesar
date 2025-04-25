@@ -666,7 +666,7 @@ impl BoolVcUnit {
 
         translate.set_literal_exprs(
             LiteralExprCollector::new()
-                .with_functions_with_def(translate.ctx.functions_with_def().as_slice())
+                .with_computable_functions(translate.ctx.computable_functions().as_slice())
                 .collect(&mut self.vc),
         );
         let bool_vc = translate.t_bool(&self.vc);
