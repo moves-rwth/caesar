@@ -368,6 +368,12 @@ trait EncodingFuel<'ctx>: EncodingBase<'ctx> {
                 .with_computable_functions(translate.ctx.computable_functions().as_slice())
                 .with_literal_vars(literal_vars.as_slice())
                 .collect(func.body.borrow_mut().as_mut().unwrap());
+            // The result of the computation axiom should itself never be considered literal in practice.
+            // Otherwise, some computation examples hang.
+            // The paper uses if-then-else is used as a stopper for propagating literal information.
+            // This has essentially the same effect in practice, but never making the result literal
+            // is the more distilled version.
+            literal_exprs.remove(func.body.borrow_mut().as_mut().unwrap());
 
             // Add arguments to ensure that they are lit-wrapped in the trigger
             literal_exprs.extend(LiteralExprs(
@@ -894,12 +900,12 @@ impl VisitorMut for LiteralExprCollector {
                 }
             }
             ExprKind::Ite(cond, then, other) => {
-                // If-then-else is used as a stopper for literal values and therefore itself
-                // never considered literal. The paper mentions that this works well in practice.
-                // This is indeed the case. Otherwise, some computation examples hang.
-                self.literal_exprs.remove(cond);
-                self.literal_exprs.remove(then);
-                self.literal_exprs.remove(other);
+                if self.is_literal(cond) && self.is_literal(then) && self.is_literal(other) {
+                    self.literal_exprs.insert(expr);
+                    self.literal_exprs.remove(cond);
+                    self.literal_exprs.remove(then);
+                    self.literal_exprs.remove(other);
+                }
             }
             ExprKind::Binary(_, lhs, rhs) => {
                 if self.is_literal(lhs) && self.is_literal(rhs) {
