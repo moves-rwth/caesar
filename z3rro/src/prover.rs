@@ -5,9 +5,9 @@ use std::{
     collections::VecDeque,
     env,
     fmt::Display,
-    io::{self, Write},
+    io::{self, BufRead, BufReader, Read, Write},
     path::Path,
-    process::Command,
+    process::{Command, Stdio},
     time::Duration,
 };
 
@@ -19,9 +19,14 @@ use z3::{
 };
 
 use crate::{
-    model::InstrumentedModel,
+    model::{InstrumentedModel, ModelSource},
     smtlib::Smtlib,
     util::{set_solver_timeout, ReasonUnknown},
+};
+
+use smtlib_lowlevel::{
+    ast::{CheckSatResponse, GetModelResponse},
+    Storage,
 };
 
 #[derive(Debug, Error)]
@@ -30,6 +35,8 @@ pub enum ProverCommandError {
     EnvVarError(#[from] env::VarError),
     #[error("Process execution failed: {0}")]
     ProcessError(#[from] io::Error),
+    #[error("Parse error")]
+    ParseError,
 }
 
 #[derive(Debug)]
@@ -128,12 +135,12 @@ pub struct Prover<'ctx> {
     level: usize,
     /// The minimum level where an assertion was added to the solver.
     min_level_with_provables: Option<usize>,
-    smt_solver: SolverType
+    smt_solver: SolverType,
 }
 
 impl<'ctx> Prover<'ctx> {
     /// Create a new prover with the given [`Context`].
-    pub fn new(ctx: &'ctx Context, solver_type:SolverType) -> Self {
+    pub fn new(ctx: &'ctx Context, solver_type: SolverType) -> Self {
         Prover {
             solver: Solver::new(ctx),
             level: 0,
@@ -186,18 +193,60 @@ impl<'ctx> Prover<'ctx> {
                     .unwrap();
                 let file_path = smt_file.path();
 
+                let child = Command::new("swine")
+                    .arg(file_path)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn();
+                match child {
+                    Ok(mut child) => {
+                        if let Some(stdout) = child.stdout.take() {
+                            let storage = Storage::new();
+                            let mut buffer = BufReader::new(stdout);
+                            let mut line = String::new();
+                            buffer.read_line(&mut line)?;
+
+                            let sat_res = match CheckSatResponse::parse(&storage, &line) {
+                                Ok(res) => res,
+                                Err(e) => {
+                                    eprintln!("ParseError: {}", e);
+                                    panic!();
+                                }
+                            };
+
+                            let mut cex = String::new();
+                            buffer.read_to_string(&mut cex)?;
+
+                            if sat_res == CheckSatResponse::Sat {
+                                match GetModelResponse::parse(&storage, &cex) {
+                                    Ok(model_res) => {
+                                        let model = InstrumentedModel::new(
+                                            ModelSource::SwineModel(model_res),
+                                        );
+                                        println!("{:?}", model_res);
+                                    }
+                                    Err(e) => eprintln!("ParseError: {}", e),
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => eprintln!("Failed to spawn: {}", e),
+                }
+
                 let res = execute_swine(file_path);
                 match res {
                     Ok(SatResult::Unsat) => Ok(ProveResult::Proof),
                     Ok(SatResult::Unknown) => {
                         // TODO: Determine the correct reason for Unknown
-                        Ok(ProveResult::Unknown(ReasonUnknown::Other("unknown".to_string())))
-                    },
+                        Ok(ProveResult::Unknown(ReasonUnknown::Other(
+                            "unknown".to_string(),
+                        )))
+                    }
                     Ok(SatResult::Sat) => {
                         // TODO: Get the model from the output of SWINE
                         panic!("no counterexample for swine")
-                    },
-                    Err(err) => Err(err)
+                    }
+                    Err(err) => Err(err),
                 }
             }
             SolverType::Z3 => {
@@ -208,10 +257,12 @@ impl<'ctx> Prover<'ctx> {
                 };
                 match res {
                     SatResult::Unsat => Ok(ProveResult::Proof),
-                    SatResult::Unknown => Ok(ProveResult::Unknown(self.get_reason_unknown().unwrap())),
+                    SatResult::Unknown => {
+                        Ok(ProveResult::Unknown(self.get_reason_unknown().unwrap()))
+                    }
                     SatResult::Sat => {
                         let model = self.get_model().unwrap();
-                        let model = InstrumentedModel::new(model);
+                        let model = InstrumentedModel::new(ModelSource::Z3Model(model));
                         Ok(ProveResult::Counterexample(model))
                     }
                 }
