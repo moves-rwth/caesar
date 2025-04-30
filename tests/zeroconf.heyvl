@@ -2,7 +2,7 @@
 
 domain Arith {
     func exp(b: UReal, i: UInt): UReal = ite(i == 0, 1, b * exp(b, i - 1))
-    axiom exp_bounded forall b: UReal, i: UInt. (b <= 1) ==> (exp(b, i) <= 1)
+    axiom exp_bounded forall b: UReal, i: UInt @trigger(exp(b, i)). (b <= 1) ==> (exp(b, i) <= 1)
 }
 
 domain Constants {

@@ -1,10 +1,7 @@
 // RUN: @caesar @file
 
 domain Harmonic {
-    func harmonic(n: UInt): UReal
-
-    axiom harmonic_base harmonic(0) == 0
-    axiom harmonic_step forall n: UInt. harmonic(n + 1) == 1/(n+1) + harmonic(n)
+    func harmonic(n: UInt): UReal = ite(n == 0, 0, 1/n + harmonic(n - 1))
 }
 
 coproc harmonic_sum(init_x: UReal, init_n: UInt) -> (x: UReal, n: UInt)

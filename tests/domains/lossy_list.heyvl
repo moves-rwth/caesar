@@ -8,7 +8,7 @@ domain List {
     func len(l: List): UInt
     func pop(l: List): List 
 
-    axiom list_pop forall l: List. len(pop(l)) == len(l) - 1
+    axiom list_pop forall l: List @trigger(len(pop(l))). len(pop(l)) == len(l) - 1
 }
 
 proc lossy_list(init_l: List) -> (l: List)

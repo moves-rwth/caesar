@@ -1,11 +1,8 @@
 // RUN: @caesar @file
 
 domain Exponentials {
-    func ohnine_exp(exponent: UInt): UReal
-
-    axiom ohnine_exp_base ohnine_exp(0) == 1
-    axiom ohnine_exp_step forall exponent: UInt. ohnine_exp(exponent + 1) == 0.9 * ohnine_exp(exponent)
-    axiom ohnine_max forall exponent: UInt. exponent < 1 || ohnine_exp(exponent) <= 0.9
+    func ohnine_exp(exponent: UInt): UReal = ite(exponent == 0, 1, 0.9 * ohnine_exp(exponent))
+    axiom ohnine_max forall exponent: UInt @trigger(ohnine_exp(exponent)). exponent < 1 || ohnine_exp(exponent) <= 0.9
 }
 
 coproc chain(len: UInt, init_c: Bool, init_x: UInt) -> (c: Bool, x: UInt)

@@ -1,10 +1,7 @@
 // RUN: @caesar @file
 
 domain Fib {
-    func fib(n: UInt): UInt
-    axiom fib_0 fib(0) == 0
-    axiom fib_1 fib(1) == 1
-    axiom fib_n forall n: UInt. fib(n+2) == fib(n+1) + fib(n)
+    func fib(n: UInt): UInt = ite(n <= 1, n, fib(n - 1) + fib(n - 2))
 }
 
 proc iter_fib(n: UInt) -> (res: UInt)

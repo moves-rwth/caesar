@@ -11,7 +11,7 @@ domain List {
     func len(l: List): UInt
     func pop(l: List): List
 
-    axiom list_len forall l: List. len(pop(l)) == len(l) - 1
+    axiom list_len forall l: List @trigger(len(pop(l))). len(pop(l)) == len(l) - 1
 }
 
 coproc lossy_list(init_l: List) -> (l: List)

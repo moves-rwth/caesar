@@ -9,11 +9,10 @@ domain Sums {
     // This is a helper function to specify the pre-expectation of the unif assignment in inner_loop.
     // It returns a list of unspecified length with identical elements `N/x`.
     func summands1(N: UInt, x: UInt, i: UInt): []UReal
-    axiom summands1_def forall N: UInt, x: UInt, i: UInt.
-        (forall j: UInt. (j<=N) ==> (select(summands1(N, x, i), j) == [0 < x && x < j] *  (N/x)))
+    axiom summands1_def forall N: UInt, x: UInt, i: UInt, j: UInt @trigger(select(summands1(N, x, i), j)).
+        (j<=N) ==> (select(summands1(N, x, i), j) == [0 < x && x < j] *  (N/x))
 
     func harmonic(n: UInt) : UReal = ite(n==0, 0, (1/n) + harmonic(n-1))
-    axiom harmonic_zero forall n: UInt. harmonic(n) >= 0
 }
 
 // Verifies the outer loop of the coupon collector. It uses inner_loop and

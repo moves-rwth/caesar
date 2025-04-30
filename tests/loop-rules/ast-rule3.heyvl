@@ -22,7 +22,7 @@ domain Functions {
 
     func d(v: UReal): UReal
 
-    axiom d_def forall n: UInt. (n > 0) ==> (d(harmonic(n)) == 1/n)
+    axiom d_def forall n: UInt @trigger(d(harmonic(n))). (n > 0) ==> (d(harmonic(n)) == 1/n)
     axiom d_zero d(0) == 1
 }
 
