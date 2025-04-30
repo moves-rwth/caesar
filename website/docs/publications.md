@@ -34,7 +34,7 @@ One challenge is to integrate the integrals for the expected values that arise f
 The key idea is to soundly under- or over-approximate these integrals via [Riemann sums](https://en.wikipedia.org/wiki/Riemann_sum).
 In addition to theoretical results such as convergence and completeness of the approach, the paper also provides case studies of continuous probabilistic programs that are encoded in HeyVL and verified with Caesar.
 
-[See our blog post for more details and examples](/blog/2025/11/04/foundations-continuous).
+[See our blog post for more details and examples](/blog/2025/04/11/foundations-continuous).
 
 ## AISoLA '24: A Game-Based Semantics for the Probabilistic Intermediate Verification Language HeyVL
 
