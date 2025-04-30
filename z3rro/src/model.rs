@@ -7,11 +7,27 @@ use std::{
 };
 
 use num::{BigInt, BigRational};
+
+use smtlib_lowlevel::{
+    ast::{
+        FunctionDef, GetModelResponse, Identifier, ModelResponse, QualIdentifier, SpecConstant,
+        Term,
+    },
+    lexicon::{Decimal, Symbol},
+};
+
 use thiserror::Error;
+
 use z3::{
     ast::{Ast, Bool, Dynamic, Int, Real},
     FuncDecl, FuncInterp, Model,
 };
+
+#[derive(Debug)]
+pub enum ModelSource<'ctx> {
+    Z3Model(Model<'ctx>),
+    SwineModel(GetModelResponse<'ctx>),
+}
 
 /// A [`z3::Model`] which keeps track of the accessed constants. This is useful
 /// to later print those constants which were not accessed by any of the
@@ -20,14 +36,14 @@ use z3::{
 /// we know, and then print the rest of the assignments in the model as well.
 #[derive(Debug)]
 pub struct InstrumentedModel<'ctx> {
-    model: Model<'ctx>,
+    model: ModelSource<'ctx>,
     // TODO: turn this into a HashSet of FuncDecls when the type implements Hash
     accessed_decls: RefCell<im_rc::HashSet<String>>,
     accessed_exprs: RefCell<im_rc::HashSet<Dynamic<'ctx>>>,
 }
 
 impl<'ctx> InstrumentedModel<'ctx> {
-    pub fn new(model: Model<'ctx>) -> Self {
+    pub fn new(model: ModelSource<'ctx>) -> Self {
         InstrumentedModel {
             model,
             accessed_decls: Default::default(),
@@ -57,14 +73,129 @@ impl<'ctx> InstrumentedModel<'ctx> {
     /// the model.
     pub fn eval<T: Ast<'ctx>>(&self, ast: &T, model_completion: bool) -> Option<T> {
         self.add_children_accessed(Dynamic::from_ast(ast));
-        let res = self.model.eval(ast, model_completion)?;
-        Some(res)
+        match &self.model {
+            ModelSource::Z3Model(model) => {
+                let res = model.eval(ast, model_completion)?;
+                Some(res)
+            }
+            ModelSource::SwineModel(_) => todo!(),
+        }
+    }
+
+    pub fn eval_ast_bool(&self, ast: &Bool<'ctx>) -> Option<Bool<'ctx>> {
+        let name = ast.decl().name();
+
+        if let ModelSource::SwineModel(s_model) = &self.model {
+            match Self::find_fun_def(s_model, &name) {
+                Some(fun_def) => match fun_def.3 {
+                    Term::Identifier(QualIdentifier::Identifier(Identifier::Simple(Symbol(
+                        "true",
+                    )))) => Some(Bool::from_bool(ast.get_ctx(), true)),
+                    Term::Identifier(QualIdentifier::Identifier(Identifier::Simple(Symbol(
+                        "false",
+                    )))) => Some(Bool::from_bool(ast.get_ctx(), false)),
+                    _ => None,
+                },
+                None => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn eval_ast_int(&self, ast: &Int<'ctx>) -> Option<Int<'ctx>> {
+        let name = ast.decl().name();
+
+        if let ModelSource::SwineModel(s_model) = &self.model {
+            match Self::find_fun_def(s_model, &name) {
+                Some(fun_def) => match fun_def.3 {
+                    Term::SpecConstant(SpecConstant::Numeral(numeral)) => {
+                        if let Ok(n) = numeral.into_u128() {
+                            let n_str = n.to_string();
+                            Int::from_str(ast.get_ctx(), &n_str)
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                },
+                None => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn eval_ast_real(&self, ast: &Real<'ctx>) -> Option<Real<'ctx>> {
+        let name = ast.decl().name();
+
+        if let ModelSource::SwineModel(s_model) = &self.model {
+            match Self::find_fun_def(s_model, &name) {
+                Some(fun_def) => match fun_def.3 {
+                    Term::SpecConstant(SpecConstant::Decimal(Decimal(d_str))) => {
+                        if let Some((num, den)) = Self::from_str_to_num_den(d_str) {
+                            Real::from_real_str(ast.get_ctx(), &num, &den)
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                },
+                None => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Convert a decimal string `d_str` into a pair of a numerator (`num`) and 
+    /// a denominator (`den`) in the form of '[numeral]' strings such that: 
+    /// d_str = num / den
+    pub fn from_str_to_num_den(d_str: &str) -> Option<(String, String)> {
+        if d_str.is_empty() {
+            return None;
+        }
+
+        if let Some(pos) = d_str.find('.') {
+            let den = "1".to_string() + &"0".repeat(d_str.len() - pos - 1);
+
+            let mut num = d_str.to_string();
+            num.remove(pos);
+            num.trim_start_matches('0');
+
+            if num.is_empty() {
+                num = "0".to_string();
+            }
+
+            Some((num, den))
+        } else {
+            Some((d_str.to_string(), "1".to_string()))
+        }
+    }
+
+    /// Find a `FunctionDef` object defined for a given symbol `symbol` within the `model_res`.
+    pub fn find_fun_def(
+        model_res: &GetModelResponse<'ctx>,
+        symbol: &str,
+    ) -> Option<&'ctx FunctionDef<'ctx>> {
+        model_res.0.iter().find_map(|m_res| {
+            if let ModelResponse::DefineFun(fun_def) = m_res {
+                if fun_def.0.0 == symbol {
+                    Some(fun_def)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
     }
 
     /// Get the function interpretation for this `f`.
     pub fn get_func_interp(&self, f: &FuncDecl<'ctx>) -> Option<FuncInterp<'ctx>> {
         self.accessed_decls.borrow_mut().insert(f.name());
-        self.model.get_func_interp(f)
+        todo!()
+        // self.model.get_func_interp(f)
     }
 
     /// Add this ast node and all its children to the accessed set.
@@ -89,9 +220,12 @@ impl<'ctx> InstrumentedModel<'ctx> {
     /// Iterate over all function declarations that were not accessed using
     /// `eval` so far.
     pub fn iter_unaccessed(&self) -> impl Iterator<Item = FuncDecl<'ctx>> + '_ {
+        todo!()
+        /*
         self.model
             .iter()
             .filter(|decl| !self.accessed_decls.borrow().contains(&decl.name()))
+         */
     }
 
     /// Reset the internally tracked accessed declarations and expressions.
@@ -101,7 +235,8 @@ impl<'ctx> InstrumentedModel<'ctx> {
     }
 
     pub fn into_model(self) -> Model<'ctx> {
-        self.model
+        todo!()
+        // self.model
     }
 }
 
@@ -109,7 +244,8 @@ impl<'ctx> InstrumentedModel<'ctx> {
 /// [`z3::Model`]'s implementation.
 impl Display for InstrumentedModel<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("{}", &self.model))
+        todo!()
+        // f.write_fmt(format_args!("{}", &self.model))
     }
 }
 
