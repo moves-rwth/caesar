@@ -32,25 +32,22 @@ pub enum ModelSource<'ctx> {
 /// Convert a decimal string `d_str` into a pair of a numerator (`num`) and 
 /// a denominator (`den`) in the form of '[numeral]' strings such that: 
 /// d_str = num / den
-fn from_str_to_num_den(d_str: &str) -> Option<(String, String)> {
+fn from_str_to_num_den(d_str: &str) -> Option<(BigInt, BigInt)> {
     if d_str.is_empty() {
         return None;
     }
 
-    if let Some(pos) = d_str.find('.') {
-        let den = "1".to_string() + &"0".repeat(d_str.len() - pos - 1);
-
-        let mut num = d_str.to_string();
-        num.remove(pos);
-        num.trim_start_matches('0');
-
-        if num.is_empty() {
-            num = "0".to_string();
-        }
+    if d_str.ends_with(".0") {
+        let num = BigInt::from_str(&d_str.replace(".0", "")).ok()?;
+        Some((num, BigInt::from(1)))
+    } else if let Some(pos) = d_str.find('.') {
+        let den = BigInt::from(10).pow((d_str.len() - pos - 1).try_into().unwrap());
+        let num = BigInt::from_str(&d_str.replace(".", "")).ok()?;
 
         Some((num, den))
     } else {
-        Some((d_str.to_string(), "1".to_string()))
+        let num = BigInt::from_str(d_str).ok()?;
+        Some((num, BigInt::from(1)))
     }
 }
 
@@ -326,8 +323,8 @@ impl<'ctx> SmtEval<'ctx> for Real<'ctx> {
                                 },
                                 Term::SpecConstant(SpecConstant::Decimal(Decimal(d_str))) => {
                                     if let Some((n, d)) = from_str_to_num_den(d_str) {
-                                        num *= BigInt::from_str(&n).map_err(|_| SmtEvalError::EvalError)?;
-                                        den *= BigInt::from_str(&d).map_err(|_| SmtEvalError::EvalError)?;
+                                        num *= n;
+                                        den *= d;
                                     } else {
                                         return Err(SmtEvalError::EvalError);
                                     }
@@ -343,8 +340,8 @@ impl<'ctx> SmtEval<'ctx> for Real<'ctx> {
                                 },
                                 Term::SpecConstant(SpecConstant::Decimal(Decimal(d_str))) => {
                                     if let Some((n, d)) = from_str_to_num_den(d_str) {
-                                        den *= BigInt::from_str(&n).map_err(|_| SmtEvalError::EvalError)?;
-                                        num *= BigInt::from_str(&d).map_err(|_| SmtEvalError::EvalError)?;
+                                        den *= n;
+                                        num *= d;
                                     } else {
                                         return Err(SmtEvalError::EvalError);
                                     }
