@@ -1,7 +1,5 @@
 //! *Prove* using the SMT solver that our transformations are correct.
 
-use std::time::{Duration, Instant};
-
 use itertools::Itertools;
 use z3rro::{
     model::SmtEval,
@@ -108,8 +106,7 @@ fn prove_equiv(
     let tcx = &transform_tcx.tcx;
     let builder = ExprBuilder::new(Span::dummy_span());
 
-    let deadline = Instant::now() + Duration::from_millis(1);
-    let mut vcgen = Vcgen::new(tcx, &LimitsRef::new(Some(deadline), None), None);
+    let mut vcgen = Vcgen::new(tcx, &LimitsRef::new(None, None), None);
     let stmt1_vc = vcgen
         .vcgen_stmts(stmt1, transform_tcx.post.clone())
         .unwrap();
