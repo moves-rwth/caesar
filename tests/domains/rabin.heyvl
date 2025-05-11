@@ -1,4 +1,4 @@
-// RUN: @caesar @file --quantifier-instantiation e-matching --limited-functions variable-fuel-computation
+// RUN: @caesar @file --quantifier-instantiation e-matching --function-encoding variable-fuel-computation
 
 domain Exponentials {
     func rec_pown_2(exponent: UInt): UReal = ite(exponent == 0, 1, rec_pown_2(exponent - 1) / 2)

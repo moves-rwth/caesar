@@ -1,9 +1,9 @@
-//! This module contains all functions related to limited functions.
-//! The goal is to limit the number of quantifier instantiation
-//! of a functions defining axiom.
+//! This module contains all functions the different ways of encoding user-defined functions.
+//! There are different fuel encodings, which all limit the number of possible (recursive)
+//! quantifier instantiations and a [DefaultFunctionEncoding] which does a direct mapping to SMT-LIB.
 //!
 //! # Note
-//! For this to work the SMT solver is not allowed to synthesis fuel values itself.
+//! For the fuel encodings to work the SMT solver is not allowed to synthesis fuel values itself.
 //! Therefore, MBQI must be disabled.
 
 use crate::ast::visit::{walk_expr, VisitorMut};
@@ -93,7 +93,7 @@ trait EncodingBase<'ctx> {
 type FunctionDeclaration<'ctx> = (Ident, Vec<Sort<'ctx>>, Sort<'ctx>);
 
 /// A specific strategy for encoding custom interpreted functions
-pub trait LimitedFunctionEncoder<'ctx> {
+pub trait FunctionEncoder<'ctx> {
     /// Generate the necessary function declaration(s) on the SMT-level
     fn declare_function(
         &self,
@@ -117,31 +117,31 @@ pub trait LimitedFunctionEncoder<'ctx> {
     ) -> Symbolic<'ctx>;
 }
 
-enum LimitedFunctionEncodingInner<'ctx> {
-    None(LimitedFunctionNoneEncoding),
-    Variable(LimitedFunctionVariableEncoding<'ctx>),
-    Fixed(LimitedFunctionFixedEncoding),
+enum FunctionEncodingInner<'ctx> {
+    Default(DefaultFunctionEncoding),
+    Variable(VariableFuelFunctionEncoding<'ctx>),
+    Fixed(FixedFuelFunctionEncoding),
 }
 
 /// A value that represents one of the possible encodings
-pub struct LimitedFunctionEncoding<'ctx>(LimitedFunctionEncodingInner<'ctx>);
+pub struct FunctionEncoding<'ctx>(FunctionEncodingInner<'ctx>);
 
-impl<'ctx> Default for LimitedFunctionEncoding<'ctx> {
+impl<'ctx> Default for FunctionEncoding<'ctx> {
     fn default() -> Self {
-        Self::none()
+        Self::default()
     }
 }
 
-impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionEncoding<'ctx> {
+impl<'ctx> FunctionEncoder<'ctx> for FunctionEncoding<'ctx> {
     fn declare_function(
         &self,
         ctx: &SmtCtx<'ctx>,
         func: &FuncDecl,
     ) -> Vec<FunctionDeclaration<'ctx>> {
         match &self.0 {
-            LimitedFunctionEncodingInner::None(enc) => enc.declare_function(ctx, func),
-            LimitedFunctionEncodingInner::Variable(enc) => enc.declare_function(ctx, func),
-            LimitedFunctionEncodingInner::Fixed(enc) => enc.declare_function(ctx, func),
+            FunctionEncodingInner::Default(enc) => enc.declare_function(ctx, func),
+            FunctionEncodingInner::Variable(enc) => enc.declare_function(ctx, func),
+            FunctionEncodingInner::Fixed(enc) => enc.declare_function(ctx, func),
         }
     }
 
@@ -151,9 +151,9 @@ impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionEncoding<'ctx> {
         func: &FuncDecl,
     ) -> Vec<Bool<'ctx>> {
         match &self.0 {
-            LimitedFunctionEncodingInner::None(enc) => enc.axioms(translate, func),
-            LimitedFunctionEncodingInner::Variable(enc) => enc.axioms(translate, func),
-            LimitedFunctionEncodingInner::Fixed(enc) => enc.axioms(translate, func),
+            FunctionEncodingInner::Default(enc) => enc.axioms(translate, func),
+            FunctionEncodingInner::Variable(enc) => enc.axioms(translate, func),
+            FunctionEncodingInner::Fixed(enc) => enc.axioms(translate, func),
         }
     }
 
@@ -164,19 +164,17 @@ impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionEncoding<'ctx> {
         args: Vec<Symbolic<'ctx>>,
     ) -> Symbolic<'ctx> {
         match &self.0 {
-            LimitedFunctionEncodingInner::None(enc) => enc.call_function(ctx, func, args),
-            LimitedFunctionEncodingInner::Variable(enc) => enc.call_function(ctx, func, args),
-            LimitedFunctionEncodingInner::Fixed(enc) => enc.call_function(ctx, func, args),
+            FunctionEncodingInner::Default(enc) => enc.call_function(ctx, func, args),
+            FunctionEncodingInner::Variable(enc) => enc.call_function(ctx, func, args),
+            FunctionEncodingInner::Fixed(enc) => enc.call_function(ctx, func, args),
         }
     }
 }
 
-impl<'ctx> LimitedFunctionEncoding<'ctx> {
+impl<'ctx> FunctionEncoding<'ctx> {
     /// Apply no special encoding
-    pub fn none() -> Self {
-        Self(LimitedFunctionEncodingInner::None(
-            LimitedFunctionNoneEncoding,
-        ))
+    pub fn default() -> Self {
+        Self(FunctionEncodingInner::Default(DefaultFunctionEncoding))
     }
 
     /// Perform limited function encoding by including an extra [z3rro::Fuel] parameter and
@@ -184,10 +182,10 @@ impl<'ctx> LimitedFunctionEncoding<'ctx> {
     /// instantiation.
     /// Based on the paper "Computing with an SMT Solver".
     pub fn variable(max_fuel: u8, computation: bool) -> Self {
-        Self(LimitedFunctionEncodingInner::Variable(
-            LimitedFunctionVariableEncoding {
+        Self(FunctionEncodingInner::Variable(
+            VariableFuelFunctionEncoding {
                 computation,
-                none_encoding: LimitedFunctionNoneEncoding,
+                none_encoding: DefaultFunctionEncoding,
                 fuel_context: RefCell::new(FuelContext::call()),
                 max_fuel,
             },
@@ -197,23 +195,36 @@ impl<'ctx> LimitedFunctionEncoding<'ctx> {
     /// Perform limited function encoding by introducing n versions of the function.
     /// Version x only references x - 1. There is no definition for version 0.
     pub fn fixed(max_fuel: u8, computation: bool) -> Self {
-        Self(LimitedFunctionEncodingInner::Fixed(
-            LimitedFunctionFixedEncoding {
-                none_encoding: LimitedFunctionNoneEncoding,
-                computation,
-                fuel_value: Cell::new(max_fuel.try_into().unwrap()),
-                fuel_context: Cell::new(max_fuel),
-                max_fuel,
-            },
-        ))
+        Self(FunctionEncodingInner::Fixed(FixedFuelFunctionEncoding {
+            default_encoding: DefaultFunctionEncoding,
+            computation,
+            fuel_value: Cell::new(max_fuel.try_into().unwrap()),
+            fuel_context: Cell::new(max_fuel),
+            max_fuel,
+        }))
+    }
+
+    pub fn is_limited_encoding(&self) -> bool {
+        matches!(
+            self.0,
+            FunctionEncodingInner::Variable(_) | FunctionEncodingInner::Fixed(_)
+        )
+    }
+
+    pub fn needs_lit_wrapping(&self) -> bool {
+        match &self.0 {
+            FunctionEncodingInner::Variable(enc) => enc.computation,
+            FunctionEncodingInner::Fixed(enc) => enc.computation,
+            _ => false,
+        }
     }
 }
 
-struct LimitedFunctionNoneEncoding;
+struct DefaultFunctionEncoding;
 
-impl<'ctx> EncodingBase<'ctx> for LimitedFunctionNoneEncoding {}
+impl<'ctx> EncodingBase<'ctx> for DefaultFunctionEncoding {}
 
-impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionNoneEncoding {
+impl<'ctx> FunctionEncoder<'ctx> for DefaultFunctionEncoding {
     fn declare_function(
         &self,
         ctx: &SmtCtx<'ctx>,
@@ -251,7 +262,7 @@ impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionNoneEncoding {
     }
 }
 
-impl LimitedFunctionNoneEncoding {
+impl DefaultFunctionEncoding {
     fn definitional_axiom<'smt, 'ctx>(
         &self,
         translate: &mut TranslateExprs<'smt, 'ctx>,
@@ -461,14 +472,14 @@ impl<'ctx> FuelContext<'ctx> {
 /// ```txt
 /// forall fuel: Fuel, <args...> @trigger(func_name(fuel, Lit(<args...>))) . func_name(fuel, Lit(<args...>)) = <body>
 /// ```
-struct LimitedFunctionVariableEncoding<'ctx> {
-    none_encoding: LimitedFunctionNoneEncoding,
+struct VariableFuelFunctionEncoding<'ctx> {
+    none_encoding: DefaultFunctionEncoding,
     computation: bool,
     fuel_context: RefCell<FuelContext<'ctx>>,
     max_fuel: u8,
 }
 
-impl<'ctx> EncodingBase<'ctx> for LimitedFunctionVariableEncoding<'ctx> {
+impl<'ctx> EncodingBase<'ctx> for VariableFuelFunctionEncoding<'ctx> {
     fn call_scope<'smt>(
         &self,
         translate: &mut TranslateExprs<'smt, 'ctx>,
@@ -486,7 +497,7 @@ impl<'ctx> EncodingBase<'ctx> for LimitedFunctionVariableEncoding<'ctx> {
     }
 }
 
-impl<'ctx> EncodingFuel<'ctx> for LimitedFunctionVariableEncoding<'ctx> {
+impl<'ctx> EncodingFuel<'ctx> for VariableFuelFunctionEncoding<'ctx> {
     fn use_head_context(&self, ctx: &SmtCtx<'ctx>) {
         *self.fuel_context.borrow_mut() = FuelContext::head(ctx);
     }
@@ -504,7 +515,7 @@ impl<'ctx> EncodingFuel<'ctx> for LimitedFunctionVariableEncoding<'ctx> {
     }
 }
 
-impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionVariableEncoding<'ctx> {
+impl<'ctx> FunctionEncoder<'ctx> for VariableFuelFunctionEncoding<'ctx> {
     fn declare_function(
         &self,
         ctx: &SmtCtx<'ctx>,
@@ -560,17 +571,17 @@ impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionVariableEncoding<'ctx
     }
 }
 
-struct LimitedFunctionFixedEncoding {
-    none_encoding: LimitedFunctionNoneEncoding,
+struct FixedFuelFunctionEncoding {
+    default_encoding: DefaultFunctionEncoding,
     computation: bool,
     fuel_context: Cell<u8>, // The current contex. This value is in function calls
     fuel_value: Cell<NonZero<u8>>, // The current fuel value that axioms are generated for. Head/Body is relative to this value
     max_fuel: u8,
 }
 
-impl<'ctx> EncodingBase<'ctx> for LimitedFunctionFixedEncoding {}
+impl<'ctx> EncodingBase<'ctx> for FixedFuelFunctionEncoding {}
 
-impl<'ctx> EncodingFuel<'ctx> for LimitedFunctionFixedEncoding {
+impl<'ctx> EncodingFuel<'ctx> for FixedFuelFunctionEncoding {
     fn use_head_context(&self, _ctx: &SmtCtx<'ctx>) {
         self.fuel_context.set(self.fuel_value.get().get());
     }
@@ -588,14 +599,14 @@ impl<'ctx> EncodingFuel<'ctx> for LimitedFunctionFixedEncoding {
     }
 }
 
-impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionFixedEncoding {
+impl<'ctx> FunctionEncoder<'ctx> for FixedFuelFunctionEncoding {
     fn declare_function(
         &self,
         ctx: &SmtCtx<'ctx>,
         func: &FuncDecl,
     ) -> Vec<FunctionDeclaration<'ctx>> {
         if !ctx.is_limited_function_decl(func) {
-            return self.none_encoding.declare_function(ctx, func);
+            return self.default_encoding.declare_function(ctx, func);
         }
         let range = ty_to_sort(ctx, &func.output);
         let domain = build_func_domain(ctx, func, false);
@@ -617,7 +628,7 @@ impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionFixedEncoding {
         func: &FuncDecl,
     ) -> Vec<Bool<'ctx>> {
         if !translate.ctx.is_limited_function_decl(func) {
-            return self.none_encoding.axioms(translate, func);
+            return self.default_encoding.axioms(translate, func);
         }
 
         let mut axioms = (1..=self.max_fuel)
@@ -651,7 +662,7 @@ impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionFixedEncoding {
         args: Vec<Symbolic<'ctx>>,
     ) -> Symbolic<'ctx> {
         if !ctx.is_limited_function_decl(func) {
-            return self.none_encoding.call_function(ctx, func, args);
+            return self.default_encoding.call_function(ctx, func, args);
         }
 
         apply_function(
@@ -663,7 +674,7 @@ impl<'ctx> LimitedFunctionEncoder<'ctx> for LimitedFunctionFixedEncoding {
     }
 }
 
-impl LimitedFunctionFixedEncoding {
+impl FixedFuelFunctionEncoding {
     fn ident_with_fuel(func: &FuncDecl, fuel: u8) -> Ident {
         Ident {
             name: Symbol::intern(&format!("{}${}", func.name.name, fuel)),

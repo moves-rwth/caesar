@@ -2,13 +2,12 @@
 
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
 use crate::ast::{DeclKind, FuncDecl};
-use crate::smt::limited::is_eligible_for_limited_function;
+use crate::smt::function_encodings::is_eligible_for_limited_function;
 use crate::{
     ast::{DeclRef, DomainDecl, DomainSpec, Ident, TyKind},
     tyctx::TyCtx,
 };
 use itertools::Itertools;
-use std::fmt::Debug;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use z3::ast::{Ast, Dynamic};
 use z3::{ast::Bool, Context, Sort};
@@ -17,22 +16,14 @@ use z3rro::{
     eureal::EURealSuperFactory, EUReal, Factory, FuelFactory, ListFactory, LitDecl, LitFactory,
 };
 
-mod limited;
-pub use limited::{LimitedFunctionEncoder, LimitedFunctionEncoding, LiteralExprCollector};
+mod function_encodings;
+pub use function_encodings::{FunctionEncoder, FunctionEncoding, LiteralExprCollector};
 
 pub mod pretty_model;
 pub mod symbolic;
 mod symbols;
 pub mod translate_exprs;
 mod uninterpreted;
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
-pub struct SmtCtxOptions {
-    pub use_limited_functions: bool,
-    pub lit_wrap: bool,
-    pub fixed_fuel: bool,
-    pub max_fuel: u8,
-}
 
 pub struct SmtCtx<'ctx> {
     ctx: &'ctx Context,
@@ -42,33 +33,24 @@ pub struct SmtCtx<'ctx> {
     lists: RefCell<HashMap<TyKind, Rc<ListFactory<'ctx>>>>,
     lits: RefCell<Vec<(Sort<'ctx>, LitDecl<'ctx>)>>,
     uninterpreteds: Uninterpreteds<'ctx>,
-    limited_function_encoding: LimitedFunctionEncoding<'ctx>,
-    options: SmtCtxOptions,
+    function_encoding: FunctionEncoding<'ctx>,
+    lit_wrap: bool,
 }
 
 impl<'ctx> SmtCtx<'ctx> {
-    pub fn new(ctx: &'ctx Context, tcx: &'ctx TyCtx, options: SmtCtxOptions) -> Self {
+    pub fn new(
+        ctx: &'ctx Context,
+        tcx: &'ctx TyCtx,
+        function_encoding: FunctionEncoding<'ctx>,
+    ) -> Self {
         let domains: Vec<_> = tcx.domains_owned();
         // disable lit-wrapping if there are no limited functions that can profit from it
-        let lit_wrap = options.lit_wrap
-            && options.use_limited_functions
+        let lit_wrap = function_encoding.needs_lit_wrapping()
             && domains.iter().any(|d| {
                 d.borrow()
                     .function_decls()
                     .any(|func| is_eligible_for_limited_function(&func.borrow()))
             });
-        let options = SmtCtxOptions {
-            lit_wrap,
-            ..options
-        };
-
-        let fuel_encoding = if !options.use_limited_functions {
-            LimitedFunctionEncoding::none()
-        } else if options.fixed_fuel {
-            LimitedFunctionEncoding::fixed(options.max_fuel, options.lit_wrap)
-        } else {
-            LimitedFunctionEncoding::variable(options.max_fuel, options.lit_wrap)
-        };
 
         let mut res = SmtCtx {
             ctx,
@@ -78,8 +60,8 @@ impl<'ctx> SmtCtx<'ctx> {
             lists: RefCell::new(HashMap::new()),
             lits: RefCell::new(Vec::new()),
             uninterpreteds: Uninterpreteds::new(ctx),
-            limited_function_encoding: fuel_encoding,
-            options,
+            function_encoding,
+            lit_wrap,
         };
         res.declare_domains(domains.as_slice());
         res
@@ -98,7 +80,7 @@ impl<'ctx> SmtCtx<'ctx> {
                 if let DomainSpec::Function(func_ref) = &spec {
                     let func = func_ref.borrow();
                     for (name, domain, range) in
-                        self.limited_function_encoding.declare_function(self, &func)
+                        self.function_encoding.declare_function(self, &func)
                     {
                         let domain = domain.iter().collect_vec();
                         self.uninterpreteds.add_function(name, &domain, &range)
@@ -132,7 +114,7 @@ impl<'ctx> SmtCtx<'ctx> {
 
                         // TODO: create a new name for the axioms
                         axioms.extend(
-                            self.limited_function_encoding
+                            self.function_encoding
                                 .axioms(&mut translate, &func)
                                 .into_iter()
                                 .map(with_name(func.name)),
@@ -212,7 +194,7 @@ impl<'ctx> SmtCtx<'ctx> {
     }
 
     pub fn is_limited_function(&self, ident: Ident) -> bool {
-        if !self.options.use_limited_functions {
+        if !self.function_encoding.is_limited_encoding() {
             return false;
         }
         self.tcx
@@ -225,11 +207,11 @@ impl<'ctx> SmtCtx<'ctx> {
     }
 
     pub fn is_limited_function_decl(&self, func: &FuncDecl) -> bool {
-        self.options.use_limited_functions && is_eligible_for_limited_function(func)
+        self.function_encoding.is_limited_encoding() && is_eligible_for_limited_function(func)
     }
 
-    pub fn limited_function_encoding(&self) -> &LimitedFunctionEncoding<'ctx> {
-        &self.limited_function_encoding
+    pub fn function_encoding(&self) -> &FunctionEncoding<'ctx> {
+        &self.function_encoding
     }
 
     pub fn computable_functions(&self) -> Vec<Ident> {
@@ -237,7 +219,7 @@ impl<'ctx> SmtCtx<'ctx> {
             .get_function_decls()
             .values()
             .filter(|func_decl| {
-                let decl =func_decl.borrow(); 
+                let decl = func_decl.borrow();
                 decl.computable || decl.body.borrow().is_some()
             })
             .map(|func_decl| func_decl.borrow().name)
@@ -247,7 +229,7 @@ impl<'ctx> SmtCtx<'ctx> {
 
 impl<'ctx> LitFactory<'ctx> for SmtCtx<'ctx> {
     fn lit_wrap_dynamic(&self, arg: &Dynamic<'ctx>) -> Dynamic<'ctx> {
-        if !self.options.lit_wrap {
+        if !self.lit_wrap {
             return arg.clone();
         }
 

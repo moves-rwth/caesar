@@ -14,7 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::smt::SmtCtxOptions;
+use crate::smt::FunctionEncoding;
 use crate::{
     ast::TyKind,
     driver::mk_z3_ctx,
@@ -278,41 +278,20 @@ pub enum QuantifierInstantiation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
-pub enum LimitedFunctionEncoding {
+pub enum FunctionEncodingValue {
     /// Apply no encoding.
     #[default]
-    None,
-    /// Add version of the function for each fuel value (f_0, f_1, ...).
+    Default,
+    /// Add a version of the function for each fuel value (f_0, f_1, ...).
     FixedFuel,
     /// Add a fuel parameter to the function.
     VariableFuel,
-    /// Like [LimitedFunctionEncoding::FixedFuel] with additionally allowing unbounded unfolding
+    /// Like [FunctionEncodingValue::FixedFuel] with additionally allowing unbounded unfolding
     /// if the parameter values are known.
     FixedFuelComputation,
-    /// Like [LimitedFunctionEncoding::VariableFuel] with additionally allowing unbounded unfolding
+    /// Like [FunctionEncodingValue::VariableFuel] with additionally allowing unbounded unfolding
     /// if the parameter values are known.
     VariableFuelComputation,
-}
-
-impl LimitedFunctionEncoding {
-    pub fn is_fuel_encoding(self) -> bool {
-        !matches!(self, LimitedFunctionEncoding::None)
-    }
-
-    pub fn is_fixed_encoding(self) -> bool {
-        matches!(
-            self,
-            LimitedFunctionEncoding::FixedFuel | LimitedFunctionEncoding::FixedFuelComputation
-        )
-    }
-
-    pub fn is_computation_encoding(self) -> bool {
-        matches!(
-            self,
-            LimitedFunctionEncoding::FixedFuelComputation
-                | LimitedFunctionEncoding::VariableFuelComputation
-        )
-    }
 }
 
 #[derive(Debug, Default, Args)]
@@ -346,11 +325,10 @@ pub struct OptimizationOptions {
     #[arg(long)]
     pub no_simplify: bool,
 
-    /// Limit the number of times a function declaration can be recursively instantiated/unfolded by
-    /// choosing one of the fuel encodings.
-    /// Standard usage requires `--quantifier-instantiation e-matching`.
-    #[arg(long, default_value = "none")]
-    pub limited_functions: LimitedFunctionEncoding,
+    /// Determine how user-defined functions are encoded.
+    /// The fuel encodings require `--quantifier-instantiation e-matching`.
+    #[arg(long, default_value = "default")]
+    pub function_encoding: FunctionEncodingValue,
 
     /// The number of times a function declaration can be recursively instantiated/unfolded when
     /// using one of the fuel encodings.
@@ -358,7 +336,7 @@ pub struct OptimizationOptions {
     pub max_fuel: u8,
 
     /// Select which heuristics for quantifier instantiation should be used by the SMT solver.
-    #[arg(long, alias="qi", default_value = "both")]
+    #[arg(long, alias = "qi", default_value = "both")]
     pub quantifier_instantiation: QuantifierInstantiation,
 }
 
@@ -985,19 +963,22 @@ fn verify_files_main(
 
         // 11. Translate to Z3
         let ctx = mk_z3_ctx(options);
-        let smt_ctx = SmtCtx::new(
-            &ctx,
-            &tcx,
-            SmtCtxOptions {
-                use_limited_functions: options.opt_options.limited_functions.is_fuel_encoding(),
-                lit_wrap: options
-                    .opt_options
-                    .limited_functions
-                    .is_computation_encoding(),
-                fixed_fuel: options.opt_options.limited_functions.is_fixed_encoding(),
-                max_fuel: options.opt_options.max_fuel,
-            },
-        );
+        let function_encoding = match options.opt_options.function_encoding {
+            FunctionEncodingValue::Default => FunctionEncoding::default(),
+            FunctionEncodingValue::FixedFuel => {
+                FunctionEncoding::fixed(options.opt_options.max_fuel, false)
+            }
+            FunctionEncodingValue::VariableFuel => {
+                FunctionEncoding::variable(options.opt_options.max_fuel, false)
+            }
+            FunctionEncodingValue::FixedFuelComputation => {
+                FunctionEncoding::fixed(options.opt_options.max_fuel, true)
+            }
+            FunctionEncodingValue::VariableFuelComputation => {
+                FunctionEncoding::variable(options.opt_options.max_fuel, true)
+            }
+        };
+        let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoding);
         let mut translate = TranslateExprs::new(&smt_ctx);
         let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
 

@@ -1,4 +1,4 @@
-// RUN: @caesar @file --limited-functions variable-fuel-computation --quantifier-instantiation e-matching
+// RUN: @caesar @file --function-encoding variable-fuel --quantifier-instantiation e-matching
 
 domain Arith {
     func exp(b: UReal, i: UInt): UReal = ite(i == 0, 1, b * exp(b, i - 1))

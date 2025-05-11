@@ -12,7 +12,6 @@ use super::{
     selection::SliceSelection,
     transform::{SliceStmt, SliceStmts, StmtSliceVisitor},
 };
-use crate::smt::SmtCtxOptions;
 use crate::{
     ast::{
         visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Direction, Expr, ExprBuilder,
@@ -20,7 +19,7 @@ use crate::{
         VarDecl, VarKind,
     },
     resource_limits::LimitsRef,
-    smt::{translate_exprs::TranslateExprs, SmtCtx},
+    smt::{translate_exprs::TranslateExprs, FunctionEncoding, SmtCtx},
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
 };
@@ -125,7 +124,7 @@ fn prove_equiv(
         stmt2_vc.clone(),
     );
     let ctx = z3::Context::new(&z3::Config::new());
-    let smt_ctx = SmtCtx::new(&ctx, tcx, SmtCtxOptions::default());
+    let smt_ctx = SmtCtx::new(&ctx, tcx, FunctionEncoding::default());
     let mut translate = TranslateExprs::new(&smt_ctx);
     let eq_expr_z3 = translate.t_bool(&eq_expr);
     let mut prover = Prover::new(&ctx, IncrementalMode::Native);

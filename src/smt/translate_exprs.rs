@@ -21,7 +21,7 @@ use super::{
     SmtCtx,
 };
 use crate::ast::{ExprData, PointerHashShared};
-use crate::smt::limited::{LimitedFunctionEncoder, LiteralExprs};
+use crate::smt::function_encodings::{FunctionEncoder, LiteralExprs};
 use z3rro::scope::WEIGHT_DEFAULT;
 use z3rro::{
     eureal::EUReal,
@@ -629,7 +629,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             Some(DeclKind::FuncDecl(func)) => {
                 let args = args.iter().map(|arg| self.t_symbolic(arg)).collect_vec();
                 self.ctx
-                    .limited_function_encoding()
+                    .function_encoding()
                     .call_function(self.ctx, &func.borrow(), args)
             }
             Some(DeclKind::FuncIntrin(intrin)) => intrin.translate_call(self, args),
