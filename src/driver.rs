@@ -70,6 +70,7 @@ use z3rro::{
     util::{PrefixWriter, ReasonUnknown},
 };
 
+use crate::smt::{FunctionEncoding, LiteralExprCollector};
 use tracing::{info_span, instrument, trace};
 
 /// Human-readable name for a source unit. Used for debugging and error messages.
@@ -558,7 +559,7 @@ impl QuantVcUnit {
         let _entered = span.enter();
         if !options.opt_options.strict {
             let ctx = Context::new(&Config::default());
-            let smt_ctx = SmtCtx::new(&ctx, tcx);
+            let smt_ctx = SmtCtx::new(&ctx, tcx, FunctionEncoding::default());
             let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
             unfolder.visit_expr(&mut self.expr)
         } else {
@@ -657,14 +658,23 @@ impl BoolVcUnit {
 
     /// Translate to SMT.
     pub fn into_smt_vc<'smt, 'ctx>(
-        self,
+        mut self,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> SmtVcUnit<'ctx> {
         let span = info_span!("translation to Z3");
         let _entered = span.enter();
+
+        translate.set_literal_exprs(
+            LiteralExprCollector::new()
+                .with_computable_functions(translate.ctx.computable_functions().as_slice())
+                .collect(&mut self.vc),
+        );
+        let bool_vc = translate.t_bool(&self.vc);
+        translate.clear_literal_exprs();
+
         SmtVcUnit {
             quant_vc: self.quant_vc,
-            vc: translate.t_bool(&self.vc),
+            vc: bool_vc,
         }
     }
 }
@@ -830,6 +840,8 @@ fn mk_valid_query_prover<'smt, 'ctx>(
         prover.set_timeout(remaining);
     }
 
+    // add the definition of all used Lit marker functions
+    smt_translate.ctx.add_lit_axioms_to_prover(&mut prover);
     // add assumptions (from axioms and locals) to the prover
     smt_translate
         .ctx

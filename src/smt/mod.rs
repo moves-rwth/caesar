@@ -1,19 +1,23 @@
 //! Encodings of declarations, definitions, and expressions into SMT.
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
-
-use z3::{ast::Bool, Context, Sort};
-use z3rro::{eureal::EURealSuperFactory, EUReal, Factory, ListFactory, SmtInvariant};
-
+use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
+use crate::ast::{DeclKind, FuncDecl};
+use crate::smt::function_encodings::is_eligible_for_limited_function;
 use crate::{
-    ast::{
-        BinOpKind, DeclRef, DomainDecl, DomainSpec, ExprBuilder, Ident, QuantOpKind, SpanVariant,
-        TyKind,
-    },
+    ast::{DeclRef, DomainDecl, DomainSpec, Ident, TyKind},
     tyctx::TyCtx,
 };
+use itertools::Itertools;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use z3::ast::{Ast, Dynamic};
+use z3::{ast::Bool, Context, Sort};
+use z3rro::prover::Prover;
+use z3rro::{
+    eureal::EURealSuperFactory, EUReal, Factory, FuelFactory, ListFactory, LitDecl, LitFactory,
+};
 
-use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
+mod function_encodings;
+pub use function_encodings::{FunctionEncoder, FunctionEncoding, LiteralExprCollector};
 
 pub mod pretty_model;
 pub mod symbolic;
@@ -25,20 +29,40 @@ pub struct SmtCtx<'ctx> {
     ctx: &'ctx Context,
     tcx: &'ctx TyCtx,
     eureal: EURealSuperFactory<'ctx>,
+    fuel: Rc<FuelFactory<'ctx>>,
     lists: RefCell<HashMap<TyKind, Rc<ListFactory<'ctx>>>>,
+    lits: RefCell<Vec<(Sort<'ctx>, LitDecl<'ctx>)>>,
     uninterpreteds: Uninterpreteds<'ctx>,
+    function_encoding: FunctionEncoding<'ctx>,
+    lit_wrap: bool,
 }
 
 impl<'ctx> SmtCtx<'ctx> {
-    pub fn new(ctx: &'ctx Context, tcx: &'ctx TyCtx) -> Self {
+    pub fn new(
+        ctx: &'ctx Context,
+        tcx: &'ctx TyCtx,
+        function_encoding: FunctionEncoding<'ctx>,
+    ) -> Self {
+        let domains: Vec<_> = tcx.domains_owned();
+        // disable lit-wrapping if there are no limited functions that can profit from it
+        let lit_wrap = function_encoding.needs_lit_wrapping()
+            && domains.iter().any(|d| {
+                d.borrow()
+                    .function_decls()
+                    .any(|func| is_eligible_for_limited_function(&func.borrow()))
+            });
+
         let mut res = SmtCtx {
             ctx,
             tcx,
             eureal: EURealSuperFactory::new(ctx),
+            fuel: FuelFactory::new(ctx),
             lists: RefCell::new(HashMap::new()),
+            lits: RefCell::new(Vec::new()),
             uninterpreteds: Uninterpreteds::new(ctx),
+            function_encoding,
+            lit_wrap,
         };
-        let domains: Vec<_> = tcx.domains_owned();
         res.declare_domains(domains.as_slice());
         res
     }
@@ -55,15 +79,12 @@ impl<'ctx> SmtCtx<'ctx> {
             for spec in &decl.body {
                 if let DomainSpec::Function(func_ref) = &spec {
                     let func = func_ref.borrow();
-                    let domain: Vec<Sort<'_>> = func
-                        .inputs
-                        .node
-                        .iter()
-                        .map(|param| ty_to_sort(self, &param.ty))
-                        .collect();
-                    let domain: Vec<&Sort<'_>> = domain.iter().collect();
-                    let range = ty_to_sort(self, &func.output);
-                    self.uninterpreteds.add_function(func.name, &domain, &range);
+                    for (name, domain, range) in
+                        self.function_encoding.declare_function(self, &func)
+                    {
+                        let domain = domain.iter().collect_vec();
+                        self.uninterpreteds.add_function(name, &domain, &range)
+                    }
                 }
             }
         }
@@ -76,57 +97,28 @@ impl<'ctx> SmtCtx<'ctx> {
         // is a problem when dealing with more complex types such as the
         // pair::realplus representation which needs to quantify over two
         // variables (a Boolean and a Real).
-        let mut axioms: Vec<(Ident, Bool<'ctx>)> = Vec::new();
         let mut translate = TranslateExprs::new(self);
+        let mut axioms: Vec<(Ident, Bool<'ctx>)> = Vec::new();
         for decl_ref in domains {
             let decl = decl_ref.borrow();
             for spec in &decl.body {
                 match &spec {
                     DomainSpec::Function(func_ref) => {
                         let func = func_ref.borrow();
-                        let body = func.body.borrow();
 
-                        // we'll need the function applied to its arguments
-                        let span = func.span.variant(SpanVariant::VC);
-                        let builder = ExprBuilder::new(span);
-                        let app = builder.call(
-                            func.name,
-                            func.inputs
-                                .node
-                                .iter()
-                                .map(|param| builder.var(param.name, self.tcx)),
-                            self.tcx,
+                        fn with_name<'ctx>(
+                            name: Ident,
+                        ) -> impl Fn(Bool<'ctx>) -> (Ident, Bool<'ctx>) {
+                            move |axiom: Bool<'ctx>| (name, axiom)
+                        }
+
+                        // TODO: create a new name for the axioms
+                        axioms.extend(
+                            self.function_encoding
+                                .axioms(&mut translate, &func)
+                                .into_iter()
+                                .map(with_name(func.name)),
                         );
-
-                        // if there's an smt invariant for the return value type, add it
-                        {
-                            translate.push();
-                            let app_z3 = translate.t_symbolic(&app);
-                            if let Some(invariant) = app_z3.smt_invariant() {
-                                axioms.push((
-                                    func.name, // TODO: create a new name for the axiom
-                                    translate.local_scope().forall(&[], &invariant),
-                                ));
-                            }
-                            translate.pop();
-                        }
-
-                        // create the axiom for the definition if there is a body
-                        if let Some(body) = &*body {
-                            axioms.push((
-                                func.name, // TODO: create a new name for the axiom
-                                translate.t_bool(&builder.quant(
-                                    QuantOpKind::Forall,
-                                    func.inputs.node.iter().map(|param| param.name),
-                                    builder.binary(
-                                        BinOpKind::Eq,
-                                        Some(TyKind::Bool),
-                                        app,
-                                        body.clone(),
-                                    ),
-                                )),
-                            ));
-                        }
                     }
                     DomainSpec::Axiom(axiom_ref) => {
                         let axiom = axiom_ref.borrow();
@@ -178,14 +170,82 @@ impl<'ctx> SmtCtx<'ctx> {
         lists.get(element_ty).unwrap().clone()
     }
 
+    fn fuel_factory(&self) -> Rc<FuelFactory<'ctx>> {
+        self.fuel.clone()
+    }
+
     /// Get a reference to the smt ctx's uninterpreteds.
     #[must_use]
     pub fn uninterpreteds(&self) -> &Uninterpreteds<'ctx> {
         &self.uninterpreteds
     }
+
+    #[must_use]
+    pub fn uninterpreteds_mut(&mut self) -> &mut Uninterpreteds<'ctx> {
+        &mut self.uninterpreteds
+    }
+
+    pub fn add_lit_axioms_to_prover(&self, prover: &mut Prover<'ctx>) {
+        for (_, lit) in self.lits.borrow().iter() {
+            for axiom in lit.defining_axiom() {
+                prover.add_assumption(&axiom);
+            }
+        }
+    }
+
+    pub fn is_limited_function(&self, ident: Ident) -> bool {
+        if !self.function_encoding.is_limited_encoding() {
+            return false;
+        }
+        self.tcx
+            .get(ident)
+            .filter(|decl| match decl.as_ref() {
+                DeclKind::FuncDecl(func) => self.is_limited_function_decl(&func.borrow()),
+                _ => false,
+            })
+            .is_some()
+    }
+
+    pub fn is_limited_function_decl(&self, func: &FuncDecl) -> bool {
+        self.function_encoding.is_limited_encoding() && is_eligible_for_limited_function(func)
+    }
+
+    pub fn function_encoding(&self) -> &FunctionEncoding<'ctx> {
+        &self.function_encoding
+    }
+
+    pub fn computable_functions(&self) -> Vec<Ident> {
+        self.tcx
+            .get_function_decls()
+            .values()
+            .filter(|func_decl| {
+                let decl = func_decl.borrow();
+                decl.computable || decl.body.borrow().is_some()
+            })
+            .map(|func_decl| func_decl.borrow().name)
+            .collect()
+    }
 }
 
-fn ty_to_sort<'ctx>(ctx: &SmtCtx<'ctx>, ty: &TyKind) -> Sort<'ctx> {
+impl<'ctx> LitFactory<'ctx> for SmtCtx<'ctx> {
+    fn lit_wrap_dynamic(&self, arg: &Dynamic<'ctx>) -> Dynamic<'ctx> {
+        if !self.lit_wrap {
+            return arg.clone();
+        }
+
+        let arg_sort = arg.get_sort();
+        let mut lits = self.lits.borrow_mut();
+        let lit_decl = if let Some((_, decl)) = lits.iter().find(|(sort, _)| *sort == arg_sort) {
+            decl
+        } else {
+            lits.push((arg_sort.clone(), LitDecl::new(self.ctx, arg_sort)));
+            &lits.last().unwrap().1
+        };
+        lit_decl.apply_call(arg)
+    }
+}
+
+pub fn ty_to_sort<'ctx>(ctx: &SmtCtx<'ctx>, ty: &TyKind) -> Sort<'ctx> {
     match ty {
         TyKind::Bool => Sort::bool(ctx.ctx()),
         TyKind::Int | TyKind::UInt => Sort::int(ctx.ctx()),

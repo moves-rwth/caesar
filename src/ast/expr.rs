@@ -66,6 +66,21 @@ pub enum ExprKind {
     Lit(Lit),
 }
 
+impl Expr {
+    pub fn children_mut(&mut self) -> Vec<&mut Expr> {
+        match &mut self.kind {
+            ExprKind::Var(_) | ExprKind::Lit(_) => vec![],
+            ExprKind::Call(_, args) => args.iter_mut().collect(),
+            ExprKind::Ite(cond, branch1, branch2) => vec![cond, branch1, branch2],
+            ExprKind::Binary(_, lhs, rhs) => vec![lhs, rhs],
+            ExprKind::Unary(_, operand) => vec![operand],
+            ExprKind::Cast(operand) => vec![operand],
+            ExprKind::Quant(_, _, _, expr) => vec![expr],
+            ExprKind::Subst(_, subst, expr) => vec![subst, expr],
+        }
+    }
+}
+
 impl SimplePretty for Expr {
     fn pretty(&self) -> Doc {
         let res = match &self.kind {

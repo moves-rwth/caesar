@@ -444,6 +444,15 @@ pub struct DomainDecl {
     pub span: Span,
 }
 
+impl DomainDecl {
+    pub fn function_decls(&self) -> impl Iterator<Item = &DeclRef<FuncDecl>> {
+        self.body.iter().filter_map(|spec| match spec {
+            DomainSpec::Function(func_ref) => Some(func_ref),
+            _ => None,
+        })
+    }
+}
+
 impl SimplePretty for DomainDecl {
     fn pretty(&self) -> Doc {
         Doc::text("domain")
@@ -484,6 +493,7 @@ pub struct FuncDecl {
     /// The body is in a [`RefCell`] so that we can have an exclusive reference
     /// to it while still retrieving a shared reference to the declaration
     pub body: RefCell<Option<Expr>>,
+    pub computable: bool,
     pub span: Span,
 }
 

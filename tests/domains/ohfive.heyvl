@@ -4,17 +4,14 @@
 // We're just keeping this file as it was used in our OOPSLA '23 benchmarks.
 
 domain Exponentials {
-    func exp(base: UReal, exponent: UInt): EUReal
-
-    axiom exp_base forall base: UReal. exp(base, 0) == 1
-    axiom exp_step forall base: UReal, exponent: UInt. exp(base, exponent + 1) == base * exp(base, exponent)
+    func exp(base: UReal, exponent: UInt): UReal = ite(exponent == 0, 1, base * exp(base, exponent - 1))
 }
 
 domain List {
     func len(l: List): UInt
     func pop(l: List): List
 
-    axiom list_len forall l: List. len(pop(l)) == len(l) - 1
+    axiom list_len forall l: List @trigger(len(pop(l))). len(pop(l)) == len(l) - 1
 }
 
 coproc lossy_list(init_l: List) -> (l: List)

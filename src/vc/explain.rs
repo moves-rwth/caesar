@@ -8,6 +8,11 @@ use std::mem;
 use itertools::Itertools;
 use z3::{Config, Context};
 
+use super::{
+    subst::apply_subst,
+    vcgen::{unsupported_stmt_diagnostic, Vcgen},
+};
+use crate::smt::FunctionEncoding;
 use crate::{
     ast::{
         util::remove_casts, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Direction,
@@ -24,11 +29,6 @@ use crate::{
     smt::SmtCtx,
     tyctx::TyCtx,
     VerifyError,
-};
-
-use super::{
-    subst::apply_subst,
-    vcgen::{unsupported_stmt_diagnostic, Vcgen},
 };
 
 /// Maintains a list of [`Expr`]s for successive simplification steps.
@@ -162,7 +162,7 @@ pub(super) fn explain_subst(
 
         // finally, run the unfolder for more detailed simplifications
         let ctx = Context::new(&Config::default());
-        let smt_ctx = SmtCtx::new(&ctx, vcgen.tcx);
+        let smt_ctx = SmtCtx::new(&ctx, vcgen.tcx, FunctionEncoding::default());
         let mut unfolder = Unfolder::new(vcgen.limits_ref.clone(), &smt_ctx);
         let _ = unfolder.visit_expr(expr);
         // the last value will be added to the explanations automatically in vcgen_stmt

@@ -14,6 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::smt::FunctionEncoding;
 use crate::{
     ast::TyKind,
     driver::mk_z3_ctx,
@@ -37,7 +38,6 @@ use thiserror::Error;
 use timing::DispatchBuilder;
 use tokio::task::JoinError;
 use tracing::{error, info, warn};
-
 use vc::explain::VcExplanation;
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
@@ -266,6 +266,34 @@ impl ModelCheckingOptions {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+pub enum QuantifierInstantiation {
+    /// Use both E-matching and MBQI for quantifier instantiation.
+    #[default]
+    Both,
+    /// Only use E-matching for quantifier instantiation.
+    EMatching,
+    /// Only use MBQI for quantifier instantiation.
+    MBQI,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+pub enum FunctionEncodingValue {
+    /// Apply no encoding.
+    #[default]
+    Default,
+    /// Add a version of the function for each fuel value (f_0, f_1, ...).
+    FixedFuel,
+    /// Add a fuel parameter to the function.
+    VariableFuel,
+    /// Like [FunctionEncodingValue::FixedFuel] with additionally allowing unbounded unfolding
+    /// if the parameter values are known.
+    FixedFuelComputation,
+    /// Like [FunctionEncodingValue::VariableFuel] with additionally allowing unbounded unfolding
+    /// if the parameter values are known.
+    VariableFuelComputation,
+}
+
 #[derive(Debug, Default, Args)]
 #[command(next_help_heading = "Optimization Options")]
 pub struct OptimizationOptions {
@@ -296,6 +324,20 @@ pub struct OptimizationOptions {
     /// the current solver state.
     #[arg(long)]
     pub no_simplify: bool,
+
+    /// Determine how user-defined functions are encoded.
+    /// The fuel encodings require `--quantifier-instantiation e-matching`.
+    #[arg(long, default_value = "default")]
+    pub function_encoding: FunctionEncodingValue,
+
+    /// The number of times a function declaration can be recursively instantiated/unfolded when
+    /// using one of the fuel encodings.
+    #[arg(long, default_value = "2")]
+    pub max_fuel: u8,
+
+    /// Select which heuristics for quantifier instantiation should be used by the SMT solver.
+    #[arg(long, alias = "qi", default_value = "both")]
+    pub quantifier_instantiation: QuantifierInstantiation,
 }
 
 #[derive(Debug, Default, Args)]
@@ -370,6 +412,10 @@ pub struct DebugOptions {
     /// Enable Z3 tracing for the final SAT check.
     #[arg(long)]
     pub z3_trace: bool,
+
+    /// An explicit seed used by Z3 for the final SAT check.
+    #[arg(long)]
+    pub z3_seed: Option<u32>,
 
     /// Print Z3's statistics after the final SAT check.
     #[arg(long)]
@@ -849,6 +895,9 @@ fn verify_files_main(
         warn!("Z3 tracing is enabled with multiple verification units. Intermediate tracing results will be overwritten.");
     }
 
+    // set requested global z3 options
+    set_global_z3_options(options, &limits_ref);
+
     let mut num_proven: usize = 0;
     let mut num_failures: usize = 0;
 
@@ -918,7 +967,22 @@ fn verify_files_main(
 
         // 11. Translate to Z3
         let ctx = mk_z3_ctx(options);
-        let smt_ctx = SmtCtx::new(&ctx, &tcx);
+        let function_encoding = match options.opt_options.function_encoding {
+            FunctionEncodingValue::Default => FunctionEncoding::default(),
+            FunctionEncodingValue::FixedFuel => {
+                FunctionEncoding::fixed(options.opt_options.max_fuel, false)
+            }
+            FunctionEncodingValue::VariableFuel => {
+                FunctionEncoding::variable(options.opt_options.max_fuel, false)
+            }
+            FunctionEncodingValue::FixedFuelComputation => {
+                FunctionEncoding::fixed(options.opt_options.max_fuel, true)
+            }
+            FunctionEncodingValue::VariableFuelComputation => {
+                FunctionEncoding::variable(options.opt_options.max_fuel, true)
+            }
+        };
+        let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoding);
         let mut translate = TranslateExprs::new(&smt_ctx);
         let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
 
@@ -1082,6 +1146,31 @@ fn print_timings() {
         .map(|(key, value)| (*key, format!("{}", value.as_nanos())))
         .collect();
     eprintln!("Timings: {:?}", timings);
+}
+
+fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
+    // the parameters are set as globals since params set via (Solver::set_params) sometimes get ignored.
+
+    // default
+    z3::set_global_param("smt.qi.eager_threshold", "100");
+    z3::set_global_param("smt.qi.lazy_threshold", "1000");
+    match command.opt_options.quantifier_instantiation {
+        QuantifierInstantiation::EMatching => {
+            // z3::set_global_param("auto-config", "false");
+            // z3::set_global_param("smt.mbqi", "false");
+            z3::set_global_param("smt.mbqi.id", "mbqi");
+        }
+        QuantifierInstantiation::MBQI => {
+            z3::set_global_param("smt.ematching", "false");
+        }
+        QuantifierInstantiation::Both => {}
+    }
+    if let Some(seed) = command.debug_options.z3_seed {
+        z3::set_global_param("smt.random_seed", &seed.to_string());
+    }
+    if let Some(timeout) = limits_ref.time_left() {
+        z3::set_global_param("timeout", &timeout.as_millis().to_string())
+    }
 }
 
 fn run_generate_completions(options: ShellCompletionsCommand) -> ExitCode {
