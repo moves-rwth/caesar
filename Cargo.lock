@@ -162,7 +162,7 @@ dependencies = [
  "bitflags 2.6.0",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "regex",
@@ -287,9 +287,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.5"
+version = "1.1.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c31a0499c1dc64f458ad13872de75c0eb7e3fdb0e67964610c914b034fc5956e"
+checksum = "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
 dependencies = [
  "jobserver",
  "libc",
@@ -1052,15 +1052,6 @@ name = "is_terminal_polyfill"
 version = "1.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7943c866cc5cd64cbc25b2e01621d07fa8eb2a1a23160ee81ce38704e97b8ecf"
-
-[[package]]
-name = "itertools"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
-dependencies = [
- "either",
-]
 
 [[package]]
 name = "itertools"
@@ -2560,7 +2551,7 @@ dependencies = [
 [[package]]
 name = "z3"
 version = "0.12.1"
-source = "git+https://github.com/prove-rs/z3.rs.git?rev=60001b36fc8a7ab1d4f22595e80a3b6f7adc1bcf#60001b36fc8a7ab1d4f22595e80a3b6f7adc1bcf"
+source = "git+https://github.com/ole-thoeb/z3.rs.git?rev=f785da2c606e622162b939b948df2a3dc8c61e6e#f785da2c606e622162b939b948df2a3dc8c61e6e"
 dependencies = [
  "log",
  "num",
@@ -2570,9 +2561,10 @@ dependencies = [
 [[package]]
 name = "z3-sys"
 version = "0.8.1"
-source = "git+https://github.com/prove-rs/z3.rs.git?rev=60001b36fc8a7ab1d4f22595e80a3b6f7adc1bcf#60001b36fc8a7ab1d4f22595e80a3b6f7adc1bcf"
+source = "git+https://github.com/ole-thoeb/z3.rs.git?rev=f785da2c606e622162b939b948df2a3dc8c61e6e#f785da2c606e622162b939b948df2a3dc8c61e6e"
 dependencies = [
  "bindgen",
+ "cc",
  "cmake",
  "pkg-config",
 ]
