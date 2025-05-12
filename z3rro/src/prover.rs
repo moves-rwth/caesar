@@ -1,13 +1,14 @@
 //! Not a SAT solver, but a prover. There's a difference.
+use itertools::Itertools;
 use thiserror::Error;
 
 use std::{
     collections::VecDeque,
     env,
     fmt::Display,
-    io::{self, BufRead, BufReader, Read, Write},
+    io::{self, Write},
     path::Path,
-    process::{Command, Stdio},
+    process::Command,
     time::Duration,
 };
 
@@ -19,15 +20,11 @@ use z3::{
 };
 
 use crate::{
-    model::{InstrumentedModel, ModelSource},
+    model::InstrumentedModel,
     smtlib::Smtlib,
     util::{set_solver_timeout, ReasonUnknown},
 };
 
-use smtlib_lowlevel::{
-    ast::{CheckSatResponse, GetModelResponse},
-    Storage,
-};
 
 #[derive(Debug, Error)]
 pub enum ProverCommandError {
@@ -54,19 +51,26 @@ pub enum ProveResult<'ctx> {
 }
 
 /// Execute swine on the file located at file_path
-fn execute_swine(file_path: &Path) -> Result<SatResult, ProverCommandError> {
+fn execute_swine(file_path: &Path) -> Result<(SatResult, String), ProverCommandError> {
     let output = Command::new("swine").arg(file_path).output();
 
     match output {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
-
-            if stdout.contains("unsat") {
-                Ok(SatResult::Unsat)
-            } else if stdout.contains("sat") {
-                Ok(SatResult::Sat)
+            let mut lines_buffer: VecDeque<&str>= stdout.lines().collect();
+            let first_line = lines_buffer.pop_front().ok_or(ProverCommandError::ParseError)?;
+            if first_line.contains("unsat") {
+                Ok((SatResult::Unsat, "".to_string()))
+            } else if first_line.contains("sat") {
+                let _last_line = lines_buffer.pop_back().ok_or(ProverCommandError::ParseError)?;
+                if _last_line.contains("SHA") {
+                    let cex = lines_buffer.iter().join("");
+                    Ok((SatResult::Sat, cex))
+                } else {
+                    Err(ProverCommandError::ParseError)
+                }
             } else {
-                Ok(SatResult::Unknown)
+                Ok((SatResult::Unknown, "".to_string()))
             }
         }
         Err(e) => Err(ProverCommandError::ProcessError(e)),
@@ -193,58 +197,21 @@ impl<'ctx> Prover<'ctx> {
                     .unwrap();
                 let file_path = smt_file.path();
 
-                let child = Command::new("swine")
-                    .arg(file_path)
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn();
-                match child {
-                    Ok(mut child) => {
-                        if let Some(stdout) = child.stdout.take() {
-                            let storage = Storage::new();
-                            let mut buffer = BufReader::new(stdout);
-                            let mut line = String::new();
-                            buffer.read_line(&mut line)?;
-
-                            let sat_res = match CheckSatResponse::parse(&storage, &line) {
-                                Ok(res) => res,
-                                Err(e) => {
-                                    eprintln!("ParseError: {}", e);
-                                    panic!();
-                                }
-                            };
-
-                            let mut cex = String::new();
-                            buffer.read_to_string(&mut cex)?;
-
-                            if sat_res == CheckSatResponse::Sat {
-                                match GetModelResponse::parse(&storage, &cex) {
-                                    Ok(model_res) => {
-                                        let model = InstrumentedModel::new(
-                                            ModelSource::SwineModel(model_res),
-                                        );
-                                        println!("{:?}", model_res);
-                                    }
-                                    Err(e) => eprintln!("ParseError: {}", e),
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => eprintln!("Failed to spawn: {}", e),
-                }
-
                 let res = execute_swine(file_path);
                 match res {
-                    Ok(SatResult::Unsat) => Ok(ProveResult::Proof),
-                    Ok(SatResult::Unknown) => {
+                    Ok((SatResult::Unsat, _)) => Ok(ProveResult::Proof),
+                    Ok((SatResult::Unknown, _)) => {
                         // TODO: Determine the correct reason for Unknown
                         Ok(ProveResult::Unknown(ReasonUnknown::Other(
                             "unknown".to_string(),
                         )))
                     }
-                    Ok(SatResult::Sat) => {
-                        // TODO: Get the model from the output of SWINE
-                        panic!("no counterexample for swine")
+                    Ok((SatResult::Sat, cex)) => {
+                        self.solver.from_string(cex);
+                        
+                        let model = self.get_model().unwrap();
+                        let model = InstrumentedModel::new(model);
+                        Ok(ProveResult::Counterexample(model))
                     }
                     Err(err) => Err(err),
                 }
@@ -262,7 +229,7 @@ impl<'ctx> Prover<'ctx> {
                     }
                     SatResult::Sat => {
                         let model = self.get_model().unwrap();
-                        let model = InstrumentedModel::new(ModelSource::Z3Model(model));
+                        let model = InstrumentedModel::new(model);
                         Ok(ProveResult::Counterexample(model))
                     }
                 }
