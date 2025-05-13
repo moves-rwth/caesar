@@ -59,9 +59,9 @@ fn execute_swine(file_path: &Path) -> Result<(SatResult, String), ProverCommandE
             let stdout = String::from_utf8_lossy(&output.stdout);
             let mut lines_buffer: VecDeque<&str>= stdout.lines().collect();
             let first_line = lines_buffer.pop_front().ok_or(ProverCommandError::ParseError)?;
-            if first_line.contains("unsat") {
+            if first_line.trim().to_lowercase() == "unsat" {
                 Ok((SatResult::Unsat, "".to_string()))
-            } else if first_line.contains("sat") {
+            } else if first_line.trim().to_lowercase() == "sat" {
                 let _last_line = lines_buffer.pop_back().ok_or(ProverCommandError::ParseError)?;
                 if _last_line.contains("SHA") {
                     let cex = lines_buffer.iter().join("");
@@ -70,7 +70,8 @@ fn execute_swine(file_path: &Path) -> Result<(SatResult, String), ProverCommandE
                     Err(ProverCommandError::ParseError)
                 }
             } else {
-                Ok((SatResult::Unknown, "".to_string()))
+                lines_buffer.push_front(first_line);
+                Ok((SatResult::Unknown, lines_buffer.iter().join("\n")))
             }
         }
         Err(e) => Err(ProverCommandError::ProcessError(e)),
@@ -200,11 +201,8 @@ impl<'ctx> Prover<'ctx> {
                 let res = execute_swine(file_path);
                 match res {
                     Ok((SatResult::Unsat, _)) => Ok(ProveResult::Proof),
-                    Ok((SatResult::Unknown, _)) => {
-                        // TODO: Determine the correct reason for Unknown
-                        Ok(ProveResult::Unknown(ReasonUnknown::Other(
-                            "unknown".to_string(),
-                        )))
+                    Ok((SatResult::Unknown, reason)) => {
+                        Ok(ProveResult::Unknown(ReasonUnknown::Other(reason)))
                     }
                     Ok((SatResult::Sat, cex)) => {
                         self.solver.from_string(cex);
