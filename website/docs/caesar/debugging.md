@@ -53,6 +53,28 @@ Number of expressions: 71
 ```
 
 The tool also tries to compute the complexity class of the problem to help you determine whether a problem is "easy".
+Note that none of these metrics can be used to conclusively determine whether a problem can be verified or not.
+For example, the presence of quantifiers means that the problem can not be associated with a decidable fragment, but often times the SMT solver can still solve the problem.
+Similarly, the number of expressions or constants can sometimes be useful indicators to *compare* different problems, but on their own they are often not very informative.
+In general, it is seldom useful to micro-optimize these metrics.
+
+### Z3 Statistics
+
+With the `--print-z3-stats` command-line flag, Caesar will print Z3 statistics to standard error.
+
+## Debugging Quantifier Instantiations with SMTscope
+
+The [SMTscope tool](https://viperproject.github.io/smt-scope/) by the [Viper project](https://viper.ethz.ch/) can be used to debug quantifier instantiations in SMT queries.
+SMTscope is a graphical tool that allows you to visualize the quantifier instantiations that Z3 performs during the solving process.
+This can be useful to understand why a query is taking a long time to solve or why it is not solving at all.
+
+To use SMTscope with Caesar, you need to run Caesar with the `--z3-trace` flag.
+This will create a `z3.log` file in the current directory.
+Load this file into SMTscope to visualize the quantifier instantiations.
+
+SMTscope's *matching loop* detection is very useful.
+A matching loop occurs when Z3 repeatedly instantiates the same quantifier pattern.
+This can be a sign that some quantifiers need additional [triggers](../heyvl/expressions.md#triggers) to help Z3 find a solution.
 
 ## Further Reading
 

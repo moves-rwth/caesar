@@ -19,29 +19,35 @@ use crate::{
     tyctx::TyCtx,
 };
 
+/// A stack frame of substitutions.
+///
+/// This structure uses immutable data structures, so it is cheap to clone.
 #[derive(Default, Clone)]
-struct SubstLevel {
+struct SubstFrame {
     substs: im_rc::HashMap<Ident, Expr>,
     free_vars: im_rc::HashSet<Ident>,
 }
 
+/// A structure to apply variable substitutions in expressions.
 pub struct Subst<'a> {
     tcx: &'a TyCtx,
-    cur: SubstLevel,
-    stack: Vec<SubstLevel>,
-    limits_ref: LimitsRef,
+    cur: SubstFrame,
+    stack: Vec<SubstFrame>,
+    pub limits_ref: LimitsRef,
 }
 
 impl<'a> Subst<'a> {
+    /// Create a new empty instance.
     pub fn new(tcx: &'a TyCtx, limits_ref: &LimitsRef) -> Self {
         Subst {
             tcx,
-            cur: SubstLevel::default(),
+            cur: SubstFrame::default(),
             stack: Vec::new(),
             limits_ref: limits_ref.clone(),
         }
     }
 
+    /// Push the stack and add a substitution.
     pub fn push_subst(&mut self, ident: Ident, mut expr: Expr) {
         self.stack.push(self.cur.clone());
         let mut free_var_collector = FreeVariableCollector::new();
@@ -50,33 +56,48 @@ impl<'a> Subst<'a> {
         self.cur.substs.insert(ident, expr);
     }
 
+    /// Push the stack and handle quantified variables.
+    ///
+    /// This function removes all given variables from the substitutions. If a
+    /// variable is contained in the free variables of the current substitution,
+    /// then we create a "shadow" variable that is used instead of the original
+    /// variable to avoid name clashes.
     pub fn push_quant(&mut self, span: Span, vars: &mut [QuantVar], tcx: &TyCtx) {
         self.stack.push(self.cur.clone());
         for var in vars {
             let ident = var.name();
             self.cur.substs.remove(&ident);
-            // TODO: if we removed a previous substitution, we should rebuild
-            // the set of free variables because it might contain variables that
-            // won't be inserted anymore.
-            //
-            // right now, we over-approximate the set of free variables which is
-            // sound, but might result in too many quantified variables being
-            // renamed.
 
+            // TODO: we never remove a variable from the set of free variables
+            // in the substitutions. This is sound because we might shadow too
+            // many variables this way, but never too few.
+
+            // if the variable is contained in the free variables of this
+            // substitution, then shadow it: rename the variable and replace all
+            // occurrences of the original variable with the new one.
             if self.cur.free_vars.contains(&ident) {
-                let new_ident =
-                    tcx.clone_var(ident, span.variant(SpanVariant::Subst), VarKind::Subst);
-                *var = QuantVar::Shadow(new_ident);
+                tracing::trace!(ident=?ident, "shadowing quantified variable");
+
+                let new_span = span.variant(SpanVariant::Subst);
+                let new_ident = tcx.clone_var(ident, new_span, VarKind::Subst);
                 let builder = ExprBuilder::new(new_ident.span);
-                self.cur.substs.insert(ident, builder.var(new_ident, tcx));
+                let new_expr = builder.var(new_ident, tcx);
+
+                // shadow the variable
+                *var = QuantVar::Shadow(new_ident);
+
+                // substitute original variable with the shadow variable
+                self.cur.substs.insert(ident, new_expr);
             }
         }
     }
 
+    /// Pop the stack.
     pub fn pop(&mut self) {
         self.cur = self.stack.pop().expect("more calls to pop than push!");
     }
 
+    /// Lookup a variable in the current frame of substitutions.
     pub fn lookup_var(&self, ident: Ident) -> Option<&Expr> {
         self.cur.substs.get(&ident)
     }

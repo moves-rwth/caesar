@@ -1,10 +1,11 @@
 use std::{
-    collections::HashSet,
     iter::FromIterator,
     ops::{RangeFrom, RangeInclusive, RangeToInclusive},
 };
 
-use tracing::instrument;
+use indexmap::IndexSet;
+use itertools::Itertools;
+use tracing::{instrument, trace};
 use z3::{ast::Bool, Context, SatResult, Solver};
 
 /// A result of a test during the partial minimization. Either we accept all
@@ -148,31 +149,40 @@ fn iter_range_from_mid(range: RangeInclusive<usize>) -> Box<dyn Iterator<Item = 
 /// minimal unsatisfiable subset slicing method.
 pub struct SubsetExploration<'ctx> {
     solver: Solver<'ctx>,
-    variables: HashSet<Bool<'ctx>>,
+    variables: IndexSet<Bool<'ctx>>,
+    extensive: IndexSet<Bool<'ctx>>,
+    reductive: IndexSet<Bool<'ctx>>,
 }
 
 impl<'ctx> SubsetExploration<'ctx> {
-    pub fn new(ctx: &'ctx Context, variables: impl IntoIterator<Item = Bool<'ctx>>) -> Self {
+    pub fn new(
+        ctx: &'ctx Context,
+        variables: IndexSet<Bool<'ctx>>,
+        extensive: IndexSet<Bool<'ctx>>,
+        reductive: IndexSet<Bool<'ctx>>,
+    ) -> Self {
         SubsetExploration {
             solver: Solver::new(ctx),
-            variables: HashSet::from_iter(variables),
+            variables,
+            extensive,
+            reductive,
         }
     }
 
     /// Return the set of variables that we're exploring subsets of.
-    pub fn variables(&self) -> &HashSet<Bool<'ctx>> {
+    pub fn variables(&self) -> &IndexSet<Bool<'ctx>> {
         &self.variables
     }
 
     /// Return the next unexplored set. Returns `None` if there is no unexplored
     /// set left.
-    pub fn next_set(&mut self) -> Option<HashSet<Bool<'ctx>>> {
+    pub fn next_set(&mut self) -> Option<IndexSet<Bool<'ctx>>> {
         match self.solver.check() {
             SatResult::Unsat => None,
-            SatResult::Unknown => None,
+            SatResult::Unknown => panic!("solver returned unknown"),
             SatResult::Sat => {
                 let model = self.solver.get_model().unwrap();
-                Some(HashSet::from_iter(
+                Some(IndexSet::from_iter(
                     self.variables
                         .iter()
                         .filter(|variable| match model.eval(*variable, false) {
@@ -186,82 +196,217 @@ impl<'ctx> SubsetExploration<'ctx> {
         }
     }
 
-    /// Block this set, we do not want to see it again.
-    pub fn block_this(&mut self, set: &HashSet<Bool<'ctx>>) {
-        let assignments: Vec<_> = self
+    /// Block all models which have size at least `size`.
+    pub fn block_at_least(&mut self, size: usize) {
+        let variables = self.variables.iter().map(|v| (v, 1)).collect_vec();
+        self.solver
+            .assert(&Bool::pb_ge(self.solver.get_context(), &variables, size as i32).not())
+    }
+
+    /// Block all models which are not subsets of the given set.
+    pub fn block_non_subset(&mut self, set: &IndexSet<Bool<'ctx>>) {
+        let ctx = self.solver.get_context();
+        let constraint = Bool::and(
+            ctx,
+            &self.variables.difference(set).map(Bool::not).collect_vec(),
+        );
+        self.solver.assert(&constraint);
+    }
+
+    /// Block a set of models where all variables `all_off` are set to `false`
+    /// and all variables `all_on` are set to `true`.
+    fn block(&mut self, all_on: &IndexSet<Bool<'ctx>>, all_off: &IndexSet<Bool<'ctx>>) {
+        let ctx = self.solver.get_context();
+        let all_on_constraint = Bool::and(ctx, &all_on.iter().collect_vec());
+        let all_off_constraint = Bool::and(ctx, &all_off.iter().map(Bool::not).collect_vec());
+        let both_constraints = Bool::and(ctx, &[all_on_constraint, all_off_constraint]);
+        let constraint = both_constraints.not();
+        tracing::trace!(constraint = ?constraint, "Adding blocking constraint");
+        self.solver.assert(&constraint);
+    }
+
+    /// Block an exact variable assignment, we do not want to see it again, where
+    /// all variables in `set` are set to `true` and all other variables are set
+    /// to `false`.
+    pub fn block_this(&mut self, set: &IndexSet<Bool<'ctx>>) {
+        tracing::trace!(set = ?set, "Blocking exact set");
+
+        let (all_on, all_off): (IndexSet<_>, IndexSet<_>) = self
             .variables
             .iter()
-            .map(|var| {
-                if set.contains(var) {
-                    var.clone()
-                } else {
-                    var.not()
-                }
-            })
+            .cloned()
+            .partition(|var| set.contains(var));
+        self.block(&all_on, &all_off);
+    }
+
+    /// Block a set of models knowing that the following model is unsat:
+    /// `all_true` variables are set to true and all others are set to false.
+    ///
+    /// Then, we block all models of those where the enabled extensive
+    /// variables are a *superset* of those currently enabled and where the
+    /// enabled reductive variables are a *subset* of those currently enabled.
+    ///
+    /// Phrased differently: a new model must have a currently disabled
+    /// `reductive` variable set to true *or* a currently enabled `extensive`
+    /// variable set to false.
+    fn block_unsat(&mut self, all_true: &IndexSet<Bool<'ctx>>) {
+        tracing::trace!(all_true = ?all_true, "Blocking unsat");
+
+        let all_false: IndexSet<Bool<'ctx>> = self
+            .variables
+            .clone()
+            .difference(all_true)
+            .cloned()
             .collect();
-        let constraint = Bool::and(self.solver.get_context(), &assignments);
-        self.solver.assert(&constraint.not());
+
+        // turning off a reductive variable (assertion) will still result in UNSAT.
+        let all_on: IndexSet<Bool<'ctx>> = all_true.difference(&self.reductive).cloned().collect();
+
+        // turning on an extensive variable (assumption) will still result in UNSAT.
+        let all_off: IndexSet<Bool<'ctx>> =
+            all_false.difference(&self.extensive).cloned().collect();
+
+        self.block(&all_on, &all_off);
     }
 
-    /// "Block down" - all values at this point or lower are considered not unsat.
-    fn block_down(&mut self, from_point: &HashSet<Bool<'ctx>>) {
-        // we add a constraint that says the next set must have any variable set
-        // to true not in the given `from_point`.
-        let complement: Vec<_> = self.variables.difference(from_point).collect();
-        let constraint = Bool::or(self.solver.get_context(), &complement);
-        self.solver.assert(&constraint);
+    /// Block a set of models knowing that the following model is sat:
+    /// `all_true` variables are set to true and all others are set to false.
+    ///
+    /// Then, we block all models of those where the enabled extensive
+    /// variables are a *subset* of those currently enabled and where the
+    /// enabled reductive variables are a *superset* of those currently enabled.
+    ///
+    /// Phrased differently: a new model must have a currently disabled
+    /// `extensive` variable set to true *or* a currently enabled `reductive`
+    /// variable set to false.
+    #[instrument(level = "trace", skip_all, fields(all_true.len = all_true.len()))]
+    fn block_sat(&mut self, all_true: &IndexSet<Bool<'ctx>>) {
+        trace!(all_true = ?all_true, "Blocking sat");
+
+        let all_false: IndexSet<Bool<'ctx>> = self
+            .variables
+            .clone()
+            .difference(all_true)
+            .cloned()
+            .collect();
+
+        // turning off an extensive variable (assumption) will still result in SAT.
+        let all_on: IndexSet<Bool<'ctx>> = all_true.difference(&self.extensive).cloned().collect();
+
+        // turning on a reductive variable (assertion) will still result in SAT.
+        let all_off: IndexSet<Bool<'ctx>> =
+            all_false.difference(&self.reductive).cloned().collect();
+
+        self.block(&all_on, &all_off);
     }
 
-    /// "Block up" - the next sets must not contain at least one of the given values.
-    fn block_up(&mut self, from_point: &HashSet<Bool<'ctx>>) {
-        // we add a constraint that says the next set must have any variable set
-        // to true not in the given `from_point`.
-        let negated: Vec<_> = from_point.iter().map(|var| var.not()).collect();
-        let constraint = Bool::or(self.solver.get_context(), &negated);
-        self.solver.assert(&constraint);
-    }
-
-    /// Shrink this set with the given shrinking function. If the shrinking
-    /// function returns `Some`, we will shrink to this set. Then, we'll block
-    /// upwards.
-    #[instrument(level = "trace", skip_all, fields(seed.len = seed.len(), ret.len))]
-    pub fn shrink_block_up(
+    /// *Shrink and block* a set of models knowing that the following model is
+    /// unsat: `all_true` variables are set to true and all others are set to
+    /// false.
+    ///
+    /// For *blocking*, we use [`Self::block_unsat()`]. *Shrinking* tries to
+    /// remove extensive variables from the set of enabled ones. It uses the
+    /// `get_shrunk_core` function to check whether the shrunk set is still
+    /// unsatisfiable. If so, the `get_shrunk_core` function returns the
+    /// unsatisfiable core. If not, it returns `None`.
+    ///
+    /// We use a heuristic for shrinking: simply try to remove one extensive
+    /// variable after another so that the runtime is linear. We do *not* try
+    /// all combinations of removals.
+    ///
+    /// We could also try to *add* reductive variables here, but we do not to
+    /// keep it simple.
+    #[instrument(level = "trace", skip_all, fields(all_true.len = all_true.len(), ret.len))]
+    pub fn shrink_block_unsat(
         &mut self,
-        seed: HashSet<Bool<'ctx>>,
-        mut get_shrunk_core: impl FnMut(&HashSet<Bool<'ctx>>) -> Option<HashSet<Bool<'ctx>>>,
-    ) -> HashSet<Bool<'ctx>> {
-        let mut current = seed.clone();
-        for var in seed {
-            if !current.remove(&var) {
+        all_true: IndexSet<Bool<'ctx>>,
+        mut get_shrunk_core: impl FnMut(&IndexSet<Bool<'ctx>>) -> Option<IndexSet<Bool<'ctx>>>,
+    ) -> IndexSet<Bool<'ctx>> {
+        let mut current = all_true.clone();
+
+        if let Some(shrunk_set) = get_shrunk_core(&current) {
+            debug_assert!(shrunk_set.is_subset(&current));
+
+            // check if we removed an extensive statement, then we don't use
+            // the unsat core.
+            if current
+                .difference(&shrunk_set)
+                .cloned()
+                .collect::<IndexSet<_>>()
+                .difference(&self.extensive)
+                .next()
+                .is_some()
+            {
+                // the result was unsat (good), but we cannot use the unsat
+                // core because we removed stuff that's not extensive.
+            } else {
+                current = shrunk_set;
+            }
+        }
+
+        for var in all_true.intersection(&self.extensive) {
+            if !current.shift_remove(var) {
                 continue;
             }
             if let Some(shrunk_set) = get_shrunk_core(&current) {
                 debug_assert!(shrunk_set.is_subset(&current));
-                current = shrunk_set;
+
+                // check if we removed an extensive statement, then we don't use
+                // the unsat core.
+                if current
+                    .difference(&shrunk_set)
+                    .cloned()
+                    .collect::<IndexSet<_>>()
+                    .difference(&self.extensive)
+                    .next()
+                    .is_some()
+                {
+                    // the result was unsat (good), but we cannot use the unsat
+                    // core because we removed stuff that's not extensive.
+                } else {
+                    current = shrunk_set;
+                }
             } else {
-                current.insert(var);
+                // undo removal
+                current.insert(var.clone());
             }
         }
-        self.block_up(&current);
+        self.block_unsat(&current);
         tracing::Span::current().record("ret.len", current.len());
         current
     }
 
-    /// Grow this set with the given function that checks the set. Then, we
-    /// block downwards from this grown set.
-    #[instrument(level = "trace", skip_all, fields(seed.len = seed.len(), ret.len))]
-    pub fn grow_block_down(
+    /// *Grow and block* a set of models knowing that the following model is
+    /// sat: `all_true` variables are set to true and all others are set to
+    /// false.
+    ///
+    /// For *blocking*, we use [`Self::block_sat()`]. *Growing* tries to add
+    /// extensive variables from the set of enabled ones. It uses the
+    /// `check_grow` function to check whether the grown set is still
+    /// satisfiable. If so, the `check_grow` function returns `true` and
+    /// `false` otherwise.
+    ///
+    /// We use a heuristic for growing: simply try to add one extensive variable
+    /// after another so that the runtime is linear. We do *not* try all
+    /// combinations of additions.
+    ///
+    /// We could also try to *remove* reductive variables here, but we do not to
+    /// keep it simple.
+    #[instrument(level = "trace", skip_all, fields(all_true.len = all_true.len(), ret.len))]
+    pub fn grow_block_sat(
         &mut self,
-        seed: HashSet<Bool<'ctx>>,
-        mut check_grow: impl FnMut(&HashSet<Bool<'ctx>>) -> bool,
-    ) -> HashSet<Bool<'ctx>> {
-        let mut current = seed.clone();
-        for var in self.variables.difference(&seed) {
-            if check_grow(&current) {
-                current.insert(var.clone());
+        all_true: IndexSet<Bool<'ctx>>,
+        mut check_grow: impl FnMut(&IndexSet<Bool<'ctx>>) -> bool,
+    ) -> IndexSet<Bool<'ctx>> {
+        let mut current = all_true.clone();
+        for var in self.extensive.difference(&all_true) {
+            current.insert(var.clone());
+            if !check_grow(&current) {
+                // undo addition on unsat
+                current.shift_remove(var);
             }
         }
-        self.block_down(&current);
+        self.block_sat(&current);
         tracing::Span::current().record("ret.len", current.len());
         current
     }

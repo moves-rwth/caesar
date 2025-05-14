@@ -33,16 +33,18 @@ pub type ServerError = Box<dyn Error + Send + Sync>;
 pub enum VerifyResult {
     // If the verification is not done yet the result is Todo
     Todo,
+    Ongoing,
     Verified,
     Failed,
     Unknown,
+    Timeout,
 }
 
 impl VerifyResult {
     pub fn from_prove_result(result: &ProveResult) -> Self {
         match &result {
             ProveResult::Proof => VerifyResult::Verified,
-            ProveResult::Counterexample(_) => VerifyResult::Failed,
+            ProveResult::Counterexample => VerifyResult::Failed,
             ProveResult::Unknown(_) => VerifyResult::Unknown,
         }
     }
@@ -71,6 +73,9 @@ pub trait Server: Send {
     /// Register a source unit span with the server.
     fn register_source_unit(&mut self, span: Span) -> Result<(), VerifyError>;
 
+    /// Register a verify unit span as the current verifying with the server.
+    fn set_ongoing_unit(&mut self, span: Span) -> Result<(), VerifyError>;
+
     /// Send a verification status message to the client (a custom notification).
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
@@ -79,9 +84,6 @@ pub trait Server: Send {
         result: &mut SmtVcCheckResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError>;
-
-    /// Sends an unknown verification result for the not checked proc with the given span.
-    fn handle_not_checked(&mut self, span: Span) -> Result<(), ServerError>;
 
     /// Return an exit code for the process.
     ///

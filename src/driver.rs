@@ -36,7 +36,7 @@ use crate::{
     slicing::{
         model::SliceModel,
         selection::SliceSelection,
-        solver::{SliceSolveOptions, SliceSolver},
+        solver::{SliceMinimality, SliceSolveOptions, SliceSolver, UnknownHandling},
         transform::{SliceStmts, StmtSliceVisitor},
     },
     smt::{
@@ -63,8 +63,9 @@ use z3::{
     Config, Context, Goal,
 };
 use z3rro::{
+    model::InstrumentedModel,
     probes::ProbeSummary,
-    prover::{ProveResult, Prover, SolverType},
+    prover::{IncrementalMode, ProveResult, Prover, SolverType},
     smtlib::Smtlib,
     util::{PrefixWriter, ReasonUnknown},
 };
@@ -699,7 +700,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
 
         if options.debug_options.probe {
             let goal = Goal::new(ctx, false, false, false);
-            for assertion in prover.solver().get_assertions() {
+            for assertion in prover.get_assertions() {
                 goal.assert(&assertion);
             }
             eprintln!(
@@ -719,50 +720,74 @@ impl<'ctx> SmtVcUnit<'ctx> {
                 prove_result: ProveResult::Unknown(ReasonUnknown::Other(
                     "verification skipped".to_owned(),
                 )),
-                quant_vc: self.quant_vc,
+                model: None,
                 slice_model: None,
+                quant_vc: self.quant_vc,
             });
         }
 
         let mut slice_solver = SliceSolver::new(slice_vars.clone(), translate, prover);
         let failing_slice_options = SliceSolveOptions {
-            globally_optimal: !options.slice_options.slice_error_first,
-            continue_on_unknown: false,
+            minimality: if options.slice_options.slice_error_first {
+                SliceMinimality::Any
+            } else {
+                SliceMinimality::Size
+            },
+            unknown: if options.slice_options.slice_error_inconsistent {
+                UnknownHandling::Accept
+            } else {
+                UnknownHandling::Stop
+            },
         };
-        let (result, mut slice_model) =
-            slice_solver.slice_while_failing(&failing_slice_options, limits_ref)?;
-        if matches!(result, ProveResult::Proof) && options.slice_options.slice_verify {
+
+        // this is the main call to the SMT solver for the verification task!
+        let (result, models) =
+            slice_solver.slice_failing_binary_search(&failing_slice_options, limits_ref)?;
+        let (model, mut slice_model) = match models {
+            Some((model, slice_model)) => (Some(model), Some(slice_model)),
+            None => (None, None),
+        };
+
+        // if the program was successfully proven, do slicing for verification
+        if options.slice_options.slice_verify && matches!(result, ProveResult::Proof) {
             match options.slice_options.slice_verify_via {
                 SliceVerifyMethod::UnsatCore => {
-                    slice_model = slice_solver.verified_slice_unsat_core(limits_ref)?;
+                    slice_model = slice_solver.slice_verifying_unsat_core(limits_ref)?;
                 }
                 SliceVerifyMethod::MinimalUnsatSubset => {
                     let slice_options = SliceSolveOptions {
-                        globally_optimal: false,
-                        continue_on_unknown: true,
+                        minimality: SliceMinimality::Subset,
+                        unknown: UnknownHandling::Continue,
                     };
-                    slice_model = slice_solver.verified_slice_mus(&slice_options, limits_ref)?;
+                    slice_model =
+                        slice_solver.slice_verifying_enumerate(&slice_options, limits_ref)?;
                 }
                 SliceVerifyMethod::SmallestUnsatSubset => {
                     let slice_options = SliceSolveOptions {
-                        globally_optimal: true,
-                        continue_on_unknown: true,
+                        minimality: SliceMinimality::Size,
+                        unknown: UnknownHandling::Continue,
                     };
-                    slice_model = slice_solver.verified_slice_mus(&slice_options, limits_ref)?;
+                    slice_model =
+                        slice_solver.slice_verifying_enumerate(&slice_options, limits_ref)?;
                 }
                 SliceVerifyMethod::ExistsForall => {
                     let slice_options = SliceSolveOptions {
-                        globally_optimal: false,
-                        continue_on_unknown: false,
+                        minimality: SliceMinimality::Any,
+                        unknown: UnknownHandling::Stop,
                     };
                     if translate.ctx.uninterpreteds().is_empty() {
-                        slice_model =
-                            slice_solver.exists_verified_slice(&slice_options, limits_ref)?;
+                        slice_model = slice_solver
+                            .slice_verifying_exists_forall(&slice_options, limits_ref)?;
                     } else {
                         tracing::warn!("There are uninterpreted sorts, functions, or axioms present. Slicing for correctness is disabled because it does not support them.");
                     }
                 }
             }
+        }
+
+        if options.debug_options.print_z3_stats {
+            let stats = slice_solver.get_statistics();
+            eprintln!("Z3 statistics for {}: {:?}", name, stats);
         }
 
         if let Some(smtlib) = &smtlib {
@@ -777,8 +802,9 @@ impl<'ctx> SmtVcUnit<'ctx> {
 
         Ok(SmtVcCheckResult {
             prove_result: result,
-            quant_vc: self.quant_vc,
+            model,
             slice_model,
+            quant_vc: self.quant_vc,
         })
     }
 }
@@ -805,7 +831,7 @@ fn mk_valid_query_prover<'smt, 'ctx>(
     };
 
     // create the prover and set the params
-    let mut prover = Prover::new(ctx, solver_type);
+    let mut prover = Prover::new(ctx, IncrementalMode::Native, solver_type);
     if let Some(remaining) = limits_ref.time_left() {
         prover.set_timeout(remaining);
     }
@@ -839,11 +865,11 @@ fn get_smtlib(options: &VerifyCommand, prover: &Prover) -> Option<Smtlib> {
 }
 
 /// Write the SMT-LIB dump to a file if requested.
-fn write_smtlib<'ctx>(
+fn write_smtlib(
     options: &DebugOptions,
     name: &SourceUnitName,
     smtlib: &Smtlib,
-    prove_result: Option<&ProveResult<'ctx>>,
+    prove_result: Option<&ProveResult>,
 ) -> Result<(), VerifyError> {
     if options.print_smt || options.smt_dir.is_some() {
         let mut smtlib = smtlib.clone();
@@ -874,7 +900,8 @@ fn write_smtlib<'ctx>(
 
 /// The result of an SMT solver call for a [`SmtVcUnit`].
 pub struct SmtVcCheckResult<'ctx> {
-    pub prove_result: ProveResult<'ctx>,
+    pub prove_result: ProveResult,
+    model: Option<InstrumentedModel<'ctx>>,
     slice_model: Option<SliceModel>,
     quant_vc: QuantVcUnit,
 }
@@ -901,7 +928,8 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
                     }
                 }
             }
-            ProveResult::Counterexample(model) => {
+            ProveResult::Counterexample => {
+                let model = self.model.as_ref().unwrap();
                 println!("{}: Counter-example to verification found!", name);
                 let mut w = Vec::new();
                 let doc = pretty_model(
@@ -915,7 +943,15 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
                 println!("    {}", String::from_utf8(w).unwrap());
             }
             ProveResult::Unknown(reason) => {
-                println!("{}: Unknown result! (reason: {})", name, reason)
+                println!("{}: Unknown result! (reason: {})", name, reason);
+                if let Some(slice_model) = &self.slice_model {
+                    let doc = pretty_slice(&files, slice_model);
+                    if let Some(doc) = doc {
+                        let mut w = Vec::new();
+                        doc.nest(4).render(120, &mut w).unwrap();
+                        println!("    {}", String::from_utf8(w).unwrap());
+                    }
+                }
             }
         }
     }
@@ -939,7 +975,8 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
 
         match &mut self.prove_result {
             ProveResult::Proof => {}
-            ProveResult::Counterexample(model) => {
+            ProveResult::Counterexample => {
+                let model = self.model.as_ref().unwrap();
                 let mut labels = vec![];
                 let files = server.get_files_internal().lock().unwrap();
                 // Print the values of the global variables in the model.

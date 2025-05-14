@@ -174,6 +174,10 @@ export class StatusBarComponent {
                     case VerifyResult.Unknown:
                         unknown++;
                         break;
+                    case VerifyResult.Timeout:
+                        // For now we treat timeouts as unknowns in the status bar.
+                        unknown++;
+                        break;
                 }
             }
             if (failed > 0 || unknown > 0) {

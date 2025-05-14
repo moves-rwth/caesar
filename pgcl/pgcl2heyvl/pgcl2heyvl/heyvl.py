@@ -151,6 +151,32 @@ class Calculus(Enum):
             return "wlp"
 
 
+class Encoding(Enum):
+    INVARIANT = auto()
+    K_INDUCTION = auto()
+    UNROLL = auto()
+    PAST = auto()
+    AST = auto()
+    OMEGA = auto()
+    OST = auto()
+
+    def __str__(self):
+
+        if self == Encoding.INVARIANT:
+            return "invariant"
+        elif self == Encoding.K_INDUCTION:
+            return "k_induction"
+        elif self == Encoding.UNROLL:
+            return "unroll"
+        elif self == Encoding.PAST:
+            return "past"
+        elif self == Encoding.AST:
+            return "ast"
+        elif self == Encoding.OMEGA:
+            return "omega_invariant"
+        elif self == Encoding.OST:
+            return "ost"
+
 @attr.s
 class HeyHavoc(HeyInstr):
     direction: Direction = attr.ib()
@@ -292,3 +318,35 @@ class HeyComment(HeyObject, HeyInstr):
         return indent(
             indent(self.comment, "// ", lambda line: not line.isspace()), "//",
             lambda line: line.isspace())
+
+
+@attr.s
+class HeyEncodingAnnotation(HeyInstr):
+    encoding: Encoding = attr.ib()
+    args: List[HeyExpr] = attr.ib() 
+    stmt: HeyInstr = attr.ib()
+ 
+
+    def __str__(self):
+
+        arg_list = ", ".join(
+            [f"{arg}" for arg in self.args])
+        
+        return f"@{self.encoding}({arg_list})\n{self.stmt}" 
+
+
+@attr.s 
+class HeyCalculusAnnotation(HeyObject):
+    calculus: Calculus = attr.ib()
+    proc: HeyObject = attr.ib()
+
+    def __str__(self) -> str:
+        return f"@{self.calculus}\n{self.proc}"
+
+@attr.s 
+class HeyWhile(HeyInstr):
+    cond: HeyExpr = attr.ib()
+    body: HeyBlock = attr.ib()
+
+    def __str__(self) -> str:
+        return f"while {self.cond} {_str_block(self.body)}"

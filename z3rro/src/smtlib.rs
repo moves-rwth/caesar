@@ -34,7 +34,7 @@ impl Smtlib {
     pub fn add_details_query(&mut self, prove_result: &ProveResult) {
         match prove_result {
             ProveResult::Proof => {}
-            ProveResult::Counterexample(_) => self.0.push_str("\n(get-model)\n"),
+            ProveResult::Counterexample => self.0.push_str("\n(get-model)\n"),
             ProveResult::Unknown(_) => self.0.push_str("\n(get-info :reason-unknown)\n"),
         }
     }

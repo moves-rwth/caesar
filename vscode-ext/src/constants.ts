@@ -9,6 +9,7 @@ export const enum ConfigurationConstants {
     installationOptions = "installationOptions",
     showGutterIcons = "showGutterIcons",
     showStatusBar = "showStatusBar",
+    showGutterAnimation = "showGutterAnimations",
     showInlineGhostText = "showInlineGhostText",
     binaryPath = "binaryPath",
     sourcePath = "sourcePath",

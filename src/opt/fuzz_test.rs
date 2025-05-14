@@ -2,7 +2,8 @@ use proptest::{
     prelude::*,
     test_runner::{TestCaseResult, TestRunner},
 };
-use z3rro::prover::{ProveResult, Prover, SolverType};
+
+use z3rro::prover::{IncrementalMode, ProveResult, Prover, SolverType};
 
 use crate::{
     ast::{
@@ -201,17 +202,20 @@ fn prove_equiv(expr: Expr, optimized: Expr, tcx: &TyCtx) -> TestCaseResult {
     let smt_ctx = SmtCtx::new(&ctx, tcx);
     let mut translate = TranslateExprs::new(&smt_ctx);
     let eq_expr_z3 = translate.t_bool(&eq_expr);
-    let mut prover = Prover::new(&ctx, SolverType::Z3);
+    let mut prover = Prover::new(&ctx, IncrementalMode::Native, SolverType::Z3);
     translate
         .local_scope()
         .add_assumptions_to_prover(&mut prover);
     prover.add_provable(&eq_expr_z3);
     let x = match prover.check_proof() {
         Ok(ProveResult::Proof) => Ok(()),
-        Ok(ProveResult::Counterexample(model)) => Err(TestCaseError::fail(format!(
-            "rewrote {} ...into... {}, but those are not equivalent:\n{}",
-            expr, optimized, model
-        ))),
+        Ok(ProveResult::Counterexample) => {
+            let model = prover.get_model().unwrap();
+            Err(TestCaseError::fail(format!(
+                "rewrote {} ...into... {}, but those are not equivalent:\n{}",
+                expr, optimized, model
+            )))
+        }
         Ok(ProveResult::Unknown(reason)) => {
             Err(TestCaseError::fail(format!("unknown result ({})", reason)))
         },

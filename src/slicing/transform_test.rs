@@ -1,11 +1,9 @@
 //! *Prove* using the SMT solver that our transformations are correct.
 
-use std::time::{Duration, Instant};
-
 use itertools::Itertools;
 use z3rro::{
     model::SmtEval,
-    prover::{ProveResult, Prover, SolverType},
+    prover::{IncrementalMode, ProveResult, Prover, SolverType},
 };
 
 use crate::{
@@ -109,8 +107,7 @@ fn prove_equiv(
     let tcx = &transform_tcx.tcx;
     let builder = ExprBuilder::new(Span::dummy_span());
 
-    let deadline = Instant::now() + Duration::from_millis(1);
-    let mut vcgen = Vcgen::new(tcx, &LimitsRef::new(Some(deadline), None), None);
+    let mut vcgen = Vcgen::new(tcx, &LimitsRef::new(None, None), None);
     let stmt1_vc = vcgen
         .vcgen_stmts(stmt1, transform_tcx.post.clone())
         .unwrap();
@@ -128,7 +125,7 @@ fn prove_equiv(
     let smt_ctx = SmtCtx::new(&ctx, tcx);
     let mut translate = TranslateExprs::new(&smt_ctx);
     let eq_expr_z3 = translate.t_bool(&eq_expr);
-    let mut prover = Prover::new(&ctx, SolverType::Z3);
+    let mut prover = Prover::new(&ctx, IncrementalMode::Native, SolverType::Z3);
     translate
         .local_scope()
         .add_assumptions_to_prover(&mut prover);
@@ -139,13 +136,14 @@ fn prove_equiv(
     prover.add_provable(&eq_expr_z3);
     let x = match prover.check_proof() {
         Ok(ProveResult::Proof) => Ok(()),
-        Ok(ProveResult::Counterexample(model)) => Err(format!(
+        Ok(ProveResult::Counterexample) => {
+            let model = prover.get_model().unwrap();
+            Err(format!(
                 "we want to rewrite {:?} ...into... {:?} under assumptions {:?}, but those are not equivalent:\n{}\n original evaluates to {}\n rewritten evaluates to {}",
-            stmt1, stmt2, assumptions, model, translate.t_eureal(&stmt1_vc).eval(&model).unwrap(), translate.t_eureal(&stmt2_vc).eval(&model).unwrap()
-        )),
-        Ok(ProveResult::Unknown(reason)) => {
-            Err(format!("unknown result ({})", reason))
-        },
+            stmt1, stmt2, assumptions, &model, translate.t_eureal(&stmt1_vc).eval(&model).unwrap(), translate.t_eureal(&stmt2_vc).eval(&model).unwrap()
+        ))
+        }
+        Ok(ProveResult::Unknown(reason)) => Err(format!("unknown result ({})", reason)),
         Err(err) => Err(format!("{}", err))
     };
     x

@@ -374,6 +374,10 @@ pub struct DebugOptions {
     #[arg(long)]
     pub z3_trace: bool,
 
+    /// Print Z3's statistics after the final SAT check.
+    #[arg(long)]
+    pub print_z3_stats: bool,
+
     /// Run a bunch of probes on the SMT solver.
     #[arg(long)]
     pub probe: bool,
@@ -406,6 +410,13 @@ pub struct SliceOptions {
     /// counterexample.
     #[arg(long)]
     pub slice_error_first: bool,
+
+    /// If the SMT solver provides a model for an "unknown" result, use that to
+    /// obtain an error slice. The slice is not guaranteed to be an actual error
+    /// slice, because the model might not be a real counterexample. However, it
+    /// is often a helpful indicator of where the SMT solver got stuck.
+    #[arg(long)]
+    pub slice_error_inconsistent: bool,
 
     /// Enable slicing tick/reward statements during slicing for errors.
     #[arg(long)]
@@ -847,6 +858,8 @@ fn verify_files_main(
         && !options.lsp_options.explain_core_vc
         && !options.debug_options.probe
         && !options.debug_options.print_smt
+        && !options.debug_options.print_core
+        && !options.debug_options.print_core_procs
         && options.debug_options.smt_dir.is_none()
     {
         return Ok(true);
@@ -868,6 +881,10 @@ fn verify_files_main(
         let (name, mut verify_unit) = verify_unit.enter_with_name();
 
         limits_ref.check_limits()?;
+
+        // Set the current unit as ongoing
+        server.set_ongoing_unit(verify_unit.span)?;
+
         // 4. Desugaring: transforming spec calls to procs
         verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
 
@@ -945,10 +962,6 @@ fn verify_files_main(
             &slice_vars,
         )?;
 
-        server
-            .handle_vc_check_result(name, verify_unit.span, &mut result, &mut translate)
-            .map_err(VerifyError::ServerError)?;
-
         if options.debug_options.z3_trace {
             info!("Z3 tracing output will be written to `z3.log`.");
         }
@@ -966,8 +979,14 @@ fn verify_files_main(
         // Increment counters
         match result.prove_result {
             ProveResult::Proof => num_proven += 1,
-            ProveResult::Counterexample(_) | ProveResult::Unknown(_) => num_failures += 1,
+            ProveResult::Counterexample | ProveResult::Unknown(_) => num_failures += 1,
         }
+
+        limits_ref.check_limits()?;
+
+        server
+            .handle_vc_check_result(name, verify_unit.span, &mut result, &mut translate)
+            .map_err(VerifyError::ServerError)?;
     }
 
     if !options.lsp_options.language_server {
