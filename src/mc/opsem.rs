@@ -143,7 +143,7 @@ fn translate_stmt(
             Ok(start)
         }
         StmtKind::Havoc(dir, _) => Err(JaniConversionError::UnsupportedHavoc {
-            stmt: stmt.clone(),
+            stmt: Box::new(stmt.clone()),
             can_eliminate: automaton.spec_part.direction == *dir,
         }),
         StmtKind::Compare(_, _) | StmtKind::Negate(_) | StmtKind::Validate(_) => {

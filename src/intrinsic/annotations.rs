@@ -33,7 +33,7 @@ pub enum AnnotationError {
     NotOnWhile {
         span: Span,
         annotation_name: Ident,
-        annotated: Stmt,
+        annotated: Box<Stmt>,
     },
     WrongArgument {
         span: Span,

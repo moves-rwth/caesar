@@ -46,12 +46,18 @@ pub enum JaniConversionError {
     UnsupportedPre(Expr),
     UnsupportedAssume(Expr),
     UnsupportedAssert(Expr),
-    UnsupportedHavoc { stmt: Stmt, can_eliminate: bool },
+    UnsupportedHavoc {
+        stmt: Box<Stmt>,
+        can_eliminate: bool,
+    },
     UnsupportedInftyPost(Expr),
     NondetSelection(Span),
     MismatchedDirection(Span),
     UnsupportedCall(Span, Ident),
-    UnsupportedCalculus { proc: Ident, calculus: Ident },
+    UnsupportedCalculus {
+        proc: Ident,
+        calculus: Ident,
+    },
 }
 
 impl JaniConversionError {
