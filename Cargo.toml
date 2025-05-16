@@ -55,7 +55,7 @@ serde = "1.0.197"
 jani = { path = "./jani" }
 itertools = "0.13.0"
 stacker = "0.1.15"
-crossbeam-channel = "0.5.14"
+crossbeam-channel = "0.5.15"
 shlex = "1.3.0"
 clap = { version = "4.5.23", features = ["derive", "string", "cargo"] }
 clap_complete = "4.5.42"
