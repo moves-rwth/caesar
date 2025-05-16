@@ -284,7 +284,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "z3",
- "z3-sys",
  "z3rro",
 ]
 
@@ -2649,7 +2648,7 @@ dependencies = [
 [[package]]
 name = "z3"
 version = "0.12.1"
-source = "git+https://github.com/Philipp15b/z3.rs.git?rev=53d9de51c575ae7b83dccc38762f74a725ad812d#53d9de51c575ae7b83dccc38762f74a725ad812d"
+source = "git+https://github.com/Philipp15b/z3.rs.git?rev=e8f03cdedfa4a2b4938ee0efc943ff003aed8687#e8f03cdedfa4a2b4938ee0efc943ff003aed8687"
 dependencies = [
  "log",
  "num",
@@ -2659,7 +2658,7 @@ dependencies = [
 [[package]]
 name = "z3-sys"
 version = "0.8.1"
-source = "git+https://github.com/Philipp15b/z3.rs.git?rev=53d9de51c575ae7b83dccc38762f74a725ad812d#53d9de51c575ae7b83dccc38762f74a725ad812d"
+source = "git+https://github.com/Philipp15b/z3.rs.git?rev=e8f03cdedfa4a2b4938ee0efc943ff003aed8687#e8f03cdedfa4a2b4938ee0efc943ff003aed8687"
 dependencies = [
  "bindgen",
  "cmake",
