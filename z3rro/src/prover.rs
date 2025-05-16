@@ -1,6 +1,18 @@
 //! Not a SAT solver, but a prover. There's a difference.
+use itertools::Itertools;
+use thiserror::Error;
 
-use std::{fmt::Display, time::Duration};
+use std::{
+    collections::VecDeque,
+    env,
+    fmt::Display,
+    io::{self, Write},
+    path::Path,
+    process::Command,
+    time::Duration,
+};
+
+use tempfile::NamedTempFile;
 
 use z3::{
     ast::{forall_const, Ast, Bool, Dynamic},
@@ -13,6 +25,23 @@ use crate::{
     util::{set_solver_timeout, ReasonUnknown},
 };
 
+
+#[derive(Debug, Error)]
+pub enum ProverCommandError {
+    #[error("Environment variable error: {0}")]
+    EnvVarError(#[from] env::VarError),
+    #[error("Process execution failed: {0}")]
+    ProcessError(#[from] io::Error),
+    #[error("Parse error")]
+    ParseError,
+}
+
+#[derive(Debug)]
+pub enum SolverType {
+    Z3,
+    SWINE,
+}
+
 /// The result of a prove query.
 #[derive(Debug)]
 pub enum ProveResult {
@@ -20,6 +49,65 @@ pub enum ProveResult {
     Counterexample,
     Unknown(ReasonUnknown),
 }
+
+/// Execute swine on the file located at file_path
+fn execute_swine(file_path: &Path) -> Result<(SatResult, String), ProverCommandError> {
+    let output = Command::new("swine").arg(file_path).output();
+
+    match output {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let mut lines_buffer: VecDeque<&str>= stdout.lines().collect();
+            let first_line = lines_buffer.pop_front().ok_or(ProverCommandError::ParseError)?;
+            if first_line.trim().to_lowercase() == "unsat" {
+                Ok((SatResult::Unsat, "".to_string()))
+            } else if first_line.trim().to_lowercase() == "sat" {
+                let _last_line = lines_buffer.pop_back().ok_or(ProverCommandError::ParseError)?;
+                if _last_line.contains("SHA") {
+                    let cex = lines_buffer.iter().join("");
+                    Ok((SatResult::Sat, cex))
+                } else {
+                    Err(ProverCommandError::ParseError)
+                }
+            } else {
+                lines_buffer.push_front(first_line);
+                Ok((SatResult::Unknown, lines_buffer.iter().join("\n")))
+            }
+        }
+        Err(e) => Err(ProverCommandError::ProcessError(e)),
+    }
+}
+
+/// In order to execute the program, it is necessary to remove lines that
+/// contain a forall quantifier or the declaration of the exponential function (exp).
+fn remove_lines_for_swine(input: &str) -> String {
+    let mut output = String::new();
+    let mut tmp_buffer: VecDeque<char> = VecDeque::new();
+    let mut input_buffer: VecDeque<char> = input.chars().collect();
+    let mut cnt = 0;
+
+    while let Some(c) = input_buffer.pop_front() {
+        tmp_buffer.push_back(c);
+        match c {
+            '(' => {
+                cnt += 1;
+            }
+            ')' => {
+                cnt -= 1;
+                if cnt == 0 {
+                    let tmp: String = tmp_buffer.iter().collect();
+                    if !tmp.contains("declare-fun exp") && !tmp.contains("forall") {
+                        output.push_str(&tmp);
+                    }
+                    tmp_buffer.clear();
+                }
+            }
+            _ => {}
+        }
+    }
+    output
+}
+
 
 impl Display for ProveResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -83,13 +171,15 @@ pub struct Prover<'ctx> {
     level: usize,
     /// The minimum level where an assertion was added to the solver.
     min_level_with_provables: Option<usize>,
+    /// SMT solver type
+    smt_solver: SolverType,
     /// Cached information about the last SAT/proof check call.
     last_result: Option<LastSatResult>,
 }
 
 impl<'ctx> Prover<'ctx> {
     /// Create a new prover with the given [`Context`] and [`IncrementalMode`].
-    pub fn new(ctx: &'ctx Context, mode: IncrementalMode) -> Self {
+    pub fn new(ctx: &'ctx Context, mode: IncrementalMode, solver_type: SolverType) -> Self {
         Prover {
             ctx,
             timeout: None,
@@ -101,6 +191,7 @@ impl<'ctx> Prover<'ctx> {
             },
             level: 0,
             min_level_with_provables: None,
+            smt_solver: solver_type,
             last_result: None,
         }
     }
@@ -152,36 +243,76 @@ impl<'ctx> Prover<'ctx> {
         self.add_assumption(&value.not());
         self.min_level_with_provables.get_or_insert(self.level);
     }
-
+    
     /// `self.check_proof_assuming(&[])`.
-    pub fn check_proof(&mut self) -> ProveResult {
+    pub fn check_proof(&mut self) -> Result<ProveResult, ProverCommandError> {
+
         self.check_proof_assuming(&[])
     }
 
     /// Do the SAT check, but consider a check with no provables to be a
     /// [`ProveResult::Proof`].
-    pub fn check_proof_assuming(&mut self, assumptions: &[Bool<'ctx>]) -> ProveResult {
+    pub fn check_proof_assuming(
+        &mut self,
+        assumptions: &[Bool<'ctx>],
+    ) -> Result<ProveResult, ProverCommandError> {
         if !self.has_provables() {
-            return ProveResult::Proof;
+            return Ok(ProveResult::Proof);
         }
 
-        let res = match &self.last_result {
-            Some(cached_result) if assumptions.is_empty() => cached_result.last_result,
-            _ => {
-                let solver = self.get_solver();
-                let res = if assumptions.is_empty() {
-                    solver.check()
-                } else {
-                    solver.check_assumptions(assumptions)
-                };
-                self.cache_result(res);
-                res
+        match self.smt_solver {
+            SolverType::SWINE => {
+                let mut smtlib = self.get_smtlib();
+                smtlib.add_check_sat();
+                let smtlib = smtlib.into_string();
+                let mut smt_file: NamedTempFile = NamedTempFile::new().unwrap();
+                smt_file
+                    .write_all(remove_lines_for_swine(&smtlib).as_bytes())
+                    .unwrap();
+                let file_path = smt_file.path();
+
+                let res = execute_swine(file_path);
+                match res {
+                    Ok((SatResult::Unsat, _)) => Ok(ProveResult::Proof),
+                    Ok((SatResult::Unknown, reason)) => {
+                        Ok(ProveResult::Unknown(ReasonUnknown::Other(reason)))
+                    }
+                    Ok((SatResult::Sat, cex)) => {
+                        match &self.solver {
+                            StackSolver::Native(solver) => {
+                                solver.from_string(cex);
+                            },
+                            StackSolver::Emulated(solver, _) => {
+                                solver.from_string(cex);
+                            },
+                        }
+                        
+                        Ok(ProveResult::Counterexample)
+                    }
+                    Err(err) => Err(err),
+                }
             }
-        };
-        match res {
-            SatResult::Unsat => ProveResult::Proof,
-            SatResult::Unknown => ProveResult::Unknown(self.get_reason_unknown().unwrap()),
-            SatResult::Sat => ProveResult::Counterexample,
+            SolverType::Z3 => {
+                let res = match &self.last_result {
+                    Some(cached_result) if assumptions.is_empty() => cached_result.last_result,
+                    _ => {
+                        let solver = self.get_solver();
+                        let res = if assumptions.is_empty() {
+                            solver.check()
+                        } else {
+                            solver.check_assumptions(assumptions)
+                        };
+                        self.cache_result(res);
+                        res
+                    }
+                };
+                match res {
+                    SatResult::Unsat => Ok(ProveResult::Proof),
+                    SatResult::Unknown => Ok(ProveResult::Unknown(self.get_reason_unknown().unwrap())),
+                    SatResult::Sat => Ok(ProveResult::Counterexample),
+                }
+            }
+
         }
     }
 
@@ -321,7 +452,7 @@ impl<'ctx> Prover<'ctx> {
             &[],
             &Bool::and(self.ctx, &self.get_assertions()).not(),
         );
-        let mut res = Prover::new(self.ctx, IncrementalMode::Native); // TODO
+        let mut res = Prover::new(self.ctx, IncrementalMode::Native, SolverType::Z3); // TODO
         res.add_assumption(&theorem);
         res
     }
@@ -336,7 +467,7 @@ impl<'ctx> Prover<'ctx> {
 mod test {
     use z3::{ast::Bool, Config, Context, SatResult};
 
-    use crate::prover::IncrementalMode;
+    use crate::prover::{IncrementalMode, SolverType};
 
     use super::{ProveResult, Prover};
 
@@ -344,17 +475,17 @@ mod test {
     fn test_prover() {
         for mode in [IncrementalMode::Native, IncrementalMode::Emulated] {
             let ctx = Context::new(&Config::default());
-            let mut prover = Prover::new(&ctx, mode);
-            assert!(matches!(prover.check_proof(), ProveResult::Proof));
+            let mut prover = Prover::new(&ctx, mode, SolverType::Z3);
+            assert!(matches!(prover.check_proof(), Ok(ProveResult::Proof)));
             assert_eq!(prover.check_sat(), SatResult::Sat);
 
             prover.push();
             prover.add_assumption(&Bool::from_bool(&ctx, true));
-            assert!(matches!(prover.check_proof(), ProveResult::Proof));
+            assert!(matches!(prover.check_proof(), Ok(ProveResult::Proof)));
             assert_eq!(prover.check_sat(), SatResult::Sat);
             prover.pop();
 
-            assert!(matches!(prover.check_proof(), ProveResult::Proof));
+            assert!(matches!(prover.check_proof(), Ok(ProveResult::Proof)));
             assert_eq!(prover.check_sat(), SatResult::Sat);
         }
     }

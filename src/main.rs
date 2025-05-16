@@ -39,7 +39,7 @@ use tokio::task::JoinError;
 use tracing::{error, info, warn};
 
 use vc::explain::VcExplanation;
-use z3rro::{prover::ProveResult, util::ReasonUnknown};
+use z3rro::{prover::{ProveResult, ProverCommandError}, util::ReasonUnknown};
 
 pub mod ast;
 mod driver;
@@ -138,6 +138,9 @@ pub struct VerifyCommand {
 
     #[command(flatten)]
     pub debug_options: DebugOptions,
+
+    #[command(flatten)]
+    pub smt_solver_options: SMTSolverOptions,
 }
 
 #[derive(Debug, Args)]
@@ -381,6 +384,22 @@ pub struct DebugOptions {
 }
 
 #[derive(Debug, Default, Args)]
+#[command(next_help_heading = "SMT Solver Options")]
+pub struct SMTSolverOptions {
+    #[arg(long, default_value = "z3")]
+    pub smt_solver: SMTSolverType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+pub enum SMTSolverType {
+    #[default]
+    #[value(name = "z3")]
+    Z3,
+    #[value(name = "swine")]
+    Swine,
+}
+
+#[derive(Debug, Default, Args)]
 #[command(next_help_heading = "Slicing Options")]
 pub struct SliceOptions {
     /// Do not try to slice when an error occurs.
@@ -533,6 +552,10 @@ fn finalize_verify_result(
             tracing::error!("Interrupted");
             ExitCode::from(130) // 130 seems to be a standard exit code for CTRL+C
         }
+        Err(VerifyError::ProverError(err)) => {
+            eprintln!("{}", err.to_string());
+            ExitCode::from(1)
+        }
     }
 }
 
@@ -612,6 +635,8 @@ pub enum VerifyError {
     /// The verifier was interrupted.
     #[error("interrupted")]
     Interrupted,
+    #[error("{0}")]
+    ProverError(#[from] ProverCommandError),
 }
 
 /// Verify a list of `user_files`. The `options.files` value is ignored here.

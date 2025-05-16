@@ -3,7 +3,7 @@
 use itertools::Itertools;
 use z3rro::{
     model::SmtEval,
-    prover::{IncrementalMode, ProveResult, Prover},
+    prover::{IncrementalMode, ProveResult, Prover, SolverType},
 };
 
 use crate::{
@@ -125,7 +125,7 @@ fn prove_equiv(
     let smt_ctx = SmtCtx::new(&ctx, tcx);
     let mut translate = TranslateExprs::new(&smt_ctx);
     let eq_expr_z3 = translate.t_bool(&eq_expr);
-    let mut prover = Prover::new(&ctx, IncrementalMode::Native);
+    let mut prover = Prover::new(&ctx, IncrementalMode::Native, SolverType::Z3);
     translate
         .local_scope()
         .add_assumptions_to_prover(&mut prover);
@@ -135,15 +135,16 @@ fn prove_equiv(
     }
     prover.add_provable(&eq_expr_z3);
     let x = match prover.check_proof() {
-        ProveResult::Proof => Ok(()),
-        ProveResult::Counterexample => {
+        Ok(ProveResult::Proof) => Ok(()),
+        Ok(ProveResult::Counterexample) => {
             let model = prover.get_model().unwrap();
             Err(format!(
                 "we want to rewrite {:?} ...into... {:?} under assumptions {:?}, but those are not equivalent:\n{}\n original evaluates to {}\n rewritten evaluates to {}",
             stmt1, stmt2, assumptions, &model, translate.t_eureal(&stmt1_vc).eval(&model).unwrap(), translate.t_eureal(&stmt2_vc).eval(&model).unwrap()
         ))
         }
-        ProveResult::Unknown(reason) => Err(format!("unknown result ({})", reason)),
+        Ok(ProveResult::Unknown(reason)) => Err(format!("unknown result ({})", reason)),
+        Err(err) => Err(format!("{}", err))
     };
     x
 }

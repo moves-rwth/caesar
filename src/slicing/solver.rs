@@ -9,13 +9,13 @@ use z3::{
 };
 use z3rro::{
     model::{InstrumentedModel, ModelConsistency},
-    prover::{ProveResult, Prover},
+    prover::{ProveResult, Prover, ProverCommandError},
     util::ReasonUnknown,
 };
 
 use crate::{
     ast::{ExprBuilder, Span},
-    resource_limits::{LimitError, LimitsRef},
+    resource_limits::LimitsRef,
     slicing::{
         model::{SliceMode, SliceModel},
         util::{PartialMinimizeResult, SubsetExploration},
@@ -248,10 +248,12 @@ impl<'ctx> SliceSolver<'ctx> {
 
         self.prover.add_assumption(&self.slice_stmts.constraints);
         self.prover.add_assumption(&inactive_formula);
-        let res = self.prover.check_proof_assuming(&active_toggle_values);
+        let res = self
+            .prover
+            .check_proof_assuming(&active_toggle_values);
 
         let mut slice_searcher = SliceModelSearch::new(active_toggle_values.clone());
-        if let ProveResult::Proof = res {
+        if let Ok(ProveResult::Proof) = res {
             slice_searcher.found_active(self.prover.get_unsat_core());
         }
 
@@ -351,7 +353,7 @@ impl<'ctx> SliceSolver<'ctx> {
         self.prover.push();
 
         slice_sat_binary_search(&mut self.prover, &active_toggle_values, options, limits_ref)?;
-        let res = self.prover.check_proof();
+        let res = self.prover.check_proof().map_err(|err| VerifyError::ProverError(err))?;
         let model = if let Some(model) = self.prover.get_model() {
             assert!(matches!(
                 res,
@@ -593,7 +595,7 @@ pub fn slice_unsat_search<'ctx>(
     prover: &mut Prover<'ctx>,
     options: &SliceSolveOptions,
     limits_ref: &LimitsRef,
-) -> Result<Option<Vec<Bool<'ctx>>>, LimitError> {
+) -> Result<Option<Vec<Bool<'ctx>>>, VerifyError> {
     let mut slice_searcher =
         SliceModelSearch::new(exploration.variables().iter().cloned().collect_vec());
     let all_variables = exploration.variables().clone();
@@ -602,14 +604,15 @@ pub fn slice_unsat_search<'ctx>(
         limits_ref.check_limits()?;
 
         match check_proof_seed(&all_variables, prover, limits_ref, &seed) {
-            ProveResult::Proof => {
+            Ok(ProveResult::Proof) => {
                 // now start the shrinking, then block up
-                let res = exploration.shrink_block_unsat(seed, |seed| {
-                    match check_proof_seed(&all_variables, prover, limits_ref, seed) {
-                        ProveResult::Proof => Some(unsat_core_to_seed(prover, &all_variables)),
-                        ProveResult::Counterexample | ProveResult::Unknown(_) => None,
-                    }
-                });
+                let res_seed = match check_proof_seed(&all_variables, prover, limits_ref, &seed) {
+                    Ok(ProveResult::Proof) => Some(unsat_core_to_seed(prover, &all_variables)),
+                    Ok(ProveResult::Counterexample) | Ok(ProveResult::Unknown(_)) => None,
+                    Err(err) => return Err(VerifyError::ProverError(err))
+                };
+
+                let res = exploration.shrink_block_unsat(seed, |_| res_seed.clone());
 
                 let res_vec: Vec<_> = res.iter().cloned().collect();
                 slice_searcher.found_active(res_vec);
@@ -619,17 +622,19 @@ pub fn slice_unsat_search<'ctx>(
                     SliceMinimality::Subset => exploration.block_non_subset(&res),
                     SliceMinimality::Size => exploration.block_at_least(res.len()),
                 }
+
             }
-            ProveResult::Counterexample => {
+            Ok(ProveResult::Counterexample) => {
                 // grow the counterexample and then block down
-                exploration.grow_block_sat(seed, |seed| {
-                    match check_proof_seed(&all_variables, prover, limits_ref, seed) {
-                        ProveResult::Counterexample => true,
-                        ProveResult::Proof | ProveResult::Unknown(_) => false,
-                    }
-                });
+                let res_seed = match check_proof_seed(&all_variables, prover, limits_ref, &seed) {
+                    Ok(ProveResult::Counterexample) => true,
+                    Ok(ProveResult::Proof) | Ok(ProveResult::Unknown(_)) => false,
+                    Err(err) => return Err(VerifyError::ProverError(err)),
+                };
+
+                exploration.grow_block_sat(seed, |_| res_seed);
             }
-            ProveResult::Unknown(_) => {
+            Ok(ProveResult::Unknown(_)) => {
                 exploration.block_this(&seed);
 
                 match options.unknown {
@@ -643,6 +648,7 @@ pub fn slice_unsat_search<'ctx>(
                     }
                 }
             }
+            Err(err) => return Err(VerifyError::ProverError(err)),
         }
     }
 
@@ -655,7 +661,7 @@ fn check_proof_seed<'ctx>(
     prover: &mut Prover<'ctx>,
     limits_ref: &LimitsRef,
     seed: &IndexSet<Bool<'ctx>>,
-) -> ProveResult {
+) -> Result<ProveResult, ProverCommandError> {
     let mut timeout = Duration::from_millis(100);
     if let Some(time_left) = limits_ref.time_left() {
         timeout = timeout.min(time_left);

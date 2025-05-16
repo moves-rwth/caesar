@@ -25,7 +25,7 @@
 use std::ops::DerefMut;
 
 use z3::SatResult;
-use z3rro::prover::{IncrementalMode, Prover};
+use z3rro::prover::{IncrementalMode, Prover, SolverType};
 
 use crate::{
     ast::{
@@ -60,7 +60,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
         // it's important that we use the native incremental mode here, because
         // the performance benefit from the unfolder relies on many very fast
         // SAT checks.
-        let prover = Prover::new(ctx.ctx(), IncrementalMode::Native);
+        let prover = Prover::new(ctx.ctx(), IncrementalMode::Native, SolverType::Z3);
 
         Unfolder {
             subst: Subst::new(ctx.tcx(), &limits_ref),

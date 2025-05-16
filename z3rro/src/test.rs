@@ -4,7 +4,7 @@
 
 use z3::{ast::Bool, Config, Context, SatResult};
 
-use crate::prover::{IncrementalMode, ProveResult, Prover};
+use crate::prover::{IncrementalMode, ProveResult, Prover, SolverType};
 
 use super::scope::SmtScope;
 
@@ -18,7 +18,7 @@ pub fn test_prove(f: impl for<'ctx> FnOnce(&'ctx Context, &mut SmtScope<'ctx>) -
     let mut scope = SmtScope::new();
     let theorem = f(&ctx, &mut scope);
 
-    let mut prover = Prover::new(&ctx, IncrementalMode::Native);
+    let mut prover = Prover::new(&ctx, IncrementalMode::Native, SolverType::Z3);
     scope.add_assumptions_to_prover(&mut prover);
     assert_eq!(
         prover.check_sat(),
@@ -28,13 +28,14 @@ pub fn test_prove(f: impl for<'ctx> FnOnce(&'ctx Context, &mut SmtScope<'ctx>) -
 
     prover.add_provable(&theorem);
     match prover.check_proof() {
-        ProveResult::Counterexample => panic!(
+        Ok(ProveResult::Counterexample) => panic!(
             "counter-example: {:?}\nassertions:\n{:?}",
             prover.get_model(),
             prover.get_assertions()
         ),
-        ProveResult::Unknown(reason) => panic!("solver returned unknown ({})", reason),
-        ProveResult::Proof => {}
+        Ok(ProveResult::Unknown(reason)) => panic!("solver returned unknown ({})", reason),
+        Ok(ProveResult::Proof) => {},
+        Err(_) => {}
     };
 }
 

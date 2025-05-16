@@ -53,7 +53,7 @@ use crate::{
         vcgen::Vcgen,
     },
     version::write_detailed_version_info,
-    DebugOptions, SliceOptions, SliceVerifyMethod, VerifyCommand, VerifyError,
+    DebugOptions, SliceOptions, SliceVerifyMethod, VerifyCommand, VerifyError, SMTSolverType,
 };
 
 use ariadne::ReportKind;
@@ -65,7 +65,7 @@ use z3::{
 use z3rro::{
     model::InstrumentedModel,
     probes::ProbeSummary,
-    prover::{IncrementalMode, ProveResult, Prover},
+    prover::{IncrementalMode, ProveResult, Prover, SolverType},
     smtlib::Smtlib,
     util::{PrefixWriter, ReasonUnknown},
 };
@@ -696,7 +696,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
         let span = info_span!("SAT check");
         let _entered = span.enter();
 
-        let prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc);
+        let prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc, options.smt_solver_options.smt_solver);
 
         if options.debug_options.probe {
             let goal = Goal::new(ctx, false, false, false);
@@ -823,9 +823,15 @@ fn mk_valid_query_prover<'smt, 'ctx>(
     ctx: &'ctx Context,
     smt_translate: &TranslateExprs<'smt, 'ctx>,
     valid_query: &Bool<'ctx>,
+    smt_solver: SMTSolverType,
 ) -> Prover<'ctx> {
+    let solver_type = match smt_solver {
+        SMTSolverType::Swine => SolverType::SWINE,
+        SMTSolverType::Z3 => SolverType::Z3,            
+    };
+
     // create the prover and set the params
-    let mut prover = Prover::new(ctx, IncrementalMode::Native);
+    let mut prover = Prover::new(ctx, IncrementalMode::Native, solver_type);
     if let Some(remaining) = limits_ref.time_left() {
         prover.set_timeout(remaining);
     }
