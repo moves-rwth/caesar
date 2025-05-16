@@ -3,7 +3,6 @@
 
 use std::{
     env,
-    ffi::CStr,
     io::{self, Write},
 };
 
@@ -33,12 +32,6 @@ pub fn caesar_semver_version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
 }
 
-/// Return Z3's version.
-fn z3_version_info() -> String {
-    let z3_str = unsafe { CStr::from_ptr(z3_sys::Z3_get_full_version()) };
-    z3_str.to_string_lossy().to_string()
-}
-
 /// Write detailed version info about Caesar and its dependencies.
 pub fn write_detailed_version_info<W>(w: &mut W) -> io::Result<()>
 where
@@ -66,7 +59,7 @@ where
         built_info::TARGET,
         built_info::HOST
     )?;
-    writeln!(w, "Z3 version: {}", z3_version_info())?;
+    writeln!(w, "Z3 version: {}", z3::full_version())?;
     writeln!(w)
 }
 

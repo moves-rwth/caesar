@@ -255,7 +255,7 @@ mod test {
                         .map(|s| s.to_owned() + "\n")
                         .collect::<String>(),
                     r#"Error: Unexpected token
-   ╭─[<builtin>:1:5]
+   ╭─[ <builtin>:1:5 ]
    │
  1 │ if ⊓!
    │     ┬

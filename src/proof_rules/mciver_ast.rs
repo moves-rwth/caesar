@@ -144,7 +144,7 @@ impl Encoding for ASTAnnotation {
             return Err(AnnotationError::NotOnWhile {
                 span: annotation_span,
                 annotation_name: self.name(),
-                annotated: inner_stmt.clone(),
+                annotated: Box::new(inner_stmt.clone()),
             });
         };
 

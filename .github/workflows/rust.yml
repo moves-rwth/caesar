@@ -1,6 +1,8 @@
 on: [push, pull_request]
 
 name: Rust
+permissions:
+  contents: read
 
 jobs:
   test:

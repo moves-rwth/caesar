@@ -288,7 +288,7 @@ impl<'tcx, 'sunit> VisitorMut for EncodingVisitor<'tcx, 'sunit> {
                             AnnotationError::NotOnWhile {
                                 span: *annotation_span,
                                 annotation_name: *ident,
-                                annotated: inner_stmt.as_ref().clone(),
+                                annotated: Box::new(inner_stmt.as_ref().clone()),
                             },
                         ));
                     }

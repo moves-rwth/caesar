@@ -29,7 +29,6 @@ log-print-timeless = []
 string-interner = "0.18"
 lalrpop-util = { version = "0.22", features = ["lexer"] }
 z3 = "^0.12"
-z3-sys = "^0.8"
 ref-cast = "1.0"
 replace_with = "0.1"
 num = "0.4"
@@ -55,7 +54,7 @@ serde = "1.0.197"
 jani = { path = "./jani" }
 itertools = "0.13.0"
 stacker = "0.1.15"
-crossbeam-channel = "0.5.14"
+crossbeam-channel = "0.5.15"
 shlex = "1.3.0"
 clap = { version = "4.5.23", features = ["derive", "string", "cargo"] }
 clap_complete = "4.5.42"
@@ -86,9 +85,8 @@ harness = false
 opt-level = 3
 
 [patch.crates-io]
-z3 = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = '473cb83d85cbce92b837a1667693ca9ca38c046c' }
-z3-sys = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = '473cb83d85cbce92b837a1667693ca9ca38c046c' }
-# to work on z3.rs locally, clone it into the main directory and use the following directive instead:
+z3 = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = 'e8f03cdedfa4a2b4938ee0efc943ff003aed8687' }
+z3-sys = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = 'e8f03cdedfa4a2b4938ee0efc943ff003aed8687' }
 
 # see https://github.com/heim-rs/darwin-libproc/pull/3#issuecomment-1645444056
 darwin-libproc = { git = "https://github.com/Orycterope/darwin-libproc.git", rev = "f73ddb1002d51ae74c1b41670fae56bd5896b7a3" }
