@@ -52,7 +52,7 @@ use crate::{
         subst::apply_subst,
         vcgen::Vcgen,
     },
-    version::write_detailed_version_info,
+    version::write_detailed_command_info,
     DebugOptions, SliceOptions, SliceVerifyMethod, VerifyCommand, VerifyError,
 };
 
@@ -880,7 +880,7 @@ fn write_smtlib(
             create_dir_all(file_path.parent().unwrap())?;
             let mut file = File::create(&file_path)?;
             let mut comment_writer = PrefixWriter::new("; ".as_bytes(), &mut file);
-            write_detailed_version_info(&mut comment_writer)?;
+            write_detailed_command_info(&mut comment_writer)?;
             writeln!(comment_writer, "Source unit: {}", name)?;
             if let Some(prove_result) = prove_result {
                 writeln!(comment_writer, "Prove result: {}", &prove_result)?;

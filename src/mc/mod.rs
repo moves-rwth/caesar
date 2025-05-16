@@ -29,7 +29,7 @@ use crate::{
     },
     procs::proc_verify::verify_proc,
     tyctx::TyCtx,
-    version::caesar_version_info,
+    version::caesar_detailed_version,
     ModelCheckingOptions,
 };
 
@@ -173,7 +173,7 @@ pub fn proc_to_model(
         description: Some(
             format!(
                 "Created by the Caesar deductive verifier ({}).",
-                caesar_version_info()
+                caesar_detailed_version()
             )
             .into_boxed_str(),
         ),

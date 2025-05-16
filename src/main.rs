@@ -65,7 +65,7 @@ mod version;
     name = "caesar",
     about = crate_description!(),
     long_about = "Caesar is a deductive verifier for probabilistic programs. Run the caesar binary with a subcommand to use it. Usually, you'll want to use the `verify` command.",
-    version = version::detailed_version_info_string()
+    version = version::clap_detailed_version_info()
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -457,7 +457,7 @@ async fn main() -> ExitCode {
     if let Some(debug_options) = options.debug_options() {
         if debug_options.debug {
             let mut stderr = io::stderr().lock();
-            version::write_detailed_version_info(&mut stderr).unwrap();
+            version::write_detailed_command_info(&mut stderr).unwrap();
         }
         // install global collector configured based on RUST_LOG env var.
         setup_tracing(debug_options);
