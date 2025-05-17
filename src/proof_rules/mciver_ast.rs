@@ -205,7 +205,7 @@ impl Encoding for ASTAnnotation {
             .into_iter()
             .collect();
 
-        // Replace all variables with the init versions in the past-invariant
+        // Replace all variables with the init versions in the variant
         let init_variant = to_init_expr(tcx, annotation_span, variant, &modified_vars);
 
         let a_ident = new_ident_with_name(tcx, &TyKind::UReal, annotation_span, "a");
@@ -214,6 +214,7 @@ impl Encoding for ASTAnnotation {
         let b_ident = new_ident_with_name(tcx, &TyKind::UReal, annotation_span, "b");
         let b_expr = ident_to_expr(tcx, annotation_span, b_ident);
 
+        // ?(a <= b)
         let cond1_2_pre = builder.unary(
             UnOpKind::Embed,
             Some(TyKind::EUReal),
@@ -225,6 +226,7 @@ impl Encoding for ASTAnnotation {
             ),
         );
 
+        // ?(prob(a) >= prob(b))
         let cond1_post = builder.unary(
             UnOpKind::Embed,
             Some(TyKind::EUReal),
@@ -236,6 +238,7 @@ impl Encoding for ASTAnnotation {
             ),
         );
 
+        // ?(decrease(a) >= decrease(b))
         let cond2_post = builder.unary(
             UnOpKind::Embed,
             Some(TyKind::EUReal),
@@ -277,6 +280,7 @@ impl Encoding for ASTAnnotation {
         // decrease antitone
         let cond2_proc = generate_proc(annotation_span, cond2_proc_info, base_proc_ident, tcx);
 
+        // [I]
         let cond3_expr = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), invariant.clone());
 
         let mut cond3_body = init_assigns.clone();
@@ -327,7 +331,7 @@ impl Encoding for ASTAnnotation {
             ),
         );
 
-        // if G then V > 0
+        // if I then (G ==> V > 0)
         let cond4_proc_info = ProcInfo {
             // create the ProcInfo according to the generate_proc function below
             name: "termination_condition".to_string(),
@@ -346,7 +350,8 @@ impl Encoding for ASTAnnotation {
         };
         let cond4_proc = generate_proc(annotation_span, cond4_proc_info, base_proc_ident, tcx);
 
-        // Phi_{V}(V) <= V
+        // Phi_{V}(V) <= V ⊔ ?(!I)
+        // Modification: only check that V is a superinvariant for states fulfilling the invariant
         let mut cond5_body = init_assigns.clone();
         cond5_body.push(Spanned::new(
             annotation_span,
@@ -385,6 +390,7 @@ impl Encoding for ASTAnnotation {
 
         let cond5_proc = generate_proc(annotation_span, cond5_proc_info, base_proc_ident, tcx);
 
+        // [I] * [G] * (p o V)
         let cond6_pre = builder.binary(
             BinOpKind::Mul,
             Some(TyKind::EUReal),
@@ -408,6 +414,7 @@ impl Encoding for ASTAnnotation {
             ),
         );
 
+        // [V <= V(init) - d(V(init))]
         let cond6_post = builder.unary(
             UnOpKind::Iverson,
             Some(TyKind::EUReal),
