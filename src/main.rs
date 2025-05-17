@@ -23,12 +23,12 @@ use crate::{
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
 };
-use ast::{DeclKind, Diagnostic, FileId};
+use ast::{visit::VisitorMut, DeclKind, Diagnostic, FileId};
 use clap::{crate_description, Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use mc::run_storm::{run_storm, storm_result_to_diagnostic};
-use proof_rules::{find_looping_procs, init_encodings};
+use proof_rules::{find_looping_procs, init_encodings, EncodingVisitor};
 use regex::Regex;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef, MemorySize};
 use servers::{run_lsp_server, CliServer, LspServer, Server, ServerError};
@@ -702,6 +702,29 @@ fn parse_and_tycheck(
     Ok((source_units, tcx))
 }
 
+/// Apply encodings from annotations. This might generate new source units for side conditions.
+/// Returns existing and generated source units together.
+pub fn apply_encodings(
+    tcx: &mut TyCtx,
+    mut source_units: Vec<Item<SourceUnit>>,
+) -> Result<Vec<Item<SourceUnit>>, VerifyError> {
+    // Find potentially 'looping' (co)procs i.e. (co)procs that contain a proc call which might result in a recursive loop.
+    let looping_procs = find_looping_procs(tcx, &mut source_units);
+    let mut source_units_buf = vec![];
+
+    let mut encoding_visitor = EncodingVisitor::new(tcx, &mut source_units_buf, looping_procs);
+
+    for source_unit in &mut source_units {
+        match source_unit.enter().deref_mut() {
+            SourceUnit::Decl(decl) => encoding_visitor.visit_decl(decl),
+            SourceUnit::Raw(block) => encoding_visitor.visit_block(block),
+        }
+        .map_err(|ann_err| ann_err.diagnostic())?;
+    }
+    source_units.extend(source_units_buf);
+    Ok(source_units)
+}
+
 /// Synchronously verify the given source code. This is used for tests. The
 /// `--werr` option is enabled by default.
 #[cfg(test)]
@@ -727,8 +750,6 @@ pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, servers::
 
 #[cfg(test)]
 pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
-    use std::collections::HashSet;
-
     use ast::SourceFilePath;
 
     let mut options = VerifyCommand::default();
@@ -750,14 +771,8 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
     )?;
 
     assert_eq!(source_units.len(), 1);
-    let mut source_unit = source_units.into_iter().next().unwrap();
 
-    let mut new_source_units: Vec<Item<SourceUnit>> = vec![];
-    source_unit
-        .enter()
-        .apply_encodings(&mut tcx, &mut new_source_units, &HashMap::new())?;
-
-    new_source_units.push(source_unit);
+    let new_source_units: Vec<Item<SourceUnit>> = apply_encodings(&mut tcx, source_units)?;
 
     Ok(new_source_units
         .into_iter()
@@ -812,18 +827,9 @@ fn verify_files_main(
         false,
     )?;
 
-    // Find 'looping' procs i.e. procs that contain a proc call which results in a recursive loop.
-    let looping_procs = find_looping_procs(&mut tcx, &mut source_units);
-
-    // Desugar encodings from source units. They might generate new source
+    // Desugar encodings from source units. This might generate new source
     // units (for side conditions).
-    let mut source_units_buf = vec![];
-    for source_unit in &mut source_units {
-        source_unit
-            .enter()
-            .apply_encodings(&mut tcx, &mut source_units_buf, &looping_procs)?;
-    }
-    source_units.extend(source_units_buf);
+    let mut source_units = apply_encodings(&mut tcx, source_units)?;
 
     if options.debug_options.print_core_procs {
         println!("HeyVL query with generated procs:");

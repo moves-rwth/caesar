@@ -1,7 +1,6 @@
 //! This module glues all components of Caesar together.
 
 use std::{
-    collections::HashMap,
     fmt,
     fs::{create_dir_all, File},
     hash::Hash,
@@ -13,8 +12,8 @@ use std::{
 use crate::{
     ast::{
         stats::StatsVisitor, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclKindName,
-        Diagnostic, Direction, Expr, ExprBuilder, Ident, Label, SourceFilePath, Span, StoredFile,
-        TyKind, UnOpKind, VarKind,
+        Diagnostic, Direction, Expr, ExprBuilder, Label, SourceFilePath, Span, StoredFile, TyKind,
+        UnOpKind, VarKind,
     },
     front::{
         parser::{self, ParseError},
@@ -32,7 +31,6 @@ use crate::{
         proc_verify::{to_direction_lower_bounds, verify_proc},
         SpecCall,
     },
-    proof_rules::EncodingVisitor,
     resource_limits::{LimitError, LimitsRef},
     servers::Server,
     slicing::{
@@ -400,22 +398,6 @@ impl SourceUnit {
         } else {
             Ok(None)
         }
-    }
-
-    /// Apply encodings from annotations.
-    #[instrument(skip(self, tcx, source_units_buf))]
-    pub fn apply_encodings(
-        &mut self,
-        tcx: &mut TyCtx,
-        source_units_buf: &mut Vec<Item<SourceUnit>>,
-        looping_procs: &HashMap<Ident, Span>,
-    ) -> Result<(), VerifyError> {
-        let mut encoding_visitor = EncodingVisitor::new(tcx, source_units_buf, looping_procs);
-        let res = match self {
-            SourceUnit::Decl(decl) => encoding_visitor.visit_decl(decl),
-            SourceUnit::Raw(block) => encoding_visitor.visit_block(block),
-        };
-        Ok(res.map_err(|ann_err| ann_err.diagnostic())?)
     }
 
     /// Convert this source unit into a [`VerifyUnit`].

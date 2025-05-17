@@ -12,7 +12,7 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    proof_rules::Encoding,
+    proof_rules::{Encoding, LoopingProcBlame},
     slicing::selection::SliceAnnotation,
     tyctx::TyCtx,
 };
@@ -65,8 +65,8 @@ pub enum AnnotationUnsoundnessError {
     },
     UnsoundRecursion {
         direction: Direction,
-        span: Span,
         calculus_name: Ident,
+        blame: LoopingProcBlame,
     },
 }
 
@@ -145,16 +145,19 @@ impl AnnotationUnsoundnessError {
                         "The calculus of the called procedure must match the calculus of the calling procedure.",
                     ))
             }
-            AnnotationUnsoundnessError::UnsoundRecursion{direction, span, calculus_name} => {
-                Diagnostic::new(ReportKind::Error, span)
+            AnnotationUnsoundnessError::UnsoundRecursion{direction,calculus_name , blame } => {
+                Diagnostic::new(ReportKind::Error, blame.call_span)
                     .with_message(format!(
-                        "In {}s, The '{}' calculus does not support calls that may lead to recursion.",
+                        "Potential recursive calls are not allowed in a {} with the '{}' calculus.",
                         direction.prefix("proc"), calculus_name.name, 
                     ))
-                    .with_label(Label::new(span).with_message(
-                        "This call may lead to a recursive loop.",
+                    .with_label(Label::new(blame.call_span).with_message(format!(
+                        "This call to {} might lead to a recursive call of {}.", 
+                        blame.called_proc_name.name, blame.recursive_proc_name.name) ,
                     ))
-                    
+                    .with_note(
+                        "(Co)Procedure calls make use of Park induction, which is not sound in this setting in general.",
+                    )
             }
         }
     }

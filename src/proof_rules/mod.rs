@@ -142,20 +142,33 @@ struct ProcContext {
 
 /// Walks the AST and transforms encoding annotations into their desugared form.
 /// Correct and sound usage of the encoding annotations are also checked during this process.
-pub struct EncodingVisitor<'tcx, 'sunit, 'hmap> {
+pub struct EncodingVisitor<'tcx, 'sunit> {
     tcx: &'tcx mut TyCtx,
     source_units_buf: &'sunit mut Vec<Item<SourceUnit>>,
-    looping_procs: &'hmap HashMap<Ident, Span>, // The set of looping procedures along with the spans of their looping calls
+    /// The set of looping procedures along with the spans of their looping calls
+    looping_procs: HashMap<Ident, LoopingProcBlame>,
     terminator_annotation: Option<Ident>, // The name of the terminator annotation if there is one
     nesting_level: usize,
     proc_context: Option<ProcContext>, // The relevant context of the current procedure being visited for soundness
 }
 
-impl<'tcx, 'sunit, 'hmap> EncodingVisitor<'tcx, 'sunit, 'hmap> {
+/// A struct that contains the information about a looping procedure.
+#[derive(Debug, Copy, Clone)]
+pub struct LoopingProcBlame {
+    /// The span of the 'looping' call that might lead to the recursion
+    pub call_span: Span,
+    /// The name of the directly called procedure
+    pub called_proc_name: Ident,
+    /// The name of the first recursive procedure that can be reached from the call
+    /// (i.e. the first procedure that is part of a cycle)
+    pub recursive_proc_name: Ident,
+}
+
+impl<'tcx, 'sunit> EncodingVisitor<'tcx, 'sunit> {
     pub fn new(
         tcx: &'tcx mut TyCtx,
         source_units_buf: &'sunit mut Vec<Item<SourceUnit>>,
-        looping_procs: &'hmap HashMap<Ident, Span>,
+        looping_procs: HashMap<Ident, LoopingProcBlame>,
     ) -> Self {
         EncodingVisitor {
             tcx,
@@ -186,7 +199,7 @@ impl EncodingVisitorError {
     }
 }
 
-impl<'tcx, 'sunit, 'hmap> VisitorMut for EncodingVisitor<'tcx, 'sunit, 'hmap> {
+impl<'tcx, 'sunit> VisitorMut for EncodingVisitor<'tcx, 'sunit> {
     type Err = EncodingVisitorError;
 
     fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
@@ -252,8 +265,8 @@ impl<'tcx, 'sunit, 'hmap> VisitorMut for EncodingVisitor<'tcx, 'sunit, 'hmap> {
                 return Err(EncodingVisitorError::UnsoundnessError(
                     AnnotationUnsoundnessError::UnsoundRecursion {
                         direction: proc.direction,
-                        span: *self.looping_procs.get(&proc.name).unwrap(),
                         calculus_name: calculus.name,
+                        blame: *self.looping_procs.get(&proc.name).unwrap(),
                     },
                 ));
             }
@@ -424,7 +437,12 @@ impl<'tcx, 'sunit, 'hmap> VisitorMut for EncodingVisitor<'tcx, 'sunit, 'hmap> {
     }
 }
 
-struct CallGraphVisitor<'tcx> {
+/// A visitor that generates a call graph of the procedures in the program.
+/// The call graph is represented as a directed graph where the nodes are the procedure names
+/// and the directed edges are the calls between procedures.
+/// The edges are also annotated with the span of the call expression.
+/// The direction of the edge is from the callee to the caller to simplify our algorithm to find looping procs.
+pub struct CallGraphVisitor<'tcx> {
     tcx: &'tcx mut TyCtx,
     current_proc: Option<Ident>,
     graph: petgraph::graph::DiGraph<Ident, Span>,
@@ -451,18 +469,20 @@ impl VisitorMut for CallGraphVisitor<'_> {
 
         self.current_proc = Some(proc.name);
 
-        // Visit the body of the procedure
+        // Visit the body of the procedure.
         let mut body = proc.body.borrow_mut();
-        if let Some(ref mut block) = &mut *body {
-            self.visit_block(block)?;
-        }
-
+        let res = {
+            if let Some(ref mut block) = &mut *body {
+                self.visit_block(block)
+            } else {
+                Err(())
+            }
+        };
+        // Reset the current procedure.
         self.current_proc = None;
-
-        Ok(())
+        res
     }
 
-    /// Generate the directed call graph by adding edges between the nodes
     fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
         if let ExprKind::Call(ref ident, _) = e.deref_mut().kind {
             if let DeclKind::ProcDecl(proc_ref) = self.tcx.get(*ident).unwrap().as_ref() {
@@ -491,11 +511,7 @@ impl VisitorMut for CallGraphVisitor<'_> {
     }
 }
 
-// Generate the call graph of the procedures in the program
-// The call graph is represented as a directed graph where the nodes are the procedure names
-// and the directed edges are the calls between procedures.
-// The edges are also annotated with the span of the call expression.
-// The direction of the edge is from the callee to the caller to simplify our algorithm to find looping procs.
+/// Generate the call graph of the procedures in the program with the ['CallGraphVisitor'].
 fn generate_call_graph(
     tcx: &mut TyCtx,
     source_units: &mut Vec<Item<SourceUnit>>,
@@ -517,13 +533,13 @@ fn generate_call_graph(
     visitor.graph
 }
 
-/// Find procs that have a proc call in their body which effectively creates a loop by reaching to a recursive proc.
-/// This is done by generating a call graph of the procedures in the program and checking which procs can reach to a cycle.
-/// The function returns a map of the 'looping' procedures and the spans of their looping/recursive calls.
+/// Find (co)procs that have a (co)proc call in their body that might effectively result in a loop by reaching to a recursive (co)proc.
+/// This analysis is done by generating a call graph of the procedures in the program and checking which (co)procs can reach to a cycle.
+/// The function returns a map of the 'looping' procedures and the information about which call and (co)proc to blame for the recursion.
 pub fn find_looping_procs(
     tcx: &mut TyCtx,
     source_units: &mut Vec<Item<SourceUnit>>,
-) -> HashMap<Ident, Span> {
+) -> HashMap<Ident, LoopingProcBlame> {
     let call_graph = generate_call_graph(tcx, source_units);
 
     // Find SCCs in the call graph
@@ -547,16 +563,29 @@ pub fn find_looping_procs(
             // If we added it to the map immediately, we would not know which call led to the recursion.
 
             let mut stack = vec![scc[0]];
+            let mut first_reachable_recursive_proc = call_graph[scc[0]];
             while let Some(node_index) = stack.pop() {
+                // Track the last seen node from the same SCC to be able to deduce the first reachable recursive proc from any looping proc
+                if scc.contains(&node_index) {
+                    first_reachable_recursive_proc = call_graph[node_index];
+                }
+
                 for edge in call_graph.edges(node_index) {
                     let neighbor = edge.target();
-                    let neigbor_ident = call_graph[neighbor];
-                    if looping_procs.contains_key(&neigbor_ident) {
+                    let neighbor_ident = call_graph[neighbor];
+                    if looping_procs.contains_key(&neighbor_ident) {
                         // If the neighbor is already in the map, skip it
                         continue;
                     }
                     // Add the span of the recursive call to the map with the caller procs name
-                    looping_procs.insert(neigbor_ident, *edge.weight());
+                    looping_procs.insert(
+                        neighbor_ident,
+                        LoopingProcBlame {
+                            call_span: *edge.weight(),
+                            called_proc_name: call_graph[node_index],
+                            recursive_proc_name: first_reachable_recursive_proc,
+                        },
+                    );
                     stack.push(neighbor);
                 }
             }
