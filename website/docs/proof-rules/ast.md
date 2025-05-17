@@ -44,9 +44,127 @@ The latter two quantities are specified by user-provided _decrease_ and _probabi
 Additionally, a Boolean _invariant_ must also be specified.
 It allows to limit the set of states on which almost-sure termination is checked.
 
+### Formal Theorem
+
+Consider a loop `while G { Body }`.
+The loop's used and modified variables, except the ones declared within the loop, are referred to as `vars`.
+Give
+- $\mathtt{I}$ a Boolean predicate, 
+- $\mathtt{V}$ a variant function assigning a value $\mathbb{R}_{\geq 0}$ to every state,
+- $\mathtt{prob} \colon \mathbb{R}_{\geq 0} \to (0,1]$,
+- $\mathtt{decrease} \colon \mathbb{R}_{\geq 0} \to \mathbb{R}_{> 0}$,
+
+such that all the following conditions are fulfilled:
+
+1. $\mathtt{prob}$ is antitone,
+    <details>
+    <summary>HeyVL Encoding</summary>
+    <p>
+
+    ```heyvl
+    proc prob_antitone(a: UReal, b: UReal) -> ()
+        pre ?(a <= b)
+        post ?(prob(a) >= prob(b))
+    {}
+    ```
+
+    </p>
+    </details>
+2. $\mathtt{decrease}$ is antitone,
+    <details>
+    <summary>HeyVL Encoding</summary>
+    <p>
+
+    ```heyvl
+    proc decrease_antitone(a: UReal, b: UReal) -> ()
+        pre ?(a <= b)
+        post ?(decrease(a) >= decrease(b))
+    {}
+    ```
+
+    </p>
+    </details>
+3. `[I]` is a `wp`-subinvariant of `while G { Body }` with respect to `[I]`,
+    <details>
+    <summary>HeyVL Encoding</summary>
+    <p>
+
+    ```heyvl
+    @wp
+    proc I_wp_subinvariant(init_vars: ...) -> (vars: ...)
+        pre [I(init_vars)]
+        post [I(vars)]
+    {
+        vars = init_vars // set current state to input values
+        if G {
+            Body
+        }
+    }
+    ```
+
+    </p>
+    </details>
+4. For states fulfilling the invariant `I`: if the loop guard `G` holds, then $\mathtt{V} > 0$,
+    <details>
+    <summary>HeyVL Encoding</summary>
+    <p>
+
+    ```heyvl
+    proc termination_condition(vars: ...) -> ()
+        pre ?(I(vars))
+        post ?(G(vars) ==> V(vars) > 0]
+    {}
+    ```
+
+    </p>
+    </details>
+5. For states fulfilling the invariant `I`: `V` is a `wp`-superinvariant of `while G { Body }` with respect to `V`, i.e. in expectation the variant does not increase after one loop iteration [^1]
+    <details>
+    <summary>HeyVL Encoding</summary>
+    <p>
+
+    ```heyvl
+    @wp
+    coproc V_wp_superinvariant(init_vars: ...) -> (vars: ...)
+        pre ?(!I(init_vars))
+        pre V(init_vars)
+        post V(vars)
+    {
+        vars = init_vars // set current state to input values
+        if G {
+            Body
+        }
+    }
+    ```
+
+    </p>
+    </details>
+6. `V` satisfies a _progress_ condition, ensuring that, in expectation, one loop iteration decreases the variant by at least `decrease` with probability at least `prob`.
+    <details>
+    <summary>HeyVL Encoding</summary>
+    <p>
+
+    ```heyvl
+    @wp
+    proc progress_condition(init_vars: ...) -> (vars: ...)
+        pre [I(init_vars)] * [G(init_vars)] * prob(V(init_vars))
+        post [V(vars) <= V(init_vars) - decrease(V(init_vars))]
+    {
+        vars = init_vars // set current state to input values
+        Body
+    }
+    ```
+
+    </p>
+    </details>
+
+Then `while G { Body }` is almost-surely terminating from all initial states satisfying `I`, i.e. `[I] <= wp[while G { Body }](1)`.
+
+
 ### Usage
 
-Below is the encoding of the "escaping spline" example [from Section 5.4 of the paper](https://dl.acm.org/doi/pdf/10.1145/3158121#page=18).
+By applying the `@ast` annotation to a loop, Caesar will check the above requirements for a given invariant, variant, probability and decrease function.
+Below is the encoding of the "escaping spline" example [from Section 5.4 of the proof rule's paper](https://dl.acm.org/doi/pdf/10.1145/3158121#page=18).
 
 ```heyvl
 proc ast_example4() -> ()
