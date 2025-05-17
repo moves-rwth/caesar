@@ -28,7 +28,7 @@ use clap::{crate_description, Args, CommandFactory, Parser, Subcommand, ValueEnu
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use mc::run_storm::{run_storm, storm_result_to_diagnostic};
-use proof_rules::init_encodings;
+use proof_rules::{find_looping_procs, init_encodings};
 use regex::Regex;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef, MemorySize};
 use servers::{run_lsp_server, CliServer, LspServer, Server, ServerError};
@@ -727,6 +727,8 @@ pub(crate) fn verify_test(source: &str) -> (Result<bool, VerifyError>, servers::
 
 #[cfg(test)]
 pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
+    use std::collections::HashSet;
+
     use ast::SourceFilePath;
 
     let mut options = VerifyCommand::default();
@@ -753,7 +755,7 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
     let mut new_source_units: Vec<Item<SourceUnit>> = vec![];
     source_unit
         .enter()
-        .apply_encodings(&mut tcx, &mut new_source_units)?;
+        .apply_encodings(&mut tcx, &mut new_source_units, &HashMap::new())?;
 
     new_source_units.push(source_unit);
 
@@ -810,13 +812,16 @@ fn verify_files_main(
         false,
     )?;
 
+    // Find 'looping' procs i.e. procs that contain a proc call which results in a recursive loop.
+    let looping_procs = find_looping_procs(&mut tcx, &mut source_units);
+
     // Desugar encodings from source units. They might generate new source
     // units (for side conditions).
     let mut source_units_buf = vec![];
     for source_unit in &mut source_units {
         source_unit
             .enter()
-            .apply_encodings(&mut tcx, &mut source_units_buf)?;
+            .apply_encodings(&mut tcx, &mut source_units_buf, &looping_procs)?;
     }
     source_units.extend(source_units_buf);
 

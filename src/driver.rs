@@ -1,8 +1,10 @@
 //! This module glues all components of Caesar together.
 
 use std::{
+    collections::HashMap,
     fmt,
     fs::{create_dir_all, File},
+    hash::Hash,
     io::Write,
     ops::{Deref, DerefMut},
     path::PathBuf,
@@ -11,8 +13,8 @@ use std::{
 use crate::{
     ast::{
         stats::StatsVisitor, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclKindName,
-        Diagnostic, Direction, Expr, ExprBuilder, Label, SourceFilePath, Span, StoredFile, TyKind,
-        UnOpKind, VarKind,
+        Diagnostic, Direction, Expr, ExprBuilder, Ident, Label, SourceFilePath, Span, StoredFile,
+        TyKind, UnOpKind, VarKind,
     },
     front::{
         parser::{self, ParseError},
@@ -406,8 +408,9 @@ impl SourceUnit {
         &mut self,
         tcx: &mut TyCtx,
         source_units_buf: &mut Vec<Item<SourceUnit>>,
+        looping_procs: &HashMap<Ident, Span>,
     ) -> Result<(), VerifyError> {
-        let mut encoding_visitor = EncodingVisitor::new(tcx, source_units_buf);
+        let mut encoding_visitor = EncodingVisitor::new(tcx, source_units_buf, looping_procs);
         let res = match self {
             SourceUnit::Decl(decl) => encoding_visitor.visit_decl(decl),
             SourceUnit::Raw(block) => encoding_visitor.visit_block(block),
