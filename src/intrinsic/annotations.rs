@@ -63,6 +63,11 @@ pub enum AnnotationUnsoundnessError {
         context_calculus: Ident,
         call_calculus: Ident,
     },
+    UnsoundRecursion {
+        direction: Direction,
+        span: Span,
+        calculus_name: Ident,
+    },
 }
 
 impl AnnotationError {
@@ -140,6 +145,17 @@ impl AnnotationUnsoundnessError {
                         "The calculus of the called procedure must match the calculus of the calling procedure.",
                     ))
             }
+            AnnotationUnsoundnessError::UnsoundRecursion{direction, span, calculus_name} => {
+                Diagnostic::new(ReportKind::Error, span)
+                    .with_message(format!(
+                        "In {}s, The '{}' calculus does not support calls that may lead to recursion.",
+                        direction.prefix("proc"), calculus_name.name, 
+                    ))
+                    .with_label(Label::new(span).with_message(
+                        "This call may lead to a recursive loop.",
+                    ))
+                    
+            }
         }
     }
 }
@@ -155,6 +171,17 @@ pub enum CalculusType {
     Wp,
     Wlp,
     Ert,
+}
+
+impl CalculusType {
+    pub fn is_induction_allowed(&self, direction: Direction) -> bool {
+        matches!(
+            (self, direction),
+            (CalculusType::Wlp, Direction::Down)
+                | (CalculusType::Wp, Direction::Up)
+                | (CalculusType::Ert, Direction::Up)
+        )
+    }
 }
 
 pub struct CalculusAnnotationError;
