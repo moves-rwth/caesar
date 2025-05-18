@@ -16,7 +16,7 @@
 <link rel="search" type="application/opensearchdescription+xml" title="Caesar" href="/opensearch.xml">
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.13.24/dist/katex.min.css" integrity="sha384-odtC+0UGzzFL/6PNoE8rX/SPcQDXBJ+uRepguP4QkPCm2LBxH3FA3y+fKSiJ+AmM" crossorigin="anonymous"><link rel="stylesheet" href="/assets/css/styles.194e9fbb.css">
-<script src="/assets/js/runtime~main.5a4af6d2.js" defer="defer"></script>
+<script src="/assets/js/runtime~main.364f722a.js" defer="defer"></script>
 <script src="/assets/js/main.cb5031ca.js" defer="defer"></script>
 </head>
 <body class="navigation-with-keyboard">
@@ -74,7 +74,13 @@ For example, if you want to verify a program in <code>./programs/example.heyvl</
 <h2 class="anchor anchorWithStickyNavbar_LWe7" id="build-source">Options C: Build From Source<a href="#build-source" class="hash-link" aria-label="Direct link to Options C: Build From Source" title="Direct link to Options C: Build From Source">​</a></h2>
 <h3 class="anchor anchorWithStickyNavbar_LWe7" id="option-c1-compile-binary">Option C.1: Compile Binary<a href="#option-c1-compile-binary" class="hash-link" aria-label="Direct link to Option C.1: Compile Binary" title="Direct link to Option C.1: Compile Binary">​</a></h3>
 <h4 class="anchor anchorWithStickyNavbar_LWe7" id="installing-dependencies">Installing Dependencies<a href="#installing-dependencies" class="hash-link" aria-label="Direct link to Installing Dependencies" title="Direct link to Installing Dependencies">​</a></h4>
-<p>You will need to install some dependencies manually:</p>
+<p>Compiling Caesar requires a few dependencies.
+You can either</p>
+<ol>
+<li>install them manually (see below) or</li>
+<li>use the provided <a href="https://code.visualstudio.com/docs/devcontainers/containers" target="_blank" rel="noopener noreferrer">DevContainer</a> configuration.
+The DevContainer configuration is available in the <code>.devcontainer</code> folder and can be used with e.g. the DevContainer VSCode extension by running the &quot;Dev Containers: Open Folder in Container...&quot; command&quot;.</li>
+</ol>
 <p><strong>Rust:</strong> To install <a href="https://www.rust-lang.org/" target="_blank" rel="noopener noreferrer">Rust</a>, we recommend <a href="https://rustup.rs/" target="_blank" rel="noopener noreferrer">installation via rustup</a>.
 You might need to restart your terminal after installing Rust.</p>
 <p><strong>Build Tools:</strong> Caesar builds <a href="https://github.com/Z3Prover/z3" target="_blank" rel="noopener noreferrer">Z3</a> itself, so we need <a href="https://www.python.org" target="_blank" rel="noopener noreferrer">Python</a> and <a href="https://cmake.org/" target="_blank" rel="noopener noreferrer">cmake</a>.</p>
