@@ -1,7 +1,50 @@
 use pretty_assertions::assert_eq;
 
+/// Remove trailing whitespace from each line of the string, remove newlines
+/// before and after the string, and remove the common indentation from each line.
 fn remove_whitespace(s: &mut String) {
-    s.retain(|c| !c.is_whitespace());
+    let mut lines: Vec<&str> = s.lines().map(|line| line.trim_end()).collect();
+
+    // Remove newlines before
+    while let Some(line) = lines.first() {
+        if line.is_empty() {
+            lines.remove(0);
+        } else {
+            break;
+        }
+    }
+
+    // Remove newlines after
+    while let Some(line) = lines.last() {
+        if line.is_empty() {
+            lines.pop();
+        } else {
+            break;
+        }
+    }
+
+    // Find the minimum indentation
+    let min_indent = lines
+        .iter()
+        .filter(|line| !line.is_empty())
+        .map(|line| line.chars().take_while(|c| c.is_ascii_whitespace()).count())
+        .min()
+        .unwrap_or(0);
+
+    // Remove min_indent spaces from each line
+    let new_string = lines
+        .iter()
+        .map(|line| {
+            if line.len() >= min_indent {
+                &line[min_indent..]
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    *s = new_string;
 }
 
 use crate::single_desugar_test;
@@ -28,6 +71,7 @@ fn test_k_induction_transform() {
                         @success_msg("while could be an if statement")
                         assume cast(EUReal, 0)
                     } else {
+
                     }
                 }
             }
@@ -47,6 +91,7 @@ fn test_k_induction_transform() {
     remove_whitespace(&mut res);
     assert_eq!(test_string, res);
 }
+
 #[test]
 fn test_unroll_transform() {
     let mut test_string = String::from(
@@ -137,9 +182,9 @@ fn test_ost_transform() {
             proc optional_stopping_lt_infinity_0(a: Bool) -> () {
                 assert ?(((cast(EUReal, 2) * [a]) < ∞))
             }
-            coproc optional_stopping_past_0(init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt) -> (
-                prob_choice: Bool, a: Bool, b: UInt, k: UInt
-            )
+            coproc optional_stopping_past_0(
+                init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt
+            ) -> (prob_choice: Bool, a: Bool, b: UInt, k: UInt)
                 pre ((cast(EUReal, 2) * [a]))[a -> init_a]
                 post cast(EUReal, 0)
             {
@@ -241,7 +286,11 @@ fn test_ost_transform() {
                 var k: UInt
                 b = init_b
                 a = init_a
-                { prob_choice, a, b, k = optional_stopping_lower_bound_0(prob_choice, a, b, k) }
+                {
+                    prob_choice, a, b, k = optional_stopping_lower_bound_0(
+                        prob_choice, a, b, k
+                    )
+                }
             }
         "#,
     );
@@ -334,7 +383,7 @@ fn test_ast_transform() {
         }
         proc main_decrease_antitone_0(a: UReal, b: UReal) -> ()
             pre ?((a <= b))
-            post ?(((cast(UReal, v))[v -> a] >= (cast(UReal, v))[v -> b]))
+            post ?(((v)[v -> a] >= (v)[v -> b]))
         {
 
         }
@@ -345,22 +394,27 @@ fn test_ast_transform() {
             x = init_x
             if (1 <= x) { x = (x - 1) } else {  }
         }
-        proc main_termination_condition_0(x: UInt) -> () {
-            assert ?((! ((1 <= x)) == (cast(EUReal, x) == cast(EUReal, 0))))
+        proc main_termination_condition_0(x: UInt) -> ()
+            pre ?(true)
+        {
+            assert ?(((1 <= x) → (cast(UReal, x) > cast(UReal, 0))))
         }
         coproc main_V_wp_superinvariant_0(init_x: UInt) -> (x: UInt)
-            pre (cast(EUReal, x))[x -> init_x]
-            post cast(EUReal, x)
+            pre cast(EUReal, (cast(UReal, x))[x -> init_x])
+            post cast(EUReal, cast(UReal, x))
         {
             x = init_x
+            coassume ?(! (true))
             if (1 <= x) { x = (x - 1) } else {  }
         }
         proc main_progress_condition_0(init_x: UInt) -> (x: UInt)
-            pre (([true] * ([(1 <= x)] * (5/10)[v -> cast(EUReal, x)])))[x -> init_x]
+            pre (
+                ([true] * ([(1 <= x)] * cast(EUReal, (5/10)[v -> cast(UReal, x)])))
+            )[x -> init_x]
             post [(
-                cast(EUReal, x) <= (
-                    (cast(EUReal, x))[x -> init_x] - (cast(UReal, v))[v -> (
-                        cast(EUReal, x)
+                cast(UReal, x) <= (
+                    (cast(UReal, x))[x -> init_x] - (v)[v -> (
+                        cast(UReal, x)
                     )[x -> init_x]]
                 )
             )]
@@ -397,7 +451,7 @@ fn test_double_annotation() {
     proc main() -> ()
     {
         var x: UInt
-        @ast(true, (3 * [!(x % 2 == 0)]) + ite(x >= 10, x - 10, 10 - x), v, 0.5, 2)
+        @ast(true, (3 * ite(!(x % 2 == 0), 1, 0)) + ite(x >= 10, x - 10, 10 - x), v, 0.5, 2)
         while x != 10 {
             if x % 2 == 0{
                 var prob_choice: Bool
@@ -412,7 +466,7 @@ fn test_double_annotation() {
             }
         }
 
-        @ast(true, (3 * [!(x % 2 == 0)]) + ite(x >= 10, x - 10, 10 - x), t, 0.5, 2)
+        @ast(true, (3 * ite(!(x % 2 == 0), 1, 0)) + ite(x >= 10, x - 10, 10 - x), t, 0.5, 2)
         while x != 10 {
             if x % 2 == 0{
                 var prob_choice: Bool
