@@ -55,10 +55,10 @@ proc ast_example4() -> ()
 {
     var x: UInt
     @ast(
-        /* invariant: */    true, 
-        /* variant: */      x, 
-        /* variable: */     v, 
-        /* prob(v): */      1/(v+1), 
+        /* invariant: */    true,
+        /* variant: */      x,
+        /* variable: */     v,
+        /* prob(v): */      1/(v+1),
         /* decrease(v): */  1
     )
     while x != 0 {
@@ -72,7 +72,7 @@ proc ast_example4() -> ()
 }
 ```
 
-#### Inputs 
+#### Inputs
 
 You can see all five parameters are passed to the `@ast` annotation in sequence:
 
@@ -85,8 +85,10 @@ You can see all five parameters are passed to the `@ast` annotation in sequence:
 
 :::warning
 
-You can only use _demonic_ nondeterminism with this proof rule.
-Uncountable nondeterminism might also be unsound.
+While the paper's proof rule supports (demonic and countable) nondeterminism, Caesar's implementation does not at this moment.
+Users must manually ensure that no nondeterminism is present in the program.
+
+The implementation might be extended in the future to support nondeterminism.
 Refer to [Section 8.1 of the paper](https://dl.acm.org/doi/pdf/10.1145/3158121#page=25) for more details.
 
 :::
