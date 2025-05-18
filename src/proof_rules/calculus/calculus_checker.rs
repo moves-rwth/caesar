@@ -12,21 +12,21 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::LoopingProcBlame;
+use super::RecursiveProcBlame;
 
 /// Walk the AST and check the rules of calculus annotations. For more information about the rules, see <https://www.caesarverifier.org/docs/proof-rules/calculi>
 pub struct CalculusVisitor<'tcx> {
     tcx: &'tcx mut TyCtx,
-    /// The set of looping procedures along with the blame information for generating error messages
-    looping_procs: HashMap<Ident, LoopingProcBlame>,
+    /// The set of recursive procedures along with the blame information for generating error messages
+    recursive_procs: HashMap<Ident, RecursiveProcBlame>,
     proc_context: Option<ProcContext>, // The relevant context of the current procedure being visited for soundness
 }
 
 impl<'tcx> CalculusVisitor<'tcx> {
-    pub fn new(tcx: &'tcx mut TyCtx, looping_procs: HashMap<Ident, LoopingProcBlame>) -> Self {
+    pub fn new(tcx: &'tcx mut TyCtx, recursive_procs: HashMap<Ident, RecursiveProcBlame>) -> Self {
         CalculusVisitor {
             tcx,
-            looping_procs,
+            recursive_procs,
             proc_context: None,
         }
     }
@@ -109,15 +109,15 @@ impl<'tcx> VisitorMut for CalculusVisitor<'tcx> {
 
         // If the procedure has a calculus annotation, check the call graph for cycles
         if let Some(calculus) = curr_calculus {
-            // If induction is not allowed, check whether the procedure has a looping call
+            // If induction is not allowed, check whether the procedure has a recursive call
             if !calculus.calculus_type.is_induction_allowed(proc.direction)
-                && self.looping_procs.contains_key(&proc.name)
+                && self.recursive_procs.contains_key(&proc.name)
             {
                 return Err(CalculusVisitorError::UnsoundnessError(
                     AnnotationUnsoundnessError::UnsoundRecursion {
                         direction: proc.direction,
                         calculus_name: calculus.name,
-                        blame: *self.looping_procs.get(&proc.name).unwrap(),
+                        blame: *self.recursive_procs.get(&proc.name).unwrap(),
                     },
                 ));
             }

@@ -24,11 +24,11 @@ use crate::{
     vc::vcgen::Vcgen,
 };
 use ast::{visit::VisitorMut, Diagnostic, FileId};
-use calculus::{find_looping_procs, CalculusVisitor};
 use clap::{crate_description, Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use mc::run_storm::{run_storm, storm_result_to_diagnostic};
+use proof_rules::calculus::{find_recursive_procs, CalculusVisitor};
 use proof_rules::{init_encodings, EncodingVisitor};
 use regex::Regex;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef, MemorySize};
@@ -43,7 +43,6 @@ use vc::explain::VcExplanation;
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
 pub mod ast;
-mod calculus;
 mod driver;
 pub mod front;
 pub mod intrinsic;
@@ -735,10 +734,10 @@ pub fn check_calculus_rules(
     source_units: &mut Vec<Item<SourceUnit>>,
     tcx: &mut TyCtx,
 ) -> Result<(), VerifyError> {
-    // Find potentially 'looping' (co)procs i.e. (co)procs that contain a proc call which might result in a recursive loop.
-    let looping_procs = find_looping_procs(tcx, source_units);
+    // Find potentially 'recursive' (co)procs i.e. (co)procs that contain a proc call which might result in a recursive loop.
+    let recursive_procs = find_recursive_procs(tcx, source_units);
 
-    let mut visitor = CalculusVisitor::new(tcx, looping_procs);
+    let mut visitor = CalculusVisitor::new(tcx, recursive_procs);
     for source_unit in source_units {
         match source_unit.enter().deref_mut() {
             SourceUnit::Decl(decl) => visitor.visit_decl(decl),

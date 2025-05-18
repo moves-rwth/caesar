@@ -49,7 +49,6 @@ fn remove_whitespace(s: &mut String) {
 
 use crate::single_desugar_test;
 use crate::verify_test;
-use crate::VerifyError;
 
 #[test]
 fn test_k_induction_transform() {

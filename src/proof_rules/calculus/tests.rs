@@ -141,31 +141,6 @@ fn test_missing_calculus_call() {
 }
 
 #[test]
-fn test_looping_with_wp() {
-    let source = r#"
-    @wp
-    proc A() -> () {
-        var x: UInt
-        B()
-    }
-
-    @wp
-    proc B() -> () {
-        var y: UInt
-        B()
-    }
-
-    "#;
-    let res = verify_test(source).0;
-    assert!(res.is_err());
-    let err = res.unwrap_err();
-    assert_eq!(
-        err.to_string(),
-        "Error: Potential recursive calls are not allowed in a proc with the 'wp' calculus."
-    );
-}
-
-#[test]
 fn test_recursive_with_wp() {
     let source = r#"
     @wp
@@ -180,12 +155,12 @@ fn test_recursive_with_wp() {
     let err = res.unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Error: Potential recursive calls are not allowed in a proc with the 'wp' calculus."
+        "Error: Potentially recursive calls are not allowed in a proc with the 'wp' calculus."
     );
 }
 
 #[test]
-fn test_indirect_looping() {
+fn test_indirect_recursion() {
     let source = r#"
     @wp
     proc A() -> () {
@@ -204,25 +179,15 @@ fn test_indirect_looping() {
     }
     "#;
     let res = verify_test(source).0;
-    assert!(res.is_err());
-    let err = res.unwrap_err();
-    assert_eq!(
-        err.to_string(),
-        "Error: Potential recursive calls are not allowed in a proc with the 'wp' calculus."
-    );
+    assert!(res.is_ok());
 }
 
 #[test]
-fn test_looping_without_calculus() {
+fn test_recursion_without_calculus() {
     let source = r#"
     proc A() -> () {
         var x: UInt
-        B()
-    }
-
-    proc B() -> () {
-        var y: UInt
-        B()
+        A() // this should be allowed
     }
 
     "#;
@@ -232,7 +197,7 @@ fn test_looping_without_calculus() {
 }
 
 #[test]
-fn test_looping_with_wlp_proc() {
+fn test_recursion_with_wlp_proc() {
     let source = r#"
     @wlp
     proc A() -> () {

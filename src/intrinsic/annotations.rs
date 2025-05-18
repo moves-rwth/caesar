@@ -8,11 +8,11 @@ use crate::{
         DeclKind, Diagnostic, Direction, Expr, Files, Ident, Label, Param, SourceFilePath, Span,
         Spanned, Stmt, Symbol,
     },
-    calculus::LoopingProcBlame,
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
+    proof_rules::calculus::RecursiveProcBlame,
     proof_rules::Encoding,
     slicing::selection::SliceAnnotation,
     tyctx::TyCtx,
@@ -67,7 +67,7 @@ pub enum AnnotationUnsoundnessError {
     UnsoundRecursion {
         direction: Direction,
         calculus_name: Ident,
-        blame: LoopingProcBlame,
+        blame: RecursiveProcBlame,
     },
 }
 
@@ -149,13 +149,19 @@ impl AnnotationUnsoundnessError {
             AnnotationUnsoundnessError::UnsoundRecursion{direction,calculus_name , blame } => {
                 Diagnostic::new(ReportKind::Error, blame.call_span)
                     .with_message(format!(
-                        "Potential recursive calls are not allowed in a {} with the '{}' calculus.",
+                        "Potentially recursive calls are not allowed in a {} with the '{}' calculus.",
                         direction.prefix("proc"), calculus_name.name, 
                     ))
-                    .with_label(Label::new(blame.call_span).with_message(format!(
-                        "This call to {} might lead to a recursive call of {}.", 
-                        blame.called_proc_name.name, blame.recursive_proc_name.name) ,
-                    ))
+                    .with_label(Label::new(blame.call_span).with_message({
+                        if blame.called_proc_name == blame.recursive_proc_name {
+                            format!("This call to '{}' is potentially recursive.", blame.called_proc_name.name)
+                        } else {
+                            format!(
+                            "This call to '{}' can lead to a recursive call to '{}' again.", 
+                            blame.called_proc_name.name, blame.recursive_proc_name.name
+                            )
+                        }
+                    }))
                     .with_note(
                         "(Co)Procedure calls make use of Park induction, which is not sound in this setting in general.",
                     )
