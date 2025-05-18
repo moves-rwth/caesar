@@ -26,7 +26,7 @@ use crate::{
 
 use super::{
     util::{encode_iter, hey_const, intrinsic_param, two_args},
-    Encoding, EncodingEnvironment, EncodingGenerated,
+    Encoding, EncodingEnvironment, GeneratedEncoding,
 };
 
 pub struct OmegaInvAnnotation(AnnotationDecl);
@@ -115,7 +115,7 @@ impl Encoding for OmegaInvAnnotation {
         args: &[Expr],
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
-    ) -> Result<EncodingGenerated, AnnotationError> {
+    ) -> Result<GeneratedEncoding, AnnotationError> {
         // Unpack values from struct
         let annotation_span = enc_env.call_span;
         let direction = enc_env.direction;
@@ -213,7 +213,7 @@ impl Encoding for OmegaInvAnnotation {
             ),
         ];
 
-        Ok(EncodingGenerated {
+        Ok(GeneratedEncoding {
             block: Spanned::new(annotation_span, buf),
             decls: None,
         })

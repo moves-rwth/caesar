@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    ast::{Diagnostic, FileId, Files, Span, StoredFile},
+    ast::{Diagnostic, FileId, Files, Span, SpanVariant, StoredFile},
     driver::{SmtVcCheckResult, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
@@ -19,6 +19,7 @@ mod test;
 
 use ariadne::ReportKind;
 pub use cli::CliServer;
+use indexmap::IndexMap;
 pub use lsp::run_lsp_server;
 pub use lsp::LspServer;
 use serde::{Deserialize, Serialize};
@@ -28,25 +29,96 @@ use z3rro::prover::ProveResult;
 
 pub type ServerError = Box<dyn Error + Send + Sync>;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum VerifyResult {
-    // If the verification is not done yet the result is Todo
+pub enum VerifyStatus {
+    /// The verification task is scheduled, but not started.
     Todo,
+    /// The verification task is in progress.
     Ongoing,
+    /// The verification was successful.
     Verified,
+    /// The verification yielded a counterexample.
     Failed,
+    /// The SMT solver returned an unknown result.
     Unknown,
+    /// The verification task was cancelled.
     Timeout,
 }
 
-impl VerifyResult {
+impl VerifyStatus {
     pub fn from_prove_result(result: &ProveResult) -> Self {
         match &result {
-            ProveResult::Proof => VerifyResult::Verified,
-            ProveResult::Counterexample => VerifyResult::Failed,
-            ProveResult::Unknown(_) => VerifyResult::Unknown,
+            ProveResult::Proof => VerifyStatus::Verified,
+            ProveResult::Counterexample => VerifyStatus::Failed,
+            ProveResult::Unknown(_) => VerifyStatus::Unknown,
         }
+    }
+
+    /// Returns true if the verification status is not `Todo` or `Ongoing`.
+    fn is_completed(&self) -> bool {
+        self != &VerifyStatus::Todo && self != &VerifyStatus::Ongoing
+    }
+
+    /// Combine two statuses into one, choosing the most imformative one.
+    fn combine(&self, other: &Self) -> Self {
+        match (self, other) {
+            (VerifyStatus::Failed, _) | (_, VerifyStatus::Failed) => VerifyStatus::Failed,
+            (VerifyStatus::Verified, VerifyStatus::Verified) => VerifyStatus::Verified,
+            (VerifyStatus::Unknown, _) | (_, VerifyStatus::Unknown) => VerifyStatus::Unknown,
+            (VerifyStatus::Timeout, _) | (_, VerifyStatus::Timeout) => VerifyStatus::Timeout,
+            (VerifyStatus::Ongoing, _) | (_, VerifyStatus::Ongoing) => VerifyStatus::Ongoing,
+            (VerifyStatus::Todo, _) | (_, VerifyStatus::Todo) => VerifyStatus::Todo,
+        }
+    }
+}
+
+/// Collects verification statuses for source units and groups them by their
+/// spans, aggregating the statuses for each span.
+#[derive(Debug, Default)]
+pub struct VerifyStatusList {
+    results: IndexMap<SourceUnitName, VerifyStatus>,
+}
+
+impl VerifyStatusList {
+    pub fn update_status(&mut self, name: &SourceUnitName, result: VerifyStatus) {
+        let prev = self.results.insert(name.clone(), result);
+        if prev.is_none() && result != VerifyStatus::Todo {
+            panic!("Must first register the source unit with Todo result before adding any other result");
+        }
+    }
+
+    // Set all uncompleted source units to `Timeout` status, returning the
+    // modified source unit names and the previous status.
+    pub fn timeout_all(&mut self) -> impl Iterator<Item = (&SourceUnitName, VerifyStatus)> {
+        self.results
+            .iter_mut()
+            .filter(|(_, status)| !status.is_completed())
+            .map(|(name, status)| {
+                let old_status = *status;
+                *status = VerifyStatus::Timeout;
+                (name, old_status)
+            })
+    }
+
+    pub fn iter_spans(&self) -> impl Iterator<Item = (Span, VerifyStatus)> {
+        let mut by_span: IndexMap<Span, VerifyStatus> = IndexMap::new();
+        for (name, result) in &self.results {
+            // Drop the variant information from the span, as we properly need
+            // to combine the results for all spans that are related to the same
+            // location, regardless of the metadata.
+            let span = name.span().variant(SpanVariant::Combined);
+            if let Some(prev) = by_span.get_mut(&span) {
+                *prev = prev.combine(result);
+            } else {
+                by_span.insert(span, *result);
+            }
+        }
+        by_span.into_iter()
+    }
+
+    pub fn remove_file(&mut self, file_id: FileId) {
+        self.results.retain(|name, _| name.span().file != file_id);
     }
 }
 
@@ -71,16 +143,15 @@ pub trait Server: Send {
     fn add_vc_explanation(&mut self, explanation: VcExplanation) -> Result<(), VerifyError>;
 
     /// Register a source unit span with the server.
-    fn register_source_unit(&mut self, span: Span) -> Result<(), VerifyError>;
+    fn register_source_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError>;
 
     /// Register a verify unit span as the current verifying with the server.
-    fn set_ongoing_unit(&mut self, span: Span) -> Result<(), VerifyError>;
+    fn set_ongoing_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError>;
 
     /// Send a verification status message to the client (a custom notification).
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
         name: &SourceUnitName,
-        span: Span,
         result: &mut SmtVcCheckResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError>;

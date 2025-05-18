@@ -23,7 +23,7 @@ use crate::{
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
 };
-use ast::{DeclKind, Diagnostic, FileId};
+use ast::{Diagnostic, FileId};
 use clap::{crate_description, Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
@@ -780,16 +780,7 @@ fn verify_files_main(
 
     // Register all relevant source units with the server
     for source_unit in &mut source_units {
-        let source_unit = source_unit.enter();
-        match *source_unit {
-            SourceUnit::Decl(ref decl) => {
-                // only register procs since we do not check any other decls
-                if let DeclKind::ProcDecl(proc_decl) = decl {
-                    server.register_source_unit(proc_decl.borrow().name.span)?;
-                }
-            }
-            SourceUnit::Raw(ref block) => server.register_source_unit(block.span)?,
-        }
+        server.register_source_unit(source_unit.name())?;
     }
 
     // explain high-level HeyVL if requested
@@ -812,13 +803,16 @@ fn verify_files_main(
 
     // Desugar encodings from source units. They might generate new source
     // units (for side conditions).
-    let mut source_units_buf = vec![];
+    let mut new_source_units = vec![];
     for source_unit in &mut source_units {
         source_unit
             .enter()
-            .apply_encodings(&mut tcx, &mut source_units_buf)?;
+            .apply_encodings(&mut tcx, &mut new_source_units)?;
     }
-    source_units.extend(source_units_buf);
+    for source_unit in &new_source_units {
+        server.register_source_unit(source_unit.name())?;
+    }
+    source_units.extend(new_source_units);
 
     if options.debug_options.print_core_procs {
         println!("HeyVL query with generated procs:");
@@ -858,7 +852,7 @@ fn verify_files_main(
         limits_ref.check_limits()?;
 
         // Set the current unit as ongoing
-        server.set_ongoing_unit(verify_unit.span)?;
+        server.set_ongoing_unit(name)?;
 
         // 4. Desugaring: transforming spec calls to procs
         verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
@@ -960,7 +954,7 @@ fn verify_files_main(
         limits_ref.check_limits()?;
 
         server
-            .handle_vc_check_result(name, verify_unit.span, &mut result, &mut translate)
+            .handle_vc_check_result(name, &mut result, &mut translate)
             .map_err(VerifyError::ServerError)?;
     }
 

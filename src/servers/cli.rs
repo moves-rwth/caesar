@@ -8,7 +8,7 @@ use std::{
 use ariadne::ReportKind;
 
 use crate::{
-    ast::{Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
+    ast::{Diagnostic, FileId, Files, SourceFilePath, StoredFile},
     driver::{SmtVcCheckResult, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
@@ -84,12 +84,12 @@ impl Server for CliServer {
         Ok(())
     }
 
-    fn register_source_unit(&mut self, _span: Span) -> Result<(), VerifyError> {
+    fn register_source_unit(&mut self, _name: &SourceUnitName) -> Result<(), VerifyError> {
         // Not relevant for CLI
         Ok(())
     }
 
-    fn set_ongoing_unit(&mut self, _span: Span) -> Result<(), VerifyError> {
+    fn set_ongoing_unit(&mut self, _name: &SourceUnitName) -> Result<(), VerifyError> {
         // Not relevant for CLI
         Ok(())
     }
@@ -97,7 +97,6 @@ impl Server for CliServer {
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
         name: &SourceUnitName,
-        _span: Span,
         result: &mut SmtVcCheckResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError> {

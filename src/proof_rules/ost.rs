@@ -26,7 +26,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingEnvironment, EncodingGenerated, ProcInfo};
+use super::{Encoding, EncodingEnvironment, GeneratedEncoding, ProcInfo};
 
 use super::util::*;
 
@@ -102,7 +102,7 @@ impl Encoding for OSTAnnotation {
         args: &[Expr],
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
-    ) -> Result<EncodingGenerated, AnnotationError> {
+    ) -> Result<GeneratedEncoding, AnnotationError> {
         // Unpack values from struct
         let annotation_span = enc_env.call_span;
         let base_proc_ident = enc_env.base_proc_ident;
@@ -361,7 +361,7 @@ impl Encoding for OSTAnnotation {
             StmtKind::Assign(modified_vars, proc_call),
         )];
 
-        Ok(EncodingGenerated {
+        Ok(GeneratedEncoding {
             block: Spanned::new(annotation_span, buf),
             decls: Some(vec![
                 cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,
