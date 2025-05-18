@@ -187,7 +187,11 @@ fn test_ost_transform() {
                 var k: UInt
                 b = init_b
                 a = init_a
-                { prob_choice, a, b, k = optional_stopping_lower_bound_0(prob_choice, a, b, k) }
+                { 
+                    prob_choice, a, b, k = optional_stopping_lower_bound_0(
+                        prob_choice, a, b, k
+                    ) 
+                }
             }
             proc optional_stopping_lt_infinity_0(a: Bool) -> () {
                 assert ?(((cast(EUReal, 2) * [a]) < ∞))

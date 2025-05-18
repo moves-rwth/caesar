@@ -24,8 +24,8 @@ use std::{any::Any, fmt, rc::Rc};
 use crate::{
     ast::{
         visit::{walk_stmt, VisitorMut},
-        Block, DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprKind, Files, Ident, Param,
-        ProcDecl, ProcSpec, SourceFilePath, Span, Stmt, StmtKind,
+        Block, DeclKind, DeclRef, Diagnostic, Direction, Expr, Files, Ident, Param, ProcDecl,
+        ProcSpec, Span, Stmt, StmtKind,
     },
     driver::{Item, SourceUnit},
     front::{
