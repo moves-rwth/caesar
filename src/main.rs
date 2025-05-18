@@ -24,11 +24,12 @@ use crate::{
     vc::vcgen::Vcgen,
 };
 use ast::{visit::VisitorMut, DeclKind, Diagnostic, FileId};
+use calculus::{find_looping_procs, CalculusVisitor};
 use clap::{crate_description, Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use mc::run_storm::{run_storm, storm_result_to_diagnostic};
-use proof_rules::{find_looping_procs, init_encodings, EncodingVisitor};
+use proof_rules::{init_encodings, EncodingVisitor};
 use regex::Regex;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef, MemorySize};
 use servers::{run_lsp_server, CliServer, LspServer, Server, ServerError};
@@ -42,6 +43,7 @@ use vc::explain::VcExplanation;
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
 pub mod ast;
+mod calculus;
 mod driver;
 pub mod front;
 pub mod intrinsic;
@@ -708,11 +710,9 @@ pub fn apply_encodings(
     tcx: &mut TyCtx,
     mut source_units: Vec<Item<SourceUnit>>,
 ) -> Result<Vec<Item<SourceUnit>>, VerifyError> {
-    // Find potentially 'looping' (co)procs i.e. (co)procs that contain a proc call which might result in a recursive loop.
-    let looping_procs = find_looping_procs(tcx, &mut source_units);
     let mut source_units_buf = vec![];
 
-    let mut encoding_visitor = EncodingVisitor::new(tcx, &mut source_units_buf, looping_procs);
+    let mut encoding_visitor = EncodingVisitor::new(tcx, &mut source_units_buf);
 
     for source_unit in &mut source_units {
         match source_unit.enter().deref_mut() {
@@ -723,6 +723,24 @@ pub fn apply_encodings(
     }
     source_units.extend(source_units_buf);
     Ok(source_units)
+}
+
+pub fn check_calculus_rules(
+    source_units: &mut Vec<Item<SourceUnit>>,
+    tcx: &mut TyCtx,
+) -> Result<(), VerifyError> {
+    // Find potentially 'looping' (co)procs i.e. (co)procs that contain a proc call which might result in a recursive loop.
+    let looping_procs = find_looping_procs(tcx, source_units);
+
+    let mut visitor = CalculusVisitor::new(tcx, looping_procs);
+    for source_unit in source_units {
+        match source_unit.enter().deref_mut() {
+            SourceUnit::Decl(decl) => visitor.visit_decl(decl),
+            SourceUnit::Raw(block) => visitor.visit_block(block),
+        }
+        .map_err(|ann_err| ann_err.diagnostic())?;
+    }
+    Ok(())
 }
 
 /// Synchronously verify the given source code. This is used for tests. The
@@ -826,6 +844,10 @@ fn verify_files_main(
         &tcx,
         false,
     )?;
+
+    // Visit every source unit and check possible cases of unsoundness
+    // based on the provided calculus annotations
+    check_calculus_rules(&mut source_units, &mut tcx)?;
 
     // Desugar encodings from source units. This might generate new source
     // units (for side conditions).

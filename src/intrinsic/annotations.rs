@@ -8,11 +8,12 @@ use crate::{
         DeclKind, Diagnostic, Direction, Expr, Files, Ident, Label, Param, SourceFilePath, Span,
         Spanned, Stmt, Symbol,
     },
+    calculus::LoopingProcBlame,
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    proof_rules::{Encoding, LoopingProcBlame},
+    proof_rules::Encoding,
     slicing::selection::SliceAnnotation,
     tyctx::TyCtx,
 };
