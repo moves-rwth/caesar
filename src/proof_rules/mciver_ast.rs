@@ -104,7 +104,7 @@ impl Encoding for ASTAnnotation {
             // Declare the free variable to be used in the omega invariant
             resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;
         } else {
-            todo!() // TODO: print an error message otherwise!
+            return Err(ResolveError::NotIdent(free_var.span));
         }
 
         resolve.visit_expr(prob)?;
@@ -159,11 +159,7 @@ impl Encoding for ASTAnnotation {
         let free_var = if let ExprKind::Var(var_ref) = &free_var.kind {
             *var_ref
         } else {
-            return Err(AnnotationError::WrongArgument {
-                span: annotation_span,
-                arg: free_var.clone(),
-                message: String::from("This argument must be a single variable expression."),
-            });
+            unreachable!("error should have been caught during resolve")
         };
 
         // Collect modified variables (exclude the variables that are declared in the loop)
