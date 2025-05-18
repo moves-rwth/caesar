@@ -99,7 +99,11 @@ docker run -it -v $PWD/programs:/root/caesar/programs/ ghcr.io/moves-rwth/caesar
 
 #### Installing Dependencies
 
-You will need to install some dependencies manually:
+Compiling Caesar requires a few dependencies.
+You can either
+1. install them manually (see below) or
+2. use the provided [DevContainer](https://code.visualstudio.com/docs/devcontainers/containers) configuration.
+  The DevContainer configuration is available in the `.devcontainer` folder and can be used with e.g. the DevContainer VSCode extension by running the "Dev Containers: Open Folder in Container..." command".
 
 **Rust:** To install [Rust](https://www.rust-lang.org/), we recommend [installation via rustup](https://rustup.rs/).
 You might need to restart your terminal after installing Rust.
