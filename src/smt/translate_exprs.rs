@@ -657,10 +657,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     fn t_pair(&mut self, a: &Expr, b: &Expr) -> SymbolicPair<'ctx> {
         let t_a = self.t_symbolic(a);
         let t_b = self.t_symbolic(b);
-        SymbolicPair::from_untypeds(t_a, t_b).unwrap_or_else(|| panic!(
-            "type mismatch during translation: {:?} and {:?}",
-            a, b
-        ))
+        SymbolicPair::from_untypeds(t_a, t_b)
+            .unwrap_or_else(|| panic!("type mismatch during translation: {:?} and {:?}", a, b))
     }
 
     pub fn get_local(&mut self, ident: Ident) -> &ScopeSymbolic<'ctx> {
