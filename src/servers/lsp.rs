@@ -26,7 +26,7 @@ use crate::{
     VerifyCommand, VerifyError,
 };
 
-use super::{unless_fatal_error, Server, ServerError, VerifyResult};
+use super::{unless_fatal_error, Server, ServerError, VerifyStatus, VerifyStatusList};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct VerifyRequest {
@@ -36,7 +36,7 @@ struct VerifyRequest {
 #[derive(Debug, Serialize, Deserialize)]
 struct VerifyStatusUpdate {
     document: VersionedTextDocumentIdentifier,
-    statuses: Vec<(lsp_types::Range, VerifyResult)>,
+    statuses: Vec<(lsp_types::Range, VerifyStatus)>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,7 +55,7 @@ pub struct LspServer {
     diagnostics: HashMap<FileId, Vec<Diagnostic>>,
     #[allow(clippy::type_complexity)]
     vc_explanations: HashMap<FileId, Vec<(Span, bool, Vec<(String, String)>)>>,
-    statuses: HashMap<Span, VerifyResult>,
+    statuses: VerifyStatusList,
 }
 
 impl LspServer {
@@ -231,9 +231,9 @@ impl LspServer {
         let files = self.files.lock().unwrap();
         let statuses_by_document = by_lsp_document(
             &files,
-            self.statuses.iter().flat_map(|(span, status)| {
+            self.statuses.iter_spans().flat_map(|(span, status)| {
                 let (_, range) = span.to_lsp(&files)?;
-                Some((span.file, (range, *status)))
+                Some((span.file, (range, status)))
             }),
         );
         for (document_id, statuses) in statuses_by_document {
@@ -255,23 +255,21 @@ impl LspServer {
         let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
         // Transform results and collect diagnostics for timed out procedures
-        for (span, status) in &mut self.statuses {
+        for (name, status) in self.statuses.timeout_all() {
             match status {
-                VerifyResult::Ongoing => {
+                VerifyStatus::Ongoing => {
                     diagnostics.push(
-                        Diagnostic::new(ReportKind::Error, *span)
+                        Diagnostic::new(ReportKind::Error, name.span())
                             .with_message("Timed out while verifying this procedure"),
                     );
-                    *status = VerifyResult::Timeout;
                 }
-                VerifyResult::Todo => {
+                VerifyStatus::Todo => {
                     diagnostics.push(
-                        Diagnostic::new(ReportKind::Warning, *span)
+                        Diagnostic::new(ReportKind::Warning, name.span())
                             .with_message("Skipped this procedure due to timeout"),
                     );
-                    *status = VerifyResult::Timeout;
                 }
-                _ => {}
+                _ => unreachable!(),
             }
         }
 
@@ -291,7 +289,7 @@ impl LspServer {
         if let Some(explanations) = self.vc_explanations.get_mut(file_id) {
             explanations.clear();
         }
-        self.statuses.retain(|span, _| span.file != *file_id);
+        self.statuses.remove_file(*file_id);
         self.publish_diagnostics()?;
         self.publish_verify_statuses()?;
         Ok(())
@@ -350,15 +348,15 @@ impl Server for LspServer {
         Ok(())
     }
 
-    fn register_source_unit(&mut self, span: Span) -> Result<(), VerifyError> {
-        self.statuses.insert(span, VerifyResult::Todo);
+    fn register_source_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError> {
+        self.statuses.update_status(name, VerifyStatus::Todo);
         self.publish_verify_statuses()
             .map_err(VerifyError::ServerError)?;
         Ok(())
     }
 
-    fn set_ongoing_unit(&mut self, span: Span) -> Result<(), VerifyError> {
-        self.statuses.insert(span, VerifyResult::Ongoing);
+    fn set_ongoing_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError> {
+        self.statuses.update_status(name, VerifyStatus::Ongoing);
         self.publish_verify_statuses()
             .map_err(VerifyError::ServerError)?;
         Ok(())
@@ -366,16 +364,13 @@ impl Server for LspServer {
 
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
-        _name: &SourceUnitName,
-        span: Span,
+        name: &SourceUnitName,
         result: &mut SmtVcCheckResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError> {
-        result.emit_diagnostics(span, self, translate)?;
-        let prev = self
-            .statuses
-            .insert(span, VerifyResult::from_prove_result(&result.prove_result));
-        assert!(prev.is_some());
+        result.emit_diagnostics(name.span(), self, translate)?;
+        self.statuses
+            .update_status(name, VerifyStatus::from_prove_result(&result.prove_result));
         self.publish_verify_statuses()?;
         Ok(())
     }
