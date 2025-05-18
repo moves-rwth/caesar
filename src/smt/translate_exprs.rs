@@ -104,6 +104,13 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     pub fn t_bool(&mut self, expr: &Expr) -> Bool<'ctx> {
+        assert_eq!(
+            &expr.ty,
+            &Some(TyKind::Bool),
+            "expr is not of type Bool: {:?}",
+            expr
+        );
+
         if is_expr_worth_caching(expr) {
             if let Some(res) = self.cache.get(expr) {
                 return res.clone().into_bool().unwrap();
@@ -198,6 +205,13 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     pub fn t_int(&mut self, expr: &Expr) -> Int<'ctx> {
+        assert_eq!(
+            &expr.ty,
+            &Some(TyKind::Int),
+            "expr is not of type Int: {:?}",
+            expr
+        );
+
         if is_expr_worth_caching(expr) {
             if let Some(res) = self.cache.get(expr) {
                 tracing::trace!(ref_count = Shared::ref_count(expr), "uncaching expr");
@@ -252,6 +266,13 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     pub fn t_uint(&mut self, expr: &Expr) -> UInt<'ctx> {
+        assert_eq!(
+            &expr.ty,
+            &Some(TyKind::UInt),
+            "expr is not of type UInt: {:?}",
+            expr
+        );
+
         if is_expr_worth_caching(expr) {
             if let Some(res) = self.cache.get(expr) {
                 tracing::trace!(ref_count = Shared::ref_count(expr), "uncaching expr");
@@ -303,6 +324,13 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     pub fn t_real(&mut self, expr: &Expr) -> Real<'ctx> {
+        assert_eq!(
+            &expr.ty,
+            &Some(TyKind::Real),
+            "expr is not of type Real: {:?}",
+            expr
+        );
+
         if is_expr_worth_caching(expr) {
             if let Some(res) = self.cache.get(expr) {
                 tracing::trace!(ref_count = Shared::ref_count(expr), "uncaching expr");
@@ -365,6 +393,13 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     pub fn t_ureal(&mut self, expr: &Expr) -> UReal<'ctx> {
+        assert_eq!(
+            &expr.ty,
+            &Some(TyKind::UReal),
+            "expr is not of type UReal: {:?}",
+            expr
+        );
+
         if is_expr_worth_caching(expr) {
             if let Some(res) = self.cache.get(expr) {
                 tracing::trace!(ref_count = Shared::ref_count(expr), "uncaching expr");
@@ -427,6 +462,13 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     pub fn t_eureal(&mut self, expr: &Expr) -> EUReal<'ctx> {
+        assert_eq!(
+            &expr.ty,
+            &Some(TyKind::EUReal),
+            "expr is not of type EUReal: {:?}",
+            expr
+        );
+
         match &expr.kind {
             ExprKind::Var(ident) => self
                 .get_local(*ident)
@@ -615,7 +657,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     fn t_pair(&mut self, a: &Expr, b: &Expr) -> SymbolicPair<'ctx> {
         let t_a = self.t_symbolic(a);
         let t_b = self.t_symbolic(b);
-        SymbolicPair::from_untypeds(t_a, t_b).unwrap()
+        SymbolicPair::from_untypeds(t_a, t_b)
+            .unwrap_or_else(|| panic!("type mismatch during translation: {:?} and {:?}", a, b))
     }
 
     pub fn get_local(&mut self, ident: Ident) -> &ScopeSymbolic<'ctx> {
