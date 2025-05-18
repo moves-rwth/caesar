@@ -24,8 +24,8 @@ use std::{any::Any, fmt, rc::Rc};
 use crate::{
     ast::{
         visit::{walk_stmt, VisitorMut},
-        Block, DeclKind, DeclRef, Diagnostic, Direction, Expr, Files, Ident, Param, ProcDecl,
-        ProcSpec, SourceFilePath, Span, Stmt, StmtKind,
+        Block, DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprKind, Files, Ident, Param,
+        ProcDecl, ProcSpec, SourceFilePath, Span, Stmt, StmtKind,
     },
     driver::{Item, SourceUnit},
     front::{
@@ -48,8 +48,9 @@ pub struct ProcInfo {
     direction: Direction,
 }
 
-/// The result of transforming an annotation call, it can contain generated statements and declarations
-pub struct EncodingGenerated {
+/// The result of transforming an annotation call. It contains generated
+/// statements and declarations.
+pub struct GeneratedEncoding {
     block: Block,
     decls: Option<Vec<DeclKind>>,
 }
@@ -89,7 +90,7 @@ pub trait Encoding: fmt::Debug {
         args: &[Expr],
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
-    ) -> Result<EncodingGenerated, AnnotationError>;
+    ) -> Result<GeneratedEncoding, AnnotationError>;
 
     /// Check if the given calculus annotation is compatible with the encoding annotation
     fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool;
@@ -253,13 +254,14 @@ impl<'tcx, 'sunit> VisitorMut for EncodingVisitor<'tcx, 'sunit> {
                     // Unpack the current procedure context
                     let direction = proc_context.direction;
                     let base_proc_ident = proc_context.name;
+                    let annotation_span = *annotation_span;
 
                     // Check whether the calculus annotation is actually on a while loop (annotations can only be on while loops)
                     if let StmtKind::While(_, _) = inner_stmt.node {
                     } else {
                         return Err(EncodingVisitorError::AnnotationError(
                             AnnotationError::NotOnWhile {
-                                span: *annotation_span,
+                                span: annotation_span,
                                 annotation_name: *ident,
                                 annotated: Box::new(inner_stmt.as_ref().clone()),
                             },
@@ -279,7 +281,7 @@ impl<'tcx, 'sunit> VisitorMut for EncodingVisitor<'tcx, 'sunit> {
                     let enc_env = EncodingEnvironment {
                         base_proc_ident,
                         stmt_span: s.span,
-                        call_span: *annotation_span, // TODO: if I change this to stmt_span, explain core vc works :(
+                        call_span: annotation_span, // TODO: if I change this to stmt_span, explain core vc works :(
                         direction,
                     };
 
@@ -307,8 +309,10 @@ impl<'tcx, 'sunit> VisitorMut for EncodingVisitor<'tcx, 'sunit> {
                         let items: Vec<Item<SourceUnit>> = decls
                             .iter_mut()
                             .map(|decl| {
-                                SourceUnit::Decl(decl.to_owned())
-                                    .wrap_item(&SourceFilePath::Generated)
+                                SourceUnit::from_generated_decl(
+                                    decl.to_owned(),
+                                    base_proc_ident.span,
+                                )
                             })
                             .collect();
 

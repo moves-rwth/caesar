@@ -25,7 +25,7 @@ use crate::{
 
 use super::{
     util::{encode_unroll, hey_const, intrinsic_param, lit_u128, two_args},
-    Encoding, EncodingEnvironment, EncodingGenerated,
+    Encoding, EncodingEnvironment, GeneratedEncoding,
 };
 
 pub struct UnrollAnnotation(AnnotationDecl);
@@ -96,7 +96,7 @@ impl Encoding for UnrollAnnotation {
         args: &[Expr],
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
-    ) -> Result<EncodingGenerated, AnnotationError> {
+    ) -> Result<GeneratedEncoding, AnnotationError> {
         let [k, terminator] = two_args(args);
 
         let k: u128 = lit_u128(k);
@@ -123,7 +123,7 @@ impl Encoding for UnrollAnnotation {
             hey_const(&enc_env, terminator, enc_env.direction, tcx),
         );
 
-        Ok(EncodingGenerated {
+        Ok(GeneratedEncoding {
             block: Spanned::new(enc_env.stmt_span, buf),
             decls: None,
         })

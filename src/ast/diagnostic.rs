@@ -215,6 +215,7 @@ impl<'a> Cache<FileId> for &'a Files {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SpanVariant {
+    Combined,
     Parser,
     VC,
     ImplicitCast,
@@ -322,6 +323,7 @@ impl Span {
 impl fmt::Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let prefix = match self.variant {
+            SpanVariant::Combined => "?/",
             SpanVariant::Parser => "",
             SpanVariant::VC => "vc/",
             SpanVariant::ImplicitCast => "cast/",

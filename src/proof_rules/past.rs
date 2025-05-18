@@ -27,7 +27,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingEnvironment, EncodingGenerated, ProcInfo};
+use super::{Encoding, EncodingEnvironment, GeneratedEncoding, ProcInfo};
 
 use super::util::*;
 
@@ -95,7 +95,7 @@ impl Encoding for PASTAnnotation {
         args: &[Expr],
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
-    ) -> Result<EncodingGenerated, AnnotationError> {
+    ) -> Result<GeneratedEncoding, AnnotationError> {
         // Unpack values from struct
         let annotation_span = enc_env.call_span;
         let base_proc_ident = enc_env.base_proc_ident;
@@ -282,7 +282,7 @@ impl Encoding for PASTAnnotation {
 
         let cond3_proc = generate_proc(annotation_span, cond3_proc_info, base_proc_ident, tcx);
 
-        Ok(EncodingGenerated {
+        Ok(GeneratedEncoding {
             block: Spanned::new(annotation_span, vec![]),
             decls: Some(vec![cond1_proc, cond2_proc, cond3_proc]),
         })

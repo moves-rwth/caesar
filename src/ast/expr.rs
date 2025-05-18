@@ -469,6 +469,13 @@ impl ExprBuilder {
     }
 
     pub fn cast(&self, ty: TyKind, operand: Expr) -> Expr {
+        let cast_not_needed = operand
+            .ty
+            .as_ref()
+            .is_some_and(|operand_ty| operand_ty == &ty);
+        if cast_not_needed {
+            return operand;
+        }
         Shared::new(ExprData {
             kind: ExprKind::Cast(operand),
             ty: Some(ty),

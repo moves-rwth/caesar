@@ -23,7 +23,7 @@ use crate::{
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
 };
-use ast::{visit::VisitorMut, DeclKind, Diagnostic, FileId};
+use ast::{visit::VisitorMut, Diagnostic, FileId};
 use calculus::{find_looping_procs, CalculusVisitor};
 use clap::{crate_description, Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use driver::{Item, SourceUnit, VerifyUnit};
@@ -709,10 +709,11 @@ fn parse_and_tycheck(
 pub fn apply_encodings(
     tcx: &mut TyCtx,
     mut source_units: Vec<Item<SourceUnit>>,
+    server: &mut dyn Server,
 ) -> Result<Vec<Item<SourceUnit>>, VerifyError> {
-    let mut source_units_buf = vec![];
+    let mut new_source_units = vec![];
 
-    let mut encoding_visitor = EncodingVisitor::new(tcx, &mut source_units_buf);
+    let mut encoding_visitor = EncodingVisitor::new(tcx, &mut new_source_units);
 
     for source_unit in &mut source_units {
         match source_unit.enter().deref_mut() {
@@ -721,7 +722,12 @@ pub fn apply_encodings(
         }
         .map_err(|ann_err| ann_err.diagnostic())?;
     }
-    source_units.extend(source_units_buf);
+
+    for source_unit in &new_source_units {
+        server.register_source_unit(source_unit.name())?;
+    }
+
+    source_units.extend(new_source_units);
     Ok(source_units)
 }
 
@@ -790,7 +796,8 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
 
     assert_eq!(source_units.len(), 1);
 
-    let new_source_units: Vec<Item<SourceUnit>> = apply_encodings(&mut tcx, source_units)?;
+    let new_source_units: Vec<Item<SourceUnit>> =
+        apply_encodings(&mut tcx, source_units, &mut server)?;
 
     Ok(new_source_units
         .into_iter()
@@ -815,16 +822,7 @@ fn verify_files_main(
 
     // Register all relevant source units with the server
     for source_unit in &mut source_units {
-        let source_unit = source_unit.enter();
-        match *source_unit {
-            SourceUnit::Decl(ref decl) => {
-                // only register procs since we do not check any other decls
-                if let DeclKind::ProcDecl(proc_decl) = decl {
-                    server.register_source_unit(proc_decl.borrow().name.span)?;
-                }
-            }
-            SourceUnit::Raw(ref block) => server.register_source_unit(block.span)?,
-        }
+        server.register_source_unit(source_unit.name())?;
     }
 
     // explain high-level HeyVL if requested
@@ -851,7 +849,7 @@ fn verify_files_main(
 
     // Desugar encodings from source units. This might generate new source
     // units (for side conditions).
-    let mut source_units = apply_encodings(&mut tcx, source_units)?;
+    let mut source_units = apply_encodings(&mut tcx, source_units, server)?;
 
     if options.debug_options.print_core_procs {
         println!("HeyVL query with generated procs:");
@@ -891,7 +889,7 @@ fn verify_files_main(
         limits_ref.check_limits()?;
 
         // Set the current unit as ongoing
-        server.set_ongoing_unit(verify_unit.span)?;
+        server.set_ongoing_unit(name)?;
 
         // 4. Desugaring: transforming spec calls to procs
         verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
@@ -993,7 +991,7 @@ fn verify_files_main(
         limits_ref.check_limits()?;
 
         server
-            .handle_vc_check_result(name, verify_unit.span, &mut result, &mut translate)
+            .handle_vc_check_result(name, &mut result, &mut translate)
             .map_err(VerifyError::ServerError)?;
     }
 
