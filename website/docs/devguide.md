@@ -14,6 +14,9 @@ We are very happy to work and research with you on Caesar!
 
 ## Caesar
 
+Follow the [*"Build From Source"* section in the installation instructions](./getting-started/installation.mdx#build-source) to learn how to compile Caesar.
+This gives you an environment to modify the code and run it locally.
+
 The source code of the main [caesar tool](./caesar) begins at the root level of the Git repository.
 It is a [cargo workspace](https://doc.rust-lang.org/book/ch14-03-cargo-workspaces.html) containing the main `caesar` crate and the `z3rro` crate.
 
