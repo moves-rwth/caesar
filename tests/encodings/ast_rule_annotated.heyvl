@@ -6,7 +6,7 @@
 proc main() -> ()
 {
     var x: UInt
-    @ast(true, (3 * [!(x % 2 == 0)]) + ite(x >= 10, x - 10, 10 - x), v, 0.5, 2)
+    @ast(true, (3 * ite(!(x % 2 == 0), 1, 0)) + ite(x >= 10, x - 10, 10 - x), v, 0.5, 2)
     while x != 10 {
         if x % 2 == 0{
             var prob_choice: Bool
