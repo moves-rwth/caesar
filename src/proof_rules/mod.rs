@@ -475,7 +475,7 @@ impl VisitorMut for CallGraphVisitor<'_> {
             if let Some(ref mut block) = &mut *body {
                 self.visit_block(block)
             } else {
-                Err(())
+                Ok(())
             }
         };
         // Reset the current procedure.

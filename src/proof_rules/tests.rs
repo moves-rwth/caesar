@@ -134,6 +134,16 @@ fn test_omega_transform() {
 fn test_ost_transform() {
     let mut test_string = String::from(
         r#"
+            proc optional_stopping(init_b: UInt, init_a: Bool) -> (b: UInt, a: Bool)
+                pre (cast(EUReal, init_b) + [init_a])
+                post cast(EUReal, b)
+            {
+                var prob_choice: Bool
+                var k: UInt
+                b = init_b
+                a = init_a
+                { prob_choice, a, b, k = optional_stopping_lower_bound_0(prob_choice, a, b, k) }
+            }
             proc optional_stopping_lt_infinity_0(a: Bool) -> () {
                 assert ?(((cast(EUReal, 2) * [a]) < ∞))
             }
@@ -233,16 +243,6 @@ fn test_ost_transform() {
 
                 }
             }
-            proc optional_stopping(init_b: UInt, init_a: Bool) -> (b: UInt, a: Bool)
-                pre (cast(EUReal, init_b) + [init_a])
-                post cast(EUReal, b)
-            {
-                var prob_choice: Bool
-                var k: UInt
-                b = init_b
-                a = init_a
-                { prob_choice, a, b, k = optional_stopping_lower_bound_0(prob_choice, a, b, k) }
-            }
         "#,
     );
     let source = r#"
@@ -278,6 +278,10 @@ fn test_ost_transform() {
 fn test_past_transform() {
     let mut test_string = String::from(
         r#"
+            proc main() -> () {
+                var x: UInt
+                {  }
+            }
             proc main_condition_1_0(x: UInt) -> () {
                 assert ?((([! ((1 <= x))] * cast(EUReal, (x + 1))) <= 10/10))
             }
@@ -301,10 +305,6 @@ fn test_past_transform() {
 
                 }
             }
-            proc main() -> () {
-                var x: UInt
-                {  }
-            }
         "#,
     );
     let source = r#"
@@ -326,6 +326,10 @@ fn test_past_transform() {
 fn test_ast_transform() {
     let mut test_string = String::from(
         r#"
+        proc main() -> () {
+            var x: UInt
+            {  }
+        }
         proc main_prob_antitone_0(a: UReal, b: UReal) -> ()
             pre ?((a <= b))
             post ?(((5/10)[v -> a] >= (5/10)[v -> b]))
@@ -367,10 +371,6 @@ fn test_ast_transform() {
         {
             x = init_x
             x = (x - 1)
-        }
-        proc main() -> () {
-            var x: UInt
-            {  }
         }
         "#,
     );
