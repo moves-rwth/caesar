@@ -1,0 +1,156 @@
+# Build binaries for a given Git ref.
+# Based on:
+# - https://github.com/BurntSushi/ripgrep/blob/d922b7ac114c24d6800ae5f79d2967481f380c83/.github/workflows/release.yml
+# - https://github.com/dafny-lang/dafny/blob/beab582113744ea72e2727d934f5a03d42c4ba17/.github/workflows/publish-release-reusable.yml
+name: Build Binaries
+
+on:
+  workflow_call:
+    inputs:
+      git_ref:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      is_prerelease:
+        required: true
+        type: boolean
+
+jobs:
+  build-release:
+    name: build-release
+    runs-on: ${{ matrix.os }}
+    env:
+      # For some builds, we use cross to test on 32-bit and big-endian
+      # systems.
+      CARGO: cargo
+      # When CARGO is set to CROSS, this is set to `--target matrix.target`.
+      TARGET_FLAGS:
+      # When CARGO is set to CROSS, TARGET_DIR includes matrix.target.
+      TARGET_DIR: ./target
+      # Emit backtraces on panics.
+      RUST_BACKTRACE: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+
+        - build: linux-x86
+          os: ubuntu-latest
+          rust: stable
+          target: x86_64-unknown-linux-gnu
+
+        - build: macos-apple-silicon
+          os: macos-latest
+          rust: stable
+          target: aarch64-apple-darwin
+
+        - build: macos-intel
+          os: macos-13 # newest available Github runner on Intel
+          rust: stable
+          target: x86_64-apple-darwin
+
+        - build: windows-msvc
+          os: windows-latest
+          rust: stable
+          target: x86_64-pc-windows-msvc
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+          ref: ${{ inputs.git_ref }}
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        target: ${{ matrix.target }}
+
+    - name: Install packages (Ubuntu)
+      if: contains(matrix.os, 'ubuntu')
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake llvm-dev libclang-dev clang lld
+
+    - name: Install packages (MacOS)
+      if: contains(matrix.os, 'macos')
+      shell: bash
+      run: |
+        brew update
+        brew install cmake
+
+    - name: Install packages (Windows)
+      if: contains(matrix.os, 'windows')
+      shell: bash
+      run: |
+        choco install -y cmake llvm
+
+    - name: Set target variables
+      shell: bash
+      run: |
+        echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
+        echo "TARGET_DIR=./target/${{ matrix.target }}" >> $GITHUB_ENV
+
+    - name: Show command used for Cargo
+      shell: bash
+      run: |
+        echo "cargo command is: ${{ env.CARGO }}"
+        echo "target flag is: ${{ env.TARGET_FLAGS }}"
+        echo "target dir is: ${{ env.TARGET_DIR }}"
+
+    - name: Build release binary
+      shell: bash
+      run: |
+        ${{ env.CARGO }} build --verbose --release ${{ env.TARGET_FLAGS }}
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          bin="target/${{ matrix.target }}/release/caesar.exe"
+        else
+          bin="target/${{ matrix.target }}/release/caesar"
+        fi
+        echo "BIN=$bin" >> $GITHUB_ENV
+
+    - name: Strip release binary (macos)
+      if: matrix.os == 'macos-latest'
+      shell: bash
+      run: strip "$BIN"
+
+    - name: Determine archive name
+      shell: bash
+      run: |
+        version="${{ inputs.version }}"
+        echo "ARCHIVE=caesar-$version-${{ matrix.target }}" >> $GITHUB_ENV
+
+    - name: Creating directory for archive
+      shell: bash
+      run: |
+        mkdir -p "$ARCHIVE"
+        cp "$BIN" "$ARCHIVE"/
+        cp README.md "$ARCHIVE"/
+      #  cp {CHANGELOG.md,FAQ.md,GUIDE.md} "$ARCHIVE"/doc/
+      #  cp {README.md,COPYING,UNLICENSE,LICENSE-MIT} "$ARCHIVE"/
+
+    - name: Build archive (Windows)
+      shell: bash
+      if: matrix.os == 'windows-latest'
+      run: |
+        7z a "$ARCHIVE.zip" "./$ARCHIVE/*"
+        echo "ASSET=$ARCHIVE.zip" >> $GITHUB_ENV
+
+    - name: Build archive (Unix)
+      shell: bash
+      if: matrix.os != 'windows-latest'
+      run: |
+        tar czf "$ARCHIVE.tar.gz" "$ARCHIVE"
+        echo "ASSET=$ARCHIVE.tar.gz" >> $GITHUB_ENV
+
+    - name: Upload Release Files
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ inputs.git_ref }}
+        # Also need to specify 'draft' again, so that the action finds the correct existing (draft) release
+        draft: ${{ !inputs.is_prerelease }}
+        files: |
+          ${{ env.ASSET }}

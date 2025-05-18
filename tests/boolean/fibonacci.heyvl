@@ -21,7 +21,7 @@ proc iter_fib(n: UInt) -> (res: UInt)
     if i < n {
         var t: UInt = res
         res = next
-        next = t + next 
+        next = t + next
         i = i + 1
         assert ?(i <= n && next == fib(i+1) && res == fib(i))
         assume ?(false)

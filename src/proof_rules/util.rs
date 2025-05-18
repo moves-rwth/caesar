@@ -13,23 +13,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::ProcInfo;
-
-/// Encode the given specification
-pub fn encode_spec(
-    span: Span,
-    pre: &Expr,
-    post: &Expr,
-    variables: Vec<Ident>,
-    direction: Direction,
-) -> Vec<Stmt> {
-    vec![
-        Spanned::new(span, StmtKind::Assert(direction, pre.clone())),
-        Spanned::new(span, StmtKind::Havoc(direction, variables)),
-        Spanned::new(span, StmtKind::Validate(direction)),
-        Spanned::new(span, StmtKind::Assume(direction, post.clone())),
-    ]
-}
+use super::{EncodingEnvironment, ProcInfo};
 
 /// Encode the extend step in k-induction and bmc recursively for k times
 /// # Arguments
@@ -38,61 +22,81 @@ pub fn encode_spec(
 /// * `k` - How many times the loop will be extended
 /// * `invariant` - The invariant which will be used in assert statements
 /// * `direction` - The direction of the statements in the extend
-/// * `bmc` - Whether the extension is for bmc of k-induction
 /// * `next_iter` - Parameter necessary for the recursion
 pub fn encode_extend(
-    span: Span,
+    enc_env: &EncodingEnvironment,
     inner_stmt: &Stmt,
     k: u128,
     invariant: &Expr,
     direction: Direction,
-    bmc: bool,
     next_iter: Vec<Stmt>,
 ) -> Vec<Stmt> {
     if k == 0 {
         return next_iter;
     }
-    let next_iter = encode_extend(
-        span,
-        inner_stmt,
-        k - 1,
-        invariant,
-        direction,
-        bmc,
-        next_iter,
-    );
-    if bmc {
-        vec![encode_iter(span, inner_stmt, next_iter).unwrap()]
-    } else {
-        vec![
-            Spanned::new(span, StmtKind::Assert(direction, invariant.clone())),
-            encode_iter(span, inner_stmt, next_iter).unwrap(),
-        ]
+    let next_iter = encode_extend(enc_env, inner_stmt, k - 1, invariant, direction, next_iter);
+    vec![
+        Spanned::new(
+            enc_env.call_span,
+            StmtKind::Assert(direction, invariant.clone()),
+        ),
+        encode_iter(enc_env, inner_stmt, next_iter).unwrap(),
+    ]
+}
+
+/// Encode the extend step in bmc recursively for k times:
+///
+/// # Arguments
+/// * `inner_stmt` - A While statement to be encoded
+/// * `k` - How many times the loop will be extended
+/// * `next_iter` - Parameter necessary for the recursion
+pub fn encode_unroll(
+    enc_env: &EncodingEnvironment,
+    inner_stmt: &Stmt,
+    k: u128,
+    next_iter: Vec<Stmt>,
+) -> Vec<Stmt> {
+    if k == 0 {
+        return next_iter;
     }
+    let next_iter = encode_unroll(enc_env, inner_stmt, k - 1, next_iter);
+    vec![encode_iter(enc_env, inner_stmt, next_iter).unwrap()]
 }
 
 /// Encode one iteration of a while loop with an if then else statement
-pub fn encode_iter(span: Span, stmt: &Stmt, next_iter: Vec<Stmt>) -> Option<Stmt> {
+pub fn encode_iter(
+    enc_env: &EncodingEnvironment,
+    stmt: &Stmt,
+    next_iter: Vec<Stmt>,
+) -> Option<Stmt> {
     if let StmtKind::While(expr, body) = &stmt.node {
         let mut next_body = body.clone();
-        next_body.extend(next_iter);
+        next_body.node.extend(next_iter);
+        let empty_block = Spanned::new(enc_env.stmt_span, vec![]);
         return Some(Spanned::new(
-            span,
-            StmtKind::If(expr.clone(), next_body, vec![]),
+            enc_env.stmt_span,
+            StmtKind::If(expr.clone(), next_body, empty_block),
         ));
     };
     None
 }
 
 /// Constant program which always evaluates to the given expression
-pub fn hey_const(span: Span, expr: &Expr, tcx: &TyCtx) -> Vec<Stmt> {
+pub fn hey_const(
+    enc_env: &EncodingEnvironment,
+    expr: &Expr,
+    direction: Direction,
+    tcx: &TyCtx,
+) -> Vec<Stmt> {
+    let span = enc_env.call_span;
     let builder = ExprBuilder::new(span);
+    let extreme_lit = match direction {
+        Direction::Up => builder.top_lit(tcx.spec_ty()),
+        Direction::Down => builder.bot_lit(tcx.spec_ty()),
+    };
     vec![
-        Spanned::new(span, StmtKind::Assert(Direction::Down, expr.clone())),
-        Spanned::new(
-            span,
-            StmtKind::Assume(Direction::Down, builder.bot_lit(tcx.spec_ty())),
-        ),
+        Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
+        Spanned::new(span, StmtKind::Assume(direction, extreme_lit)),
     ]
 }
 
@@ -155,6 +159,7 @@ pub fn get_init_idents(tcx: &TyCtx, span: Span, idents: &[Ident]) -> Vec<Ident> 
 
 /// Construct multiple [`StmtKind::Assign`] expressions sequentially
 pub fn multiple_assign(span: Span, lhses: Vec<Ident>, rhses: Vec<Expr>) -> Vec<Stmt> {
+    assert_eq!(lhses.len(), rhses.len());
     let mut buf: Vec<Stmt> = vec![];
     lhses.iter().zip(rhses).for_each(|(lhs, rhs)| {
         let stmt = Spanned::new(span, StmtKind::Assign(vec![*lhs], rhs));
@@ -205,9 +210,10 @@ pub fn generate_proc(
     tcx: &TyCtx,
 ) -> DeclKind {
     // construct the name of the new procedure by appending the proc name to the base proc name
-    let ident = Ident::with_dummy_span(Symbol::intern(
-        format!("{}_{}", base_proc_ident.name, proc_info.name).as_str(),
-    ));
+    let ident = Ident::with_dummy_file_span(
+        Symbol::intern(format!("{}_{}", base_proc_ident.name, proc_info.name).as_str()),
+        span.file,
+    );
     // get a fresh ident to avoid name conflicts
     let name = tcx.fresh_ident(ident, ident.span.variant(SpanVariant::Encoding));
 
@@ -220,6 +226,7 @@ pub fn generate_proc(
         spec: proc_info.spec,
         body: RefCell::new(Some(proc_info.body)),
         span,
+        calculus: None,
     }));
 
     tcx.declare(decl.clone());
@@ -235,14 +242,6 @@ pub fn one_arg(args: &[Expr]) -> [&Expr; 1] {
     }
 }
 
-pub fn mut_one_arg(args: &mut [Expr]) -> [&mut Expr; 1] {
-    if let [a] = args {
-        [a]
-    } else {
-        unreachable!()
-    }
-}
-
 pub fn two_args(args: &[Expr]) -> [&Expr; 2] {
     if let [a, b] = args {
         [a, b]
@@ -251,23 +250,7 @@ pub fn two_args(args: &[Expr]) -> [&Expr; 2] {
     }
 }
 
-pub fn mut_two_args(args: &mut [Expr]) -> [&mut Expr; 2] {
-    if let [ref mut a, ref mut b] = args {
-        [a, b]
-    } else {
-        unreachable!()
-    }
-}
-
 pub fn three_args(args: &[Expr]) -> [&Expr; 3] {
-    if let [a, b, c] = args {
-        [a, b, c]
-    } else {
-        unreachable!()
-    }
-}
-
-pub fn mut_three_args(args: &mut [Expr]) -> [&mut Expr; 3] {
     if let [a, b, c] = args {
         [a, b, c]
     } else {

@@ -1,14 +1,15 @@
 // @ts-check
 // Note: type annotations allow type checking and IDEs autocompletion
 
-const lightCodeTheme = require('prism-react-renderer/themes/nightOwlLight');
-const darkCodeTheme = require('prism-react-renderer/themes/nightOwl');
+import {themes as prismThemes} from 'prism-react-renderer';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'Caesar',
   tagline: 'Verify probabilistic programs with Caesar, a deductive verifier built on the HeyVL intermediate verification language.',
-  favicon: 'img/laurel.svg',
+  favicon: 'img/laurel-square.svg',
 
   // Set the production url of your site here
   url: 'https://www.caesarverifier.org',
@@ -21,7 +22,8 @@ const config = {
   organizationName: 'moves-rwth', // Usually your GitHub org/user name.
   projectName: 'caesar', // Usually your repo name.
 
-  onBrokenLinks: 'throw',
+  // the broken links detection seems to be broken for links to images in the blog, so we set it to warn only
+  onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
 
   // Even if you don't use internalization, you can use this field to set useful
@@ -44,17 +46,18 @@ const config = {
       ({
         docs: {
           sidebarPath: require.resolve('./sidebars.js'),
-          // Please change this to your repo.
-          // Remove this to remove the "edit this page" links.
           editUrl:
             'https://github.com/moves-rwth/caesar/tree/main/website/',
+          remarkPlugins: [remarkMath],
+          rehypePlugins: [rehypeKatex],
         },
         blog: {
+          blogSidebarCount: 20,
           showReadingTime: true,
-          // Please change this to your repo.
-          // Remove this to remove the "edit this page" links.
           editUrl:
             'https://github.com/moves-rwth/caesar/tree/main/website/',
+          remarkPlugins: [remarkMath],
+          rehypePlugins: [rehypeKatex],
         },
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
@@ -65,6 +68,16 @@ const config = {
         },
       }),
     ],
+  ],
+
+  stylesheets: [
+    {
+      href: 'https://cdn.jsdelivr.net/npm/katex@0.13.24/dist/katex.min.css',
+      type: 'text/css',
+      integrity:
+        'sha384-odtC+0UGzzFL/6PNoE8rX/SPcQDXBJ+uRepguP4QkPCm2LBxH3FA3y+fKSiJ+AmM',
+      crossorigin: 'anonymous',
+    },
   ],
 
   themeConfig:
@@ -87,11 +100,16 @@ const config = {
             label: 'Docs',
           },
           {
+            to: '/about',
+            position: 'left',
+            label: 'About',
+          },
+          {to: '/blog', label: 'News', position: 'left'},
+          {
             href: 'https://github.com/moves-rwth/caesar',
             label: 'GitHub',
             position: 'right',
           },
-          {to: '/blog', label: 'News', position: 'left'},
           {to: '/docs/publications', label: 'Publications', position: 'right'},
         ],
       },
@@ -114,8 +132,8 @@ const config = {
                 to: '/docs/stdlib',
               },
               {
-                label: 'pGCL',
-                to: '/docs/pgcl',
+                label: 'Proof Rules',
+                to: '/docs/proof-rules',
               },
             ],
           },
@@ -136,6 +154,10 @@ const config = {
             title: 'More',
             items: [
               {
+                label: 'About',
+                to: '/about',
+              },
+              {
                 label: 'News',
                 to: '/blog',
               },
@@ -149,10 +171,15 @@ const config = {
         copyright: `Copyright © ${new Date().getFullYear()} Caesar Developers. Built with Docusaurus.`,
       },
       prism: {
-        theme: lightCodeTheme,
-        darkTheme: darkCodeTheme,
+        theme: prismThemes.nightOwlLight,
+        darkTheme: prismThemes.nightOwl,
         additionalLanguages: ['bash', 'shell-session'],
       },
+      algolia: {
+        appId: 'Q93W1TPDIE',
+        apiKey: '8dc15a6ca0d7a01e9f7ab673468d63a1',
+        indexName: 'caesarverifier',
+      }
     }),
 };
 

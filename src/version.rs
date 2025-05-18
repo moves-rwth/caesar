@@ -3,7 +3,6 @@
 
 use std::{
     env,
-    ffi::CStr,
     io::{self, Write},
 };
 
@@ -12,46 +11,60 @@ mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-/// Return a String that describes this crate's version, including a Git commit hash.
-pub fn self_version_info() -> String {
-    if let Some(git_version) = built_info::GIT_VERSION {
-        let mut git_version = git_version.to_string();
-        if built_info::GIT_DIRTY.unwrap_or(false) {
-            git_version.push_str("-dirty");
-        }
-        format!("{} ({})", env!("CARGO_PKG_VERSION"), git_version)
+/// This is the Cargo.toml's package version as a SemVer string.
+pub fn caesar_semver_version() -> String {
+    env!("CARGO_PKG_VERSION").to_owned()
+}
+
+/// Return a String that describes the currently built version of Caesar.
+pub fn caesar_detailed_version() -> String {
+    let cargo_version = env!("CARGO_PKG_VERSION");
+    if let Some(git_commit) = built_info::GIT_COMMIT_HASH {
+        let dirty_suffix = if built_info::GIT_DIRTY.unwrap_or(false) {
+            ", dirty"
+        } else {
+            ""
+        };
+        format!("{} ({}{})", cargo_version, git_commit, dirty_suffix)
     } else {
-        // if git is not installed or we're in a shallow checkout (e.g. in CI),
-        // then GIT_VERSION is None. So use a fallback then.
-        env!("CARGO_PKG_VERSION").to_string()
+        format!("{} (no git info)", cargo_version)
     }
 }
 
-/// Return Z3's version.
-fn z3_version_info() -> String {
-    let z3_str = unsafe { CStr::from_ptr(z3_sys::Z3_get_full_version()) };
-    z3_str.to_string_lossy().to_string()
-}
-
-/// Write detailed version info about Caesar and its dependencies.
-pub fn write_detailed_version_info<W>(w: &mut W) -> io::Result<()>
+/// Write detailed version info about the caesar command and its dependencies.
+pub fn write_detailed_command_info<W>(w: &mut W) -> io::Result<()>
 where
     W: Write,
 {
     let command: String = {
         let args_strings: Vec<String> = env::args().collect();
-        let args_strs: Vec<&str> = args_strings.iter().map(|s| s.as_str()).collect();
-        shellwords::join(&args_strs)
+        let args_strs = args_strings.iter().map(|s| s.as_str());
+        shlex::try_join(args_strs).unwrap()
     };
     writeln!(w, "Command: {}", command)?;
-    writeln!(w, "Caesar version: {}", self_version_info())?;
-    writeln!(
-        w,
-        "Profile: {}. Features: {}. Target: {}",
-        built_info::PROFILE,
-        built_info::FEATURES_STR,
-        built_info::TARGET
-    )?;
-    writeln!(w, "Z3 version: {}", z3_version_info())?;
+    writeln!(w, "Caesar version: {}", caesar_detailed_version())?;
+    writeln!(w, "Features: {}", built_info::FEATURES_LOWERCASE_STR)?;
+    writeln!(w)?;
+
+    writeln!(w, "Profile: {}", built_info::PROFILE)?;
+    writeln!(w, "Target: {}", built_info::TARGET)?;
+    writeln!(w, "Build date: {}", built_info::BUILT_TIME_UTC)?;
+    write!(w, "Build host: {}", built_info::HOST)?;
+    if let Some(ci_platform) = built_info::CI_PLATFORM {
+        write!(w, " ({})", ci_platform)?;
+    }
+    writeln!(w)?;
+    writeln!(w)?;
+
+    writeln!(w, "Z3 version: {}", z3::full_version())?;
+    writeln!(w, "Operating system: {}", os_info::get())?;
     writeln!(w)
+}
+
+/// Get a detailed version info string about Caesar and its dependencies.
+pub(crate) fn clap_detailed_version_info() -> String {
+    let mut buffer = Vec::new();
+    writeln!(&mut buffer, "{}", caesar_semver_version()).unwrap();
+    write_detailed_command_info(&mut buffer).unwrap();
+    String::from_utf8(buffer).unwrap()
 }

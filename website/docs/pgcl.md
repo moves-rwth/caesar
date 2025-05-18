@@ -1,59 +1,62 @@
 ---
-sidebar_position: 7
+sidebar_position: 11
 ---
 
-# pGCL Frontend
+# pgcl2heyvl Frontend
 
-At the moment, _pGCL_, the probabilistic guarded command langage, is the only supported frontend.
-We have a tool, `pgcl2heyvl`, that automatically generates HeyVL code from pGCL programs.
+The now deprecated `pgcl2heyvl` tool is a frontend for pGCL programs written in the syntax of the [*probably* library](https://github.com/Philipp15b/probably)
+Given an annotated pGCL program, it automatically generates HeyVL code for Caesar.
 
-Most of pGCL's syntax can be encoded in fairly straightforward manner, but loops are a bit more complicated and require additional user annotations (loop invariants).
-The tool supports both Park induction and the more general k-induction.
+:::caution
+The `pgcl2heyvl` tool is deprecated and its functionality is now fully integrated into Caesar itself.
+Simply use HeyVL [statements](heyvl/statements.md) and use the built-in [proof rules](proof-rules/README.md) on `while` loops.
 
-:::info
-The `pgcl2heyvl` tool is being phased out and its functionality is being integrated directly into Caesar itself.
-This will enable the use of the proof rule encodings with features of Caesar that pgcl2heyvl does not support, such as [domain declarations](heyvl/domains.md) or a more powerful set of [expressions](heyvl/expressions.md).
+Using HeyVL directly enables the use of the proof rule encodings with features of Caesar that pgcl2heyvl does not support, such as [domain declarations](heyvl/domains.md) or a more powerful set of [expressions](heyvl/expressions.md).
+Furthermore, Caesar's proof rules have support for [slicing](caesar/slicing.md), which enables detailed error messages such as "the invariant is not inductive".
 :::
 
-## Using pgcl2heyvl
+## Installing pgcl2heyvl
 
-[`pgcl2heyvl`](https://github.com/moves-rwth/caesar/tree/master/pgcl/pgcl2heyvl) is a Python program that reads a pGCL program from a file and uses additional user-provided annotations to encode loops.
-The output is a HeyVL file.
-
-To run `pgcl2heyl`, enter its source code directory and execute it using [poetry](https://python-poetry.org/).
+To run `pgcl2heyvl`, first install dependencies using [poetry](https://python-poetry.org/).
 Poetry is a build system and dependency manager for Python.
 [Here are installation instructions for Poetry](https://python-poetry.org/docs/).
 
-For example:
+In the [`pgcl/pgcl2heyvl` directory](https://github.com/moves-rwth/caesar/tree/main/pgcl/pgcl2heyvl), install dependencies:
 ```bash
 cd pgcl/pgcl2heyvl
-poetry run pgcl2heyvl FILE --post POST --pre PRE --k K > OUTFILE
+poetry install
 ```
-where `FILE` is a file name with the pGCL program, `POST` is a post-expectation, and `PRE` is a pre-expectation (in [pGCL syntax](#pgcl-syntax)).
+
+## Using pgcl2heyvl
+
+After installation, use `poetry run` to run `pgcl2heyvl`.
+```bash
+cd pgcl/pgcl2heyvl
+poetry run pgcl2heyvl FILE > OUTFILE
+```
+
+where `FILE` is a file name with the pGCL program and `OUTFILE` is the name of the output file with the HeyVL code.
+
+The first line in `FILE` must include `// ARGS: --post POST --pre PRE --k K`.
+`POST` is a post-expectation, and `PRE` is a pre-expectation (in [pGCL syntax](#pgcl-syntax)).
 The `K` argument is an integer that specifies which `k`-induction to use for the encoding.
-`OUTFILE` is the name of the output file with the HeyVL code.
 
 If the pGCL program includes a single loop, then `PRE` will be used as the loop invariant.
 When the program includes multiple loops, additional invariants must be specified using `--invariant`.
 
-If the input file starts with a comment `// ARGS: ` followed by command-line arguments, it will use these as defaults.
-
 The command-line interface documentation is available by invoking `poetry run pgcl2heyvl --help`.
-
-And yes, we're aware the user experience of this tool is particularly horrible.
-We're working on it!
 
 ## pGCL Examples
 
-You can find pGCL examples in the [`pgcl/examples`](https://github.com/moves-rwth/caesar/tree/master/pgcl/examples) directory.
+You can find pGCL examples in the [`pgcl/examples`](https://github.com/moves-rwth/caesar/tree/main/pgcl/examples) directory.
 They include all necessary parameters to generate verifying HeyVL files.
 
-For these examples, the generated HeyVL files are located under [`pgcl/examples-heyvl`](https://github.com/moves-rwth/caesar/tree/master/pgcl/examples-heyvl).
+For these examples, the generated HeyVL files are located under [`pgcl/examples-heyvl`](https://github.com/moves-rwth/caesar/tree/main/pgcl/examples-heyvl).
 Verification with `caesar` requires the `--raw` command-line flag since these files are just sequences of HeyVL statements.
 
-Instructions on how to (re-)generate these examples are located in [`pgcl/examples-heyvl/README.md`](https://github.com/moves-rwth/caesar/blob/master/pgcl/examples-heyvl/README.md).
+Instructions on how to (re-)generate these examples are located in [`pgcl/examples-heyvl/README.md`](https://github.com/moves-rwth/caesar/blob/main/pgcl/examples-heyvl/README.md).
 
-To execute `caesar` with the generated HeyVL files, refer to the [benchmarks section of Caesar's documentation](./caesar.md#benchmarks).
+To execute `caesar` with the generated HeyVL files, refer to the [benchmarks section of Caesar's documentation](./caesar/benchmarks.md).
 
 ## pGCL Syntax
 

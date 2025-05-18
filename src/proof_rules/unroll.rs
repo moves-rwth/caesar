@@ -5,26 +5,30 @@
 //! - `k`: the number of times the loop will be unrolled
 //! - `terminator`: the terminator of the loop
 
-use std::fmt;
+use std::{any::Any, fmt};
 
 use crate::{
     ast::{
-        visit::VisitorMut, Direction, Expr, ExprKind, Files, Ident, SourceFilePath, Span, Spanned,
-        Stmt, Symbol, TyKind,
+        util::{is_bot_lit, is_top_lit},
+        visit::VisitorMut,
+        Direction, Expr, Files, Ident, SourceFilePath, Span, Spanned, Stmt, Symbol, TyKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{check_annotation_call, AnnotationError, AnnotationInfo},
+    intrinsic::annotations::{
+        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+    },
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingEnvironment, EncodingGenerated};
+use super::{
+    util::{encode_unroll, hey_const, intrinsic_param, lit_u128, two_args},
+    Encoding, EncodingEnvironment, EncodingGenerated,
+};
 
-use super::util::*;
-
-pub struct UnrollAnnotation(AnnotationInfo);
+pub struct UnrollAnnotation(AnnotationDecl);
 
 impl UnrollAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -36,13 +40,13 @@ impl UnrollAnnotation {
         let k_param = intrinsic_param(file, "k", TyKind::UInt, true);
         let invariant_param = intrinsic_param(file, "terminator", TyKind::SpecTy, false);
 
-        let anno_info = AnnotationInfo {
+        let anno_decl = AnnotationDecl {
             name,
             inputs: Spanned::with_dummy_file_span(vec![k_param, invariant_param], file),
             span: Span::dummy_file_span(file),
         };
 
-        UnrollAnnotation(anno_info)
+        UnrollAnnotation(anno_decl)
     }
 }
 
@@ -75,9 +79,15 @@ impl Encoding for UnrollAnnotation {
         _call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), ResolveError> {
-        let [k, invariant] = mut_two_args(args);
-        resolve.visit_expr(k)?;
-        resolve.visit_expr(invariant)
+        resolve.visit_exprs(args)
+    }
+
+    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
+        matches!(
+            (&calculus.calculus_type, direction),
+            (CalculusType::Wp | CalculusType::Ert, Direction::Down)
+                | (CalculusType::Wlp, Direction::Up)
+        )
     }
 
     fn transform(
@@ -87,48 +97,43 @@ impl Encoding for UnrollAnnotation {
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
-        // Unpack values from struct
-        let annotation_span = enc_env.annotation_span;
-        let direction = enc_env.direction;
-
         let [k, terminator] = two_args(args);
 
         let k: u128 = lit_u128(k);
 
-        if let ExprKind::Lit(lit) = &terminator.kind {
-            match direction {
-                Direction::Down => {
-                    if !lit.node.is_top() {
-                        tracing::warn!("Top terminator is not used with down direction!");
-                    }
+        // TODO: these should be warning diagnostics emitted to the user
+        match enc_env.direction {
+            Direction::Down => {
+                if !is_top_lit(terminator) {
+                    tracing::warn!("Unrolling terminator is not top element (down direction)");
                 }
-                Direction::Up => {
-                    if !lit.node.is_bot() {
-                        tracing::warn!("Bottom terminator is not used with up direction!");
-                    }
+            }
+            Direction::Up => {
+                if !is_bot_lit(terminator) {
+                    tracing::warn!("Unrolling terminator is not bottom element (up direction)");
                 }
             }
         }
 
         // Extend the loop k times without asserts (unlike k-induction) because bmc flag is set
-        let buf = encode_extend(
-            annotation_span,
+        let buf = encode_unroll(
+            &enc_env,
             inner_stmt,
             k,
-            terminator,
-            direction,
-            true,
-            hey_const(annotation_span, terminator, tcx),
+            hey_const(&enc_env, terminator, enc_env.direction, tcx),
         );
 
         Ok(EncodingGenerated {
-            span: annotation_span,
-            stmts: buf,
+            block: Spanned::new(enc_env.stmt_span, buf),
             decls: None,
         })
     }
 
     fn is_terminator(&self) -> bool {
         false
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

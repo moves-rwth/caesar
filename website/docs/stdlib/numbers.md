@@ -4,6 +4,9 @@ sidebar_position: 2
 
 # Number Types
 
+Caesar supports a variety of unbounded numerical types.
+
+The [expressions documentiation](../heyvl/expressions.md) has a list of Caesar's numerical operators.
 The following diagram illustrates the hierarchy of numeric types supported by Caesar.
 
 An arrow from a type to another type indicates that it is a _subtype_ and that a value can be converted into the supertype.
@@ -17,7 +20,7 @@ graph
     UReal --> Real;
     UReal --> EUReal;
     UInt --> EUReal;
-    
+
 ```
 
 ## Mathematical Number Types

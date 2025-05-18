@@ -68,4 +68,8 @@ impl<'ctx> Uninterpreteds<'ctx> {
             prover.add_assumption(axiom);
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.sorts.is_empty() && self.functions.is_empty() && self.axioms.is_empty()
+    }
 }

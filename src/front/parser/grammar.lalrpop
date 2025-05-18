@@ -85,8 +85,8 @@ QuantOp: QuantOp = {
 }
 
 QuantVar: QuantVar = {
-    <l: @L> <name: Ident> ":" <ty: Ty> <r: @R> 
-        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty: ty, kind: VarKind::Quant, init: None, span: span(file, l, r), created_from: None }))
+    <l: @L> <name: Ident> ":" <ty: Ty> <r: @R>
+        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty, kind: VarKind::Quant, init: None, span: span(file, l, r), created_from: None }))
 }
 
 QuantAnn: QuantAnn = {
@@ -180,15 +180,19 @@ Stmt: Stmt = {
     <l: @L> <kind: StmtKind> <r: @R> => spanned(file, l, r, kind),
 }
 
-pub Stmts: Vec<Stmt> = {
+Stmts: Vec<Stmt> = {
     <stmts: OptSemi<Stmt>> => stmts,
 }
 
+pub SpannedStmts: Spanned<Vec<Stmt>> = {
+    <l: @L> <stmts: Stmts> <r: @R> => spanned(file, l, r, stmts),
+}
+
 StmtKind: StmtKind = {
-    <block: Block> => StmtKind::Block(block),
-    <l: @L> "var" <ident: Ident> ":" <ty: Ty> "=" <rhs: Expr> <r: @R> 
+    <block: Block> => StmtKind::Seq(block.node),
+    <l: @L> "var" <ident: Ident> ":" <ty: Ty> "=" <rhs: Expr> <r: @R>
         => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: Some(rhs), span: span(file, l, r), created_from: None })),
-    <l: @L> "var" <ident: Ident> ":" <ty: Ty> <r: @R> 
+    <l: @L> "var" <ident: Ident> ":" <ty: Ty> <r: @R>
         => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: None, span: span(file, l, r), created_from: None })),
     <lhs: CommaPlus<Ident>> "=" <rhs: Expr> => StmtKind::Assign(lhs, rhs),
     <call: ExprTier<ExprCall>> => StmtKind::Assign(vec![], call),
@@ -210,12 +214,12 @@ StmtKind: StmtKind = {
     "if" SymCup <block1: Block> "else" <block2: Block> => StmtKind::Angelic(block1, block2),
     "if" <cond: Expr> <block1: Block> "else" <block2: Block> => StmtKind::If(cond, block1, block2),
     "while" <cond: Expr> <block1: Block> => StmtKind::While(cond, block1),
-    "@" <ident: Ident> <inputs: AnnotationInputs?> <stmt: Stmt> => StmtKind::Annotation(ident, inputs.unwrap_or_default(), Box::new(stmt)),
+    <l: @L> "@" <ident: Ident> <inputs: AnnotationInputs?> <r: @R> <stmt: Stmt> => StmtKind::Annotation(span(file, l, r), ident, inputs.unwrap_or_default(), Box::new(stmt)),
     "label" <ident: Ident> => StmtKind::Label(ident),
 }
 
 Block: Block = {
-    "{" <stmts: Stmts> "}" => stmts,
+    <l: @L> "{" <stmts: Stmts> "}" <r: @R> => spanned(file, l, r, stmts),
 }
 
 AnnotationInputs: Vec<Expr> = {
@@ -232,9 +236,13 @@ pub Decl: DeclKind = {
 
 ProcDecl: ProcDecl = {
     <l: @L> "proc" <name: Ident> <inputs: ParamList> "->" <outputs: ParamList> <spec: ProcSpec*> <body: Block?> <r: @R>
-         => ProcDecl { direction: Direction::Down, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r) },
+         => ProcDecl { direction: Direction::Down, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r), calculus: None },
     <l: @L> "coproc" <name: Ident> <inputs: ParamList> "->" <outputs: ParamList> <spec: ProcSpec*> <body: Block?> <r: @R>
-         => ProcDecl { direction: Direction::Up, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r) }
+         => ProcDecl { direction: Direction::Up, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r), calculus: None },
+    <l: @L> "@" <anno: Ident> "proc" <name: Ident> <inputs: ParamList> "->" <outputs: ParamList> <spec: ProcSpec*> <body: Block?> <r: @R>
+         => ProcDecl { direction: Direction::Down, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r), calculus: Some(anno) },
+    <l: @L> "@" <anno: Ident> "coproc" <name: Ident> <inputs: ParamList> "->" <outputs: ParamList> <spec: ProcSpec*> <body: Block?> <r: @R>
+         => ProcDecl { direction: Direction::Up, name, inputs, outputs, spec, body: RefCell::new(body), span: span(file, l, r), calculus: Some(anno) }
 }
 
 ParamList: Spanned<Vec<Param>> = {
@@ -251,16 +259,16 @@ ProcSpec: ProcSpec = {
 }
 
 DomainDecl: DomainDecl = {
-    <l: @L> "domain" <name: Ident> "{" <body: DomainSpec*> "}" <r: @R> 
+    <l: @L> "domain" <name: Ident> "{" <body: DomainSpec*> "}" <r: @R>
         => DomainDecl { name, body, span: span(file, l, r) }
 }
 
 DomainSpec: DomainSpec = {
-    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> <r: @R> 
-        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output: output, body: RefCell::new(None), span: span(file, l, r) })),
-    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> "=" <body: Expr> <r: @R> 
-        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output: output, body: RefCell::new(Some(body)), span: span(file, l, r) })),
-    <l: @L> "axiom" <name: Ident> <axiom: Expr> <r: @R> 
+    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> <r: @R>
+        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(None), span: span(file, l, r) })),
+    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> "=" <body: Expr> <r: @R>
+        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(Some(body)), span: span(file, l, r) })),
+    <l: @L> "axiom" <name: Ident> <axiom: Expr> <r: @R>
         => DomainSpec::Axiom(DeclRef::new(AxiomDecl{ name, axiom, span: span(file, l, r) }))
 }
 

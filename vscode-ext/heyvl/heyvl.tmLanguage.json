@@ -6,9 +6,6 @@
       "include": "#keywords"
     },
     {
-      "include": "#strings"
-    },
-    {
       "include": "#comments"
     },
     {
@@ -16,6 +13,9 @@
     },
     {
       "include": "#constant"
+    },
+    {
+      "include": "#annotations"
     }
   ],
   "repository": {
@@ -23,11 +23,27 @@
       "patterns": [
         {
           "name": "keyword.control.heyvl",
-          "match": "\\b(var|(co)?assume|(co)?assert|(co)?negate|(co)?validate|if|else|(co)?proc|pre|post|(co)?compare|tick|reward|while|(co)?havoc|domain|func|axiom)\\b"
+          "match": "\\b(var|(co)?assume|(co)?assert|(co)?negate|(co)?validate|if( (\\\\cap|\\\\cup))?|else|(co)?proc|pre|post|(co)?compare|tick|reward|while|(co)?havoc|domain|func|axiom)\\b"
+        },
+        {
+          "name": "keyword.control.heyvl",
+          "match": "->"
         },
         {
           "name": "keyword.operator.heyvl",
           "match": "\\b(forall|exists|inf|sup|ite|let)\\b"
+        },
+        {
+          "name": "keyword.operator.heyvl",
+          "match": "!|\\+|\\*|-|/(?![/\\*])|==>|==|<=|<|>=|&&|\\|\\|"
+        },
+        {
+          "name": "keyword.operator.heyvl",
+          "match": "(\\\\cup|\\\\cap)\\b"
+        },
+        {
+          "name": "support.function.builtin",
+          "match": "\\bflip\\b"
         }
       ]
     },
@@ -80,11 +96,32 @@
       "patterns": [
         {
           "name": "constant.numeric.heyvl",
-          "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+          "match": "\\b[0-9]+/[0-9]+"
+        },
+        {
+          "name": "constant.numeric.heyvl",
+          "match": "\\b[0-9]+(\\.[0-9]+)?"
+        },
+        {
+          "name": "constant.numeric.heyvl",
+          "match": "∞|\\\\infty\\b"
         },
         {
           "name": "constant.language.heyvl",
-          "match": "\\b(true|false|∞|\\\\[a-zA-Z]+)\\b"
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "string.heyvl",
+          "begin": "\"",
+          "end": "\""
+        }
+      ]
+    },
+    "annotations": {
+      "patterns": [
+        {
+          "name": "entity.name.tag",
+          "match": "@\\w+\\b"
         }
       ]
     }

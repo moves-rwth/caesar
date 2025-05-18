@@ -3,48 +3,84 @@
 //! will contain substitution expressions and use sharing for post-expectations
 //! that occur in multiple places.
 
+use ariadne::ReportKind;
+
 use crate::{
     ast::{
-        BinOpKind, DeclKind, Direction, Expr, ExprBuilder, ExprKind, Ident, QuantOpKind,
-        SpanVariant, Stmt, StmtKind, UnOpKind,
+        BinOpKind, Block, DeclKind, Diagnostic, Direction, Expr, ExprBuilder, ExprKind, Ident,
+        Label, QuantOpKind, Span, SpanVariant, Stmt, StmtKind, UnOpKind,
     },
+    intrinsic::annotations::AnnotationKind,
+    resource_limits::LimitsRef,
     tyctx::TyCtx,
+    VerifyError,
 };
 
+use super::explain::{explain_annotated_while, explain_proc_call, explain_subst, VcExplanation};
+
 pub struct Vcgen<'tcx> {
-    tcx: &'tcx TyCtx,
-    print_label_vc: bool,
+    pub(super) tcx: &'tcx TyCtx,
+    pub explanation: Option<VcExplanation>,
+    pub limits_ref: LimitsRef,
 }
 
 impl<'tcx> Vcgen<'tcx> {
-    pub fn new(tcx: &'tcx TyCtx, print_label_vc: bool) -> Self {
+    /// Create a new `Vcgen` instance. Initialize with an optional
+    /// `VcExplanation` structure to enable explanations.
+    pub fn new(
+        tcx: &'tcx TyCtx,
+        limits_ref: &LimitsRef,
+        explanation: Option<VcExplanation>,
+    ) -> Self {
         Vcgen {
+            explanation,
+            limits_ref: limits_ref.clone(),
             tcx,
-            print_label_vc,
         }
     }
 
-    pub fn vcgen_stmts(&self, stmts: &[Stmt], post: Expr) -> Expr {
+    pub fn vcgen_block(&mut self, block: &Block, post: Expr) -> Result<Expr, VerifyError> {
+        let prev_block_span = if let Some(ref mut explanation) = self.explanation {
+            let prev_block_span = explanation.set_block_span(Some(block.span));
+            let mut end_span = block.span;
+            end_span.start = end_span.end - 1;
+            explanation.add_expr(end_span, post.clone(), true);
+            prev_block_span
+        } else {
+            None
+        };
+        let res = self.vcgen_stmts(&block.node, post);
+        if let Some(ref mut explanation) = self.explanation {
+            explanation.set_block_span(prev_block_span);
+        }
+        res
+    }
+
+    pub fn vcgen_stmts(&mut self, stmts: &[Stmt], post: Expr) -> Result<Expr, VerifyError> {
         stmts
             .iter()
             .rev()
-            .fold(post, |acc, x| self.vcgen_stmt(x, acc))
+            .try_fold(post, |acc, x| self.vcgen_stmt(x, acc))
     }
 
-    pub fn vcgen_stmt(&self, stmt: &Stmt, post: Expr) -> Expr {
+    fn vcgen_stmt(&mut self, stmt: &Stmt, post: Expr) -> Result<Expr, VerifyError> {
+        self.limits_ref.check_limits()?;
+
         let builder = ExprBuilder::new(stmt.span.variant(SpanVariant::VC));
         let spec_ty = Some(self.tcx.spec_ty().clone());
-        match &stmt.node {
-            StmtKind::Block(block) => self.vcgen_stmts(block, post),
+        let res = match &stmt.node {
+            StmtKind::Seq(block) => self.vcgen_stmts(block, post)?,
             StmtKind::Var(var_def) => {
                 let var_def = var_def.borrow();
                 if let Some(init) = &var_def.init {
-                    self.generate_assign(init, builder, &[var_def.name], post)
+                    self.generate_assign(stmt.span, init, builder, &[var_def.name], post)?
                 } else {
                     post
                 }
             }
-            StmtKind::Assign(lhses, rhs) => self.generate_assign(rhs, builder, lhses, post),
+            StmtKind::Assign(lhses, rhs) => {
+                self.generate_assign(stmt.span, rhs, builder, lhses, post)?
+            }
             StmtKind::Havoc(dir, idents) => {
                 let quant_op = match dir {
                     Direction::Down => QuantOpKind::Inf,
@@ -74,6 +110,12 @@ impl<'tcx> Vcgen<'tcx> {
                 builder.binary(bin_op, spec_ty, expr.clone(), post)
             }
             StmtKind::Negate(dir) => {
+                if let Some(ref mut explanation) = self.explanation {
+                    explanation
+                        .direction
+                        .handle_negation_backwards(stmt)
+                        .map_err(|_| unsupported_stmt_diagnostic(stmt))?;
+                }
                 let un_op = match dir {
                     Direction::Down => UnOpKind::Not,
                     Direction::Up => UnOpKind::Non,
@@ -86,22 +128,22 @@ impl<'tcx> Vcgen<'tcx> {
                     ExprKind::Binary(bin_op, lhs, rhs)
                         if *dir == Direction::Down && bin_op.node == BinOpKind::Impl =>
                     {
-                        return builder.binary(
+                        return Ok(builder.binary(
                             BinOpKind::Compare,
                             spec_ty,
                             lhs.clone(),
                             rhs.clone(),
-                        );
+                        ));
                     }
                     ExprKind::Binary(bin_op, lhs, rhs)
                         if *dir == Direction::Up && bin_op.node == BinOpKind::CoImpl =>
                     {
-                        return builder.binary(
+                        return Ok(builder.binary(
                             BinOpKind::CoCompare,
                             spec_ty,
                             lhs.clone(),
                             rhs.clone(),
-                        );
+                        ));
                     }
                     _ => {}
                 };
@@ -114,42 +156,73 @@ impl<'tcx> Vcgen<'tcx> {
             }
             StmtKind::Tick(expr) => builder.binary(BinOpKind::Add, spec_ty, expr.clone(), post),
             StmtKind::Demonic(block1, block2) => {
-                let post1 = self.vcgen_stmts(block1, post.clone());
-                let post2 = self.vcgen_stmts(block2, post);
+                let post1 = self.vcgen_block(block1, post.clone())?;
+                let post2 = self.vcgen_block(block2, post)?;
                 builder.binary(BinOpKind::Inf, spec_ty, post1, post2)
             }
             StmtKind::Angelic(block1, block2) => {
-                let post1 = self.vcgen_stmts(block1, post.clone());
-                let post2 = self.vcgen_stmts(block2, post);
+                let post1 = self.vcgen_block(block1, post.clone())?;
+                let post2 = self.vcgen_block(block2, post)?;
                 builder.binary(BinOpKind::Sup, spec_ty, post1, post2)
             }
             StmtKind::If(cond, block1, block2) => {
-                let post1 = self.vcgen_stmts(block1, post.clone());
-                let post2 = self.vcgen_stmts(block2, post);
+                let post1 = self.vcgen_block(block1, post.clone())?;
+                let post2 = self.vcgen_block(block2, post)?;
                 builder.ite(spec_ty, cond.clone(), post1, post2)
             }
-            StmtKind::While(_, _) => todo!(),
-            StmtKind::Annotation(_, _, _) => todo!(),
-            StmtKind::Label(ident) => {
-                if self.print_label_vc {
-                    println!("VC at label `{}`: {}", ident, &post);
+            StmtKind::While(_, _) => return Err(unsupported_while_loop_diagnostic(stmt).into()),
+            StmtKind::Annotation(_, ident, _, inner_stmt) => {
+                // there may be still slicing annotations left, which we just
+                // walk through. this may happen if the slicing transformer
+                // didn't run at all (slicing disabled) or when it errored, but
+                // we still continue.
+                if let Some(decl_ref) = self.tcx.get(*ident) {
+                    if let DeclKind::AnnotationDecl(AnnotationKind::Slicing(_)) = *decl_ref {
+                        return self.vcgen_stmt(inner_stmt, post);
+                    }
                 }
+                // only if explanations are enabled, explain the while loop and
+                // return the invariant as the pre. otherwise, error.
+                if self.explanation.is_some() {
+                    explain_annotated_while(self, stmt, &post)?
+                } else {
+                    return Err(unsupported_stmt_diagnostic(stmt).into());
+                }
+            }
+            StmtKind::Label(_ident) => {
+                // TODO
                 post
             }
+        };
+
+        if let Some(ref mut explanation) = self.explanation {
+            explanation.add_expr(stmt.span, res.clone(), false);
         }
+
+        Ok(res)
     }
 
     fn generate_assign(
-        &self,
+        &mut self,
+        span: Span,
         rhs: &Expr,
         builder: ExprBuilder,
         lhses: &[Ident],
         post: Expr,
-    ) -> Expr {
+    ) -> Result<Expr, VerifyError> {
         if let ExprKind::Call(ident, args) = &rhs.kind {
             match self.tcx.get(*ident).as_deref() {
                 Some(DeclKind::ProcIntrin(proc_intrin)) => {
-                    return proc_intrin.vcgen(builder, args, lhses, post)
+                    let mut res = proc_intrin.vcgen(builder, args, lhses, post);
+                    explain_subst(self, span, &mut res)?;
+                    return Ok(res);
+                }
+                // only if explanations are enabled, return a simple explanation
+                // for proc calls.
+                Some(DeclKind::ProcDecl(decl_ref)) if self.explanation.is_some() => {
+                    let mut res = explain_proc_call(decl_ref, args, &builder);
+                    explain_subst(self, span, &mut res)?;
+                    return Ok(res);
                 }
                 Some(DeclKind::FuncDecl(_)) | Some(DeclKind::FuncIntrin(_)) => {}
                 Some(decl) => panic!("cannot do vc generation for {:?}", decl),
@@ -157,9 +230,29 @@ impl<'tcx> Vcgen<'tcx> {
             }
         };
         if let [lhs] = lhses {
-            builder.subst(post, [(*lhs, rhs.clone())])
+            let mut res = builder.subst(post, [(*lhs, rhs.clone())]);
+            explain_subst(self, span, &mut res)?;
+            Ok(res)
         } else {
             panic!("for vc generation, there must be exactly one lhs in an assignment");
         }
     }
+}
+
+fn unsupported_while_loop_diagnostic(stmt: &Stmt) -> Diagnostic {
+    Diagnostic::new(ReportKind::Error, stmt.span)
+            .with_message("while loops must have a proof rule annotation")
+            .with_note(
+                "without a proof rule, Caesar cannot generate verification conditions. read more at: https://www.caesarverifier.org/docs/proof-rules/",
+            )
+            .with_label(
+                Label::new(stmt.span).with_message("this loop needs an annotation"),
+            )
+}
+
+pub(super) fn unsupported_stmt_diagnostic(stmt: &Stmt) -> Diagnostic {
+    Diagnostic::new(ReportKind::Error, stmt.span)
+        .with_message("this statement is not supported in vc generation")
+        .with_note("this is most likely an internal error")
+        .with_label(Label::new(stmt.span).with_message("this is not supported"))
 }

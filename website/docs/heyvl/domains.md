@@ -7,10 +7,25 @@ sidebar_position: 4
 
 `domain` blocks are used to create user-defined types and uninterpreted functions.
 A domain has a name which can be used as a type in HeyVL code.
-The domain block contains a list of functions and axioms defined on this domain.
+The domain block contains a list of `func`s and `axiom`s defined on this domain.
 
 Every domain type supports the binary operators `==` and `!=`.
 All other operations must be encoded using functions and axioms.
+
+:::warning Unsoundness from Axioms
+
+`axiom` declarations behave like [`assume` statements](./statements.md) and can quickly make verification unsound.
+E.g. `axiom unsound ?(false)` behaves like `assume ?(false)`, making everything verify.
+[See below for a longer example](#unsoundness-from-axioms).
+
+:::
+
+:::tip Incompleteness from Quantifiers
+
+Note that axioms with quantifiers quickly introduce *incompleteness* of Caesar, making it unable to prove or disprove verification.
+Read the documentation section on [SMT Theories and Incompleteness](../caesar/debugging.md#incompleteness) for more information.
+
+:::
 
 ## Example: Exponentials of ½
 
@@ -39,8 +54,9 @@ proc ohfive_3() -> ()
     post ?(ohfive_exp(3) == 0.125)
 {}
 ```
-**Do not forget the _empty_ block of statements `{}` at the end!**
-If you omit it, Caesar will not attempt to verify the procedure and thus will not check the specification.
+
+Do not forget the _empty_ block of statements `{}` at the end.
+If you omit it, [Caesar will not attempt to verify the procedure](./procs.md#procs-without-body) and thus will not check the specification.
 
 ## Pure Functions
 
@@ -52,11 +68,12 @@ The following function declaration has a such a definition (`= x + 1`):
 func plus_one(x: UInt): UInt = x + 1
 ```
 
-This syntax is just syntactic sugar for a function declaration with an additional axiom, i.e.
+One can intuitively understand the above syntax as syntactic sugar for a function declaration with an additional axiom, i.e.
 ```heyvl
 func plus_one(x: UInt): UInt
 axiom plus_one_def forall x: UInt. plus_one(x) == x + 1
 ```
+However, the *pure* function syntax allows Caesar to make certain optimizations, therefore it should always be preferred.
 
 ## Unsoundness From Axioms
 

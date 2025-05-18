@@ -9,7 +9,7 @@ pub mod distributions;
 
 pub mod list;
 
-use std::fmt;
+use std::{any::Any, fmt, rc::Rc};
 
 use crate::{
     ast::{Expr, ExprBuilder, Ident, Span, TyKind},
@@ -17,7 +17,7 @@ use crate::{
     smt::{symbolic::Symbolic, translate_exprs::TranslateExprs},
 };
 
-pub trait ProcIntrin: fmt::Debug {
+pub trait ProcIntrin: fmt::Debug + Any {
     fn name(&self) -> Ident;
 
     fn tycheck(
@@ -28,6 +28,8 @@ pub trait ProcIntrin: fmt::Debug {
     ) -> Result<TyKind, TycheckError>;
 
     fn vcgen(&self, builder: ExprBuilder, args: &[Expr], lhses: &[Ident], post: Expr) -> Expr;
+
+    fn as_any_rc(self: Rc<Self>) -> Rc<dyn Any>;
 }
 
 pub trait FuncIntrin: fmt::Debug {

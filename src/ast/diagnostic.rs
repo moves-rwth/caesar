@@ -6,28 +6,35 @@ use std::{
     error::Error,
     fmt::{self, Display, Formatter},
     path::PathBuf,
+    sync::Arc,
 };
 
 use ariadne::{Cache, Report, ReportBuilder, ReportKind, Source};
+use lsp_types::{
+    DiagnosticTag, NumberOrString, TextDocumentIdentifier, VersionedTextDocumentIdentifier,
+};
 use pathdiff::diff_paths;
 
 use crate::pretty::{Doc, SimplePretty};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FileId(u16);
 
 impl FileId {
     pub const DUMMY: FileId = FileId(0);
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceFilePath {
     Path(PathBuf),
+    Lsp(VersionedTextDocumentIdentifier),
     Builtin,
     Generated,
 }
 
 impl SourceFilePath {
+    /// Rewrites a [`SourceFilePath::Path`] to be relative to the process
+    /// working directory.
     pub fn relative_to_cwd(&self) -> std::io::Result<Self> {
         match self {
             SourceFilePath::Path(path) => {
@@ -37,16 +44,27 @@ impl SourceFilePath {
                 let path_buf = diff_paths(path, current_dir).unwrap_or(path.to_path_buf());
                 Ok(SourceFilePath::Path(path_buf))
             }
-            SourceFilePath::Builtin => Ok(SourceFilePath::Builtin),
-            SourceFilePath::Generated => Ok(SourceFilePath::Generated),
+            _ => Ok(self.clone()),
         }
     }
 
     pub fn to_string_lossy(&self) -> Cow<'_, str> {
         match self {
             SourceFilePath::Path(path) => path.to_string_lossy(),
+            SourceFilePath::Lsp(ident) => Cow::Owned(format!(
+                "{} (version {})",
+                ident.uri.as_str(),
+                ident.version
+            )),
             SourceFilePath::Builtin => Cow::from("<builtin>"),
             SourceFilePath::Generated => Cow::from("<generated>"),
+        }
+    }
+
+    pub fn to_lsp_identifier(&self) -> Option<VersionedTextDocumentIdentifier> {
+        match self {
+            SourceFilePath::Lsp(ident) => Some(ident.clone()),
+            _ => None,
         }
     }
 }
@@ -66,7 +84,7 @@ pub struct StoredFile {
 
 impl StoredFile {
     pub(self) fn new(id: FileId, path: SourceFilePath, source: String) -> Self {
-        let lines = Source::from(&source);
+        let lines = Source::from(source.clone());
         StoredFile {
             id,
             path,
@@ -101,7 +119,7 @@ impl fmt::Debug for StoredFile {
 
 #[derive(Debug, Default)]
 pub struct Files {
-    files: Vec<StoredFile>,
+    files: Vec<Arc<StoredFile>>,
 }
 
 impl Files {
@@ -109,19 +127,61 @@ impl Files {
         Default::default()
     }
 
-    pub fn add(&mut self, path: SourceFilePath, source: String) -> &StoredFile {
+    pub fn add(&mut self, path: SourceFilePath, source: String) -> &Arc<StoredFile> {
         let id = FileId(u16::try_from(self.files.len() + 1).unwrap());
-        self.files.push(StoredFile::new(id, path, source));
-        self.files.last().unwrap()
+        self.files.push(Arc::new(StoredFile::new(id, path, source)));
+        self.get(id).unwrap()
     }
 
-    pub fn get(&self, file_id: FileId) -> Option<&StoredFile> {
+    pub fn add_or_update_uri(
+        &mut self,
+        document_id: VersionedTextDocumentIdentifier,
+        source: String,
+    ) -> &StoredFile {
+        let file = self.files.iter_mut().find(|file| match &file.path {
+            SourceFilePath::Lsp(ident) => ident.uri == document_id.uri,
+            _ => false,
+        });
+        let path = SourceFilePath::Lsp(document_id);
+        if let Some(file) = file {
+            let file_id = file.id;
+            *file = Arc::new(StoredFile::new(file_id, path, source));
+            self.get(file_id).unwrap()
+        } else {
+            self.add(path, source)
+        }
+    }
+
+    pub fn get(&self, file_id: FileId) -> Option<&Arc<StoredFile>> {
         assert_ne!(file_id, FileId::DUMMY);
         self.files.get((file_id.0 - 1) as usize)
     }
 
+    pub fn find(&self, path: &SourceFilePath) -> Option<&Arc<StoredFile>> {
+        self.files.iter().find(|file| &file.path == path)
+    }
+
+    pub fn find_uri(&self, document_id: TextDocumentIdentifier) -> Option<&Arc<StoredFile>> {
+        self.files.iter().find(|file| match &file.path {
+            SourceFilePath::Lsp(ident) => ident.uri == document_id.uri,
+            _ => false,
+        })
+    }
+
     pub fn char_span(&self, span: Span) -> CharSpan {
         self.get(span.file).unwrap().char_span(span)
+    }
+
+    pub fn get_human_span_start(&self, span: Span) -> Option<(&StoredFile, usize, usize)> {
+        if span.file == FileId::DUMMY {
+            None
+        } else {
+            let file = self.get(span.file).unwrap();
+            let char_span = file.char_span(span);
+            let (_line, line_number, col_number) =
+                file.lines.get_offset_line(char_span.start).unwrap();
+            Some((file, line_number + 1, col_number + 1))
+        }
     }
 
     /// Formats the start of the span as a human-readable string. The format is
@@ -133,31 +193,21 @@ impl Files {
     ///
     /// Returns `None` if the span's file id is [`FileId::DUMMY`].
     pub fn format_span_start(&self, span: Span) -> Option<String> {
-        if span.file == FileId::DUMMY {
-            None
-        } else {
-            let file = self.get(span.file).unwrap();
-            let char_span = file.char_span(span);
-            let (_line, line_number, col_number) =
-                file.lines.get_offset_line(char_span.start).unwrap();
-            Some(format!(
-                "{}:{}:{}",
-                file.path,
-                line_number + 1,
-                col_number + 1
-            ))
-        }
+        let (file, line_number, col_number) = self.get_human_span_start(span)?;
+        Some(format!("{}:{}:{}", file.path, line_number, col_number))
     }
 }
 
 /// Hacky impl of `Cache` for `Files` so that it only requires a shared reference.
 impl<'a> Cache<FileId> for &'a Files {
-    fn fetch(&mut self, id: &FileId) -> Result<&Source, Box<dyn std::fmt::Debug + '_>> {
+    type Storage = String;
+
+    fn fetch(&mut self, id: &FileId) -> Result<&Source<Self::Storage>, impl fmt::Debug> {
         let stored_file = self.get(*id).unwrap();
-        Ok(&stored_file.lines)
+        Ok::<&ariadne::Source, ()>(&stored_file.lines)
     }
 
-    fn display<'b>(&self, id: &'b FileId) -> Option<Box<dyn std::fmt::Display + 'b>> {
+    fn display<'b>(&self, id: &'b FileId) -> Option<impl fmt::Display + 'b> {
         let stored_file = self.get(*id).unwrap();
         Some(Box::new(format!("{}", stored_file.path)))
     }
@@ -224,6 +274,47 @@ impl Span {
             end: self.end,
             variant,
         }
+    }
+
+    pub fn to_lsp(
+        self,
+        files: &Files,
+    ) -> Option<(VersionedTextDocumentIdentifier, lsp_types::Range)> {
+        let file = files.get(self.file).unwrap();
+        let char_span = file.char_span(self);
+
+        let mut start_line = 0;
+        let mut start_offset = 0;
+        let mut end_line = 0;
+        let mut end_offset = 0;
+
+        for (i, c) in file.source.chars().enumerate() {
+            if i == char_span.end {
+                break;
+            }
+            if i == char_span.start {
+                (start_line, start_offset) = (end_line, end_offset);
+            }
+
+            if c == '\n' {
+                end_line += 1;
+                end_offset = 0;
+            } else {
+                end_offset += 1;
+            }
+        }
+
+        let range = lsp_types::Range {
+            start: lsp_types::Position {
+                line: start_line,
+                character: start_offset,
+            },
+            end: lsp_types::Position {
+                line: end_line,
+                character: end_offset,
+            },
+        };
+        Some((file.path.to_lsp_identifier()?, range))
     }
 }
 
@@ -331,16 +422,17 @@ pub struct Diagnostic(Box<DiagnosticInner>);
 /// of a [`Result`] without clippy complaining because of a big object.
 #[derive(Debug)]
 struct DiagnosticInner {
-    kind: ReportKind,
-    code: Option<u32>,
+    kind: ReportKind<'static>,
+    code: Option<NumberOrString>,
     msg: Option<String>,
     note: Option<String>,
     location: Span,
     labels: Vec<Label>,
+    tags: Option<Vec<DiagnosticTag>>,
 }
 
 impl Diagnostic {
-    pub fn new(kind: ReportKind, span: Span) -> Self {
+    pub fn new(kind: ReportKind<'static>, span: Span) -> Self {
         let inner = DiagnosticInner {
             kind,
             code: None,
@@ -348,12 +440,19 @@ impl Diagnostic {
             note: None,
             location: span,
             labels: vec![],
+            tags: None,
         };
         Diagnostic(Box::new(inner))
     }
 
-    /// Give this diagnostic a numerical code that may be used to more precisely look up the error in documentation.
-    pub fn with_code(mut self, code: u32) -> Self {
+    /// Overwrite the [`ReportKind`].
+    pub fn with_kind(mut self, kind: ReportKind<'static>) -> Self {
+        self.0.kind = kind;
+        self
+    }
+
+    /// Give this diagnostic a code.
+    pub fn with_code(mut self, code: NumberOrString) -> Self {
         self.0.code = Some(code);
         self
     }
@@ -376,12 +475,36 @@ impl Diagnostic {
         self
     }
 
+    /// Add new labels to the diagnostic.
+    pub fn with_labels(mut self, labels: impl IntoIterator<Item = Label>) -> Self {
+        self.0.labels.extend(labels);
+        self
+    }
+
+    /// Add a new [`DiagnosticTag`] (relevant for LSP only).
+    pub fn with_tag(mut self, tag: DiagnosticTag) -> Self {
+        self.0.tags.get_or_insert(vec![]).push(tag);
+        self
+    }
+
+    pub fn kind(&self) -> ReportKind {
+        self.0.kind
+    }
+
+    pub fn span(&self) -> Span {
+        self.0.location
+    }
+
     /// Generate the [`ariadne::ReportBuilder`].
     pub fn into_ariadne(self, files: &Files) -> ReportBuilder<CharSpan> {
         // note that ariadne's report doesn't use the span end
         let span = files.char_span(self.0.location);
-        let mut builder = Report::build(self.0.kind, span.file, span.start);
+        let mut builder = Report::build(self.0.kind, span);
         if let Some(code) = self.0.code {
+            let code = match code {
+                NumberOrString::Number(code) => code.to_string(),
+                NumberOrString::String(code) => code,
+            };
             builder = builder.with_code(code);
         }
         if let Some(msg) = self.0.msg {
@@ -394,6 +517,67 @@ impl Diagnostic {
             builder = builder.with_label(label.into_ariadne(files));
         }
         builder
+    }
+
+    pub fn into_lsp_diagnostic(
+        &self,
+        files: &Files,
+    ) -> Option<(VersionedTextDocumentIdentifier, lsp_types::Diagnostic)> {
+        let (document_id, range) = self.0.location.to_lsp(files)?;
+
+        let severity = match self.0.kind {
+            ReportKind::Error => lsp_types::DiagnosticSeverity::ERROR,
+            ReportKind::Warning => lsp_types::DiagnosticSeverity::WARNING,
+            ReportKind::Advice => lsp_types::DiagnosticSeverity::INFORMATION,
+            _ => lsp_types::DiagnosticSeverity::ERROR,
+        };
+        let code = self.0.code.clone();
+        let message = self
+            .0
+            .msg
+            .clone()
+            .unwrap_or_else(|| "(no message)".to_string());
+        let mut related_information = self
+            .0
+            .labels
+            .iter()
+            .flat_map(|label| {
+                let (uri, range) = if let Some(res) = label.span.to_lsp(files) {
+                    res
+                } else {
+                    tracing::error!("{:?} is not an LSP path, skipping label", label.span);
+                    return None;
+                };
+                Some(lsp_types::DiagnosticRelatedInformation {
+                    location: lsp_types::Location {
+                        uri: uri.uri,
+                        range,
+                    },
+                    message: label.msg.clone()?,
+                })
+            })
+            .collect::<Vec<_>>();
+        if let Some(note) = &self.0.note {
+            related_information.push(lsp_types::DiagnosticRelatedInformation {
+                location: lsp_types::Location {
+                    uri: document_id.uri.clone(),
+                    range,
+                },
+                message: format!("Note: {}", note),
+            })
+        }
+        let diagnostic = lsp_types::Diagnostic {
+            range,
+            severity: Some(severity),
+            code,
+            code_description: None,
+            source: Some("caesar".to_owned()),
+            message,
+            related_information: Some(related_information),
+            tags: self.0.tags.clone(),
+            data: None,
+        };
+        Some((document_id, diagnostic))
     }
 
     /// Write the diagnostic to a simple [`String`] without ANSI colors.
@@ -416,7 +600,11 @@ impl Diagnostic {
 /// exists to make debugging easier.
 impl Display for Diagnostic {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(code) = self.0.code {
+        if let Some(code) = &self.0.code {
+            let code = match code {
+                NumberOrString::Number(code) => &code.to_string(),
+                NumberOrString::String(code) => code,
+            };
             write!(f, "[{}] ", code)?;
         }
         write!(f, "{}: ", self.0.kind)?;

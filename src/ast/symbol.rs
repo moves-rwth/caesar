@@ -1,12 +1,11 @@
 use super::Span;
 use crate::ast::FileId;
-use once_cell::sync::Lazy;
 use std::fmt;
-use std::sync::Mutex;
-use string_interner::{DefaultSymbol, StringInterner};
+use std::sync::{LazyLock, Mutex};
+use string_interner::{DefaultStringInterner, DefaultSymbol, StringInterner};
 
-static INTERNED_STRINGS: Lazy<Mutex<StringInterner>> =
-    Lazy::new(|| Mutex::new(StringInterner::new()));
+static INTERNED_STRINGS: LazyLock<Mutex<DefaultStringInterner>> =
+    LazyLock::new(|| Mutex::new(StringInterner::default()));
 
 /// An interned string.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -21,6 +20,13 @@ impl Symbol {
     pub fn to_owned(self) -> String {
         let interned = INTERNED_STRINGS.lock().unwrap();
         interned.resolve(self.0).unwrap().to_owned()
+    }
+}
+
+impl PartialEq<str> for Symbol {
+    fn eq(&self, other: &str) -> bool {
+        let interned = INTERNED_STRINGS.lock().unwrap();
+        interned.resolve(self.0).unwrap() == other
     }
 }
 

@@ -3,7 +3,7 @@ use indexmap::IndexSet;
 
 use super::{
     visit::{walk_expr, walk_stmt, VisitorMut},
-    Expr, ExprKind, Ident, StmtKind,
+    Direction, Expr, ExprKind, Ident, StmtKind,
 };
 
 /// Helper to find all free variables in expressions.
@@ -52,7 +52,7 @@ impl VisitorMut for FreeVariableCollector {
                 // remove the set of bound variables that haven't been free
                 // before from the set of free variables.
                 for var in bound_and_not_free {
-                    self.variables.remove(&var);
+                    self.variables.swap_remove(&var);
                 }
 
                 Ok(())
@@ -109,6 +109,57 @@ impl VisitorMut for ModifiedVariableCollector {
             }
             _ => walk_expr(self, e),
         }
+    }
+}
+
+/// For [`Direction::Down`], this is [`is_top_lit`], for [`Direction::Up`] this
+/// is [`is_bot_lit`].
+pub fn is_dir_top_lit(direction: Direction, expr: &Expr) -> bool {
+    match direction {
+        Direction::Down => is_top_lit(expr),
+        Direction::Up => is_bot_lit(expr),
+    }
+}
+
+/// Whether this is a [`ExprKind::Lit`] that is a top element.
+pub fn is_top_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(lit) => lit.node.is_top(),
+        _ => false,
+    }
+}
+
+/// Whether this is a [`ExprKind::Lit`] that is a bottom element. Will walk
+/// through one [`ExprKind::Cast`] expression (as generated for 0 for EUReal).
+pub fn is_bot_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(lit) => lit.node.is_bot(),
+        ExprKind::Cast(inner) => match &inner.kind {
+            ExprKind::Lit(lit) => lit.node.is_bot(),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// Remove [`ExprKind::Cast`] from this expression. This is mainly used to make
+/// the pretty-printed expression look less verbose.
+pub fn remove_casts(expr: &Expr) -> Expr {
+    let mut res = expr.clone();
+    RemoveCastsVisitor.visit_expr(&mut res).unwrap();
+    res
+}
+
+struct RemoveCastsVisitor;
+
+impl VisitorMut for RemoveCastsVisitor {
+    type Err = ();
+
+    fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
+        if let ExprKind::Cast(inner) = &mut e.kind {
+            *e = inner.clone();
+        }
+        walk_expr(self, e)
     }
 }
 

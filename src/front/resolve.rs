@@ -69,6 +69,7 @@ impl<'tcx> Resolve<'tcx> {
 pub enum ResolveError {
     AlreadyDefined(Span, Ident),
     NotFound(Ident),
+    NotIdent(Span),
 }
 
 impl ResolveError {
@@ -80,7 +81,11 @@ impl ResolveError {
             ResolveError::NotFound(ident) => Diagnostic::new(ReportKind::Error, ident.span)
                 .with_message(format!("Name `{}` is not declared", ident))
                 .with_label(Label::new(ident.span).with_message("not declared")),
+            ResolveError::NotIdent(span) => Diagnostic::new(ReportKind::Error, span)
+                .with_message("Expression must be an identifier")
+                .with_label(Label::new(span).with_message("found expression instead")),
         }
+        .with_code(lsp_types::NumberOrString::String("resolve".to_owned()))
     }
 }
 
@@ -130,10 +135,16 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
             for spec in &mut proc.spec {
                 walk_proc_spec(this, spec)?;
             }
+
+            if let Some(ref mut calculus) = proc.calculus {
+                this.visit_ident(calculus)?;
+            }
+
             let mut body = proc.body.borrow_mut();
             if let Some(ref mut block) = &mut *body {
-                this.visit_stmts(block)?;
+                this.visit_block(block)?;
             }
+
             Ok(())
         })?;
         drop(proc);
@@ -185,25 +196,25 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
 
     fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
         match &mut s.node {
-            StmtKind::Block(ref mut block) => self.with_subscope(|this| this.visit_stmts(block)),
+            StmtKind::Seq(ref mut block) => self.with_subscope(|this| this.visit_stmts(block)),
             StmtKind::Demonic(ref mut lhs, ref mut rhs) => {
-                self.with_subscope(|this| this.visit_stmts(lhs))?;
-                self.with_subscope(|this| this.visit_stmts(rhs))
+                self.with_subscope(|this| this.visit_block(lhs))?;
+                self.with_subscope(|this| this.visit_block(rhs))
             }
             StmtKind::Angelic(ref mut lhs, ref mut rhs) => {
-                self.with_subscope(|this| this.visit_stmts(lhs))?;
-                self.with_subscope(|this| this.visit_stmts(rhs))
+                self.with_subscope(|this| this.visit_block(lhs))?;
+                self.with_subscope(|this| this.visit_block(rhs))
             }
             StmtKind::If(ref mut cond, ref mut lhs, ref mut rhs) => {
                 self.visit_expr(cond)?;
-                self.with_subscope(|this| this.visit_stmts(lhs))?;
-                self.with_subscope(|this| this.visit_stmts(rhs))
+                self.with_subscope(|this| this.visit_block(lhs))?;
+                self.with_subscope(|this| this.visit_block(rhs))
             }
             StmtKind::While(ref mut cond, ref mut block) => {
                 self.visit_expr(cond)?;
-                self.with_subscope(|this| this.visit_stmts(block))
+                self.with_subscope(|this| this.visit_block(block))
             }
-            StmtKind::Annotation(ref mut ident, ref mut args, ref mut inner_stmt) => {
+            StmtKind::Annotation(_, ref mut ident, ref mut args, ref mut inner_stmt) => {
                 self.visit_ident(ident)?;
 
                 match self.tcx.get(*ident).as_deref() {

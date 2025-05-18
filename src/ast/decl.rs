@@ -324,6 +324,7 @@ pub struct ProcDecl {
     /// (read) access to the proc declaration.
     pub body: RefCell<Option<Block>>,
     pub span: Span,
+    pub calculus: Option<Ident>,
 }
 
 impl ProcDecl {

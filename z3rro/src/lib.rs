@@ -20,8 +20,9 @@ pub mod orders;
 pub mod scope;
 
 pub mod model;
-pub mod pretty;
+pub mod probes;
 pub mod prover;
+pub mod smtlib;
 mod uint;
 pub use uint::UInt;
 mod ureal;
@@ -48,10 +49,10 @@ pub trait SmtFactory<'ctx> {
     fn factory(&self) -> Factory<'ctx, Self>;
 }
 
-/// Type alias for a reference to the the factory type of an [`SmtAst`] type.
+/// Type alias for a reference to the the factory type of an [`SmtFactory`] type.
 pub type Factory<'ctx, T> = <T as SmtFactory<'ctx>>::FactoryType;
 
-// Many built-in Z3 AST object trivially implement [`SmtAst`].
+// Many built-in Z3 AST object trivially implement [`SmtFactory`].
 macro_rules! z3_smt_ast {
     ($ty:ident) => {
         impl<'ctx> SmtFactory<'ctx> for $ty<'ctx> {

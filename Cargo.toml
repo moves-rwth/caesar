@@ -1,14 +1,20 @@
 [workspace]
 members = [
     "scooter",
+    "jani",
     "z3rro"
 ]
 
 [package]
 name = "caesar"
-version = "1.0.0"
+version = "2.1.2"
 authors = ["Philipp Schroer <phisch@cs.rwth-aachen.de>"]
-edition = "2018"
+description = "Caesar is a deductive verifier for probabilistic programs."
+homepage = "https://www.caesarverifier.org/"
+repository = "https://github.com/moves-rwth/caesar"
+license = "MIT"
+keywords = ["verification", "probabilistic programming"]
+edition = "2021"
 build = "build.rs" # LALRPOP preprocessing
 
 [features]
@@ -17,58 +23,62 @@ datatype-eureal = ["z3rro/datatype-eureal"]
 datatype-eureal-funcs = ["z3rro/datatype-eureal-funcs"]
 static-link-z3 = ["z3/static-link-z3"]
 # Emit log messages to stderr without timing information. This is useful to diff logs.
-log-print-timeless = [] 
+log-print-timeless = []
 
 [dependencies]
-string-interner = "0.12"
-once_cell = "1.8"
-typed-arena = "2.0"
-lalrpop-util = "0.19"
+string-interner = "0.18"
+lalrpop-util = { version = "0.22", features = ["lexer"] }
 z3 = "^0.12"
-z3-sys = "^0.8"
 ref-cast = "1.0"
 replace_with = "0.1"
 num = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "^0.3.3", features = ["env-filter", "json"] }
-structopt = "0.3"
 pathdiff = "0.2"
-egg = "0.7"
+egg = "0.9"
 tokio = { version = "1", features = ["time", "macros", "rt", "rt-multi-thread"] }
 simple-process-stats = "1.0"
-hdrhistogram = "7.4"
-ariadne = "0.1"
-atty = "0.2"
-shellwords = "1.1.0"
-thiserror = "1.0"
-indexmap = "1.9"
-pretty = "0.11"
+hdrhistogram = "7.5"
+ariadne = "0.5"
+thiserror = "2.0"
+indexmap = "2.7"
+pretty = "0.12"
 z3rro = { path = "./z3rro" }
 dashmap = "5.4"
-im-rc = "15.1.0"
+im-rc = "15"
 cfg-if = "1.0.0"
-itertools = "0.12.0"
+lsp-types = "0.97.0"
+serde_json = "1.0.114"
+lsp-server = "0.7.6"
+serde = "1.0.197"
+jani = { path = "./jani" }
+itertools = "0.13.0"
+stacker = "0.1.15"
+crossbeam-channel = "0.5.15"
+shlex = "1.3.0"
+clap = { version = "4.5.23", features = ["derive", "string", "cargo"] }
+clap_complete = "4.5.42"
+regex = "1.11.1"
+tempfile = "3.16.0"
+os_info = "3.11.0"
 
 [build-dependencies]
-lalrpop = "0.19"
-built = { version = "0.5", features = ["git2", "chrono"] }
+lalrpop = "0.22"
+built = { version = "0.7", features = ["git2", "chrono"] }
 
 [dev-dependencies]
-lit = "1.0"
-clap = "2.33"
 glob = "0.3"
-proptest = "1.0"
+proptest = "1.6"
 pretty_assertions = "1.4.0"
+libtest-mimic = "0.8.1"
 
 [[test]]
 name = "integration"
 path = "tests/integration.rs"
 harness = false
-
-[profile.release]
-# Debug information is nice, but it increases the binary size by about 500 megabytes.
-# So we don't enable it for release builds.
-# debug = 1
+# Unfortunately, adding debug information to release binaries incurs
+# an unacceptable overhead of about 450 megabytes. So we disable it.
+# debug = "line-tables-only"
 
 # there are tests which take more than 10x longer with z3 not optimized, so just optimize z3 as well as possible.
 # this might make some debugging a bit harder, so you might want to disable it for that.
@@ -76,12 +86,8 @@ harness = false
 opt-level = 3
 
 [patch.crates-io]
-z3 = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = 'bdd501ca1e50785365b875b3438a0cf953cffbfc' }
-z3-sys = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = 'bdd501ca1e50785365b875b3438a0cf953cffbfc' }
-# to work on z3.rs locally, clone it into the main directory and use the following directive instead:
-# z3 = { path = 'z3.rs/z3' }
-
-lit = { git = 'https://github.com/Philipp15b/lit.git', rev = '40426a541626b90aed4ceaac9b7008b647f06d1e' }
+z3 = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = 'e8f03cdedfa4a2b4938ee0efc943ff003aed8687' }
+z3-sys = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = 'e8f03cdedfa4a2b4938ee0efc943ff003aed8687' }
 
 # see https://github.com/heim-rs/darwin-libproc/pull/3#issuecomment-1645444056
 darwin-libproc = { git = "https://github.com/Orycterope/darwin-libproc.git", rev = "f73ddb1002d51ae74c1b41670fae56bd5896b7a3" }

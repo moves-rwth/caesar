@@ -15,7 +15,7 @@
   --ifm-color-primary-lightest: #1a8c74;
 }
 
-/* 
+/*
 :root {
   --ifm-color-primary: #2e8555;
   --ifm-color-primary-dark: #29784c;
@@ -41,14 +41,35 @@
 }
 
 /* Link decorations */
-p a, .markdown ul a {
+.markdown p a, .markdown ul a {
   --ifm-link-decoration: underline;
 }
 
-p a:hover, .markdown ul a:hover {
+.markdown p a:hover, .markdown ul a:hover {
   text-decoration: none;
 }
 
-a.button {
+.markdown a.button {
   text-decoration: none;
 }
+
+/* external links are marked with dashed underlines.
+   we can spot them by the target="_blank" attribute that docusaurus adds. */
+article a[target="_blank"]:not(.button) {
+  text-decoration: dashed underline;
+}
+
+article a[target="_blank"]:not(.button):hover {
+  text-decoration: none;
+}
+
+/* fixing a bug in docosaurus: inline TOCs should be shown in print mode */
+@media print {
+  article .table-of-contents {
+    display: inherit;
+  }
+}
+
+/* by default, katex equations are bigger than the surrounding text. we want our
+math to nicely be contained in the surrounding text. */
+.katex { font-size: 1em !important; }

@@ -6,7 +6,7 @@
 //! - `omega_inv`: the omega invariant of the loop
 //!
 
-use std::fmt;
+use std::{any::Any, fmt};
 
 use crate::{
     ast::{
@@ -18,15 +18,18 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{check_annotation_call, AnnotationError, AnnotationInfo},
+    intrinsic::annotations::{
+        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+    },
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingEnvironment, EncodingGenerated};
+use super::{
+    util::{encode_iter, hey_const, intrinsic_param, two_args},
+    Encoding, EncodingEnvironment, EncodingGenerated,
+};
 
-use super::util::*;
-
-pub struct OmegaInvAnnotation(AnnotationInfo);
+pub struct OmegaInvAnnotation(AnnotationDecl);
 
 impl OmegaInvAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -39,13 +42,13 @@ impl OmegaInvAnnotation {
         let omega_inv_param = intrinsic_param(file, "omega_inv", TyKind::EUReal, false);
         let free_var_param = intrinsic_param(file, "free_variable", TyKind::UInt, false);
 
-        let anno_info = AnnotationInfo {
+        let anno_decl = AnnotationDecl {
             name,
             inputs: Spanned::with_dummy_file_span(vec![free_var_param, omega_inv_param], file),
             span: Span::dummy_file_span(file),
         };
 
-        OmegaInvAnnotation(anno_info)
+        OmegaInvAnnotation(anno_decl)
     }
 }
 
@@ -62,6 +65,32 @@ impl Encoding for OmegaInvAnnotation {
         self.0.name
     }
 
+    fn resolve(
+        &self,
+        resolve: &mut Resolve<'_>,
+        call_span: Span,
+        args: &mut [Expr],
+    ) -> Result<(), ResolveError> {
+        let mut args_iter = args.iter_mut();
+        if let Some(free_var) = args_iter.next() {
+            if let ExprKind::Var(var_ref) = &free_var.kind {
+                let var_decl = VarDecl {
+                    name: *var_ref,
+                    ty: TyKind::UInt,
+                    kind: VarKind::Mut,
+                    init: None,
+                    span: call_span,
+                    created_from: None,
+                };
+                // Declare the free variable to be used in the omega invariant
+                resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;
+            } else {
+                return Err(ResolveError::NotIdent(free_var.span));
+            }
+        }
+        resolve.visit_exprs(args_iter.into_slice())
+    }
+
     fn tycheck(
         &self,
         tycheck: &mut Tycheck<'_>,
@@ -72,26 +101,12 @@ impl Encoding for OmegaInvAnnotation {
         Ok(())
     }
 
-    fn resolve(
-        &self,
-        resolve: &mut Resolve<'_>,
-        call_span: Span,
-        args: &mut [Expr],
-    ) -> Result<(), ResolveError> {
-        let [free_var, omega_inv] = mut_two_args(args);
-        if let ExprKind::Var(var_ref) = &free_var.kind {
-            let var_decl = VarDecl {
-                name: *var_ref,
-                ty: TyKind::UInt,
-                kind: VarKind::Mut,
-                init: None,
-                span: call_span,
-                created_from: None,
-            };
-            // Declare the free variable to be used in the omega invariant
-            resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;
-        }
-        resolve.visit_expr(omega_inv)
+    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
+        matches!(
+            (&calculus.calculus_type, direction),
+            (CalculusType::Wp | CalculusType::Ert, Direction::Down)
+                | (CalculusType::Wlp, Direction::Up)
+        )
     }
 
     fn transform(
@@ -102,7 +117,7 @@ impl Encoding for OmegaInvAnnotation {
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
         // Unpack values from struct
-        let annotation_span = enc_env.annotation_span;
+        let annotation_span = enc_env.call_span;
         let direction = enc_env.direction;
 
         let [free_var, omega_inv] = two_args(args);
@@ -110,11 +125,11 @@ impl Encoding for OmegaInvAnnotation {
         let omega_var = if let ExprKind::Var(var_ref) = &free_var.kind {
             *var_ref
         } else {
-            return Err(AnnotationError::WrongArgument(
-                annotation_span,
-                free_var.clone(),
-                String::from("This argument must be a single variable expression."),
-            ));
+            return Err(AnnotationError::WrongArgument {
+                span: annotation_span,
+                arg: free_var.clone(),
+                message: String::from("This argument must be a single variable expression."),
+            });
         };
 
         let builder = ExprBuilder::new(annotation_span);
@@ -135,38 +150,45 @@ impl Encoding for OmegaInvAnnotation {
 
         // Phi_x(I_n)
         let iter = encode_iter(
-            annotation_span,
+            &enc_env,
             inner_stmt,
-            hey_const(annotation_span, omega_inv, tcx),
+            hey_const(&enc_env, omega_inv, direction, tcx),
         )
         .unwrap();
 
         // Phi_x(0)
         let null_iter = encode_iter(
-            annotation_span,
+            &enc_env,
             inner_stmt,
             hey_const(
-                annotation_span,
+                &enc_env,
                 &builder.cast(tcx.spec_ty().clone(), builder.uint(0)),
+                direction,
                 tcx,
             ),
         )
         .unwrap();
 
         // I_0 <= Phi_{post}(0)
-        let cond1 = vec![
-            Spanned::new(annotation_span, StmtKind::Validate(direction)),
-            Spanned::new(annotation_span, StmtKind::Assume(direction, null_omega_inv)),
-            null_iter,
-        ];
+        let cond1 = Spanned::new(
+            annotation_span,
+            vec![
+                Spanned::new(annotation_span, StmtKind::Validate(direction)),
+                Spanned::new(annotation_span, StmtKind::Assume(direction, null_omega_inv)),
+                null_iter,
+            ],
+        );
 
         // for all n. I_{n+1} <= Phi_{post}(I_n)
-        let cond2 = vec![
-            Spanned::new(annotation_span, StmtKind::Havoc(direction, vec![omega_var])),
-            Spanned::new(annotation_span, StmtKind::Validate(direction)),
-            Spanned::new(annotation_span, StmtKind::Assume(direction, next_omega_inv)),
-            iter,
-        ];
+        let cond2 = Spanned::new(
+            annotation_span,
+            vec![
+                Spanned::new(annotation_span, StmtKind::Havoc(direction, vec![omega_var])),
+                Spanned::new(annotation_span, StmtKind::Validate(direction)),
+                Spanned::new(annotation_span, StmtKind::Assume(direction, next_omega_inv)),
+                iter,
+            ],
+        );
 
         // conditions are checked with demonic if,
         // we take sup or inf of the omega_inv before the demonic if
@@ -196,13 +218,16 @@ impl Encoding for OmegaInvAnnotation {
         ];
 
         Ok(EncodingGenerated {
-            span: annotation_span,
-            stmts: buf,
+            block: Spanned::new(annotation_span, buf),
             decls: None,
         })
     }
 
     fn is_terminator(&self) -> bool {
         false
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

@@ -2,11 +2,11 @@ use std::fmt::{self, Display};
 
 use crate::pretty::{pretty_block, Doc, SimplePretty};
 
-use super::{DeclRef, Expr, Ident, Spanned, VarDecl};
+use super::{DeclRef, Expr, Ident, Span, Spanned, VarDecl};
 
-pub type Block = Vec<Stmt>;
+pub type Block = Spanned<Vec<Stmt>>;
 
-impl SimplePretty for Block {
+impl SimplePretty for Vec<Stmt> {
     fn pretty(&self) -> Doc {
         Doc::intersperse(
             self.iter().map(|stmt| stmt.pretty()),
@@ -28,7 +28,7 @@ impl Display for Stmt {
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     /// A sequence of statements.
-    Block(Block),
+    Seq(Vec<Stmt>),
     /// A variable declaration.
     Var(DeclRef<VarDecl>),
     /// An assignment.
@@ -56,7 +56,7 @@ pub enum StmtKind {
     /// A `while` loop.
     While(Expr, Block),
     /// An annotation on a statement.
-    Annotation(Ident, Vec<Expr>, Box<Stmt>),
+    Annotation(Span, Ident, Vec<Expr>, Box<Stmt>),
     /// A label statement.
     Label(Ident),
 }
@@ -100,7 +100,7 @@ impl SimplePretty for StmtKind {
         }
 
         let res = match self {
-            StmtKind::Block(stmts) => pretty_block(stmts.pretty()),
+            StmtKind::Seq(stmts) => pretty_block(stmts.pretty()),
             StmtKind::Var(decl_ref) => decl_ref.borrow().pretty_stmt(),
             StmtKind::Assign(lhs, rhs) => Doc::intersperse(
                 lhs.iter().map(|lhs| Doc::as_string(lhs.name)),
@@ -126,7 +126,7 @@ impl SimplePretty for StmtKind {
             StmtKind::Angelic(lhs, rhs) => pretty_branch(Doc::text("⊔"), lhs, rhs),
             StmtKind::If(cond, lhs, rhs) => pretty_branch(cond.pretty(), lhs, rhs),
             StmtKind::While(cond, body) => pretty_loop(cond.pretty(), body),
-            StmtKind::Annotation(ident, inputs, stmt) => Doc::text("@")
+            StmtKind::Annotation(_, ident, inputs, stmt) => Doc::text("@")
                 .append(Doc::as_string(ident.name))
                 .append(Doc::text("("))
                 .append(Doc::intersperse(
@@ -157,6 +157,13 @@ pub enum Direction {
 }
 
 impl Direction {
+    pub fn map<T>(&self, a: T, b: T) -> T {
+        match self {
+            Direction::Down => a,
+            Direction::Up => b,
+        }
+    }
+
     pub fn toggle(&self) -> Direction {
         match self {
             Direction::Down => Direction::Up,

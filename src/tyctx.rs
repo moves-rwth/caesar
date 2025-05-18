@@ -3,12 +3,17 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
+    iter::FromIterator,
+    ops::Deref,
     rc::Rc,
 };
 
 use indexmap::IndexMap;
 
-use crate::ast::{DeclKind, DeclRef, DomainDecl, Ident, LitKind, Span, Symbol, TyKind, VarKind};
+use crate::{
+    ast::{DeclKind, DeclRef, DomainDecl, Ident, LitKind, Span, Symbol, TyKind, VarKind},
+    intrinsic::distributions::DistributionProc,
+};
 
 /// This is the central symbol table for the language. It keeps track of all
 /// definitions,
@@ -60,7 +65,7 @@ impl TyCtx {
     /// Panics if there was no existing declaration.
     pub fn undeclare(&mut self, ident: Ident) -> Rc<DeclKind> {
         self.globals.remove(&ident);
-        self.declarations.get_mut().remove(&ident).unwrap()
+        self.declarations.get_mut().shift_remove(&ident).unwrap()
     }
 
     pub fn add_global(&mut self, ident: Ident) {
@@ -87,7 +92,7 @@ impl TyCtx {
     }
 
     /// Generate a fresh variable declaration from an existing variable declaration with the given `var_kind`.
-    /// Uses [`fresh_ident`](fn@fresh_ident) to generate a new name for the variable.
+    /// Uses [`Self::fresh_ident()`] to generate a new name for the variable.
     pub fn clone_var(&self, ident: Ident, span: Span, var_kind: VarKind) -> Ident {
         let new_ident = self.fresh_ident(ident, span);
 
@@ -148,11 +153,23 @@ impl TyCtx {
 
     pub fn lit_ty(&self, lit: &LitKind) -> TyKind {
         match lit {
-            LitKind::Str(_) => todo!(),
+            LitKind::Str(_) => TyKind::String,
             LitKind::UInt(_) => TyKind::UInt,
             LitKind::Frac(_) => TyKind::UReal,
             LitKind::Infinity => TyKind::EUReal,
             LitKind::Bool(_) => TyKind::Bool,
         }
+    }
+
+    pub fn get_distributions(&self) -> HashMap<Ident, Rc<DistributionProc>> {
+        HashMap::from_iter(self.declarations.borrow().iter().flat_map(|(ident, decl)| {
+            if let DeclKind::ProcIntrin(intrin) = decl.deref() {
+                if let Ok(distribution) = intrin.clone().as_any_rc().downcast::<DistributionProc>()
+                {
+                    return Some((*ident, distribution));
+                }
+            };
+            None
+        }))
     }
 }

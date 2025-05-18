@@ -2,7 +2,7 @@ use proptest::{
     prelude::*,
     test_runner::{TestCaseResult, TestRunner},
 };
-use z3rro::prover::{ProveResult, Prover};
+use z3rro::prover::{IncrementalMode, ProveResult, Prover};
 
 use crate::{
     ast::{
@@ -97,7 +97,7 @@ impl ExprGen {
                         BinOpKind::Gt,
                         BinOpKind::Eq,
                     ],
-                    TyKind::EUReal,
+                    TyKind::Bool,
                     eureal_element.clone()
                 )
             ];
@@ -201,21 +201,25 @@ fn prove_equiv(expr: Expr, optimized: Expr, tcx: &TyCtx) -> TestCaseResult {
     let smt_ctx = SmtCtx::new(&ctx, tcx);
     let mut translate = TranslateExprs::new(&smt_ctx);
     let eq_expr_z3 = translate.t_bool(&eq_expr);
-    let mut prover = Prover::new(&ctx);
+    let mut prover = Prover::new(&ctx, IncrementalMode::Native);
     translate
         .local_scope()
         .add_assumptions_to_prover(&mut prover);
     prover.add_provable(&eq_expr_z3);
-    match prover.check_proof() {
+    let x = match prover.check_proof() {
         ProveResult::Proof => Ok(()),
-        ProveResult::Counterexample => Err(TestCaseError::fail(format!(
-            "rewrote {} ...into... {}, but those are not equivalent:\n{}",
-            expr,
-            optimized,
-            prover.get_model().unwrap()
-        ))),
-        ProveResult::Unknown => Err(TestCaseError::fail("unknown result")),
-    }
+        ProveResult::Counterexample => {
+            let model = prover.get_model().unwrap();
+            Err(TestCaseError::fail(format!(
+                "rewrote {} ...into... {}, but those are not equivalent:\n{}",
+                expr, optimized, model
+            )))
+        }
+        ProveResult::Unknown(reason) => {
+            Err(TestCaseError::fail(format!("unknown result ({})", reason)))
+        }
+    };
+    x
 }
 
 pub fn mk_tcx() -> TyCtx {

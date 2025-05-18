@@ -13,7 +13,6 @@ use crate::ast::{
 
 lalrpop_util::lalrpop_mod!(
     #[cfg_attr(rustfmt, rustfmt_skip)]
-    #[allow(clippy::all, unused_parens)]
     grammar,
     "/src/front/parser/grammar.rs"
 );
@@ -24,7 +23,7 @@ type GrammarParseError<'input> =
 #[derive(Debug)]
 pub enum ParseError {
     InvalidToken { span: Span },
-    UnrecognizedEOF { span: Span, expected: Vec<String> },
+    UnrecognizedEof { span: Span, expected: Vec<String> },
     UnrecognizedToken { span: Span, expected: Vec<String> },
     ExtraToken { span: Span },
 }
@@ -40,8 +39,8 @@ impl ParseError {
                     crate::ast::SpanVariant::Parser,
                 ),
             },
-            GrammarParseError::UnrecognizedEOF { location, expected } => {
-                ParseError::UnrecognizedEOF {
+            GrammarParseError::UnrecognizedEof { location, expected } => {
+                ParseError::UnrecognizedEof {
                     span: Span::new(
                         file_id,
                         location,
@@ -69,7 +68,7 @@ impl ParseError {
             ParseError::InvalidToken { span } => Diagnostic::new(ReportKind::Error, *span)
                 .with_message("Invalid token")
                 .with_label(Label::new(*span).with_message("here")),
-            ParseError::UnrecognizedEOF { span, expected } => {
+            ParseError::UnrecognizedEof { span, expected } => {
                 Diagnostic::new(ReportKind::Error, *span)
                     .with_message("Unrecognized end of file")
                     .with_label(Label::new(*span).with_message("here"))
@@ -89,9 +88,9 @@ impl ParseError {
 }
 
 /// Parse a source code file into a list of declarations.
-#[instrument]
+#[instrument(skip(source))]
 pub fn parse_decls(file_id: FileId, source: &str) -> Result<Vec<DeclKind>, ParseError> {
-    let clean_source = remove_comments(source).unwrap();
+    let clean_source = remove_comments(source);
     let parser = grammar::DeclsParser::new();
     parser
         .parse(file_id, &clean_source)
@@ -101,8 +100,8 @@ pub fn parse_decls(file_id: FileId, source: &str) -> Result<Vec<DeclKind>, Parse
 /// Parse a source code file into a block of HeyVL statements.
 #[instrument]
 pub fn parse_raw(file_id: FileId, source: &str) -> Result<Block, ParseError> {
-    let clean_source = remove_comments(source).unwrap();
-    let parser = grammar::StmtsParser::new();
+    let clean_source = remove_comments(source);
+    let parser = grammar::SpannedStmtsParser::new();
     parser
         .parse(file_id, &clean_source)
         .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))
@@ -132,13 +131,13 @@ pub(crate) fn parse_lit(source: &str) -> Result<LitKind, ()> {
     parser.parse(FileId::DUMMY, source).map_err(|_| ())
 }
 
-#[derive(Debug)]
-struct UnclosedCommentError;
-
 /// Return a string where all comments are replaced by whitespace. The result
 /// can be fed into our parser, and all non-whitespace locations will be the
 /// same as in the original string.
-fn remove_comments(source: &str) -> Result<String, UnclosedCommentError> {
+///
+/// If a block comment is not closed, then there will be no error, and instead
+/// the rest of the file will be treated as whitespace.
+fn remove_comments(source: &str) -> String {
     let mut res = source.as_bytes().to_owned();
     let mut iter = res.iter_mut();
     // iterate over all comment candidates
@@ -181,9 +180,6 @@ fn remove_comments(source: &str) -> Result<String, UnclosedCommentError> {
                         _ => {}
                     }
                 }
-                if comment_depth > 0 {
-                    return Err(UnclosedCommentError);
-                }
             }
             _ => {}
         }
@@ -191,7 +187,7 @@ fn remove_comments(source: &str) -> Result<String, UnclosedCommentError> {
 
     let res = String::from_utf8(res).unwrap();
     assert_eq!(res.len(), source.len());
-    Ok(res)
+    res
 }
 
 fn fmt_expected(expected: &[String]) -> String {
@@ -227,14 +223,11 @@ mod test {
 
     #[test]
     fn test_remove_comments() {
-        assert_eq!(remove_comments("/* /* */ */").unwrap(), "           ");
-        assert_eq!(remove_comments("// /* */ */").unwrap(), "           ");
-        assert_eq!(remove_comments("/* */ //").unwrap(), "        ");
+        assert_eq!(remove_comments("/* /* */ */"), "           ");
+        assert_eq!(remove_comments("// /* */ */"), "           ");
+        assert_eq!(remove_comments("/* */ //"), "        ");
 
-        assert_eq!(
-            remove_comments("test //   \ntest").unwrap(),
-            "test      \ntest"
-        );
+        assert_eq!(remove_comments("test //   \ntest"), "test      \ntest");
     }
 
     #[test]
@@ -262,13 +255,13 @@ mod test {
                         .map(|s| s.to_owned() + "\n")
                         .collect::<String>(),
                     r#"Error: Unexpected token
-   ╭─[<builtin>:1:5]
+   ╭─[ <builtin>:1:5 ]
    │
  1 │ if ⊓!
-   ·     ┬
-   ·     ╰── here
-   ·
-   · Note: Expected "{"
+   │     ┬
+   │     ╰── here
+   │
+   │ Note: Expected "{"
 ───╯
 "#
                 );

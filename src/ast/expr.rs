@@ -13,6 +13,24 @@ use super::{shared::Shared, DeclKind, DeclRef, Ident, Span, Spanned, Symbol, TyK
 
 pub type Expr = Shared<ExprData>;
 
+impl Expr {
+    /// Replace this expression with another expression in-place.
+    ///
+    /// The alternative would be to simply clone this expression and then
+    /// overwrite the original location with the new expression. However, would
+    /// cause an unnecessary clone of the underlying [`ExprData`].
+    pub fn replace_with(&mut self, f: impl FnOnce(Expr) -> Expr) {
+        let default = || {
+            Shared::new(ExprData {
+                kind: ExprKind::Lit(Spanned::with_dummy_span(LitKind::Bool(false))),
+                ty: Some(TyKind::Bool),
+                span: Span::dummy_span(),
+            })
+        };
+        replace_with::replace_with(self, default, f)
+    }
+}
+
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.pretty().render_fmt(80, f)
@@ -373,7 +391,7 @@ impl FromStr for LitKind {
 impl fmt::Display for LitKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LitKind::Str(symbol) => symbol.fmt(f),
+            LitKind::Str(symbol) => f.write_fmt(format_args!("\"{}\"", symbol)),
             LitKind::UInt(num) => num.fmt(f),
             LitKind::Frac(frac) => frac.fmt(f),
             LitKind::Infinity => f.write_str("∞"),
@@ -495,10 +513,10 @@ impl ExprBuilder {
     pub fn subst_by(
         &self,
         expr: Expr,
-        idents: &[Ident],
+        idents: impl IntoIterator<Item = Ident>,
         mut subst: impl FnMut(Ident) -> Expr,
     ) -> Expr {
-        self.subst(expr, idents.iter().map(|ident| (*ident, subst(*ident))))
+        self.subst(expr, idents.into_iter().map(|ident| (ident, subst(ident))))
     }
 
     pub fn literal(&self, lit: LitKind, tcx: &TyCtx) -> Expr {
@@ -540,6 +558,12 @@ impl ExprBuilder {
     pub fn bot_lit(&self, ty: &TyKind) -> Expr {
         match ty {
             TyKind::Bool => self.bool_lit(false),
+            TyKind::UInt => self.uint(0),
+            TyKind::UReal => Expr::new(ExprData {
+                kind: ExprKind::Cast(self.uint(0)),
+                ty: Some(TyKind::UReal),
+                span: self.span,
+            }),
             TyKind::EUReal => Expr::new(ExprData {
                 kind: ExprKind::Cast(self.uint(0)),
                 ty: Some(TyKind::EUReal),

@@ -1,25 +1,344 @@
 {
-  "name": "heyvl",
-  "displayName": "HeyVL",
-  "description": "HeyVL language support",
-  "version": "0.0.1",
-  "engines": {
-    "vscode": "^1.71.0"
+  "name": "caesar",
+  "displayName": "Caesar Verifier",
+  "description": "The quantitative deductive verifier Caesar for VSCode",
+  "publisher": "rwth-moves",
+  "version": "2.1.2",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/moves-rwth/caesar.git",
+    "directory": "vscode-ext"
   },
+  "homepage": "https://www.caesarverifier.org/",
+  "qna": "https://github.com/moves-rwth/caesar/discussions/categories/q-a",
   "categories": [
     "Programming Languages"
   ],
+  "icon": "images/icon.png",
+  "tags": [
+    "verification",
+    "snippet"
+  ],
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.87.0"
+  },
+  "main": "./out/extension.js",
   "contributes": {
-    "languages": [{
-      "id": "heyvl",
-      "aliases": ["HeyVL", "heyvl"],
-      "extensions": [".heyvl"],
-      "configuration": "./language-configuration.json"
-    }],
-    "grammars": [{
-      "language": "heyvl",
-      "scopeName": "source.heyvl",
-      "path": "./syntaxes/heyvl.tmLanguage.json"
-    }]
+    "commands": [
+      {
+        "command": "caesar.restartServer",
+        "title": "Caesar: Restart Server"
+      },
+      {
+        "command": "caesar.startServer",
+        "title": "Caesar: Start Server"
+      },
+      {
+        "command": "caesar.stopServer",
+        "title": "Caesar: Stop Server"
+      },
+      {
+        "command": "caesar.verify",
+        "title": "Caesar: Verify"
+      },
+      {
+        "command": "caesar.copyCommand",
+        "title": "Caesar: Copy Command"
+      },
+      {
+        "command": "caesar.showOutput",
+        "title": "Caesar: Show Output Channel"
+      },
+      {
+        "command": "caesar.explainVc",
+        "title": "Caesar: Explain Verification Condition Generation"
+      },
+      {
+        "command": "caesar.explainCoreVc",
+        "title": "Caesar: Explain HeyVL Core Verification Condition Generation"
+      },
+      {
+        "command": "caesar.checkUpdate",
+        "title": "Caesar: Check for Updates"
+      },
+      {
+        "command": "caesar.uninstall",
+        "title": "Caesar: Uninstall Caesar"
+      },
+      {
+        "command": "caesar.openWalkthrough",
+        "title": "Caesar: Show Getting Started"
+      }
+    ],
+    "languages": [
+      {
+        "id": "heyvl",
+        "aliases": [
+          "HeyVL",
+          "heyvl"
+        ],
+        "extensions": [
+          ".heyvl"
+        ],
+        "icon": {
+          "light": "./images/heyvl.png",
+          "dark": "./images/heyvl.png"
+        },
+        "configuration": "./heyvl/language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "heyvl",
+        "scopeName": "source.heyvl",
+        "path": "./heyvl/heyvl.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "heyvl",
+        "path": "./heyvl/snippets.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Caesar",
+      "properties": {
+        "caesar.server.timeout": {
+          "type": "number",
+          "default": 60,
+          "description": "Specifies the timeout for the verifier in seconds.",
+          "order": 1
+        },
+        "caesar.server.installationOptions": {
+          "type": "string",
+          "default": "installerBinary",
+          "enum": [
+            "installerBinary",
+            "userBinary",
+            "source-code"
+          ],
+          "enumDescriptions": [
+            "Use the binary from the installer",
+            "Use a user-provided binary of Caesar",
+            "Build Caesar from the source code"
+          ],
+          "description": "Specifies how caesar will be executed from the extension.",
+          "order": 2
+        },
+        "caesar.server.binaryPath": {
+          "type": "string",
+          "default": "",
+          "description": "Specifies the path to the Caesar binary.",
+          "order": 3
+        },
+        "caesar.server.sourcePath": {
+          "type": "string",
+          "default": "",
+          "description": "Specifies the path to Caesar's source code. The extension will start Caesar using `cargo run`.",
+          "order": 4
+        },
+        "caesar.server.explainVc": {
+          "type": "string",
+          "default": "no",
+          "enum": [
+            "no",
+            "explain",
+            "core"
+          ],
+          "enumDescriptions": [
+            "Do not add any explanations (default).",
+            "Add explanations for the wp/wlp/ert computations. Only @invariant-annotated loops are supported.",
+            "Add explanations for the vc computation on core HeyVL."
+          ],
+          "description": "Explain ",
+          "order": 5
+        },
+        "caesar.server.sliceVerify": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to slice for correctness. Without any additional annotations, this will enable slicing for assumptions. See Caesar's slicing documentation for more information.",
+          "order": 6
+        },
+        "caesar.server.args": {
+          "type": "string",
+          "default": "",
+          "description": "Specifies the arguments to be passed to the Caesar server.",
+          "order": 7
+        },
+        "caesar.server.autoStartServer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Specifies whether to automatically start the server when the extension is activated.",
+          "order": 8
+        },
+        "caesar.userInterface.gutterIcons.showGutterIcons": {
+          "type": "boolean",
+          "default": true,
+          "description": "Specifies whether to show icons on the gutter about the verification status."
+        },
+        "caesar.userInterface.gutterIcons.showGutterAnimations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Specifies whether to show animations on the gutter about the verification status."
+        },
+        "caesar.userInterface.inlineGhostText.showInlineGhostText": {
+          "type": "boolean",
+          "default": true,
+          "description": "Specifies whether to show inline ghost text about the wp/wlp/ert."
+        },
+        "caesar.userInterface.statusBar.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Specifies whether to show the status bar."
+        },
+        "caesar.automaticVerification": {
+          "type": "string",
+          "default": "onsave",
+          "enum": [
+            "never",
+            "onsave"
+          ],
+          "enumDescriptions": [
+            "Verification only when the `Caesar: Verify` command is used",
+            "Verification whenever a .heyvl file is saved"
+          ],
+          "description": "Specifies when Caesar automatically verifies the file."
+        },
+        "caesar.installer.autoCheck": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically check for updates of Caesar every 24 hours."
+        },
+        "caesar.installer.nightly": {
+          "type": "boolean",
+          "default": false,
+          "description": "Install nightly releases. Warning: The latest nightly release might not work with your version of the VSCode extension!"
+        }
+      }
+    },
+    "colors": [
+      {
+        "id": "caesar.inlineGhostBackgroundColor",
+        "description": "Specifies the background color of the inline ghost texts.",
+        "defaults": {
+          "dark": "#00000000",
+          "light": "#00000000",
+          "highContrast": "#00000000"
+        }
+      },
+      {
+        "id": "caesar.inlineGhostForegroundColor",
+        "description": "Specifies the foreground color of the inline ghost texts.",
+        "defaults": {
+          "dark": "#cdcdcdb5",
+          "light": "#00000097",
+          "highContrast": "#e3e3e3"
+        }
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "caesar.welcome",
+        "title": "Get Started with Caesar",
+        "description": "Learn about Caesar and the Caesar Verifier for VSCode extension. You can always find more information in the [Caesar Documentation](https://www.caesarverifier.org/docs/).",
+        "steps": [
+          {
+            "id": "install",
+            "title": "Download Caesar Server",
+            "description": "You'll need to install the Caesar server. You can find more information in the [Installation Guide](https://www.caesarverifier.org/docs/getting-started/installation).\n[Automatically Install Caesar](command:caesar.checkUpdate)",
+            "media": {
+              "markdown": "walkthrough/installation.md"
+            },
+            "completionEvents": [
+              "onContext:caesarverifier.installedBinary"
+            ]
+          },
+          {
+            "id": "openHeyVl",
+            "title": "Create a HeyVL file",
+            "description": "[Open](command:toSide:workbench.action.files.openFile) or [create](command:caesar.openExampleFileBeside) a HeyVL file - make sure to save it as \".heyvl\".\n[Create HeyVL File](command:caesar.openExampleFileBeside)",
+            "completionEvents": [
+              "onContext:caesarverifier.openedHeyVl"
+            ],
+            "media": {
+              "markdown": "walkthrough/heyvl-examples.md"
+            }
+          },
+          {
+            "id": "verifyHeyvl",
+            "title": "Verify a HeyVL file",
+            "description": "Verify your first HeyVL file with Caesar. It will be verified whenever you save the file.",
+            "completionEvents": [
+              "onContext:caesarverifier.verifiedHeyVl"
+            ],
+            "media": {
+              "image": "images/verified-demo.png",
+              "altText": "Demo"
+            }
+          },
+          {
+            "id": "explainvc",
+            "title": "Explain Verification Conditions",
+            "description": "Show computed verification conditions via the \"Explain Verification Condition Generation\" command. Leave empty lines between code to show the computations. Run again to disable.\n[Explain Verification Conditions](command:caesar.explainVc)",
+            "completionEvents": [
+              "onContext:caesarverifier.explainedVc"
+            ],
+            "media": {
+              "image": "images/vc-demo.png",
+              "altText": "Demo"
+            }
+          },
+          {
+            "id": "learnmore",
+            "title": "Learn More",
+            "description": "Veni, vidi, vici! Caesar's documentation is available online. If you have any questions, don't hesitate to contact us via the links in the documentation.\n[Open Documentation](https://www.caesarverifier.org/docs/)",
+            "completionEvents": [
+              "onLink:https://www.caesarverifier.org/docs/"
+            ],
+            "media": {
+              "image": "images/icon.png",
+              "altText": "Caesar Logo"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint .",
+    "test": "vscode-test",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.2.0",
+    "@types/adm-zip": "^0.5.5",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "18.x",
+    "@types/semver": "^7.5.8",
+    "@types/tar": "^6.1.13",
+    "@types/vscode": "^1.87.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.2",
+    "@typescript-eslint/parser": "^7.0.2",
+    "@vscode/test-cli": "^0.0.6",
+    "@vscode/test-electron": "^2.3.9",
+    "@vscode/vsce": "^2.26.1",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^7.9.0"
+  },
+  "dependencies": {
+    "@octokit/rest": "^20.1.1",
+    "adm-zip": "github:cthackers/adm-zip#d3f5d7b71c48a1d0bec71362df308c3167c542d7",
+    "got": "^11.8.6",
+    "octokit": "^4.1.3",
+    "semver": "^7.6.2",
+    "tar": "^7.4",
+    "vscode-languageclient": "^9.0.1"
   }
 }

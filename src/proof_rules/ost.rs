@@ -7,7 +7,7 @@
 //! - `c`: the constant c from the theorem, must be a literal
 //! - `post`: the postcondition of the loop
 //!
-use std::fmt;
+use std::{any::Any, fmt};
 
 use crate::{
     ast::{
@@ -20,7 +20,9 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{check_annotation_call, AnnotationError, AnnotationInfo},
+    intrinsic::annotations::{
+        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+    },
     tyctx::TyCtx,
 };
 
@@ -28,7 +30,7 @@ use super::{Encoding, EncodingEnvironment, EncodingGenerated, ProcInfo};
 
 use super::util::*;
 
-pub struct OSTAnnotation(AnnotationInfo);
+pub struct OSTAnnotation(AnnotationDecl);
 
 impl OSTAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -41,7 +43,7 @@ impl OSTAnnotation {
         let c_param = intrinsic_param(file, "c", TyKind::UReal, true);
         let post_param = intrinsic_param(file, "post", TyKind::SpecTy, false);
 
-        let anno_info = AnnotationInfo {
+        let anno_decl = AnnotationDecl {
             name,
             inputs: Spanned::with_dummy_file_span(
                 vec![invariant_param, past_invariant_param, c_param, post_param],
@@ -50,7 +52,7 @@ impl OSTAnnotation {
             span: Span::dummy_file_span(file),
         };
 
-        OSTAnnotation(anno_info)
+        OSTAnnotation(anno_decl)
     }
 }
 
@@ -90,6 +92,10 @@ impl Encoding for OSTAnnotation {
         resolve.visit_expr(post)
     }
 
+    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
+        matches!(calculus.calculus_type, CalculusType::Wp) && direction == Direction::Down
+    }
+
     fn transform(
         &self,
         tcx: &TyCtx,
@@ -98,7 +104,7 @@ impl Encoding for OSTAnnotation {
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
         // Unpack values from struct
-        let annotation_span = enc_env.annotation_span;
+        let annotation_span = enc_env.call_span;
         let base_proc_ident = enc_env.base_proc_ident;
 
         let [inv, past_inv, c, post] = four_args(args);
@@ -128,11 +134,11 @@ impl Encoding for OSTAnnotation {
         let (loop_guard, loop_body) = if let StmtKind::While(guard, body) = &inner_stmt.node {
             (guard, body)
         } else {
-            return Err(AnnotationError::NotOnWhile(
-                annotation_span,
-                self.name(),
-                inner_stmt.clone(),
-            ));
+            return Err(AnnotationError::NotOnWhile {
+                span: annotation_span,
+                annotation_name: self.name(),
+                annotated: Box::new(inner_stmt.clone()),
+            });
         };
 
         // Get the "init_{}" versions of the variable identifiers and declare them
@@ -188,10 +194,13 @@ impl Encoding for OSTAnnotation {
             inputs: params_from_idents(past_inv_variables, tcx),
             outputs: vec![],
             spec: vec![],
-            body: vec![Spanned::new(
+            body: Spanned::new(
                 annotation_span,
-                StmtKind::Assert(Direction::Down, cond1_assert),
-            )],
+                vec![Spanned::new(
+                    annotation_span,
+                    StmtKind::Assert(Direction::Down, cond1_assert),
+                )],
+            ),
             direction: Direction::Down,
         };
         let cond1_proc = generate_proc(annotation_span, cond1_proc_info, base_proc_ident, tcx);
@@ -200,10 +209,10 @@ impl Encoding for OSTAnnotation {
             annotation_span,
             StmtKind::Tick(builder.cast(TyKind::EUReal, builder.uint(1))),
         )];
-        cond2_next_iter.extend(hey_const(annotation_span, past_inv, tcx));
+        cond2_next_iter.extend(hey_const(&enc_env, past_inv, Direction::Up, tcx));
         // Condition 2 : \Phi_{0}(past_I) <= past_I, so ert[P](0) <= past_I
         let mut cond2_body = init_assigns.clone();
-        cond2_body.push(encode_iter(annotation_span, inner_stmt, cond2_next_iter).unwrap());
+        cond2_body.push(encode_iter(&enc_env, inner_stmt, cond2_next_iter).unwrap());
 
         let cond2_proc_info = ProcInfo {
             name: "past".to_string(),
@@ -213,14 +222,14 @@ impl Encoding for OSTAnnotation {
                 ProcSpec::Requires(init_past_inv),
                 ProcSpec::Ensures(builder.cast(TyKind::EUReal, builder.uint(0))),
             ],
-            body: cond2_body,
+            body: Spanned::new(annotation_span, cond2_body),
             direction: Direction::Up,
         };
         let cond2_proc = generate_proc(annotation_span, cond2_proc_info, base_proc_ident, tcx);
 
         // Init assigns followed by the loop body
         let mut cond3_body = init_assigns.clone();
-        cond3_body.extend(loop_body.clone());
+        cond3_body.extend(loop_body.node.clone());
 
         // Encode |I(s)-I| as ite(I(s) <= I, I - I(s), I(s) - I)
         let cond3_post = builder.ite(
@@ -253,7 +262,7 @@ impl Encoding for OSTAnnotation {
                 ProcSpec::Requires(builder.cast(TyKind::EUReal, c.clone())),
                 ProcSpec::Ensures(cond3_post),
             ],
-            body: cond3_body,
+            body: Spanned::new(annotation_span, cond3_body),
             direction: Direction::Up,
         };
 
@@ -265,10 +274,13 @@ impl Encoding for OSTAnnotation {
             inputs: params_from_idents(harmonize_expr_vars, tcx),
             outputs: vec![],
             spec: vec![],
-            body: vec![Spanned::new(
+            body: Spanned::new(
                 annotation_span,
-                StmtKind::Assert(Direction::Down, harmonize_expr),
-            )],
+                vec![Spanned::new(
+                    annotation_span,
+                    StmtKind::Assert(Direction::Down, harmonize_expr),
+                )],
+            ),
             direction: Direction::Down,
         };
 
@@ -290,9 +302,9 @@ impl Encoding for OSTAnnotation {
                 StmtKind::Assume(Direction::Down, builder.top_lit(&TyKind::EUReal)),
             ),
             encode_iter(
-                annotation_span,
+                &enc_env,
                 inner_stmt,
-                hey_const(annotation_span, inv, tcx),
+                hey_const(&enc_env, inv, Direction::Up, tcx),
             )
             .unwrap(),
         ]);
@@ -305,7 +317,7 @@ impl Encoding for OSTAnnotation {
                 ProcSpec::Requires(builder.cast(TyKind::EUReal, builder.uint(0))),
                 ProcSpec::Ensures(post.clone()),
             ],
-            body: cond5_body,
+            body: Spanned::new(annotation_span, cond5_body),
             direction: Direction::Up,
         };
         let cond5_proc = generate_proc(annotation_span, cond5_proc_info, base_proc_ident, tcx);
@@ -314,9 +326,9 @@ impl Encoding for OSTAnnotation {
         let mut cond6_body = init_assigns;
         cond6_body.push(
             encode_iter(
-                annotation_span,
+                &enc_env,
                 inner_stmt,
-                hey_const(annotation_span, inv, tcx),
+                hey_const(&enc_env, inv, Direction::Down, tcx),
             )
             .unwrap(),
         );
@@ -329,7 +341,7 @@ impl Encoding for OSTAnnotation {
                 ProcSpec::Requires(init_inv),
                 ProcSpec::Ensures(post.clone()),
             ],
-            body: cond6_body,
+            body: Spanned::new(annotation_span, cond6_body),
             direction: Direction::Down,
         };
         let cond6_proc = generate_proc(annotation_span, cond6_proc_info, base_proc_ident, tcx);
@@ -350,8 +362,7 @@ impl Encoding for OSTAnnotation {
         )];
 
         Ok(EncodingGenerated {
-            span: annotation_span,
-            stmts: buf,
+            block: Spanned::new(annotation_span, buf),
             decls: Some(vec![
                 cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,
             ]),
@@ -360,5 +371,9 @@ impl Encoding for OSTAnnotation {
 
     fn is_terminator(&self) -> bool {
         true
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

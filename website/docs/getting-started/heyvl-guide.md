@@ -27,8 +27,8 @@ import TOCInline from '@theme/TOCInline';
 
 ### Architecture
 
-<figure style={{"max-width": "400px", "float": "right", "width": "100%", "border": "1px solid gray", "padding": "1em", "border-radius": "5px"}}>
-    <h3 style={{"text-align": "center"}}>Architecture of Caesar</h3>
+<figure style={{"maxWidth": "400px", "float": "right", "width": "100%", "border": "1px solid gray", "padding": "1em", "borderRadius": "5px"}}>
+    <h3 style={{"textAlign": "center"}}>Architecture of Caesar</h3>
     <img src="/img/architecture-oopsla23.svg" />
 </figure>
 
@@ -63,7 +63,7 @@ That is the advantage of using an intermediate verification language such as Hey
 
 :::info
 
-The language HeyVL and the basics of Caesar are formally described in our [OOPLSA '23 publication _"A Deductive Verification Infrastructure for Probabilistic Programs"_](../publications.md#oospla-23) ([direct link to extended version pdf](https://arxiv.org/pdf/2309.07781.pdf)).
+The language HeyVL and the basics of Caesar are formally described in our [OOPLSA '23 publication _"A Deductive Verification Infrastructure for Probabilistic Programs"_](../publications.md#oopsla-23) ([direct link to extended version pdf](https://arxiv.org/pdf/2309.07781.pdf)).
 There, you can find rock-solid formal foundations for HeyVL and details on how to prove that HeyVL programs are *correct*, i.e. actually encode the desired verification problems.
 We highly recommend you take a look at it after reading this guide for a more rigorous treatment of HeyVL and Caesar.
 Refer to our [publications page](../publications.md#oopsla-23) for more details.
@@ -348,7 +348,7 @@ proc lossy_list(init_l: List) -> (l: List)
 
 To verify this example using Caesar, simply run the following command in the Caesar source directory:
 ```bash
-caesar tests/domains/lossy_list.heyvl
+caesar verify tests/domains/lossy_list.heyvl
 ```
 
 ### Reasoning About Upper Bounds (Coprocedures) {#upper-bounds}
@@ -410,7 +410,7 @@ For reference-level documentation, refer to the [HeyVL statements documentation]
 
 :::info
 
-Our [OOPLSA '23 publication _"A Deductive Verification Infrastructure for Probabilistic Programs"_](../publications.md#oospla-23) ([direct link to extended version pdf](https://arxiv.org/pdf/2309.07781.pdf)) is a formal treatment of HeyVL's verification statements.
+Our [OOPLSA '23 publication _"A Deductive Verification Infrastructure for Probabilistic Programs"_](../publications.md#oopsla-23) ([direct link to extended version pdf](https://arxiv.org/pdf/2309.07781.pdf)) is a formal treatment of HeyVL's verification statements.
 It is a highly recommended read to understand HeyVL's verification statements in detail and from the bottom up.
 
 :::

@@ -1,6 +1,6 @@
 target
 .DS_Store
 benchmark-results.csv
-
-# .dockerignore is symlinked to the .gitignore, so this line is useful:
-.git
+vscode-ext/node_modules/
+vscode-ext/out/
+node_modules/

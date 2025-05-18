@@ -1,7 +1,7 @@
 // RUN: @caesar @file --no-simplify
 
 domain Sums {
-    
+
     // The sum of elements given in the list of at indices [start,start+len],
     // i.e. \sum\limits_{i=start}^{start+len-1} elements[i].
     func sum(elements: []UReal, start: UInt, len: UInt): UReal = ite(len>0, select(elements, start+len - 1) + sum(elements, start, len-1), 0)
@@ -13,9 +13,9 @@ domain Sums {
         (forall j: UInt. (j<=N) ==> (select(summands1(N, x, i), j) == [0 < x && x < j] *  (N/x)))
 
     // The harmonic function can be defined as follows:
-    // 
+    //
     //      func harmonic(n: UInt) : UReal = ite(n==0, 0, (1/n) + harmonic(n-1))
-    // 
+    //
     // However, this definition allows the SMT solver to apply the definition
     // infinitely often, which leads to nontermination. We apply a standard
     // trick here that allows the unfolding of harmonic to be done only once.
@@ -23,13 +23,13 @@ domain Sums {
     // defined. This is a standard trick that is even automatically applied in
     // many verification tools. We do it manually here.
     func harmonic(n: UInt): UReal
-    func harmonic0(n: UInt): UReal 
+    func harmonic0(n: UInt): UReal
     axiom harmonic_def forall n: UInt.
         (harmonic(n) == ite(n==0, 0, (1/n) + harmonic0(n-1)))
     axiom harmonic_zero forall n: UInt.
         (harmonic(n) >= 0)
     axiom harmonic0_zero forall n: UInt.
-        (harmonic0(n) >= 0)    
+        (harmonic0(n) >= 0)
 }
 
 // Verifies the outer loop of the coupon collector. It uses inner_loop and
@@ -57,8 +57,8 @@ coproc outer_loop(N: UInt, x: UInt, i: UInt) -> ()
                 ([0 < x && x <=N] * N * harmonic(x))
             )
         } else {
-           if x == N+1 {      
-           } else { 
+           if x == N+1 {
+           } else {
            }
         }
     }
@@ -116,7 +116,7 @@ coproc inner_loop(N: UInt, x: UInt, i: UInt) -> ()
 // explicitly e.g. when we call harmonic_lemma.
 coproc unif_1_n(N: UInt, x: UInt, i: UInt, start: UInt, len: UInt) -> ()
     pre (1/len) * sum(summands1(N, x, i), start, len) + [1 < x && x <= N+1] * N * harmonic(x-1) + [N+1<x]*(N * harmonic(N) + ((x-1)-N))
-    post  [0 < x && x < i] * ite(N>=x, (N/x), 1) + [1 < x && x <= N+1] * N * harmonic(x-1) + [N+1<x]*(N * harmonic(N) + ((x-1)-N)) 
+    post  [0 < x && x < i] * ite(N>=x, (N/x), 1) + [1 < x && x <= N+1] * N * harmonic(x-1) + [N+1<x]*(N * harmonic(N) + ((x-1)-N))
 
 // This lemma states that if `x` is a number in `(1,N]`, then the difference of
 // the `x-1`'s harmonic number to the `x`'s harmonic number is bounded by `x`.

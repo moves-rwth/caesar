@@ -83,17 +83,17 @@ impl<'tcx> Tycheck<'tcx> {
         for (lhs, rhs_ty) in lhses.iter().zip(rhs_tys) {
             let lhs_decl_ref = self.get_var_decl(span, *lhs)?;
             let lhs_decl = lhs_decl_ref.borrow();
+            if !lhs_decl.kind.is_mutable() {
+                return Err(TycheckError::CannotAssign {
+                    span,
+                    lhs_decl: lhs_decl_ref.clone(),
+                });
+            }
             if &lhs_decl.ty != rhs_ty {
                 return Err(TycheckError::TypeMismatch {
                     span,
                     lhs: lhs_decl.ty.clone().into(),
                     rhs: rhs_ty.clone().into(),
-                });
-            }
-            if !lhs_decl.kind.is_mutable() {
-                return Err(TycheckError::CannotAssign {
-                    span,
-                    lhs_decl: lhs_decl_ref.clone(),
                 });
             }
         }
@@ -384,11 +384,12 @@ impl TycheckError {
                 "Procedures must only be called on as the immediate right-hand side expression in an assignment. This makes execution order of assignments with side-effects explicit."
             ),
         }
+        .with_code(lsp_types::NumberOrString::String("tycheck".to_owned()))
     }
 }
 
 macro_rules! op_ty_check {
-    ($span:expr, $operand:expr, $( $pat:pat )|+) => {
+    ($span:expr, $operand:expr, $( $pat:pat_param )|+) => {
         {
             let operand = &$operand;
             let ty = operand.ty.as_ref().unwrap();
@@ -401,7 +402,7 @@ macro_rules! op_ty_check {
 }
 
 macro_rules! ops_ty_check {
-    ($expr:expr, $a:expr, $b:expr, $( $pat:pat )|+) => {
+    ($expr:expr, $a:expr, $b:expr, $( $pat:pat_param )|+) => {
         {
             op_ty_check!($expr, $a, $( $pat )|+);
             op_ty_check!($expr, $b, $( $pat )|+);
@@ -457,7 +458,7 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
         let proc = proc_ref.borrow();
         let mut body = proc.body.borrow_mut();
         if let Some(ref mut block) = &mut *body {
-            self.visit_stmts(block)?;
+            self.visit_block(block)?;
         }
         Ok(())
     }
@@ -485,7 +486,7 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
         self.allow_impure_calls = false;
 
         match &mut s.node {
-            StmtKind::Block(_) => {}
+            StmtKind::Seq(_) => {}
             StmtKind::Var(var_decl) => {
                 self.visit_var_decl(var_decl)?;
             }
@@ -521,13 +522,13 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
                 if let Some(lhs) = lhs_singleton {
                     let lhs_decl_ref = self.get_var_decl(s.span, *lhs)?;
                     let lhs_decl = lhs_decl_ref.borrow();
-                    self.try_cast(s.span, &lhs_decl.ty, rhs)?;
                     if !lhs_decl.kind.is_mutable() {
                         return Err(TycheckError::CannotAssign {
                             span: s.span,
                             lhs_decl: lhs_decl_ref.clone(),
                         });
                     }
+                    self.try_cast(s.span, &lhs_decl.ty, rhs)?;
                 } else {
                     return Err(TycheckError::UnpackMismatch {
                         span: s.span,
@@ -549,7 +550,7 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
             StmtKind::Angelic(_, _) => {}
             StmtKind::If(ref mut cond, _, _) => self.try_cast(s.span, &TyKind::Bool, cond)?,
             StmtKind::While(ref mut cond, _) => self.try_cast(s.span, &TyKind::Bool, cond)?,
-            StmtKind::Annotation(ref ident, ref mut args, _) => {
+            StmtKind::Annotation(_, ref ident, ref mut args, _) => {
                 match self.tcx.get(*ident).as_deref() {
                     None => {} // Declaration not found
                     Some(DeclKind::AnnotationDecl(intrin)) => {
@@ -801,10 +802,10 @@ mod test {
 
         let mut tcx = TyCtx::new(TyKind::EUReal);
         let mut resolve = Resolve::new(&mut tcx);
-        resolve.visit_stmts(&mut block).unwrap();
+        resolve.visit_block(&mut block).unwrap();
 
         let mut tycheck = Tycheck::new(&mut tcx);
-        tycheck.visit_stmts(&mut block)?;
+        tycheck.visit_block(&mut block)?;
         Ok(block)
     }
 
@@ -821,7 +822,7 @@ mod test {
             var ureal2: EUReal = uint;
         "#;
         let block = parse_block_and_tycheck(source).unwrap();
-        assert!(matches!(block[0].node, StmtKind::Var(_)));
+        assert!(matches!(block.node[0].node, StmtKind::Var(_)));
 
         let source = r#"
             var eureal: EUReal;
@@ -850,6 +851,6 @@ mod test {
                 test()
             }
         "#;
-        parse_decls_and_tycheck(&source).unwrap();
+        parse_decls_and_tycheck(source).unwrap();
     }
 }

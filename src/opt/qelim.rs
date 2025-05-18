@@ -4,9 +4,11 @@ use tracing::debug;
 
 use crate::{
     ast::{
-        util::FreeVariableCollector, visit::VisitorMut, BinOpKind, Expr, ExprBuilder, ExprData,
-        ExprKind, Ident, QuantOpKind, QuantVar, Span, SpanVariant, TyKind, UnOpKind, VarKind,
+        util::FreeVariableCollector, visit::VisitorMut, BinOpKind, Direction, Expr, ExprBuilder,
+        ExprData, ExprKind, Ident, QuantOpKind, QuantVar, Span, SpanVariant, TyKind, UnOpKind,
+        VarKind,
     },
+    driver::QuantVcUnit,
     tyctx::TyCtx,
 };
 
@@ -19,7 +21,14 @@ impl<'tcx> Qelim<'tcx> {
         Qelim { tcx }
     }
 
-    pub fn qelim_inf(&mut self, expr: &mut Expr) {
+    pub fn qelim(&mut self, vc_expr: &mut QuantVcUnit) {
+        match vc_expr.direction {
+            Direction::Down => self.qelim_inf(&mut vc_expr.expr),
+            Direction::Up => self.qelim_sup(&mut vc_expr.expr),
+        }
+    }
+
+    fn qelim_inf(&mut self, expr: &mut Expr) {
         if !matches!(expr.ty.as_ref().unwrap(), TyKind::Bool | TyKind::EUReal) {
             return;
         }
@@ -65,7 +74,7 @@ impl<'tcx> Qelim<'tcx> {
         }
     }
 
-    pub fn qelim_sup(&mut self, expr: &mut Expr) {
+    fn qelim_sup(&mut self, expr: &mut Expr) {
         if !matches!(expr.ty.as_ref().unwrap(), TyKind::Bool | TyKind::EUReal) {
             return;
         }
@@ -122,7 +131,7 @@ impl<'tcx> Qelim<'tcx> {
             })
             .collect();
         let builder = ExprBuilder::new(span);
-        builder.subst_by(operand, &idents, |ident| {
+        builder.subst_by(operand, idents.iter().cloned(), |ident| {
             let clone_var = self.tcx.clone_var(ident, span, VarKind::Quant);
             let fresh_ident = clone_var;
             builder.var(fresh_ident, self.tcx)

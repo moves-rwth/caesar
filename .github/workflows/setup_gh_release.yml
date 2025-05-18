@@ -1,0 +1,65 @@
+name: Setup GitHub Release
+
+on:
+  workflow_call:
+    inputs:
+      git_ref:
+        required: true
+        type: string
+      is_prerelease:
+        required: true
+        type: boolean
+
+    outputs:
+      version:
+          description: "The version of the release which can be used e.g. in artifact names."
+          value: ${{ jobs.create-release.outputs.version }}
+
+jobs:
+  # The create-release job runs purely to initialize the GitHub release itself,
+  # and names the release after the provided Git ref (e.g. tag). It's separate
+  # from building the release artifacts so that we only create the release once.
+  create-release:
+    name: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref }}
+
+      - name: Get the release version from the tag
+        if: env.VERSION == ''
+        run: echo "VERSION=${{ inputs.git_ref }}" >> $GITHUB_ENV
+
+      - name: Show the version
+        run: |
+          echo "version is: $VERSION"
+
+      - name: Check that tag version and Cargo.toml/package.json version are the same
+        if: ${{ !inputs.is_prerelease }}
+        shell: bash
+        # Remove leading v from semantic versioning tag v<major>.<minor>.<patch>
+        run: |
+          VERSION_WITHOUT_V=${VERSION#v}
+          if ! grep -q "version = \"${VERSION_WITHOUT_V}\"" Cargo.toml; then
+            echo "version ${VERSION_WITHOUT_V} does not match Cargo.toml" >&2
+            exit 1
+          fi
+
+          if [ "${VERSION_WITHOUT_V}" != "$(cat vscode-ext/package.json | jq '.version' --raw-output)" ]; then
+            echo "version ${VERSION_WITHOUT_V} does not match vscode-ext/package.json" >&2
+            exit 1
+          fi
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ env.VERSION }}
+          tag_name: ${{ inputs.git_ref }}
+          draft: ${{ !inputs.is_prerelease }}
+          prerelease: ${{ inputs.is_prerelease }}
+          generate_release_notes: ${{ inputs.is_prerelease }}
+
+    outputs:
+      version: ${{ env.VERSION }}

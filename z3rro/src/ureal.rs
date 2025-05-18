@@ -116,7 +116,7 @@ impl<'a, 'ctx> Sub<&'a UReal<'ctx>> for &'a UReal<'ctx> {
     type Output = UReal<'ctx>;
 
     fn sub(self, rhs: &'a UReal<'ctx>) -> Self::Output {
-        UReal(int_monus(&self.0, &rhs.0))
+        UReal(real_monus(&self.0, &rhs.0))
     }
 }
 
@@ -142,7 +142,7 @@ impl<'a, 'ctx> Div<&'a UReal<'ctx>> for &'a UReal<'ctx> {
 
 forward_binary_op!(UReal<'ctx>, UReal<'ctx>, UReal<'ctx>, Div, div, div);
 
-fn int_monus<'ctx>(lhs: &Real<'ctx>, rhs: &Real<'ctx>) -> Real<'ctx> {
+fn real_monus<'ctx>(lhs: &Real<'ctx>, rhs: &Real<'ctx>) -> Real<'ctx> {
     let zero = Real::from_real(lhs.get_ctx(), 0, 1);
     Bool::ite(&lhs.ge(rhs), &(lhs - rhs), &zero)
 }

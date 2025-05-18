@@ -5,12 +5,15 @@
 //! everywhere. However, the [`datatype`] representation can be enabled with the
 //! `datatype-eureal` feature.
 
-use std::fmt::{Display, Formatter};
+use std::{
+    borrow::Cow,
+    fmt::{Display, Formatter},
+};
 
 use num::BigRational;
 use z3::Context;
 
-use crate::{Factory, SmtBranch};
+use crate::{util::PrettyRational, Factory, SmtBranch};
 
 pub mod datatype;
 pub mod pair;
@@ -26,7 +29,7 @@ pub type EUReal<'ctx> = datatype::EUReal<'ctx>;
 /// only the rationals.
 ///
 /// These values can be created using [`EUReal`]s implementation of the
-/// [`z3rro::eval::SmtEval`] trait.
+/// [`crate::model::SmtEval`] trait.
 #[derive(Debug)]
 pub enum ConcreteEUReal {
     Infinity,
@@ -37,7 +40,9 @@ impl Display for ConcreteEUReal {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ConcreteEUReal::Infinity => f.write_str("∞"),
-            ConcreteEUReal::Real(rational) => write!(f, "{}", rational),
+            ConcreteEUReal::Real(rational) => {
+                write!(f, "{}", PrettyRational(Cow::Borrowed(rational)))
+            }
         }
     }
 }

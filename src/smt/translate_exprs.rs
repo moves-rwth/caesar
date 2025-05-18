@@ -28,7 +28,6 @@ use z3rro::{
         SmtPartialOrd,
     },
     scope::SmtScope,
-    util::real_from_big_rational,
     List, SmtBranch, SmtEq, UInt, UReal,
 };
 
@@ -97,6 +96,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             TyKind::Tuple(_) => todo!(),
             TyKind::List(_) => Symbolic::List(self.t_list(expr)),
             TyKind::Domain(_) => Symbolic::Uninterpreted(self.t_uninterpreted(expr)),
+            TyKind::String => unreachable!(),
             TyKind::SpecTy => unreachable!(),
             TyKind::Unresolved(_) => unreachable!(),
             TyKind::None => unreachable!(),
@@ -104,7 +104,12 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     pub fn t_bool(&mut self, expr: &Expr) -> Bool<'ctx> {
-        assert_eq!(&expr.ty, &Some(TyKind::Bool), "expr is not of type Bool: {:?}", expr);
+        assert_eq!(
+            &expr.ty,
+            &Some(TyKind::Bool),
+            "expr is not of type Bool: {:?}",
+            expr
+        );
 
         if is_expr_worth_caching(expr) {
             if let Some(res) = self.cache.get(expr) {
@@ -200,7 +205,12 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     pub fn t_int(&mut self, expr: &Expr) -> Int<'ctx> {
-        assert_eq!(&expr.ty, &Some(TyKind::Int), "expr is not of type Int: {:?}", expr);
+        assert_eq!(
+            &expr.ty,
+            &Some(TyKind::Int),
+            "expr is not of type Int: {:?}",
+            expr
+        );
 
         if is_expr_worth_caching(expr) {
             if let Some(res) = self.cache.get(expr) {
@@ -256,7 +266,12 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     pub fn t_uint(&mut self, expr: &Expr) -> UInt<'ctx> {
-        assert_eq!(&expr.ty, &Some(TyKind::UInt), "expr is not of type UInt: {:?}", expr);
+        assert_eq!(
+            &expr.ty,
+            &Some(TyKind::UInt),
+            "expr is not of type UInt: {:?}",
+            expr
+        );
 
         if is_expr_worth_caching(expr) {
             if let Some(res) = self.cache.get(expr) {
@@ -309,7 +324,12 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     pub fn t_real(&mut self, expr: &Expr) -> Real<'ctx> {
-        assert_eq!(&expr.ty, &Some(TyKind::Real), "expr is not of type Real: {:?}", expr);
+        assert_eq!(
+            &expr.ty,
+            &Some(TyKind::Real),
+            "expr is not of type Real: {:?}",
+            expr
+        );
 
         if is_expr_worth_caching(expr) {
             if let Some(res) = self.cache.get(expr) {
@@ -373,7 +393,12 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     pub fn t_ureal(&mut self, expr: &Expr) -> UReal<'ctx> {
-        assert_eq!(&expr.ty, &Some(TyKind::UReal), "expr is not of type UReal: {:?}", expr);
+        assert_eq!(
+            &expr.ty,
+            &Some(TyKind::UReal),
+            "expr is not of type UReal: {:?}",
+            expr
+        );
 
         if is_expr_worth_caching(expr) {
             if let Some(res) = self.cache.get(expr) {
@@ -423,7 +448,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(lit) => match &lit.node {
                 LitKind::Frac(frac) => {
-                    UReal::unchecked_from_real(real_from_big_rational(self.ctx.ctx, frac))
+                    UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac))
                 }
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
@@ -437,7 +462,12 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     pub fn t_eureal(&mut self, expr: &Expr) -> EUReal<'ctx> {
-        assert_eq!(&expr.ty, &Some(TyKind::EUReal), "expr is not of type EUReal: {:?}", expr);
+        assert_eq!(
+            &expr.ty,
+            &Some(TyKind::EUReal),
+            "expr is not of type EUReal: {:?}",
+            expr
+        );
 
         match &expr.kind {
             ExprKind::Var(ident) => self
@@ -513,7 +543,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 LitKind::Infinity => EUReal::infinity(self.ctx.eureal()),
                 LitKind::Frac(frac) => EUReal::from_ureal(
                     self.ctx.eureal(),
-                    &UReal::unchecked_from_real(real_from_big_rational(self.ctx.ctx, frac)),
+                    &UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac)),
                 ),
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
@@ -589,8 +619,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 _ => panic!("illegal exprkind"),
             },
             ExprKind::Cast(_) => panic!("illegal exprkind"),
-            ExprKind::Quant(_, _, _, _) => todo!(),
-            ExprKind::Subst(_, _, _) => todo!(),
+            ExprKind::Quant(_, _, _, _) => unreachable!(),
+            ExprKind::Subst(_, _, _) => unreachable!(),
             ExprKind::Lit(_) => panic!("illegal exprkind"),
         };
 
@@ -627,10 +657,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     fn t_pair(&mut self, a: &Expr, b: &Expr) -> SymbolicPair<'ctx> {
         let t_a = self.t_symbolic(a);
         let t_b = self.t_symbolic(b);
-        SymbolicPair::from_untypeds(t_a, t_b).expect(&format!(
-            "type mismatch during translation: {:?} and {:?}",
-            a, b
-        ))
+        SymbolicPair::from_untypeds(t_a, t_b)
+            .unwrap_or_else(|| panic!("type mismatch during translation: {:?} and {:?}", a, b))
     }
 
     pub fn get_local(&mut self, ident: Ident) -> &ScopeSymbolic<'ctx> {
@@ -661,9 +689,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 }
                 TyKind::Tuple(_) => todo!(),
                 TyKind::List(element_ty) => ScopeSymbolic::fresh_list(self.ctx, ident, element_ty),
+                TyKind::String => unreachable!(),
                 TyKind::SpecTy => unreachable!(),
-                TyKind::Unresolved(_) => todo!(),
-                TyKind::None => todo!(),
+                TyKind::Unresolved(_) => unreachable!(),
+                TyKind::None => unreachable!(),
             },
             _ => panic!("variable is not declared"),
         };

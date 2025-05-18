@@ -138,17 +138,17 @@ post [true]` }
             <CodeBlock language='heyvl'>{`domain Exponentials {
     func exp(base: UReal, exponent: UInt): EUReal
 
-    axiom exp_base forall base: UReal. 
+    axiom exp_base forall base: UReal.
       exp(base, 0) == 1
-    axiom exp_step forall base: UReal, exponent: UInt. 
+    axiom exp_step forall base: UReal, exponent: UInt.
       exp(base, exponent + 1) == base * exp(base, exponent)
 }
 
 domain List {
     func len(l: List): UInt
-    func pop(l: List): List 
+    func pop(l: List): List
 
-    axiom list_len forall l: List. 
+    axiom list_len forall l: List.
       len(pop(l)) == len(l) - 1
 }`}
             </CodeBlock>
@@ -157,16 +157,16 @@ domain List {
           <div className="col col--6">
             <h3>🏃 Running Caesar</h3>
             <p>
-              After <Link to="https://www.rust-lang.org/tools/install">installing Rust</Link>, install the <code>caesar</code> binary (<Link to="/docs/getting-started">c.f. <i>Getting Started</i></Link>):
+              <Link to="https://github.com/moves-rwth/caesar/releases/latest">Download</Link> and extract the latest <code>caesar</code> binary (or visit <Link to="/docs/getting-started"><i>Getting Started</i></Link> for alternative installation options).
             </p>
-            <CodeBlock language='bash'>{`git clone git@github.com:moves-rwth/caesar.git
-cd caesar
-cargo install --path . caesar
-caesar tests/domains/lossy_list.heyvl` }
+            <p>
+              The example from above is <Link to="https://github.com/moves-rwth/caesar/blob/main/tests/domains/lossy_list.heyvl">included in the Git repository</Link>.
+              After downloading and storing it in <code>examples/lossy_list.heyvl</code> you can try Caesar on it:
+            </p>
+            <CodeBlock language='bash'>{`caesar verify examples/lossy_list.heyvl` }
             </CodeBlock>
             <p>
-              This will run Caesar on the example above (it is included in the Git repository).
-              Caesar will print: <code>tests/domains/lossy_list.heyvl: Verified.</code>
+              Caesar will print: <code>examples/lossy_list.heyvl: Verified.</code>
             </p>
           </div>
         </div>

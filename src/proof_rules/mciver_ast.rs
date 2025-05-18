@@ -8,7 +8,7 @@
 //! - `prob`: a probability function
 //! - `decrease`: a decrease function
 
-use std::fmt;
+use std::{any::Any, fmt};
 
 use indexmap::IndexSet;
 
@@ -22,7 +22,9 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{check_annotation_call, AnnotationError, AnnotationInfo},
+    intrinsic::annotations::{
+        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+    },
     tyctx::TyCtx,
 };
 
@@ -30,7 +32,7 @@ use super::{Encoding, EncodingEnvironment, EncodingGenerated, ProcInfo};
 
 use super::util::*;
 
-pub struct ASTAnnotation(AnnotationInfo);
+pub struct ASTAnnotation(AnnotationDecl);
 
 impl ASTAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -44,7 +46,7 @@ impl ASTAnnotation {
         let prob_param = intrinsic_param(file, "prob", TyKind::UReal, false);
         let decr_param = intrinsic_param(file, "decrease", TyKind::UReal, false);
 
-        let anno_info = AnnotationInfo {
+        let anno_decl = AnnotationDecl {
             name,
             inputs: Spanned::with_dummy_file_span(
                 vec![
@@ -59,7 +61,7 @@ impl ASTAnnotation {
             span: Span::dummy_file_span(file),
         };
 
-        ASTAnnotation(anno_info)
+        ASTAnnotation(anno_decl)
     }
 }
 
@@ -125,6 +127,10 @@ impl Encoding for ASTAnnotation {
         Ok(())
     }
 
+    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
+        matches!(calculus.calculus_type, CalculusType::Wp) && direction == Direction::Down
+    }
+
     fn transform(
         &self,
         tcx: &TyCtx,
@@ -133,7 +139,7 @@ impl Encoding for ASTAnnotation {
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
         // Unpack values from struct
-        let annotation_span = enc_env.annotation_span;
+        let annotation_span = enc_env.call_span;
         let base_proc_ident = enc_env.base_proc_ident;
 
         let [invariant, variant, free_var, prob, decrease] = five_args(args);
@@ -143,21 +149,21 @@ impl Encoding for ASTAnnotation {
         let (loop_guard, loop_body) = if let StmtKind::While(guard, body) = &inner_stmt.node {
             (guard, body)
         } else {
-            return Err(AnnotationError::NotOnWhile(
-                annotation_span,
-                self.name(),
-                inner_stmt.clone(),
-            ));
+            return Err(AnnotationError::NotOnWhile {
+                span: annotation_span,
+                annotation_name: self.name(),
+                annotated: Box::new(inner_stmt.clone()),
+            });
         };
 
         let free_var = if let ExprKind::Var(var_ref) = &free_var.kind {
             *var_ref
         } else {
-            return Err(AnnotationError::WrongArgument(
-                annotation_span,
-                free_var.clone(),
-                String::from("This argument must be a single variable expression."),
-            ));
+            return Err(AnnotationError::WrongArgument {
+                span: annotation_span,
+                arg: free_var.clone(),
+                message: String::from("This argument must be a single variable expression."),
+            });
         };
 
         // Collect modified variables (exclude the variables that are declared in the loop)
@@ -259,7 +265,7 @@ impl Encoding for ASTAnnotation {
                 ProcSpec::Requires(cond1_2_pre.clone()),
                 ProcSpec::Ensures(cond1_post),
             ],
-            body: vec![],
+            body: Spanned::new(annotation_span, vec![]),
             direction: Direction::Down,
         };
 
@@ -273,7 +279,7 @@ impl Encoding for ASTAnnotation {
                 ProcSpec::Requires(cond1_2_pre),
                 ProcSpec::Ensures(cond2_post),
             ],
-            body: vec![],
+            body: Spanned::new(annotation_span, vec![]),
             direction: Direction::Down,
         };
 
@@ -286,7 +292,7 @@ impl Encoding for ASTAnnotation {
         let mut cond3_body = init_assigns.clone();
         cond3_body.push(
             encode_iter(
-                annotation_span,
+                &enc_env,
                 inner_stmt,
                 // hey_const(annotation_span, &cond3_expr, tcx),
                 vec![],
@@ -308,7 +314,7 @@ impl Encoding for ASTAnnotation {
                 )),
                 ProcSpec::Ensures(cond3_expr.clone()),
             ],
-            body: cond3_body,
+            body: Spanned::new(annotation_span, cond3_body),
             direction: Direction::Down,
         };
 
@@ -342,10 +348,13 @@ impl Encoding for ASTAnnotation {
                 Some(TyKind::EUReal),
                 invariant.to_owned(),
             ))],
-            body: vec![Spanned::new(
+            body: Spanned::new(
                 annotation_span,
-                StmtKind::Assert(Direction::Down, cond4_expr),
-            )],
+                vec![Spanned::new(
+                    annotation_span,
+                    StmtKind::Assert(Direction::Down, cond4_expr),
+                )],
+            ),
             direction: Direction::Down,
         };
         let cond4_proc = generate_proc(annotation_span, cond4_proc_info, base_proc_ident, tcx);
@@ -364,14 +373,7 @@ impl Encoding for ASTAnnotation {
                 ),
             ),
         ));
-        cond5_body.push(
-            encode_iter(
-                annotation_span,
-                inner_stmt,
-                vec![],
-            )
-            .unwrap(),
-        );
+        cond5_body.push(encode_iter(&enc_env, inner_stmt, vec![]).unwrap());
 
         let cond5_proc_info = ProcInfo {
             name: "V_wp_superinvariant".to_string(),
@@ -384,7 +386,7 @@ impl Encoding for ASTAnnotation {
                 )),
                 ProcSpec::Ensures(builder.cast(TyKind::EUReal, variant.clone())),
             ],
-            body: cond5_body,
+            body: Spanned::new(annotation_span, cond5_body),
             direction: Direction::Up,
         };
 
@@ -432,7 +434,7 @@ impl Encoding for ASTAnnotation {
         );
 
         let mut cond6_body = init_assigns;
-        cond6_body.extend(loop_body.clone());
+        cond6_body.extend(loop_body.node.clone());
 
         // [I] * [G] * (p o V) <= \\s. wp[P]([V <= V(s) - d(V(s))])(s)
         let cond6_proc_info = ProcInfo {
@@ -448,18 +450,21 @@ impl Encoding for ASTAnnotation {
                 )),
                 ProcSpec::Ensures(cond6_post),
             ],
-            body: cond6_body,
+            body: Spanned::new(annotation_span, cond6_body),
             direction: Direction::Down,
         };
 
         let cond6_proc = generate_proc(annotation_span, cond6_proc_info, base_proc_ident, tcx);
 
         Ok(EncodingGenerated {
-            span: annotation_span,
-            stmts: vec![], // TODO: the body is missing, call the police
+            block: Spanned::new(annotation_span, vec![]),
             decls: Some(vec![
                 cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,
             ]),
         })
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

@@ -1,6 +1,6 @@
 //! Enums to represent all of our supported SMT types.
 
-use std::fmt::Display;
+use std::{borrow::Cow, fmt::Display};
 
 use z3::{
     ast::{Bool, Dynamic, Int, Real},
@@ -10,6 +10,7 @@ use z3rro::{
     eureal,
     model::{InstrumentedModel, SmtEval, SmtEvalError},
     scope::{SmtFresh, SmtScope},
+    util::PrettyRational,
     EUReal, List, SmtInvariant, UInt, UReal,
 };
 
@@ -60,7 +61,7 @@ impl<'ctx> Symbolic<'ctx> {
                 Symbolic::List(list)
             }
             TyKind::Domain(_) => Symbolic::Uninterpreted(value.clone()),
-            TyKind::SpecTy | TyKind::Unresolved(_) | TyKind::None => {
+            TyKind::String | TyKind::SpecTy | TyKind::Unresolved(_) | TyKind::None => {
                 unreachable!()
             }
         }
@@ -142,8 +143,12 @@ impl<'ctx> Symbolic<'ctx> {
             Symbolic::Bool(v) => v.eval(model).map(|v| Box::new(v) as Box<dyn Display>),
             Symbolic::Int(v) => v.eval(model).map(|v| Box::new(v) as Box<dyn Display>),
             Symbolic::UInt(v) => v.eval(model).map(|v| Box::new(v) as Box<dyn Display>),
-            Symbolic::Real(v) => v.eval(model).map(|v| Box::new(v) as Box<dyn Display>),
-            Symbolic::UReal(v) => v.eval(model).map(|v| Box::new(v) as Box<dyn Display>),
+            Symbolic::Real(v) => v
+                .eval(model)
+                .map(|v| Box::new(PrettyRational(Cow::Owned(v))) as Box<dyn Display>),
+            Symbolic::UReal(v) => v
+                .eval(model)
+                .map(|v| Box::new(PrettyRational(Cow::Owned(v))) as Box<dyn Display>),
             Symbolic::EUReal(v) => v.eval(model).map(|v| Box::new(v) as Box<dyn Display>),
             Symbolic::List(_) => Err(SmtEvalError::ParseError), // TODO
             Symbolic::Uninterpreted(_) => Err(SmtEvalError::ParseError), // TODO

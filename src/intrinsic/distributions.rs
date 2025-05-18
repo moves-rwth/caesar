@@ -1,6 +1,6 @@
 //! Built-in procedures for probability distributions.
 
-use std::{fmt, rc::Rc};
+use std::{any::Any, fmt, rc::Rc};
 
 use num::{integer::binomial, rational::Ratio};
 use tracing::instrument;
@@ -18,65 +18,60 @@ use crate::{
 
 use super::ProcIntrin;
 
-type DistFn = Box<dyn Fn(&[Expr], ExprBuilder) -> Dist>;
+pub type CallDistFn = Box<dyn Fn(&[Expr], ExprBuilder) -> Dist>;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-enum DistProcKind {
-    /// Only accepting constant parameters.
-    ConstantOnly,
-    /// Accepting symbolic parameters (like any other procedure).
-    Symbolic,
-}
-
-struct DistProc {
+/// Implementation for a distribution proc.
+pub struct DistributionProc {
     decl: ProcDecl,
-    dist_fn: DistFn,
+    pub apply: CallDistFn,
 }
 
-impl DistProc {
-    fn new(
-        kind: DistProcKind,
-        files: &mut Files,
-        tcx: &mut TyCtx,
-        decl: &str,
-        dist_fn: DistFn,
-    ) -> Self {
-        // create the file
-        let file = files.add(SourceFilePath::Builtin, decl.to_string());
-
-        // parse the declaration
-        let mut decl = parser::parse_bare_decl(file).unwrap();
-
-        // resolve all identifiers
-        let mut resolve = Resolve::new(tcx);
-        // we need to declare this ProcDecl temporarily (to replace TyKind::Unresolved by the resolved type)
-        resolve.declare(decl.clone()).unwrap();
-        resolve.visit_decl(&mut decl).unwrap();
-        // now remove the ProcDecl
-        tcx.undeclare(decl.name());
-
-        // extract the ProcDecl from the Decl. We do `try_unwrap` because we're
-        // now the only owner of the ProcDecl.
-        let mut proc_decl = if let DeclKind::ProcDecl(proc_decl) = decl {
-            proc_decl.try_unwrap().unwrap()
-        } else {
-            unreachable!()
-        };
-
-        if kind == DistProcKind::ConstantOnly {
-            for param in proc_decl.params_iter_mut() {
-                param.literal_only = true;
-            }
-        }
-
-        DistProc {
+impl DistributionProc {
+    fn new_symbolic(files: &mut Files, tcx: &mut TyCtx, decl: &str, apply: CallDistFn) -> Self {
+        let proc_decl = parse_bare_proc_decl(files, decl, tcx);
+        DistributionProc {
             decl: proc_decl,
-            dist_fn,
+            apply,
+        }
+    }
+
+    fn new_literal_only(files: &mut Files, tcx: &mut TyCtx, decl: &str, apply: CallDistFn) -> Self {
+        let mut proc_decl = parse_bare_proc_decl(files, decl, tcx);
+        for param in proc_decl.params_iter_mut() {
+            param.literal_only = true;
+        }
+        DistributionProc {
+            decl: proc_decl,
+            apply,
         }
     }
 }
 
-impl fmt::Debug for DistProc {
+fn parse_bare_proc_decl(files: &mut Files, decl: &str, tcx: &mut TyCtx) -> ProcDecl {
+    // create the file
+    let file = files.add(SourceFilePath::Builtin, decl.to_string());
+
+    // parse the declaration
+    let mut decl = parser::parse_bare_decl(file).unwrap();
+
+    // resolve all identifiers
+    let mut resolve = Resolve::new(tcx);
+    // we need to declare this ProcDecl temporarily (to replace TyKind::Unresolved by the resolved type)
+    resolve.declare(decl.clone()).unwrap();
+    resolve.visit_decl(&mut decl).unwrap();
+    // now remove the ProcDecl
+    tcx.undeclare(decl.name());
+
+    // extract the ProcDecl from the Decl. We do `try_unwrap` because we're
+    // now the only owner of the ProcDecl.
+    if let DeclKind::ProcDecl(proc_decl) = decl {
+        proc_decl.try_unwrap().unwrap()
+    } else {
+        unreachable!()
+    }
+}
+
+impl fmt::Debug for DistributionProc {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DistProc")
             .field("decl", &self.decl)
@@ -85,7 +80,7 @@ impl fmt::Debug for DistProc {
     }
 }
 
-impl ProcIntrin for DistProc {
+impl ProcIntrin for DistributionProc {
     fn name(&self) -> Ident {
         self.decl.name
     }
@@ -106,16 +101,19 @@ impl ProcIntrin for DistProc {
         } else {
             panic!("unexpected number of lhses")
         };
-        let dist = (self.dist_fn)(args, builder);
+        let dist = (self.apply)(args, builder);
         dist.expectation(lhs, &post, builder)
+    }
+
+    fn as_any_rc(self: Rc<Self>) -> Rc<dyn Any> {
+        self
     }
 }
 
 /// Add all built-in distributions as globals into the [`TyCtx`].
 #[instrument(skip(files, tcx))]
 pub fn init_distributions(files: &mut Files, tcx: &mut TyCtx) {
-    let ber = DistProc::new(
-        DistProcKind::ConstantOnly,
+    let ber = DistributionProc::new_literal_only(
         files,
         tcx,
         "proc ber(pa: UInt, pb: UInt) -> (r: Bool)",
@@ -127,8 +125,7 @@ pub fn init_distributions(files: &mut Files, tcx: &mut TyCtx) {
     tcx.add_global(ber.name());
     tcx.declare(DeclKind::ProcIntrin(Rc::new(ber)));
 
-    let flip = DistProc::new(
-        DistProcKind::Symbolic,
+    let flip = DistributionProc::new_symbolic(
         files,
         tcx,
         "proc flip(p: UReal) -> (r: Bool)",
@@ -140,8 +137,7 @@ pub fn init_distributions(files: &mut Files, tcx: &mut TyCtx) {
     tcx.add_global(flip.name());
     tcx.declare(DeclKind::ProcIntrin(Rc::new(flip)));
 
-    let unif = DistProc::new(
-        DistProcKind::ConstantOnly,
+    let unif = DistributionProc::new_literal_only(
         files,
         tcx,
         "proc unif(a: UInt, b: UInt) -> (r: UInt)",
@@ -153,8 +149,7 @@ pub fn init_distributions(files: &mut Files, tcx: &mut TyCtx) {
     tcx.add_global(unif.name());
     tcx.declare(DeclKind::ProcIntrin(Rc::new(unif)));
 
-    let binom = DistProc::new(
-        DistProcKind::ConstantOnly,
+    let binom = DistributionProc::new_literal_only(
         files,
         tcx,
         "proc binom(n: UInt, pa: UInt, pb: UInt) -> (r: UInt)",
@@ -166,8 +161,7 @@ pub fn init_distributions(files: &mut Files, tcx: &mut TyCtx) {
     tcx.add_global(binom.name());
     tcx.declare(DeclKind::ProcIntrin(Rc::new(binom)));
 
-    let hyper = DistProc::new(
-        DistProcKind::ConstantOnly,
+    let hyper = DistributionProc::new_literal_only(
         files,
         tcx,
         "proc hyper(pN: UInt, k: UInt, pn: UInt) -> (r: UInt)",
@@ -213,10 +207,9 @@ fn three_args(args: &[Expr]) -> [&Expr; 3] {
     }
 }
 
-/// We represent a distribution as a list of values (expressions) with
-/// probabilities.
+/// We represent a distribution as a list of (prob, value) entries.
 #[derive(Debug)]
-struct Dist(Vec<(Expr, Expr)>);
+pub struct Dist(pub Vec<(Expr, Expr)>);
 
 impl Dist {
     fn from_odds(iter: impl IntoIterator<Item = (u128, Expr)>, builder: ExprBuilder) -> Self {
@@ -270,7 +263,7 @@ impl Dist {
 
     /// Create a new hypergeometric distribution with the given parameters.
     fn hyper(population: u128, successes: u128, draws: u128, builder: ExprBuilder) -> Dist {
-        let k = 0.max(draws + successes - population)..=draws.min(successes);
+        let k = (draws + successes).saturating_sub(population)..=draws.min(successes);
         let dist = k.map(|k| {
             (
                 binomial(successes, k) * binomial(population - successes, draws - k),

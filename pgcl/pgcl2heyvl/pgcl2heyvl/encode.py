@@ -1,12 +1,15 @@
 import copy
 from fractions import Fraction
 from textwrap import indent
-from typing import Dict, List, Set, Tuple, Union
+from typing import Any, Dict, List, Set, Tuple, Union
 
 # trunk-ignore(flake8/F401)
 from pgcl2heyvl.heyvl import (
+    Encoding,
     Calculus,
     Direction,
+    HeyEncodingAnnotation,
+    HeyCalculusAnnotation,
     HeyAssert,
     HeyAssign,
     HeyAssume,
@@ -30,6 +33,7 @@ from pgcl2heyvl.heyvl import (
     HeyUIntType,
     HeyURealType,
     HeyValidate,
+    HeyWhile,
 )
 from probably.pgcl.ast import (
     AsgnInstr,
@@ -64,9 +68,6 @@ from probably.pgcl.ast.walk import Walk, walk_expr, walk_instrs
 from probably.util.ref import Mut
 
 _encode_direction: Direction = Direction.DOWN
-_loop_annotation_stack: List[Tuple[int, Expr]] = []
-_bmc: bool = False
-
 
 def encode_k_ind(program: Program, post: Expr, pre: Expr, calculus: Calculus,
                  loop_annotations: List[Tuple[int, Expr]]) -> HeyObjects:
@@ -107,10 +108,8 @@ def encode_k_ind(program: Program, post: Expr, pre: Expr, calculus: Calculus,
     else:
         raise Exception("unsupported calculus.")
 
-    global _loop_annotation_stack
-    assert len(_loop_annotation_stack) == 0
-    _loop_annotation_stack = [(k, _encode_expr(inv))
-                              for (k, inv) in loop_annotations]
+    
+    loop_annotation_stack = [(Encoding.INVARIANT, [_encode_expr(inv)]) if k == 1 else (Encoding.K_INDUCTION, [k, _encode_expr(inv)]) for (k, inv) in loop_annotations]
 
     prob_choice_decl = []
     if _has_prob_choices(program):
@@ -119,22 +118,25 @@ def encode_k_ind(program: Program, post: Expr, pre: Expr, calculus: Calculus,
     if calculus != Calculus.ERT:
         _remove_tick_instrs(program)
 
-    return [
-        HeyComment(
-            "HeyVL file to show\n" +
-            f"    {str(_encode_expr(pre))} {'>=' if _encode_direction == Direction.UP else '<='} {calculus}[C]({str(hey_post)})\n"
-            +
-            f"using k-induction with {', '.join([f'k = {k} and invariant = {_encode_expr(inv)}' for (k,inv) in loop_annotations])}\n"
-            + "for the pGCL program C:\n\n" +
-            f"{indent(str(program), '    ')}"),
-        _encode_proc(name="k_induction",
-                     body=prob_choice_decl + _encode_init_assign(program) +
-                     _encode_instrs(program.instructions),
+
+    # Encode the program without any annotations
+    hey_instrs = _encode_instrs(program.instructions)
+
+    annotated_block = _annotate_heyblock(hey_instrs, loop_annotation_stack)
+
+    return_object = _encode_proc(name="main",
+                     body= prob_choice_decl + _encode_init_assign(program) + annotated_block,
                      input=_encode_var_dict(_get_init_vars(program)),
                      output=_encode_var_dict(program.variables),
                      direction=_encode_direction,
                      pre=hey_init_pre,
                      post=hey_post)
+    
+    if calculus is not None :
+        return_object = HeyCalculusAnnotation(calculus, return_object)
+
+    return [
+        return_object
     ]
 
 
@@ -169,23 +171,19 @@ def encode_bounded_mc(program: Program, post: Expr, pre: Expr,
     # Replace the variables with their initial versions before encoding
     hey_init_pre = _encode_expr(_to_init_expr(pre))
 
-    global _encode_direction
 
+    global _encode_direction
     if calculus == Calculus.WLP:
         _encode_direction = Direction.DOWN
+        terminator = HeyExpr("1")
     elif calculus == Calculus.WP or calculus == Calculus.ERT:
         _encode_direction = Direction.UP
+        terminator = HeyExpr("0")
     else:
         raise Exception("unsupported calculus.")
 
-    # Set the bmc flag to true, the rest is the same as k-induction
-    global _bmc
-    _bmc = True
-
-    global _loop_annotation_stack
-    assert len(_loop_annotation_stack) == 0
-    _loop_annotation_stack = [(k, _encode_expr(inv))
-                              for (k, inv) in loop_annotations]
+    loop_annotation_stack = [(Encoding.UNROLL,  [k, terminator])
+                              for (k, _) in loop_annotations]
 
     prob_choice_decl = []
     if _has_prob_choices(program):
@@ -194,22 +192,21 @@ def encode_bounded_mc(program: Program, post: Expr, pre: Expr,
     if calculus != Calculus.ERT:
         _remove_tick_instrs(program)
 
-    return [
-        HeyComment(
-            "HeyVL file to show that\n" +
-            f"    {str(_encode_expr(pre))} {'>=' if _encode_direction == Direction.UP else '<='} {calculus}[C]({str(hey_post)})\n"
-            + "DOES NOT HOLD\n" +
-            f"using bounded model checking with {', '.join([f'k = {k} and invariant = {_encode_expr(inv)}' for (k,inv) in loop_annotations])}\n"
-            + "for the pGCL program C:\n\n" +
-            f"{indent(str(program), '    ')}"),
-        _encode_proc(name="bounded_model_checking",
-                     body=prob_choice_decl + _encode_init_assign(program) +
-                     _encode_instrs(program.instructions),
+    # Encode the program without any annotations
+    hey_instrs = _encode_instrs(program.instructions)
+
+    annotated_block = _annotate_heyblock(hey_instrs, loop_annotation_stack)
+            
+    return_object = _encode_proc(name="main",
+                     body=  prob_choice_decl + _encode_init_assign(program) + annotated_block,
                      input=_encode_var_dict(_get_init_vars(program)),
                      output=_encode_var_dict(program.variables),
                      direction=_encode_direction,
                      pre=hey_init_pre,
                      post=hey_post)
+
+    return [
+        return_object
     ]
 
 
@@ -246,126 +243,42 @@ def encode_ast_mciver(program: Program, invariant: Expr, variant: Expr,
         loop for loop in program.instructions if isinstance(loop, WhileInstr)
     ]
     assert len(loops_in_program) == 1
-    loop = loops_in_program[0]
 
     prob_choice_decl = []
     if _has_prob_choices(program):
         prob_choice_decl = [HeyDecl("prob_choice", BoolType())]
 
-    if "v" in program.variables or "l" in program.variables:
-        raise Exception("Program mustn't include a variable named 'v' and 'l'")
+    if "v" in program.variables:
+        raise Exception("Program mustn't include a variable named 'v'")
 
     # Encode expressions into HeyLo expressions
     hey_variant = _encode_expr(variant)
-    hey_loop_cond = _encode_expr(loop.cond)
-
-    # Substitute variables with their init versions for the progress condition
-    init_variant = _to_init_expr(variant)
-
-    # [I] * [phi] * (p o V)
-    progress_pre_expr = _times(
-        _iverson(invariant),
-        _times(_iverson(loop.cond), _substitute_vars(prob, {"v": variant})))
-
-    # Replace all variables with their init versions for the preexpectation
-    progress_pre_expr = _to_init_expr(progress_pre_expr)
-
-    #  V <= V(s) - d(V(s))
-    progress_post_expr = _iverson(
-        _leq(
-            variant,
-            _minus(init_variant, _substitute_vars(decrease,
-                                                  {"v": init_variant}))))
-
-    free_var_name = "l"
-    hey_prob_free_var = _encode_expr(
-        _substitute_vars(prob, {"v": VarExpr(free_var_name)}))
-    hey_decrease_free_var = _encode_expr(
-        _substitute_vars(decrease, {"v": VarExpr(free_var_name)}))
-
     hey_prob = _encode_expr(prob)
     hey_decrease = _encode_expr(decrease)
+    hey_invariant = _encode_expr(invariant)
 
+
+    # Encode the program without any annotations
+    hey_instrs = _encode_instrs(program.instructions)
+
+    hey_arg_list = [hey_invariant,hey_variant,"v",hey_prob,hey_decrease]
+
+    # # Iterate over the instructions and replace the HeyWhile instructions with annotated versions
+    # for i, hey_instr in enumerate(hey_instrs):
+    #     if isinstance(hey_instr, HeyWhile):   
+    #         hey_instrs[i] = HeyEncodingAnnotation(Encoding.AST, hey_arg_list, hey_instr)
+
+    annotated_block = _annotate_heyblock(hey_instrs, [(Encoding.AST, hey_arg_list)])
+            
+    return_object = _encode_proc(name="main",
+                     body=  prob_choice_decl + _encode_init_assign(program) + annotated_block,
+                     input=_encode_var_dict(_get_init_vars(program)),
+                     output=_encode_var_dict(program.variables),
+                     direction=_encode_direction,
+                    )
+    
     return [
-        HeyComment(
-            "HeyVL file to show that C is almost-surely terminating\n" +
-            "using AST rule by McIver et al. (2018) with\n" +
-            f"invariant = {_encode_expr(invariant)}, variant = {hey_variant}, probability function p(v) = {_encode_expr(prob)}, decrease function d(v) = {_encode_expr(decrease)}\n"
-            + "for the pGCL program C:\n\n" +
-            f"{indent(str(program), '    ')}"),
-        # Check if prob is antitone
-        _encode_proc(
-            name="prob_antitone",
-            body=[
-                HeyAssert(
-                    Direction.DOWN,
-                    HeyExpr(
-                        f"forall {free_var_name}: UReal.  (v <= {free_var_name}) ==> ({hey_prob_free_var} <= {hey_prob})"
-                    ).embed())
-            ],
-            input=_encode_var_dict(program.variables) | {"v": HeyURealType()},
-            direction=Direction.DOWN,
-            comment=
-            f"forall {free_var_name}. (v <= {free_var_name}) ==> (prob({free_var_name}) <= prob(v))"
-        ),
-        # Check if decrease is antitone
-        _encode_proc(
-            name="decrease_antitone",
-            body=[
-                HeyAssert(
-                    Direction.DOWN,
-                    HeyExpr(
-                        f"forall {free_var_name}: UReal. (v <= {free_var_name}) ==> ({hey_decrease_free_var} <= {hey_decrease})"
-                    ).embed())
-            ],
-            input=_encode_var_dict(program.variables) | {"v": HeyURealType()},
-            direction=Direction.DOWN,
-            comment=
-            f"forall {free_var_name}. (v <= {free_var_name}) ==> (decrease({free_var_name}) <= decrease(v))"
-        ),
-        # Check that [I] is a wp-subinvariant of the loop w.r.t. [I]
-        _encode_proc(name="I_wp_subinvariant",
-                     body=prob_choice_decl + _encode_init_assign(program) +
-                     _encode_iter(loop, None, []),
-                     input=_encode_var_dict(_get_init_vars(program)),
-                     output=_encode_var_dict(program.variables),
-                     direction=Direction.DOWN,
-                     pre=_encode_expr(_to_init_expr(_iverson(invariant))),
-                     post=_encode_expr(_iverson(invariant)),
-                     comment="[I] <= \\Phi_{[I]}([I])"),
-        # Check that V = 0 indicates termination, i.e. !G iff V = 0
-        _encode_proc(
-            name="termination_condition",
-            body=[
-                HeyAssert(
-                    Direction.DOWN,
-                    HeyExpr(f"?(!({hey_loop_cond}) == ({hey_variant} == 0))"))
-            ],
-            input=_encode_var_dict(program.variables),
-            direction=Direction.DOWN,
-            comment="!G iff V = 0"),
-        # Check that V is a wp-superinvariant of the loop w.r.t V
-        _encode_proc(name="V_wp_superinvariant",
-                     body=prob_choice_decl + _encode_init_assign(program) +
-                     _encode_iter(loop, None, []),
-                     input=_encode_var_dict(_get_init_vars(program)),
-                     output=_encode_var_dict(program.variables),
-                     direction=Direction.UP,
-                     pre=_encode_expr(init_variant),
-                     post=_encode_expr(variant),
-                     comment="\\Phi_{V}(V) <= V"),
-        # Check that V satisfies the progress condition
-        _encode_proc(
-            name="progress_condition",
-            body=prob_choice_decl + _encode_init_assign(program) +
-            _encode_instrs(loop.body),
-            input=_encode_var_dict(_get_init_vars(program)),
-            output=_encode_var_dict(program.variables),
-            direction=Direction.DOWN,
-            pre=_encode_expr(progress_pre_expr),
-            post=_encode_expr(progress_post_expr),
-            comment="[I] * [G] * (p o V) <= \\s. wp[P]([V <= V(s) - d(V(s))])(s)"
-        )
+        return_object
     ]
 
 
@@ -408,50 +321,27 @@ def encode_past(program: Program, invariant: Expr, eps: Expr,
     if _has_prob_choices(program):
         prob_choice_decl = [HeyDecl("prob_choice", BoolType())]
 
-    # [!G] * I <= K
-    hey_cond1_expr = _encode_expr(
-        _leq(_times(_iverson(_neg(loop.cond)), invariant), k)).embed()
+    hey_k = _encode_expr(k)
+    hey_eps = _encode_expr(eps)
+    hey_invariant = _encode_expr(invariant)
 
-    # [G] * K <= [G] * I + [!G]
-    hey_cond2_expr = _encode_expr(
-        _leq(
-            _times(_iverson(loop.cond), k),
-            _plus(_times(_iverson(loop.cond), invariant),
-                  _iverson(_neg(loop.cond))))).embed()
-    # [G] * (I - eps)
-    hey_cond3_pre = _encode_expr(
-        _to_init_expr(_times(_iverson(loop.cond), _minus(invariant, eps))))
+    hey_arg_list = [hey_invariant,hey_eps,hey_k]
 
-    return [
-        HeyComment(
-            "HeyVL file to show that C is positively almost-surely terminating\n"
-            + "using PAST rule by Chakarov et al. (2013) with\n" +
-            f"invariant = {_encode_expr(invariant)} eps = {_encode_expr(eps)} and k = {_encode_expr(k)}\n"
-            + "for the pGCL program C:\n\n" +
-            f"{indent(str(program), '    ')}"),
-        # Condition 1: [!G] * I <= K
-        _encode_proc(name="condition_1",
-                     body=[HeyAssert(Direction.DOWN, hey_cond1_expr)],
-                     input=_encode_var_dict(program.variables),
-                     direction=Direction.DOWN,
-                     comment="[!G] * I <= K"),
-        # Condition 2: [G] * K <= [G] * I + [!G]
-        _encode_proc(name="condition_2",
-                     body=[HeyAssert(Direction.DOWN, hey_cond2_expr)],
-                     input=_encode_var_dict(program.variables),
-                     direction=Direction.DOWN,
-                     comment="[G] * K <= [G] * I + [!G]"),
-        # Condition 3: \Phi_0(I) <= [G] * (I - eps)
-        _encode_proc(name="condition_3",
-                     body=prob_choice_decl + _encode_init_assign(program) +
-                     _encode_iter(loop, _encode_expr(invariant),
-                                  _hey_const(_encode_expr(invariant))),
+    # Encode the program without any annotations
+    hey_instrs = _encode_instrs(program.instructions)
+
+    annotated_block = _annotate_heyblock(hey_instrs, [(Encoding.PAST, hey_arg_list)])
+            
+    return_object = _encode_proc(name="main",
+                     body=  prob_choice_decl + _encode_init_assign(program) + annotated_block,
                      input=_encode_var_dict(_get_init_vars(program)),
                      output=_encode_var_dict(program.variables),
-                     direction=Direction.UP,
-                     pre=hey_cond3_pre,
-                     post=HeyExpr("0"),
-                     comment="\\Phi_0(I) <= [G] * (I - eps)")
+                     direction=_encode_direction,
+                    )
+    
+
+    return [
+        return_object
     ]
 
 
@@ -482,96 +372,32 @@ def encode_optional_stopping(program: Program, post: Expr, invariant: Expr,
         loop for loop in program.instructions if isinstance(loop, WhileInstr)
     ]
     assert len(loops_in_program) == 1
-    loop = loops_in_program[0]
 
     prob_choice_decl = []
     if _has_prob_choices(program):
         prob_choice_decl = [HeyDecl("prob_choice", BoolType())]
 
-    init_invariant = _to_init_expr(invariant)
+    hey_post = _encode_expr(post)
+    hey_invariant = _encode_expr(invariant)
+    hey_past_inv = _encode_expr(past_inv)
+    hey_c = _encode_expr(c)
+
+    hey_arg_list = [hey_invariant,hey_past_inv,hey_c, hey_post]
+
+    # Encode the program without any annotations
+    hey_instrs = _encode_instrs(program.instructions)
+
+    annotated_block = _annotate_heyblock(hey_instrs, [(Encoding.OST, hey_arg_list)])
+            
+    return_object = _encode_proc(name="main",
+                     body=  prob_choice_decl + _encode_init_assign(program) + annotated_block,
+                     input=_encode_var_dict(_get_init_vars(program)),
+                     output=_encode_var_dict(program.variables),
+                     direction=_encode_direction,
+                    )
 
     return [
-        HeyComment(
-            "HeyVL file to show that\n" +
-            f"    {_encode_expr(invariant)} <= wp[C]({_encode_expr(post)})\n" +
-            "using the Optional Stopping Theorem from Aiming Low is Harder paper with\n"
-            +
-            f"invariant = {_encode_expr(invariant)}, c = {_encode_expr(c)} and\n"
-            +
-            f"past-invariant = {_encode_expr(past_inv)} is used to show that C is PAST by showing\n "
-            + f"    {_encode_expr(past_inv)} >= ert[C](0)\n" +
-            "for the pGCL program C:\n\n" + f"{indent(str(program), '    ')}"),
-        _encode_proc(
-            name="lt_infinity",
-            body=[
-                HeyAssert(
-                    Direction.DOWN,
-                    HeyExpr(f"{_encode_expr(past_inv)} < ?(true)").embed())
-            ],
-            input=_encode_var_dict(program.variables),
-            direction=Direction.DOWN,
-            comment="past_I < ∞"),
-        _encode_proc(
-            name="past",
-            body=prob_choice_decl + _encode_init_assign(program) +
-            # Inserted tick instruction to argue about ERT of the loop instead of WP/WLP
-            _encode_iter(loop, _encode_expr(past_inv), [HeyTick(HeyExpr("1"))]
-                         + _hey_const(_encode_expr(past_inv))),
-            input=_encode_var_dict(_get_init_vars(program)),
-            output=_encode_var_dict(program.variables),
-            direction=Direction.UP,
-            pre=_encode_expr(_to_init_expr(past_inv)),
-            post=HeyExpr("0"),
-            comment="\\Phi_{0}(past_I) <= past_I, so ert[P](0) <= past_I"),
-        _encode_proc(
-            name="conditional_difference_bounded",
-            body=prob_choice_decl + _encode_init_assign(program) +
-            _encode_instrs(loop.body),
-            input=_encode_var_dict(_get_init_vars(program)),
-            output=_encode_var_dict(program.variables),
-            direction=Direction.UP,
-            pre=_encode_expr(c),
-            post=HeyExpr(
-                f"ite({_encode_expr(_leq(init_invariant, invariant))}," +
-                f"{_encode_expr(_minus(invariant, init_invariant))}," +
-                f"{_encode_expr(_minus(init_invariant, invariant))})"),
-            comment="wp[P](|I(s)-I|)(s) <= c"),
-        _encode_proc(name="lower_bound",
-                     body=prob_choice_decl + _encode_init_assign(program) +
-                     _encode_iter(loop, _encode_expr(invariant),
-                                  _hey_const(_encode_expr(invariant))),
-                     input=_encode_var_dict(_get_init_vars(program)),
-                     output=_encode_var_dict(program.variables),
-                     direction=Direction.DOWN,
-                     pre=_encode_expr(_to_init_expr(invariant)),
-                     post=_encode_expr(post),
-                     comment="I <= \\Phi_{post}(I)"),
-        _encode_proc(
-            name="harmonize_I_f",
-            body=[
-                HeyAssert(
-                    Direction.DOWN,
-                    HeyExpr(
-                        f"!{_encode_expr(loop.cond)} ==> ({_encode_expr(invariant)} == {_encode_expr(post)})"
-                    ).embed())
-            ],
-            input=_encode_var_dict(program.variables),
-            direction=Direction.DOWN,
-            comment="!guard ==> (I = f)",
-        ),
-        # Check if \Phi_f(I) < ∞,
-        _encode_proc(name="loopiter_lt_infty",
-                     body=[
-                         HeyValidate(Direction.DOWN),
-                         HeyAssume(Direction.DOWN, HeyExpr("\\infty"))
-                     ] + prob_choice_decl + _encode_init_assign(program) +
-                     _encode_iter(loop, invariant, _hey_const(invariant)),
-                     input=_encode_var_dict(_get_init_vars(program)),
-                     output=_encode_var_dict(program.variables),
-                     direction=Direction.UP,
-                     pre=HeyExpr("0"),
-                     post=_encode_expr(post),
-                     comment="\\Phi_f(I) < ∞")
+        return_object
     ]
 
 
@@ -579,6 +405,7 @@ def encode_omega_inv(program: Program, calculus: Calculus, invariant: Expr,
                      post: Expr) -> HeyObjects:
     """
     Encodes the proof for a lower/upper bound of an expectation of a pGCL loop using omega invariants.
+    Still uses the same direct encoding.
 
     Parameters
     ----------
@@ -729,6 +556,8 @@ def _encode_expr(expr: Expr) -> HeyExpr:
             Binop.LEQ: "<=",
             Binop.LT: "<",
             Binop.EQ: "==",
+            Binop.GT: ">",
+            Binop.GEQ: ">=",
             Binop.PLUS: "+",
             Binop.MINUS: "-",
             Binop.TIMES: "*",
@@ -741,28 +570,6 @@ def _encode_expr(expr: Expr) -> HeyExpr:
         raise Exception(f"unsupported expr : {expr}")
 
 
-def _encode_loop(loop: WhileInstr, invariant: HeyExpr, k: int) -> HeyBlock:
-    global _bmc
-    global _encode_direction
-
-    modified_vars = _collect_modified_vars(loop.body)
-    spec_or_empty = _encode_spec(invariant, modified_vars,
-                                 invariant) if not _bmc else []
-
-    if k <= 0:
-        return spec_or_empty
-
-    if _bmc:
-        if _encode_direction == Direction.UP:
-            const_prog = _hey_const(HeyExpr("0"))
-        else:
-            const_prog = _hey_const(HeyExpr("1"))
-        next_iter = _encode_bmc(loop, invariant, k - 1, const_prog)
-    else:
-        const_prog = _hey_const(invariant)
-        next_iter = _encode_extend(loop, invariant, k - 1, const_prog)
-
-    return spec_or_empty + _encode_iter(loop, invariant, next_iter)
 
 
 def _encode_iter(loop: WhileInstr, invariant: HeyExpr,
@@ -856,8 +663,7 @@ def _encode_instr(instr: Instr) -> Union[Instr, List[Instr]]:
     if isinstance(instr, SkipInstr):
         return HeySkip()
     if isinstance(instr, WhileInstr):
-        (k, invariant) = _loop_annotation_stack.pop(0)
-        return _encode_loop(instr, invariant, k)
+        return HeyWhile(_encode_expr(instr.cond), _encode_instrs(instr.body))
     if isinstance(instr, IfInstr):
         return HeyIte(_encode_expr(instr.cond), _encode_instrs(instr.true),
                       _encode_instrs(instr.false))
@@ -876,6 +682,24 @@ def _encode_instr(instr: Instr) -> Union[Instr, List[Instr]]:
         return HeyTick(_encode_expr(instr.expr))
     raise Exception("unsupported instruction")
 
+def _annotate_heyblock(hey_block: HeyBlock, annotation_stack: List[Tuple[Encoding, List[HeyExpr]]]) -> HeyBlock:
+
+    return_block = hey_block
+    # Iterate over the instructions and replace the HeyWhile instructions with annotated versions
+    for i, hey_instr in enumerate(hey_block):
+        if isinstance(hey_instr, HeyWhile):
+            if len(annotation_stack) != 0:
+                annotation = annotation_stack.pop(0)
+                encoding = annotation[0]
+                hey_arg_list = annotation[1]
+
+                new_hey_instr = HeyWhile(hey_instr.cond, _annotate_heyblock(hey_instr.body, annotation_stack))
+
+                return_block[i] = HeyEncodingAnnotation(encoding, hey_arg_list , new_hey_instr)
+            else: 
+                raise Exception("Missing loop annotations")
+            
+    return return_block
 
 def _collect_modified_vars(instrs: List[Instr]) -> List[Var]:
     modified: Set[Var] = set()

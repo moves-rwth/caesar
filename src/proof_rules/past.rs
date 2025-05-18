@@ -8,7 +8,7 @@
 //!
 //! Note that eps must be smaller than k!
 //!
-use std::fmt;
+use std::{any::Any, fmt};
 
 use crate::{
     ast::{
@@ -21,7 +21,9 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{check_annotation_call, AnnotationError, AnnotationInfo},
+    intrinsic::annotations::{
+        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+    },
     tyctx::TyCtx,
 };
 
@@ -29,7 +31,7 @@ use super::{Encoding, EncodingEnvironment, EncodingGenerated, ProcInfo};
 
 use super::util::*;
 
-pub struct PASTAnnotation(AnnotationInfo);
+pub struct PASTAnnotation(AnnotationDecl);
 
 impl PASTAnnotation {
     pub fn new(_tcx: &mut TyCtx, files: &mut Files) -> Self {
@@ -41,13 +43,13 @@ impl PASTAnnotation {
         let eps_param = intrinsic_param(file, "eps", TyKind::UReal, true);
         let k_param = intrinsic_param(file, "k", TyKind::UReal, true);
 
-        let anno_info = AnnotationInfo {
+        let anno_decl = AnnotationDecl {
             name,
             inputs: Spanned::with_dummy_file_span(vec![invariant_param, eps_param, k_param], file),
             span: Span::dummy_file_span(file),
         };
 
-        PASTAnnotation(anno_info)
+        PASTAnnotation(anno_decl)
     }
 }
 
@@ -64,6 +66,15 @@ impl Encoding for PASTAnnotation {
         self.0.name
     }
 
+    fn resolve(
+        &self,
+        resolve: &mut Resolve<'_>,
+        _call_span: Span,
+        args: &mut [Expr],
+    ) -> Result<(), ResolveError> {
+        resolve.visit_exprs(args)
+    }
+
     fn tycheck(
         &self,
         tycheck: &mut Tycheck<'_>,
@@ -73,16 +84,9 @@ impl Encoding for PASTAnnotation {
         check_annotation_call(tycheck, call_span, &self.0, args)?;
         Ok(())
     }
-    fn resolve(
-        &self,
-        resolve: &mut Resolve<'_>,
-        _call_span: Span,
-        args: &mut [Expr],
-    ) -> Result<(), ResolveError> {
-        let [inv, eps, k] = mut_three_args(args);
-        resolve.visit_expr(inv)?;
-        resolve.visit_expr(eps)?;
-        resolve.visit_expr(k)
+
+    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
+        matches!(calculus.calculus_type, CalculusType::Ert) && direction == Direction::Up
     }
 
     fn transform(
@@ -93,7 +97,7 @@ impl Encoding for PASTAnnotation {
         enc_env: EncodingEnvironment,
     ) -> Result<EncodingGenerated, AnnotationError> {
         // Unpack values from struct
-        let annotation_span = enc_env.annotation_span;
+        let annotation_span = enc_env.call_span;
         let base_proc_ident = enc_env.base_proc_ident;
 
         let [inv, eps, k] = three_args(args);
@@ -103,11 +107,11 @@ impl Encoding for PASTAnnotation {
         let k_val = lit_f64(k);
 
         if eps_val >= k_val {
-            return Err(AnnotationError::WrongArgument(
-                annotation_span,
-                eps.clone(),
-                String::from("eps must be smaller than k."),
-            ));
+            return Err(AnnotationError::WrongArgument {
+                span: annotation_span,
+                arg: eps.clone(),
+                message: String::from("eps must be smaller than k."),
+            });
         }
 
         // Collect modified variables for havoc (exclude the variables that are declared in the loop)
@@ -128,11 +132,11 @@ impl Encoding for PASTAnnotation {
         let (loop_guard, _) = if let StmtKind::While(guard, body) = &inner_stmt.node {
             (guard, body)
         } else {
-            return Err(AnnotationError::NotOnWhile(
-                annotation_span,
-                self.name(),
-                inner_stmt.clone(),
-            ));
+            return Err(AnnotationError::NotOnWhile {
+                span: annotation_span,
+                annotation_name: self.name(),
+                annotated: Box::new(inner_stmt.clone()),
+            });
         };
 
         // Get the "init_{}" versions of the variable identifiers and declare them
@@ -181,10 +185,13 @@ impl Encoding for PASTAnnotation {
             inputs: params_from_idents(cond1_expr_vars, tcx),
             outputs: vec![],
             spec: vec![],
-            body: vec![Spanned::new(
+            body: Spanned::new(
                 annotation_span,
-                StmtKind::Assert(Direction::Down, cond1_expr),
-            )],
+                vec![Spanned::new(
+                    annotation_span,
+                    StmtKind::Assert(Direction::Down, cond1_expr),
+                )],
+            ),
             direction: Direction::Down,
         };
         let cond1_proc = generate_proc(annotation_span, cond1_proc_info, base_proc_ident, tcx);
@@ -232,10 +239,13 @@ impl Encoding for PASTAnnotation {
             inputs: params_from_idents(cond2_expr_vars, tcx),
             outputs: vec![],
             spec: vec![],
-            body: vec![Spanned::new(
+            body: Spanned::new(
                 annotation_span,
-                StmtKind::Assert(Direction::Down, cond2_expr),
-            )],
+                vec![Spanned::new(
+                    annotation_span,
+                    StmtKind::Assert(Direction::Down, cond2_expr),
+                )],
+            ),
             direction: Direction::Down,
         };
         let cond2_proc = generate_proc(annotation_span, cond2_proc_info, base_proc_ident, tcx);
@@ -244,9 +254,9 @@ impl Encoding for PASTAnnotation {
         let mut cond3_body = init_assigns;
         cond3_body.push(
             encode_iter(
-                annotation_span,
+                &enc_env,
                 inner_stmt,
-                hey_const(annotation_span, inv, tcx),
+                hey_const(&enc_env, inv, Direction::Up, tcx),
             )
             .unwrap(),
         );
@@ -266,20 +276,23 @@ impl Encoding for PASTAnnotation {
                 ProcSpec::Requires(cond3_pre),
                 ProcSpec::Ensures(builder.cast(TyKind::EUReal, builder.uint(0))),
             ],
-            body: cond3_body,
+            body: Spanned::new(annotation_span, cond3_body),
             direction: Direction::Up,
         };
 
         let cond3_proc = generate_proc(annotation_span, cond3_proc_info, base_proc_ident, tcx);
 
         Ok(EncodingGenerated {
-            span: annotation_span,
-            stmts: vec![],
+            block: Spanned::new(annotation_span, vec![]),
             decls: Some(vec![cond1_proc, cond2_proc, cond3_proc]),
         })
     }
 
     fn is_terminator(&self) -> bool {
         false
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
