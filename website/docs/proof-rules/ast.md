@@ -9,14 +9,6 @@ In our probabilistic setting, this does not necessarily mean that all executions
 In terms of weakest pre-expectations, this means that `wp[C](1) = 1` holds for a program `C`.
 For a nice overview of details and proof rules that are available in the literature, we refer to [Chapter 6 of Benjamin Kaminski's PhD thesis](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=139).[^1]
 
-:::info
-
-In this documentation, we'll refer to almost-sure termination as probability of termination _from all initial states_.
-This is often called _universal almost-sure termination_.
-However, all definitions and proof rules can be refined to a subset of all possible initial states.
-
-:::
-
 In Caesar, there are several ways to prove almost-sure termination:
 
 ```mdx-code-block
@@ -39,10 +31,9 @@ Caesar supports the _"new proof rule for almost-sure termination"_ by McIver et 
 You can find the [extended version of the paper on arxiv](https://arxiv.org/pdf/1711.03588.pdf).
 The paper was [published at POPL 2018](https://dl.acm.org/doi/10.1145/3158121).
 
-The proof rule is based on a real-valued _loop variant_ (also known as _super-martingale_) that decreases randomly with a certain probability in each iteration by a certain amount.
+The proof rule is based on a real-valued _loop variant_ $\mathtt{V}$ (also known as _super-martingale_) that decreases randomly with a certain probability $\mathtt{prob}(v)$ in each iteration by a certain amount $\mathtt{decrease}(v)$, where $v = V(s)$ is the variant's value in the current state $s$.
 The latter two quantities are specified by user-provided _decrease_ and _probability_ functions.
-Additionally, a Boolean _invariant_ must also be specified.
-It allows to limit the set of states on which almost-sure termination is checked.
+Additionally, a Boolean _invariant_ $\mathtt{I}$ must be specified which limits the set of states on which almost-sure termination is checked.
 
 ### Formal Theorem
 

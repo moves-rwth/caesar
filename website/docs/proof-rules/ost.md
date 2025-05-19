@@ -49,7 +49,7 @@ such that all the following conditions are fulfilled:
 
     </p>
     </details>
-2. `while G { Body }` performs finitely many outer loop iterations in expectation: `PAST_I` $< \infty$ is a `wp`-superinvariant[^modified-ert] of `while G { Body; tick 1 }` with respect to `PAST_I`,
+2. `while G { Body }` performs finitely many loop iterations in expectation: `PAST_I` $< \infty$ is a `wp`-superinvariant[^modified-ert] of `while G { Body; tick 1 }` with respect to `PAST_I`,
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
@@ -70,7 +70,7 @@ such that all the following conditions are fulfilled:
 
     </p>
     </details>
-3. `I` harmonizes with `f`, i.e. they are equal on states that do not fulfill the loop guard `G`,
+3. `I` harmonizes with `f`: $\neg\mathtt{G} \implies (\mathtt{I} = \mathtt{f})$,
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
@@ -84,7 +84,7 @@ such that all the following conditions are fulfilled:
 
     </p>
     </details>
-4. the expected value of `I` after one loop iteration is finite,[^inv-iter-finite]
+4. The expected value of `I` after one loop iteration is finite,[^inv-iter-finite]
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
@@ -105,7 +105,7 @@ such that all the following conditions are fulfilled:
 
     </p>
     </details>
-5. `I` is _conditionally difference bounded_ by `c`: the absolute change of `I` by one loop iteration is bounded by `c`.
+5. `I` is _conditionally difference bounded_ by `c`: the absolute change of `I` by one loop iteration is at most `c`.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
@@ -124,7 +124,7 @@ such that all the following conditions are fulfilled:
     </p>
     </details>
 
-Then `I <= wp[while G { Body }](f)`.
+Then, `I <= wp[while G { Body }](f)` holds.
 
 ## Usage
 
@@ -170,9 +170,10 @@ You can see all four parameters are passed to the `@ost` annotation in sequence:
 :::warning
 
 All parameters must be finite, i.e. cannot evaluate to $\infty$.
+Currently, this is only checked by Caesar for `past_invariant` and `cdb`.
 
 :::
 
-[^1]: The built-in encoding ensures uniform integrability of the subinvariant through the conditions of the paper's Theorem 37 (b).
-[^modified-ert]: `PAST_I` is an `ert`-superinvariant, where `ert` is a modified [expected runtime calculus](calculi) which only counts the number of outer loop iterations of `while G { Body }`.
-[^inv-iter-finite]: In the paper, the condition to check is $\Phi_{\mathtt{f}}(\mathtt{I}) < \infty$. With the additional constraint that `I` harmonizes with `f` one can equivalently check $\Phi_{\mathtt{I}}(\mathtt{I}) < \infty$.
+[^1]: We present the conditions from the paper's Theorem 37 (b), as used by the built-in encoding to ensure uniform integrability of the subinvariant. Currently, using the paper's alternative conditions (a) or (c) requires a manual encoding.
+[^modified-ert]: Our `PAST_I` condition effectively encodes an `ert`-superinvariant, where `ert` is a modified [expected runtime calculus](calculi) which counts the number of loop iterations of `while G { Body }` and does not count any nested loop iterations in `Body`.
+[^inv-iter-finite]: In the paper, the condition to check is $\Phi_{\mathtt{f}}(\mathtt{I}) < \infty$. With the additional constraint that `I` harmonizes with `f`, we instead check the simpler but equivalent condition that $\Phi_{\mathtt{I}}(\mathtt{I}) < \infty$ holds.
