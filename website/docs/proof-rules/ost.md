@@ -70,7 +70,7 @@ such that all the following conditions are fulfilled:
 
     </p>
     </details>
-3. `I` harmonizes with `f`: $\neg\mathtt{G} \implies (\mathtt{I} = \mathtt{f})$,
+3. `I` harmonizes with `f`: $\neg\mathtt{G} \implies (\mathtt{I} = \mathtt{f})$, i.e. `I` and `f` are equal on states that do not fulfill the loop guard `G`,
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
@@ -129,7 +129,9 @@ Then, `I <= wp[while G { Body }](f)` holds.
 ## Usage
 
 By applying the `@ost` annotation to a loop, Caesar will check the above requirements for a given invariant, PAST invariant, constant and post-expectation.
-Below is the encoding of the 'geometric loop' [Example 39 from the paper](https://dl.acm.org/doi/pdf/10.1145/3371105#page=18).
+Below is the encoding of [Example 39 from the paper](https://dl.acm.org/doi/pdf/10.1145/3371105#page=18).
+It is a _geometric loop_ program, which increments a counter `b` with probability $0.5$ or stops (setting `a = false`).
+The HeyVL program uses the `@ost` annotation that proves a lower bound of `b + [a]` on the expected value of `b`.
 
 ```heyvl
 proc ost_geo_loop_example(init_a: Bool, init_b: UInt, init_k: UInt) -> (a: Bool, b: UInt, k: UInt)
