@@ -141,7 +141,7 @@ fn test_missing_calculus_call() {
 }
 
 #[test]
-fn test_recursive_with_wp() {
+fn test_recursion_with_wp_proc() {
     let source = r#"
     @wp
     proc A() -> () {
@@ -160,12 +160,36 @@ fn test_recursive_with_wp() {
 }
 
 #[test]
-fn test_indirect_recursion() {
+fn test_indirect_recursion_with_wlp_coproc() {
+    let source = r#"
+    @wlp
+    coproc A() -> () {
+        var x: UInt
+        B()
+    }
+
+    coproc B() -> () {
+        var x: UInt
+        A()
+    }
+
+    "#;
+    let res = verify_test(source).0;
+    assert!(res.is_err());
+    let err = res.unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "Error: Potentially recursive calls are not allowed in a coproc with the 'wlp' calculus."
+    );
+}
+
+#[test]
+fn test_call_to_recursion() {
     let source = r#"
     @wp
     proc A() -> () {
         var x: UInt
-        B()
+        B() // this should be allowed
     }
 
     proc B() -> () {
@@ -207,11 +231,30 @@ fn test_recursion_with_wlp_proc() {
 
     proc B() -> () {
         var y: UInt
-        B()
+        A()
     }
 
     "#;
     let res = verify_test(source).0;
 
     assert!(res.is_ok());
+}
+
+#[test]
+fn test_recursion_with_wlp_coproc() {
+    let source = r#"
+    @wlp
+    coproc A() -> () {
+        var x: UInt
+        A()
+    }
+
+    "#;
+    let res = verify_test(source).0;
+    assert!(res.is_err());
+    let err = res.unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "Error: Potentially recursive calls are not allowed in a coproc with the 'wlp' calculus."
+    );
 }
