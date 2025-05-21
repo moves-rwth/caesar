@@ -61,6 +61,7 @@ clap_complete = "4.5.42"
 regex = "1.11.1"
 tempfile = "3.16.0"
 os_info = "3.11.0"
+petgraph = "0.8.0"
 
 [build-dependencies]
 lalrpop = "0.22"

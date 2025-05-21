@@ -3,6 +3,7 @@
 use std::{
     fmt,
     fs::{create_dir_all, File},
+    hash::Hash,
     io::Write,
     ops::{Deref, DerefMut},
     path::PathBuf,
@@ -30,7 +31,6 @@ use crate::{
         proc_verify::{to_direction_lower_bounds, verify_proc},
         SpecCall,
     },
-    proof_rules::EncodingVisitor,
     resource_limits::{LimitError, LimitsRef},
     servers::Server,
     slicing::{
@@ -382,21 +382,6 @@ impl SourceUnit {
         } else {
             Ok(None)
         }
-    }
-
-    /// Apply encodings from annotations.
-    #[instrument(skip(self, tcx, source_units_buf))]
-    pub fn apply_encodings(
-        &mut self,
-        tcx: &mut TyCtx,
-        source_units_buf: &mut Vec<Item<SourceUnit>>,
-    ) -> Result<(), VerifyError> {
-        let mut encoding_visitor = EncodingVisitor::new(tcx, source_units_buf);
-        let res = match self {
-            SourceUnit::Decl(decl) => encoding_visitor.visit_decl(decl),
-            SourceUnit::Raw(block) => encoding_visitor.visit_block(block),
-        };
-        Ok(res.map_err(|ann_err| ann_err.diagnostic())?)
     }
 
     /// Convert this source unit into a [`VerifyUnit`].

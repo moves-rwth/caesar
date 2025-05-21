@@ -12,6 +12,7 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
+    proof_rules::calculus::RecursiveProcBlame,
     proof_rules::Encoding,
     slicing::selection::SliceAnnotation,
     tyctx::TyCtx,
@@ -62,6 +63,11 @@ pub enum AnnotationUnsoundnessError {
         span: Span,
         context_calculus: Ident,
         call_calculus: Ident,
+    },
+    UnsoundRecursion {
+        direction: Direction,
+        calculus_name: Ident,
+        blame: RecursiveProcBlame,
     },
 }
 
@@ -140,6 +146,26 @@ impl AnnotationUnsoundnessError {
                         "The calculus of the called procedure must match the calculus of the calling procedure.",
                     ))
             }
+            AnnotationUnsoundnessError::UnsoundRecursion{direction,calculus_name , blame } => {
+                Diagnostic::new(ReportKind::Error, blame.call_span)
+                    .with_message(format!(
+                        "Potentially recursive calls are not allowed in a {} with the '{}' calculus.",
+                        direction.prefix("proc"), calculus_name.name, 
+                    ))
+                    .with_label(Label::new(blame.call_span).with_message({
+                        if blame.called_proc_name == blame.recursive_proc_name {
+                            format!("This call to '{}' is potentially recursive.", blame.called_proc_name.name)
+                        } else {
+                            format!(
+                            "This call to '{}' can lead to a recursive call to '{}' again.", 
+                            blame.called_proc_name.name, blame.recursive_proc_name.name
+                            )
+                        }
+                    }))
+                    .with_note(
+                        "(Co)Procedure calls make use of Park induction, which is not sound in this setting in general.",
+                    )
+            }
         }
     }
 }
@@ -155,6 +181,17 @@ pub enum CalculusType {
     Wp,
     Wlp,
     Ert,
+}
+
+impl CalculusType {
+    pub fn is_induction_allowed(&self, direction: Direction) -> bool {
+        matches!(
+            (self, direction),
+            (CalculusType::Wlp, Direction::Down)
+                | (CalculusType::Wp, Direction::Up)
+                | (CalculusType::Ert, Direction::Up)
+        )
+    }
 }
 
 pub struct CalculusAnnotationError;
