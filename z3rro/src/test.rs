@@ -34,8 +34,8 @@ pub fn test_prove(f: impl for<'ctx> FnOnce(&'ctx Context, &mut SmtScope<'ctx>) -
             prover.get_assertions()
         ),
         Ok(ProveResult::Unknown(reason)) => panic!("solver returned unknown ({})", reason),
-        Ok(ProveResult::Proof) => {},
-        Err(_) => {}
+        Ok(ProveResult::Proof) => {}
+        Err(e) => panic!("{}", e),
     };
 }
 

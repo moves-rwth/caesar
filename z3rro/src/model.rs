@@ -8,7 +8,6 @@ use std::{
 
 use num::{BigInt, BigRational};
 
-
 use thiserror::Error;
 
 use z3::{

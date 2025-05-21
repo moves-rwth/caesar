@@ -39,7 +39,10 @@ use tokio::task::JoinError;
 use tracing::{error, info, warn};
 
 use vc::explain::VcExplanation;
-use z3rro::{prover::{ProveResult, ProverCommandError}, util::ReasonUnknown};
+use z3rro::{
+    prover::{ProveResult, ProverCommandError},
+    util::ReasonUnknown,
+};
 
 pub mod ast;
 mod driver;

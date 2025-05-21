@@ -144,7 +144,7 @@ fn prove_equiv(
         ))
         }
         Ok(ProveResult::Unknown(reason)) => Err(format!("unknown result ({})", reason)),
-        Err(err) => Err(format!("{}", err))
+        Err(err) => Err(format!("{}", err)),
     };
     x
 }

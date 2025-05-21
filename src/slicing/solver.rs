@@ -248,9 +248,7 @@ impl<'ctx> SliceSolver<'ctx> {
 
         self.prover.add_assumption(&self.slice_stmts.constraints);
         self.prover.add_assumption(&inactive_formula);
-        let res = self
-            .prover
-            .check_proof_assuming(&active_toggle_values);
+        let res = self.prover.check_proof_assuming(&active_toggle_values);
 
         let mut slice_searcher = SliceModelSearch::new(active_toggle_values.clone());
         if let Ok(ProveResult::Proof) = res {
@@ -353,7 +351,10 @@ impl<'ctx> SliceSolver<'ctx> {
         self.prover.push();
 
         slice_sat_binary_search(&mut self.prover, &active_toggle_values, options, limits_ref)?;
-        let res = self.prover.check_proof().map_err(|err| VerifyError::ProverError(err))?;
+        let res = self
+            .prover
+            .check_proof()
+            .map_err(|err| VerifyError::ProverError(err))?;
         let model = if let Some(model) = self.prover.get_model() {
             assert!(matches!(
                 res,
@@ -609,7 +610,7 @@ pub fn slice_unsat_search<'ctx>(
                 let res_seed = match check_proof_seed(&all_variables, prover, limits_ref, &seed) {
                     Ok(ProveResult::Proof) => Some(unsat_core_to_seed(prover, &all_variables)),
                     Ok(ProveResult::Counterexample) | Ok(ProveResult::Unknown(_)) => None,
-                    Err(err) => return Err(VerifyError::ProverError(err))
+                    Err(err) => return Err(VerifyError::ProverError(err)),
                 };
 
                 let res = exploration.shrink_block_unsat(seed, |_| res_seed.clone());
@@ -622,7 +623,6 @@ pub fn slice_unsat_search<'ctx>(
                     SliceMinimality::Subset => exploration.block_non_subset(&res),
                     SliceMinimality::Size => exploration.block_at_least(res.len()),
                 }
-
             }
             Ok(ProveResult::Counterexample) => {
                 // grow the counterexample and then block down

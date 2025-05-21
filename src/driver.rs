@@ -53,7 +53,7 @@ use crate::{
         vcgen::Vcgen,
     },
     version::write_detailed_version_info,
-    DebugOptions, SliceOptions, SliceVerifyMethod, VerifyCommand, VerifyError, SMTSolverType,
+    DebugOptions, SMTSolverType, SliceOptions, SliceVerifyMethod, VerifyCommand, VerifyError,
 };
 
 use ariadne::ReportKind;
@@ -696,7 +696,13 @@ impl<'ctx> SmtVcUnit<'ctx> {
         let span = info_span!("SAT check");
         let _entered = span.enter();
 
-        let prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc, options.smt_solver_options.smt_solver);
+        let prover = mk_valid_query_prover(
+            limits_ref,
+            ctx,
+            translate,
+            &self.vc,
+            options.smt_solver_options.smt_solver,
+        );
 
         if options.debug_options.probe {
             let goal = Goal::new(ctx, false, false, false);
@@ -827,7 +833,7 @@ fn mk_valid_query_prover<'smt, 'ctx>(
 ) -> Prover<'ctx> {
     let solver_type = match smt_solver {
         SMTSolverType::Swine => SolverType::SWINE,
-        SMTSolverType::Z3 => SolverType::Z3,            
+        SMTSolverType::Z3 => SolverType::Z3,
     };
 
     // create the prover and set the params
@@ -846,6 +852,7 @@ fn mk_valid_query_prover<'smt, 'ctx>(
         .add_assumptions_to_prover(&mut prover);
     // add the provable: is this Boolean true?
     prover.add_provable(valid_query);
+    println!("{}", valid_query);
     prover
 }
 

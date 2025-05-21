@@ -4,7 +4,6 @@ use thiserror::Error;
 
 use std::{
     collections::VecDeque,
-    env,
     fmt::Display,
     io::{self, Write},
     path::Path,
@@ -25,15 +24,14 @@ use crate::{
     util::{set_solver_timeout, ReasonUnknown},
 };
 
-
 #[derive(Debug, Error)]
 pub enum ProverCommandError {
-    #[error("Environment variable error: {0}")]
-    EnvVarError(#[from] env::VarError),
     #[error("Process execution failed: {0}")]
     ProcessError(#[from] io::Error),
     #[error("Parse error")]
     ParseError,
+    #[error("Unexpected result from prover: {0}")]
+    UnexpectedResultError(String),
 }
 
 #[derive(Debug)]
@@ -57,21 +55,25 @@ fn execute_swine(file_path: &Path) -> Result<(SatResult, String), ProverCommandE
     match output {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            let mut lines_buffer: VecDeque<&str>= stdout.lines().collect();
-            let first_line = lines_buffer.pop_front().ok_or(ProverCommandError::ParseError)?;
+            let mut lines_buffer: VecDeque<&str> = stdout.lines().collect();
+            let first_line = lines_buffer
+                .pop_front()
+                .ok_or(ProverCommandError::ParseError)?;
             if first_line.trim().to_lowercase() == "unsat" {
                 Ok((SatResult::Unsat, "".to_string()))
             } else if first_line.trim().to_lowercase() == "sat" {
-                let _last_line = lines_buffer.pop_back().ok_or(ProverCommandError::ParseError)?;
-                if _last_line.contains("SHA") {
-                    let cex = lines_buffer.iter().join("");
-                    Ok((SatResult::Sat, cex))
-                } else {
-                    Err(ProverCommandError::ParseError)
-                }
+                lines_buffer
+                    .pop_back()
+                    .ok_or(ProverCommandError::ParseError)?;
+                let cex = lines_buffer.iter().join("");
+                Ok((SatResult::Sat, cex))
+            } else if first_line.trim().to_lowercase() == "unknown" {
+                Ok((SatResult::Unknown, lines_buffer.iter().join("\n")))
             } else {
                 lines_buffer.push_front(first_line);
-                Ok((SatResult::Unknown, lines_buffer.iter().join("\n")))
+                Err(ProverCommandError::UnexpectedResultError(
+                    lines_buffer.iter().join("\n"),
+                ))
             }
         }
         Err(e) => Err(ProverCommandError::ProcessError(e)),
@@ -86,6 +88,8 @@ fn remove_lines_for_swine(input: &str) -> String {
     let mut input_buffer: VecDeque<char> = input.chars().collect();
     let mut cnt = 0;
 
+    // Collect characters until all opened parentheses are closed, and
+    // keep this block if it does not contain 'declare-fun exp' or 'forall'.
     while let Some(c) = input_buffer.pop_front() {
         tmp_buffer.push_back(c);
         match c {
@@ -107,7 +111,6 @@ fn remove_lines_for_swine(input: &str) -> String {
     }
     output
 }
-
 
 impl Display for ProveResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -243,10 +246,9 @@ impl<'ctx> Prover<'ctx> {
         self.add_assumption(&value.not());
         self.min_level_with_provables.get_or_insert(self.level);
     }
-    
+
     /// `self.check_proof_assuming(&[])`.
     pub fn check_proof(&mut self) -> Result<ProveResult, ProverCommandError> {
-
         self.check_proof_assuming(&[])
     }
 
@@ -281,12 +283,12 @@ impl<'ctx> Prover<'ctx> {
                         match &self.solver {
                             StackSolver::Native(solver) => {
                                 solver.from_string(cex);
-                            },
+                            }
                             StackSolver::Emulated(solver, _) => {
                                 solver.from_string(cex);
-                            },
+                            }
                         }
-                        
+
                         Ok(ProveResult::Counterexample)
                     }
                     Err(err) => Err(err),
@@ -306,13 +308,15 @@ impl<'ctx> Prover<'ctx> {
                         res
                     }
                 };
+
                 match res {
                     SatResult::Unsat => Ok(ProveResult::Proof),
-                    SatResult::Unknown => Ok(ProveResult::Unknown(self.get_reason_unknown().unwrap())),
+                    SatResult::Unknown => {
+                        Ok(ProveResult::Unknown(self.get_reason_unknown().unwrap()))
+                    }
                     SatResult::Sat => Ok(ProveResult::Counterexample),
                 }
             }
-
         }
     }
 

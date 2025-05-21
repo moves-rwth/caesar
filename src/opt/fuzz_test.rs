@@ -218,10 +218,8 @@ fn prove_equiv(expr: Expr, optimized: Expr, tcx: &TyCtx) -> TestCaseResult {
         }
         Ok(ProveResult::Unknown(reason)) => {
             Err(TestCaseError::fail(format!("unknown result ({})", reason)))
-        },
-        Err(err) => {
-            Err(TestCaseError::fail(format!("{}", err)))
         }
+        Err(err) => Err(TestCaseError::fail(format!("{}", err))),
     };
     x
 }
