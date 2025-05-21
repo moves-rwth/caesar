@@ -1,9 +1,9 @@
-//! This module contains all functions the different ways of encoding user-defined functions.
-//! There are different fuel encodings, which all limit the number of possible (recursive)
-//! quantifier instantiations and a [DefaultFunctionEncoding] which does a direct mapping to SMT-LIB.
+//! This module contains all functions related to limited functions.
+//! The goal is to limit the number of quantifier instantiation
+//! of a functions defining axiom.
 //!
 //! # Note
-//! For the fuel encodings to work the SMT solver is not allowed to synthesis fuel values itself.
+//! For this to work the SMT solver is not allowed to synthesis fuel values itself.
 //! Therefore, MBQI must be disabled.
 
 use crate::ast::visit::{walk_expr, VisitorMut};
@@ -17,14 +17,14 @@ use crate::smt::{ty_to_sort, SmtCtx};
 use crate::tyctx::TyCtx;
 use itertools::Itertools;
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::convert::Infallible;
 use std::fmt::{Display, Formatter};
 use std::mem;
 use std::num::NonZero;
 use tracing::info_span;
 use z3::ast::{Ast, Bool, Dynamic};
-use z3::{Pattern, Sort};
+use z3::{Pattern, RecFuncDecl, Sort};
 use z3rro::scope::{SmtScope, WEIGHT_DEFAULT};
 use z3rro::{Fuel, SmtEq, SmtInvariant};
 
@@ -121,6 +121,7 @@ enum FunctionEncodingInner<'ctx> {
     Default(DefaultFunctionEncoding),
     Variable(VariableFuelFunctionEncoding<'ctx>),
     Fixed(FixedFuelFunctionEncoding),
+    DefineFunRec(DefineFunRecEncoding<'ctx>),
 }
 
 /// A value that represents one of the possible encodings
@@ -142,6 +143,7 @@ impl<'ctx> FunctionEncoder<'ctx> for FunctionEncoding<'ctx> {
             FunctionEncodingInner::Default(enc) => enc.declare_function(ctx, func),
             FunctionEncodingInner::Variable(enc) => enc.declare_function(ctx, func),
             FunctionEncodingInner::Fixed(enc) => enc.declare_function(ctx, func),
+            FunctionEncodingInner::DefineFunRec(enc) => enc.declare_function(ctx, func),
         }
     }
 
@@ -154,6 +156,7 @@ impl<'ctx> FunctionEncoder<'ctx> for FunctionEncoding<'ctx> {
             FunctionEncodingInner::Default(enc) => enc.axioms(translate, func),
             FunctionEncodingInner::Variable(enc) => enc.axioms(translate, func),
             FunctionEncodingInner::Fixed(enc) => enc.axioms(translate, func),
+            FunctionEncodingInner::DefineFunRec(enc) => enc.axioms(translate, func),
         }
     }
 
@@ -167,6 +170,7 @@ impl<'ctx> FunctionEncoder<'ctx> for FunctionEncoding<'ctx> {
             FunctionEncodingInner::Default(enc) => enc.call_function(ctx, func, args),
             FunctionEncodingInner::Variable(enc) => enc.call_function(ctx, func, args),
             FunctionEncodingInner::Fixed(enc) => enc.call_function(ctx, func, args),
+            FunctionEncodingInner::DefineFunRec(enc) => enc.call_function(ctx, func, args),
         }
     }
 }
@@ -201,6 +205,13 @@ impl<'ctx> FunctionEncoding<'ctx> {
             fuel_value: Cell::new(max_fuel.try_into().unwrap()),
             fuel_context: Cell::new(max_fuel),
             max_fuel,
+        }))
+    }
+
+    pub fn define_fun_rec() -> Self {
+        Self(FunctionEncodingInner::DefineFunRec(DefineFunRecEncoding {
+            default_encoding: DefaultFunctionEncoding,
+            decls: RefCell::new(HashMap::new()),
         }))
     }
 
@@ -731,6 +742,100 @@ impl FixedFuelFunctionEncoding {
     ) -> Bool<'ctx> {
         self.fuel_value.set(fuel_value);
         EncodingFuel::computation_axiom(self, translate, func)
+    }
+}
+
+struct DefineFunRecEncoding<'ctx> {
+    decls: RefCell<HashMap<Ident, RecFuncDecl<'ctx>>>,
+    default_encoding: DefaultFunctionEncoding,
+}
+
+impl<'ctx> EncodingBase<'ctx> for DefineFunRecEncoding<'ctx> {}
+impl<'ctx> FunctionEncoder<'ctx> for DefineFunRecEncoding<'ctx> {
+    fn declare_function(
+        &self,
+        ctx: &SmtCtx<'ctx>,
+        func: &FuncDecl,
+    ) -> Vec<FunctionDeclaration<'ctx>> {
+        if func.body.borrow().is_none() {
+            return self.default_encoding.declare_function(ctx, func);
+        }
+
+        let domain = build_func_domain(ctx, func, false);
+        let domain: Vec<_> = domain.iter().collect();
+        let decl = RecFuncDecl::new(
+            ctx.ctx,
+            func.name.name.to_owned(),
+            &domain,
+            &ty_to_sort(ctx, &func.output),
+        );
+        let previous = self.decls.borrow_mut().insert(func.name, decl);
+        assert!(previous.is_none());
+        vec![]
+    }
+
+    fn axioms<'smt>(
+        &self,
+        translate: &mut TranslateExprs<'smt, 'ctx>,
+        func: &FuncDecl,
+    ) -> Vec<Bool<'ctx>> {
+        if func.body.borrow().is_none() {
+            return self.default_encoding.axioms(translate, func);
+        }
+
+        let decl_borrow = self.decls.borrow();
+        let decl = decl_borrow
+            .get(&func.name)
+            .expect("function is not declared");
+
+        let span = func.span.variant(SpanVariant::Encoding);
+        let builder = ExprBuilder::new(span);
+
+        let args: Vec<_> = func
+            .inputs
+            .node
+            .iter()
+            .map(|param| builder.var(param.name, translate.ctx.tcx))
+            .map(|var| {
+                let symbolic = translate.t_symbolic(&var);
+                if symbolic.smt_invariant().is_some() {
+                    let type_name = var.ty.clone().map(|ty| format!("{}", ty)).unwrap_or_else(|| "<unknown>".into());
+                    panic!("define-fun-rec encoding only supports parameter types without side conditions.\nParameter {} of function {} has type {}, which has a side condition.", var, func.name, type_name)
+                }
+                symbolic.into_dynamic(translate.ctx)
+            })
+            .collect();
+        let args = args.iter().map(|d| d as &dyn Ast<'ctx>).collect_vec();
+        decl.add_def(
+            &args,
+            &translate
+                .t_symbolic(&func.body.borrow().as_ref().unwrap())
+                .into_dynamic(translate.ctx) as &dyn Ast<'ctx>,
+        );
+        self.build_return_invariant(translate, func, &format!("{}(return_invariant)", func.name))
+            .into_iter()
+            .collect()
+    }
+
+    fn call_function(
+        &self,
+        ctx: &SmtCtx<'ctx>,
+        func: &FuncDecl,
+        args: Vec<Symbolic<'ctx>>,
+    ) -> Symbolic<'ctx> {
+        if func.body.borrow().is_none() {
+            return self.default_encoding.call_function(ctx, func, args);
+        }
+
+        let args = args.into_iter().map(|s| s.into_dynamic(ctx)).collect_vec();
+        let args = args.iter().map(|d| d as &dyn Ast<'ctx>).collect_vec();
+        let res_dynamic = self
+            .decls
+            .borrow()
+            .get(&func.name)
+            .map(|decl| decl.apply(&args))
+            .expect("function is not declared");
+        Symbolic::from_dynamic(ctx, &func.output, &res_dynamic)
     }
 }
 

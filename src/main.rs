@@ -292,6 +292,9 @@ pub enum FunctionEncodingValue {
     /// Like [FunctionEncodingValue::VariableFuel] with additionally allowing unbounded unfolding
     /// if the parameter values are known.
     VariableFuelComputation,
+    /// Uses `define-fun-rec` defined by SMT-Lib to encode functions.
+    /// Only supports parameters without side conditions.
+    DefineFunRec,
 }
 
 #[derive(Debug, Default, Args)]
@@ -981,6 +984,7 @@ fn verify_files_main(
             FunctionEncodingValue::VariableFuelComputation => {
                 FunctionEncoding::variable(options.opt_options.max_fuel, true)
             }
+            FunctionEncodingValue::DefineFunRec => FunctionEncoding::define_fun_rec(),
         };
         let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoding);
         let mut translate = TranslateExprs::new(&smt_ctx);
