@@ -265,7 +265,13 @@ impl<'ctx> Prover<'ctx> {
         match self.smt_solver {
             SolverType::SWINE => {
                 let mut smtlib = self.get_smtlib();
-                smtlib.add_check_sat();
+                if assumptions.is_empty() {
+                    smtlib.add_check_sat();
+                } else {
+                    smtlib.add_check_sat_assuming(
+                        assumptions.iter().map(|a| a.to_string()).collect(),
+                    );
+                };
                 let smtlib = smtlib.into_string();
                 let mut smt_file: NamedTempFile = NamedTempFile::new().unwrap();
                 smt_file
@@ -288,8 +294,8 @@ impl<'ctx> Prover<'ctx> {
                                 solver.from_string(cex);
                             }
                         }
-
-                        Ok(ProveResult::Counterexample)
+                        panic!("");
+                        //Ok(ProveResult::Counterexample)
                     }
                     Err(err) => Err(err),
                 }

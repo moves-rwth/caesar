@@ -30,6 +30,15 @@ impl Smtlib {
         self.0.push_str("\n(check-sat)");
     }
 
+    pub fn add_check_sat_assuming(&mut self, assumptions: Vec<String>) {
+        let assumptions_str: Vec<String> = assumptions.iter().map(|a| a.to_string()).collect();
+
+        self.0.push_str(&format!(
+            "\n(check-sat-assuming ({}))",
+            assumptions_str.join(" ").as_str()
+        ));
+    }
+
     /// Add a `(check-sat)` command at the end.
     pub fn add_details_query(&mut self, prove_result: &ProveResult) {
         match prove_result {
