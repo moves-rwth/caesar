@@ -4,10 +4,74 @@
         <title>Caesar Blog</title>
         <link>https://www.caesarverifier.org/blog</link>
         <description>Caesar Blog</description>
-        <lastBuildDate>Fri, 11 Apr 2025 00:00:00 GMT</lastBuildDate>
+        <lastBuildDate>Fri, 23 May 2025 00:00:00 GMT</lastBuildDate>
         <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
         <generator>https://github.com/jpmonette/feed</generator>
         <language>en</language>
+        <item>
+            <title><![CDATA[Caesar 2.2: Timeout Handling, Recursion Checks, Improved Model Checking, and More]]></title>
+            <link>https://www.caesarverifier.org/blog/2025/05/23/caesar-2-2</link>
+            <guid>https://www.caesarverifier.org/blog/2025/05/23/caesar-2-2</guid>
+            <pubDate>Fri, 23 May 2025 00:00:00 GMT</pubDate>
+            <description><![CDATA[The Caesar 2.2 is an incremental release that adds various improvements to existing features and fixes some bugs.]]></description>
+            <content:encoded><![CDATA[<p>The <em>Caesar 2.2</em> is an incremental release that adds various improvements to existing features and fixes some bugs.</p>
+<p><strong>Overview:</strong></p>
+<ol>
+<li><a href="https://www.caesarverifier.org/blog/2025/05/23/caesar-2-2#ui-improvements">UI Improvements</a></li>
+<li><a href="https://www.caesarverifier.org/blog/2025/05/23/caesar-2-2#guardrail-against-unsound-recursion">Guardrail Against Unsound Recursion</a></li>
+<li><a href="https://www.caesarverifier.org/blog/2025/05/23/caesar-2-2#model-checking">Better Model Checking Support</a></li>
+<li><a href="https://www.caesarverifier.org/blog/2025/05/23/caesar-2-2#ast-rule">AST Rule Improvements</a></li>
+<li><a href="https://www.caesarverifier.org/blog/2025/05/23/caesar-2-2#other-changes">Other Changes</a></li>
+</ol>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="ui-improvements">UI Improvements<a href="https://www.caesarverifier.org/blog/2025/05/23/caesar-2-2#ui-improvements" class="hash-link" aria-label="Direct link to UI Improvements" title="Direct link to UI Improvements">​</a></h2>
+<p>We have improved Caesar's LSP server and the Visual Studio Code extension.</p>
+<ul>
+<li>The extension now properly handles Caesar timeouts.</li>
+<li>Gutter icons are now shown for more verification statuses (todo, ongoing, timeout).</li>
+</ul>
+<p>On the command-line:</p>
+<ul>
+<li>Caesar now supports the <code>--filter [&lt;filter&gt;]</code> command-line argument to filter the (co)procs that are to be verified or translated for model checking.</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="guardrail-against-unsound-recursion">Guardrail Against Unsound Recursion<a href="https://www.caesarverifier.org/blog/2025/05/23/caesar-2-2#guardrail-against-unsound-recursion" class="hash-link" aria-label="Direct link to Guardrail Against Unsound Recursion" title="Direct link to Guardrail Against Unsound Recursion">​</a></h2>
+<p>We have added a new check to prevent unsound recursion in the <a href="https://www.caesarverifier.org/docs/proof-rules/calculi">calculus annotations</a> feature.
+This check ensures that users do not accidentally invoke Park induction in an unsound way in the presence of recursive (co)procedures.
+It is based on a call graph analysis of the program and over-approximates potential recursion.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="model-checking">Better Model Checking Support<a href="https://www.caesarverifier.org/blog/2025/05/23/caesar-2-2#model-checking" class="hash-link" aria-label="Direct link to Better Model Checking Support" title="Direct link to Better Model Checking Support">​</a></h2>
+<p>Caesar's support for <a href="https://www.caesarverifier.org/docs/caesar/model-checking">model checking</a> has been greatly improved in this release.
+First of all, it gained a new subcommand <code>caesar mc</code> to run the model checker on a given HeyVL file.</p>
+<p>Many bugs have been fixed and improvements have been made to the model checking support:</p>
+<ul>
+<li>Correct extraction of preconditions from <code>coproc</code>s.</li>
+<li>Support non-integer rewards.</li>
+<li>Support for different behaviours of uninitialized variables in the translation has been added.</li>
+<li>Support for translation of more verification statements (specific forms of <code>assume</code>, <code>assert</code>) has been added.</li>
+<li>Only required function definitions are now included in the translation.</li>
+<li>Caesar now supports directly invoking the Storm model checker via either an installed binary or by using a Docker image.</li>
+<li>Input variables can be translated as variables or as constants now.</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="ast-rule">AST Rule Improvements<a href="https://www.caesarverifier.org/blog/2025/05/23/caesar-2-2#ast-rule" class="hash-link" aria-label="Direct link to AST Rule Improvements" title="Direct link to AST Rule Improvements">​</a></h2>
+<p>We have updated the <a href="https://www.caesarverifier.org/docs/caesar/proof-rules/ast#new-proof-rule">"New Proof Rule for AST"</a> to be more general, allowing verification of AST for more programs.
+This is a result of a combination of different formulations in the literature, our own theoretical improvements, as well as internal code improvements for the implementation.</p>
+<p>We have added <a href="https://www.caesarverifier.org/docs/caesar/proof-rules/ast">new documentation</a> for general AST proofs and for this specific AST proof rule in particular.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="other-changes">Other Changes<a href="https://www.caesarverifier.org/blog/2025/05/23/caesar-2-2#other-changes" class="hash-link" aria-label="Direct link to Other Changes" title="Direct link to Other Changes">​</a></h2>
+<ul>
+<li>Documentation has been improved in many places.</li>
+<li>Caesar now supports Z3's probes to determine theoretical complexities of verification tasks.</li>
+</ul>
+<p>Many internal improvements to the slicing algorithms have been made.</p>
+<ul>
+<li>Improved robustness against Z3's incremental mode instabilities.</li>
+<li>Fixed the <code>sus</code> algorithm not finding optimal slices with non-extensive statements.</li>
+<li>Clarified minimality guarantees of the different algorithms.</li>
+</ul>
+<p>Internal:</p>
+<ul>
+<li>Caesar's test files have been updated to consistenly use the built-in proof rules instead using the old Python-generated HeyVL encodings.</li>
+<li>Caesar has been updated to compile with latest versions of backwards-incompatible C++ compilers and new versions of CMake.</li>
+</ul>]]></content:encoded>
+            <category>releases</category>
+        </item>
         <item>
             <title><![CDATA[Foundations for Verification of Continuous Programs with Caesar]]></title>
             <link>https://www.caesarverifier.org/blog/2025/04/11/foundations-continuous</link>

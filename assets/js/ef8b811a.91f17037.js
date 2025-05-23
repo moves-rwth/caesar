@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunkcaesar_website=self.webpackChunkcaesar_website||[]).push([[8947],{6600:e=>{e.exports=JSON.parse('{"authors":[{"name":"Philipp Schroer","title":"Caesar Developer","url":"https://moves.rwth-aachen.de/people/philipp-schroer/","imageURL":"https://github.com/Philipp15b.png","key":"phisch","page":null,"count":9}]}')}}]);
