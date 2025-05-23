@@ -852,7 +852,6 @@ fn mk_valid_query_prover<'smt, 'ctx>(
         .add_assumptions_to_prover(&mut prover);
     // add the provable: is this Boolean true?
     prover.add_provable(valid_query);
-    println!("{}", valid_query);
     prover
 }
 
