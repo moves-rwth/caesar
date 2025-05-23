@@ -30,6 +30,7 @@ impl Smtlib {
         self.0.push_str("\n(check-sat)");
     }
 
+    /// Add a `(check-sat-assuming)` command at the end
     pub fn add_check_sat_assuming(&mut self, assumptions: Vec<String>) {
         let assumptions_str: Vec<String> = assumptions.iter().map(|a| a.to_string()).collect();
 
@@ -39,7 +40,7 @@ impl Smtlib {
         ));
     }
 
-    /// Add a `(check-sat)` command at the end.
+    /// Add a `(get-model)` command at the end for counterexamples and a `(get-info :reason-unknown)` for unknown results.
     pub fn add_details_query(&mut self, prove_result: &ProveResult) {
         match prove_result {
             ProveResult::Proof => {}
