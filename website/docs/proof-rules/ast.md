@@ -25,7 +25,7 @@ Since `wp[C](1) <= 1` always holds (by a property often called _feasibility_), `
 Lower bounds on weakest pre-expectations need a proof rule like [omega-invariants](./omega-invariants.md) to reason about loops.
 To _refute_ a lower bound on weakest pre-expectations, [unrolling](./unrolling.md) (also known as bounded model checking) can be used.
 
-## A New Proof Rule for Almost-Sure Termination (`@ast` Annotation)
+## A New Proof Rule for Almost-Sure Termination (`@ast` Annotation) {#new-proof-rule}
 
 Caesar supports the _"new proof rule for almost-sure termination"_ by McIver et al. as a built-in encoding.
 You can find the [extended version of the paper on arxiv](https://arxiv.org/pdf/1711.03588.pdf).
@@ -40,7 +40,7 @@ Additionally, a Boolean _invariant_ $\mathtt{I}$ must be specified which limits 
 Consider a loop `while G { Body }`.
 The loop's used and modified variables, except the ones declared within the loop, are referred to as `vars`.
 Give
-- $\mathtt{I}$ a Boolean predicate, 
+- $\mathtt{I}$ a Boolean predicate,
 - $\mathtt{V}$ a variant function assigning a value $\mathbb{R}_{\geq 0}$ to every state,
 - $\mathtt{prob} \colon \mathbb{R}_{\geq 0} \to (0,1]$,
 - $\mathtt{decrease} \colon \mathbb{R}_{\geq 0} \to \mathbb{R}_{> 0}$,
