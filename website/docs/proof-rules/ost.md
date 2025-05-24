@@ -64,7 +64,7 @@ such that all the following conditions are fulfilled:
         if G {
             Body
             tick 1
-        }
+        } else {}
     }
     ```
 
@@ -99,7 +99,7 @@ such that all the following conditions are fulfilled:
         validate // maps finite expectation to 0, ∞ to ∞
         if G {
             Body
-        }
+        } else {}
     }
     ```
 

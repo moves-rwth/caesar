@@ -89,7 +89,7 @@ such that all the following conditions are fulfilled:
         vars = init_vars // set current state to input values
         if G {
             Body
-        }
+        } else {}
     }
     ```
 
@@ -124,7 +124,7 @@ such that all the following conditions are fulfilled:
         vars = init_vars // set current state to input values
         if G {
             Body
-        }
+        } else {}
     }
     ```
 

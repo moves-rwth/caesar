@@ -80,9 +80,9 @@ if cont {
         if cont {
             ... body ...
             assert 0; assume 0 // terminator = 0
-        }
-    }
-}
+        } else {}
+    } else {}
+} else {}
 ```
 
 There is a `0.25` chance of reaching the `assert 0`, so we can at most prove a lower bound of `0.75` with `k = 3`.
