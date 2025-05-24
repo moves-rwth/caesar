@@ -19,7 +19,7 @@ use crate::{
         tycheck::{Tycheck, TycheckError},
     },
     intrinsic::annotations::{
-        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+        tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
     },
     slicing::{wrap_with_error_message, wrap_with_success_message},
     tyctx::TyCtx,
@@ -72,7 +72,7 @@ impl Encoding for InvariantAnnotation {
         call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), TycheckError> {
-        check_annotation_call(tycheck, call_span, &self.0, args)?;
+        tycheck_annotation_call(tycheck, call_span, &self.0, args)?;
         Ok(())
     }
 
@@ -165,7 +165,7 @@ impl Encoding for KIndAnnotation {
         call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), TycheckError> {
-        check_annotation_call(tycheck, call_span, &self.0, args)?;
+        tycheck_annotation_call(tycheck, call_span, &self.0, args)?;
         Ok(())
     }
 

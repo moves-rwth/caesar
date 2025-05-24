@@ -93,7 +93,7 @@ impl AnnotationError {
                     annotation_name
                 ))
                 .with_label(
-                    Label::new(annotated.span).with_message("This should be a while statement"),
+                    Label::new(annotated.span).with_message("This should be a while statement."),
                 ),
             AnnotationError::WrongArgument { span, arg, message } => {
                 Diagnostic::new(ReportKind::Error, span)
@@ -105,7 +105,7 @@ impl AnnotationError {
                 annotation_name,
             } => Diagnostic::new(ReportKind::Error, span)
                 .with_message(format!(
-                    "The '{}' annotation is unknown.",
+                    "The `{}` annotation is unknown.",
                     annotation_name.name
                 ))
                 .with_label(Label::new(span).with_message("This annotation is not defined.")),
@@ -119,7 +119,7 @@ impl AnnotationUnsoundnessError {
             AnnotationUnsoundnessError::NotTerminator{span, enc_name} => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "The '{}' annotation must annotate the last statement of the program.",
+                        "The `{}` annotation must annotate the last statement of the program.",
                         enc_name.name
                     ))
                     .with_label(Label::new(span).with_message(
@@ -129,7 +129,7 @@ impl AnnotationUnsoundnessError {
             AnnotationUnsoundnessError::CalculusEncodingMismatch{direction, span, calculus_name, enc_name } => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "In {}s, the '{}' calculus does not support the '{}' encoding.",
+                        "In {}s, the `{}` calculus does not support the `{}` proof rule.",
                         direction.prefix("proc"), calculus_name.name, enc_name.name
                     ))
                     .with_label(Label::new(span).with_message(
@@ -139,7 +139,7 @@ impl AnnotationUnsoundnessError {
             AnnotationUnsoundnessError::CalculusCallMismatch{span,context_calculus,call_calculus} => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "Cannot call '{}' proc from '{}' proc.",
+                        "Cannot call `{}` proc from `{}` proc.",
                          call_calculus.name, context_calculus.name
                     ))
                     .with_label(Label::new(span).with_message(
@@ -149,15 +149,15 @@ impl AnnotationUnsoundnessError {
             AnnotationUnsoundnessError::UnsoundRecursion{direction,calculus_name , blame } => {
                 Diagnostic::new(ReportKind::Error, blame.call_span)
                     .with_message(format!(
-                        "Potentially recursive calls are not allowed in a {} with the '{}' calculus.",
-                        direction.prefix("proc"), calculus_name.name, 
+                        "Potentially recursive calls are not allowed in a {} with the `{}` calculus.",
+                        direction.prefix("proc"), calculus_name.name,
                     ))
                     .with_label(Label::new(blame.call_span).with_message({
                         if blame.called_proc_name == blame.recursive_proc_name {
-                            format!("This call to '{}' is potentially recursive.", blame.called_proc_name.name)
+                            format!("This call to `{}` is potentially recursive.", blame.called_proc_name.name)
                         } else {
                             format!(
-                            "This call to '{}' can lead to a recursive call to '{}' again.", 
+                            "This call to `{}` can lead to a recursive call to `{}` again.",
                             blame.called_proc_name.name, blame.recursive_proc_name.name
                             )
                         }
@@ -239,8 +239,8 @@ impl AnnotationKind {
     }
 }
 
-/// Typecheck annotation call
-pub fn check_annotation_call(
+/// Typecheck an annotation call.
+pub fn tycheck_annotation_call(
     tycheck: &mut Tycheck<'_>,
     span: Span,
     annotation: &AnnotationDecl,
