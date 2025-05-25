@@ -57,6 +57,7 @@ Each [built-in proof rule](./README.md) specifies their soundness theorem on the
 
 So, what are the proof rules that can be used to reason about which calculus and about which direction?
 The following table contains combinations of *sound approximation* combinations, i.e. if the program with the proof rule verifies, then the original program with the true greatest/least fixpoint semantics satisfies the same specification as well.
+The documentation pages on the individual proof rules explain the soundness guarantees in more detail.
 
 <table>
     <thead>
@@ -132,6 +133,4 @@ However, some items from the list below might also be disallowed in the future.
  * You can easily introduce contradictions that lead to unsoundness.
     * E.g. `assume ?(false)` can be used in `proc`s to make everything verify trivially.
     * [Unsoundness may come from axioms with contradictions](../heyvl/domains.md#unsoundness-from-axioms).
- * `proc`s may call `coproc`s and vice versa. However, this is almost never sound.
- * Right now, you can call procedures of different calculi from each other without a warning.
- * `tick` statements may be used with `@wp` and `wlp`, and it is not checked that a `tick` statement actually occurs in an `@ert` procedure.
+ * `tick` statements may be used with `@wp` and `@wlp`, and it is not checked that a `tick` statement actually occurs in an `@ert` procedure.
