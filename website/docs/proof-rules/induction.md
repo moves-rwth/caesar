@@ -36,7 +36,7 @@ In this case, it is `ite(cont, c + 1, c)`.
     c = init_c
     var cont: Bool = true
     @invariant(ite(cont, c + 1, c))
-    while (cont) {
+    while cont {
         var prob_choice: Bool = flip(0.5)
         if prob_choice { cont = false } else { c = c + 1 }
     }
