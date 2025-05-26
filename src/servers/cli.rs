@@ -9,7 +9,7 @@ use ariadne::ReportKind;
 
 use crate::{
     ast::{Diagnostic, FileId, Files, SourceFilePath, StoredFile},
-    driver::{SmtVcCheckResult, SourceUnitName},
+    driver::{Item, SmtVcCheckResult, SourceUnit, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
     InputOptions, VerifyError,
@@ -84,7 +84,10 @@ impl Server for CliServer {
         Ok(())
     }
 
-    fn register_source_unit(&mut self, _name: &SourceUnitName) -> Result<(), VerifyError> {
+    fn register_source_unit(
+        &mut self,
+        _source_unit: &mut Item<SourceUnit>,
+    ) -> Result<(), VerifyError> {
         // Not relevant for CLI
         Ok(())
     }

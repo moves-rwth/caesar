@@ -722,8 +722,8 @@ pub fn apply_encodings(
         .map_err(|ann_err| ann_err.diagnostic())?;
     }
 
-    for source_unit in &new_source_units {
-        server.register_source_unit(source_unit.name())?;
+    for source_unit in &mut new_source_units {
+        server.register_source_unit(source_unit)?;
     }
 
     source_units.extend(new_source_units);
@@ -821,7 +821,7 @@ fn verify_files_main(
 
     // Register all relevant source units with the server
     for source_unit in &mut source_units {
-        server.register_source_unit(source_unit.name())?;
+        server.register_source_unit(source_unit)?;
     }
 
     // explain high-level HeyVL if requested
