@@ -566,10 +566,6 @@ async fn run_server(mut options: VerifyCommand) -> ExitCode {
             let res = verify_files(&options, &server, user_files.to_vec()).await;
             match res {
                 Ok(_) => Ok(()),
-                Err(VerifyError::Diagnostic(diag)) => {
-                    server.lock().unwrap().add_diagnostic(diag).unwrap();
-                    Ok(())
-                }
                 Err(err) => Err(err),
             }
         })

@@ -17,6 +17,7 @@ export enum ServerStatus {
     Stopped,
     Starting,
     Ready,
+    ReadyWithError,
     FailedToStart,
     Verifying,
 }
@@ -409,8 +410,7 @@ export class CaesarClient {
         } catch (error) {
             this.logger.error("Client: verification had an error:", document.uri, error);
             if (!(error instanceof ResponseError)) { throw error; }
-            void vscode.window.showErrorMessage(`Verification had an error: ${error.message}`);
-            this.notifyStatusUpdate(ServerStatus.Ready);
+            this.notifyStatusUpdate(ServerStatus.ReadyWithError);
         }
     }
 

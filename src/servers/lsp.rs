@@ -478,7 +478,11 @@ async fn handle_verify_request(
         Err(err) => match err {
             VerifyError::Diagnostic(diagnostic) => {
                 server.lock().unwrap().add_diagnostic(diagnostic)?;
-                Response::new_ok(id.clone(), Value::Null)
+                Response::new_err(
+                    id.clone(),
+                    0,
+                    "Verification failed: see diagnostics for details".to_string(),
+                )
             }
             VerifyError::Interrupted | VerifyError::LimitError(_) => {
                 server

@@ -103,6 +103,12 @@ export class StatusBarComponent {
                     command = "caesar.showOutput";
                     tooltipMenuText = runningTooltipMenu;
                     break;
+                case ServerStatus.ReadyWithError:
+                    viewText = "$(warning) Verification Errors";
+                    tooltipStatusText = new vscode.MarkdownString("Some files have verification errors.", true);
+                    command = "caesar.showOutput";
+                    tooltipMenuText = runningTooltipMenu;
+                    break;
                 case ServerStatus.Verifying:
                     viewText = "$(sync~spin) Verifying...";
                     command = "caesar.showOutput";
@@ -202,8 +208,8 @@ export class StatusBarComponent {
             viewText = "$(warning) Verification Errors";
         } else if (!someError && !someVerified) {
             // No error and no verified implies the file is either empty or there are syntax errors.
-            viewText = "$(error) Invalid File";
-            tooltipString = new vscode.MarkdownString("Syntax error or empty file!", true);
+            viewText = "$(thumbsup-filled) Caesar Ready";
+            tooltipString = new vscode.MarkdownString("Verify some HeyVL files!", true);
         }
 
         return [viewText, tooltipString];
