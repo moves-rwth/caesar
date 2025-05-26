@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     ast::{Diagnostic, FileId, Files, Span, SpanVariant, StoredFile},
-    driver::{SmtVcCheckResult, SourceUnitName},
+    driver::{Item, SmtVcCheckResult, SourceUnit, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
     VerifyError,
@@ -143,7 +143,10 @@ pub trait Server: Send {
     fn add_vc_explanation(&mut self, explanation: VcExplanation) -> Result<(), VerifyError>;
 
     /// Register a source unit span with the server.
-    fn register_source_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError>;
+    fn register_source_unit(
+        &mut self,
+        source_unit: &mut Item<SourceUnit>,
+    ) -> Result<(), VerifyError>;
 
     /// Register a verify unit span as the current verifying with the server.
     fn set_ongoing_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError>;

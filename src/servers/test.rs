@@ -1,8 +1,11 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    ops::Deref,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
-    ast::{Diagnostic, FileId, Files, StoredFile},
-    driver::{SmtVcCheckResult, SourceUnitName},
+    ast::{DeclKind, Diagnostic, FileId, Files, StoredFile},
+    driver::{Item, SmtVcCheckResult, SourceUnit, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
     VerifyCommand, VerifyError,
@@ -55,8 +58,14 @@ impl Server for TestServer {
         Ok(())
     }
 
-    fn register_source_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError> {
-        self.statuses.update_status(name, VerifyStatus::Todo);
+    fn register_source_unit(
+        &mut self,
+        source_unit: &mut Item<SourceUnit>,
+    ) -> Result<(), VerifyError> {
+        let name = source_unit.name().clone();
+        if let SourceUnit::Decl(DeclKind::ProcDecl(_)) = source_unit.enter().deref() {
+            self.statuses.update_status(&name, VerifyStatus::Todo);
+        }
         Ok(())
     }
 

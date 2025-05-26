@@ -7,7 +7,7 @@ use std::{
     collections::HashMap,
     ffi::OsString,
     io,
-    ops::{Deref, DerefMut},
+    ops::DerefMut,
     path::PathBuf,
     process::ExitCode,
     sync::{Arc, Mutex},
@@ -23,7 +23,7 @@ use crate::{
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
 };
-use ast::{visit::VisitorMut, DeclKind, Diagnostic, FileId};
+use ast::{visit::VisitorMut, Diagnostic, FileId};
 use clap::{crate_description, Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
@@ -722,8 +722,8 @@ pub fn apply_encodings(
         .map_err(|ann_err| ann_err.diagnostic())?;
     }
 
-    for source_unit in &new_source_units {
-        server.register_source_unit(source_unit.name())?;
+    for source_unit in &mut new_source_units {
+        server.register_source_unit(source_unit)?;
     }
 
     source_units.extend(new_source_units);
@@ -821,12 +821,7 @@ fn verify_files_main(
 
     // Register all relevant source units with the server
     for source_unit in &mut source_units {
-        let name = source_unit.name().clone();
-        if let SourceUnit::Decl(DeclKind::ProcDecl(_)) = source_unit.enter().deref() {
-            // If the source unit is a proc declaration, register it with the server
-            // so that it can be used in the LSP server.
-            server.register_source_unit(&name)?;
-        }
+        server.register_source_unit(source_unit)?;
     }
 
     // explain high-level HeyVL if requested
