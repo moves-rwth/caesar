@@ -2717,6 +2717,7 @@ dependencies = [
  "itertools 0.14.0",
  "num",
  "once_cell",
+ "proptest",
  "ref-cast",
  "tempfile",
  "thiserror 1.0.69",

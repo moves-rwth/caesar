@@ -5,47 +5,20 @@
 //! everywhere. However, the [`datatype`] representation can be enabled with the
 //! `datatype-eureal` feature.
 
-use std::{
-    borrow::Cow,
-    fmt::{Display, Formatter},
-};
-
-use num::BigRational;
 use z3::Context;
 
-use crate::{util::PrettyRational, Factory, SmtBranch};
+use crate::{Factory, SmtBranch};
 
+mod concrete;
 pub mod datatype;
 pub mod pair;
+pub use concrete::ConcreteEUReal;
 
 #[cfg(not(feature = "datatype-eureal"))]
 pub type EUReal<'ctx> = pair::EUReal<'ctx>;
 
 #[cfg(feature = "datatype-eureal")]
 pub type EUReal<'ctx> = datatype::EUReal<'ctx>;
-
-/// A concrete extended unsigned real. If it's finite, then it's represented as
-/// a [`BigRational`]. Thus, this representation cannot represent all reals, but
-/// only the rationals.
-///
-/// These values can be created using [`EUReal`]s implementation of the
-/// [`crate::model::SmtEval`] trait.
-#[derive(Debug)]
-pub enum ConcreteEUReal {
-    Infinity,
-    Real(BigRational),
-}
-
-impl Display for ConcreteEUReal {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConcreteEUReal::Infinity => f.write_str("∞"),
-            ConcreteEUReal::Real(rational) => {
-                write!(f, "{}", PrettyRational(Cow::Borrowed(rational)))
-            }
-        }
-    }
-}
 
 /// This is just a factory that supports both EUReal types and supports
 /// retrieval of the factory for the default [`EUReal`] type.

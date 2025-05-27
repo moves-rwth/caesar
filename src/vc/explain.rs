@@ -14,7 +14,7 @@ use crate::{
         Expr, ExprBuilder, Files, Ident, ProcDecl, Span, Spanned, Stmt, StmtKind, Symbol, TyKind,
     },
     intrinsic::annotations::AnnotationKind,
-    opt::unfolder::Unfolder,
+    opt::{constfold::ConstFold, unfolder::Unfolder},
     pretty::SimplePretty,
     proof_rules::{
         self, encode_unroll, hey_const, negations::DirectionTracker, EncodingEnvironment,
@@ -160,11 +160,17 @@ pub(super) fn explain_subst(
         apply_subst(vcgen.tcx, expr, &vcgen.limits_ref)?;
         explanation.add_expr(span, expr.clone(), false);
 
-        // finally, run the unfolder for more detailed simplifications
+        // almost done!
+        // - run the unfolder for SMT-based simplifications
         let ctx = Context::new(&Config::default());
         let smt_ctx = SmtCtx::new(&ctx, vcgen.tcx);
         let mut unfolder = Unfolder::new(vcgen.limits_ref.clone(), &smt_ctx);
-        let _ = unfolder.visit_expr(expr);
+        let _ = unfolder.visit_expr(expr); // ignore potential errors
+
+        // - run our const folder for further simplifications
+        let mut constfold = ConstFold;
+        let _ = constfold.visit_expr(expr); // ignore potential errors
+
         // the last value will be added to the explanations automatically in vcgen_stmt
     }
     Ok(())

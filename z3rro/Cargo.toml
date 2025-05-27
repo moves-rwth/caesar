@@ -19,3 +19,6 @@ itertools = "0.14.0"
 [features]
 datatype-eureal = []
 datatype-eureal-funcs = ["datatype-eureal"]
+
+[dev-dependencies]
+proptest = "1.6.0"
