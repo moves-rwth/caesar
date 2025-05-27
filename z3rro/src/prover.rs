@@ -6,7 +6,6 @@ use std::{
     collections::VecDeque,
     fmt::Display,
     io::{self, Write},
-    path::Path,
     process::Command,
     time::Duration,
 };
@@ -48,8 +47,41 @@ pub enum ProveResult {
     Unknown(ReasonUnknown),
 }
 
+/// The result from solver.
+#[derive(Debug, Clone)]
+pub enum SolverResult {
+    Unsat,
+    Sat(Option<String>),
+    Unknown(Option<ReasonUnknown>),
+}
+
+impl SolverResult {
+    fn to_sat_result(&self) -> SatResult {
+        match self {
+            SolverResult::Unsat => SatResult::Unsat,
+            SolverResult::Sat(_) => SatResult::Sat,
+            SolverResult::Unknown(_) => SatResult::Unknown,
+        }
+    }
+}
+
 /// Execute swine on the file located at file_path
-fn execute_swine(file_path: &Path) -> Result<(SatResult, String), ProverCommandError> {
+fn execute_swine(
+    prover: &mut Prover<'_>,
+    assumptions: &[Bool<'_>],
+) -> Result<SolverResult, ProverCommandError> {
+    let mut smtlib = prover.get_smtlib();
+    if assumptions.is_empty() {
+        smtlib.add_check_sat();
+    } else {
+        smtlib.add_check_sat_assuming(assumptions.iter().map(|a| a.to_string()).collect());
+    };
+    let smtlib = smtlib.into_string();
+    let mut smt_file: NamedTempFile = NamedTempFile::new().unwrap();
+    smt_file
+        .write_all(remove_lines_for_swine(&smtlib).as_bytes())
+        .unwrap();
+    let file_path = smt_file.path();
     let output = Command::new("swine").arg(file_path).output();
 
     match output {
@@ -60,15 +92,17 @@ fn execute_swine(file_path: &Path) -> Result<(SatResult, String), ProverCommandE
                 .pop_front()
                 .ok_or(ProverCommandError::ParseError)?;
             if first_line.trim().to_lowercase() == "unsat" {
-                Ok((SatResult::Unsat, "".to_string()))
+                Ok(SolverResult::Unsat)
             } else if first_line.trim().to_lowercase() == "sat" {
                 lines_buffer
                     .pop_back()
                     .ok_or(ProverCommandError::ParseError)?;
                 let cex = lines_buffer.iter().join("");
-                Ok((SatResult::Sat, cex))
+                Ok(SolverResult::Sat(Some(cex)))
             } else if first_line.trim().to_lowercase() == "unknown" {
-                Ok((SatResult::Unknown, lines_buffer.iter().join("\n")))
+                Ok(SolverResult::Unknown(Some(ReasonUnknown::Other(
+                    lines_buffer.iter().join("\n"),
+                ))))
             } else {
                 lines_buffer.push_front(first_line);
                 Err(ProverCommandError::UnexpectedResultError(
@@ -141,7 +175,7 @@ enum StackSolver<'ctx> {
 }
 
 #[derive(Debug)]
-struct LastSatResult {
+struct LastSatSolverResult {
     /// Whether the current model is consistent with the assertions. If the SMT
     /// solver returned [`SatResult::Unknown`], it is
     /// [`ModelConsistency::Unknown`].
@@ -150,7 +184,7 @@ struct LastSatResult {
     /// It is reset any time the assertions on the solver are modified.
     /// Sometimes Z3 caches on its own, but it is not reliable. Therefore, we do
     /// it here as well to be sure.
-    last_result: SatResult,
+    last_result: SolverResult,
 }
 
 /// A prover wraps a SAT solver, but it's used to prove validity of formulas.
@@ -177,7 +211,7 @@ pub struct Prover<'ctx> {
     /// SMT solver type
     smt_solver: SolverType,
     /// Cached information about the last SAT/proof check call.
-    last_result: Option<LastSatResult>,
+    last_result: Option<LastSatSolverResult>,
 }
 
 impl<'ctx> Prover<'ctx> {
@@ -264,45 +298,29 @@ impl<'ctx> Prover<'ctx> {
 
         match self.smt_solver {
             SolverType::SWINE => {
-                let mut smtlib = self.get_smtlib();
-                if assumptions.is_empty() {
-                    smtlib.add_check_sat();
-                } else {
-                    smtlib.add_check_sat_assuming(
-                        assumptions.iter().map(|a| a.to_string()).collect(),
-                    );
-                };
-                let smtlib = smtlib.into_string();
-                let mut smt_file: NamedTempFile = NamedTempFile::new().unwrap();
-                smt_file
-                    .write_all(remove_lines_for_swine(&smtlib).as_bytes())
-                    .unwrap();
-                let file_path = smt_file.path();
+                let res = execute_swine(self, assumptions)?;
 
-                let res = execute_swine(file_path);
                 match res {
-                    Ok((SatResult::Unsat, _)) => Ok(ProveResult::Proof),
-                    Ok((SatResult::Unknown, reason)) => {
-                        Ok(ProveResult::Unknown(ReasonUnknown::Other(reason)))
+                    SolverResult::Unsat => Ok(ProveResult::Proof),
+                    SolverResult::Unknown(r) => {
+                        let reason = r.unwrap_or(ReasonUnknown::Other("".to_string()));
+                        Ok(ProveResult::Unknown(reason))
                     }
-                    Ok((SatResult::Sat, cex)) => {
-                        match &self.solver {
-                            StackSolver::Native(solver) => {
-                                solver.from_string(cex);
-                            }
-                            StackSolver::Emulated(solver, _) => {
-                                solver.from_string(cex);
-                            }
+                    SolverResult::Sat(c) => {
+                        if let Some(cex) = c {
+                            let solver = self.get_solver();
+                            solver.from_string(cex);
                         }
-                        panic!("");
-                        //Ok(ProveResult::Counterexample)
+                        Ok(ProveResult::Counterexample)
                     }
-                    Err(err) => Err(err),
                 }
             }
+
             SolverType::Z3 => {
                 let res = match &self.last_result {
-                    Some(cached_result) if assumptions.is_empty() => cached_result.last_result,
+                    Some(cached_result) if assumptions.is_empty() => {
+                        cached_result.last_result.clone()
+                    }
                     _ => {
                         let solver = self.get_solver();
                         let res = if assumptions.is_empty() {
@@ -310,17 +328,23 @@ impl<'ctx> Prover<'ctx> {
                         } else {
                             solver.check_assumptions(assumptions)
                         };
-                        self.cache_result(res);
-                        res
+
+                        let solver_result = match res {
+                            SatResult::Unsat => SolverResult::Unsat,
+                            SatResult::Unknown => SolverResult::Unknown(None),
+                            SatResult::Sat => SolverResult::Sat(None),
+                        };
+                        self.cache_result(solver_result.clone());
+                        solver_result
                     }
                 };
 
                 match res {
-                    SatResult::Unsat => Ok(ProveResult::Proof),
-                    SatResult::Unknown => {
+                    SolverResult::Unsat => Ok(ProveResult::Proof),
+                    SolverResult::Unknown(_) => {
                         Ok(ProveResult::Unknown(self.get_reason_unknown().unwrap()))
                     }
-                    SatResult::Sat => Ok(ProveResult::Counterexample),
+                    SolverResult::Sat(_) => Ok(ProveResult::Counterexample),
                 }
             }
         }
@@ -337,23 +361,31 @@ impl<'ctx> Prover<'ctx> {
     /// Do the regular SAT check.
     pub fn check_sat(&mut self) -> SatResult {
         if let Some(cached_result) = &self.last_result {
-            return cached_result.last_result;
+            return cached_result.last_result.to_sat_result();
         }
-        let res = self.get_solver().check();
-        self.cache_result(res);
-        res
+
+        let sat_result = self.get_solver().check();
+
+        let solver_result = match sat_result {
+            SatResult::Unsat => SolverResult::Unsat,
+            SatResult::Unknown => SolverResult::Unknown(None),
+            SatResult::Sat => SolverResult::Sat(None),
+        };
+        self.cache_result(solver_result);
+
+        sat_result
     }
 
     /// Save the result of the last SAT/proof check.
-    fn cache_result(&mut self, sat_result: SatResult) {
-        let model_consistency = match sat_result {
-            SatResult::Sat => Some(ModelConsistency::Consistent),
-            SatResult::Unknown => Some(ModelConsistency::Unknown),
-            SatResult::Unsat => None,
+    fn cache_result(&mut self, solver_result: SolverResult) {
+        let model_consistency = match solver_result {
+            SolverResult::Sat(_) => Some(ModelConsistency::Consistent),
+            SolverResult::Unknown(_) => Some(ModelConsistency::Unknown),
+            SolverResult::Unsat => None,
         };
-        self.last_result = Some(LastSatResult {
+        self.last_result = Some(LastSatSolverResult {
             model_consistency,
-            last_result: sat_result,
+            last_result: solver_result,
         });
     }
 
