@@ -47,7 +47,7 @@ impl VisitorMut for ConstFold {
                                     | TyKind::Int
                                     | TyKind::Real
                             ) {
-                                *e = builder.one_lit(ty);
+                                *e = builder.zero_lit(ty);
                             }
                         } else if is_one_lit(lhs) {
                             *e = rhs.clone();
@@ -120,49 +120,65 @@ impl VisitorMut for ConstFold {
             _ => {}
         }
 
-        if let ExprKind::Binary(op, ref lhs, ref rhs) = e.kind {
-            if let Some(const_expr) = const_binop(builder, ty, op.node, lhs, rhs) {
-                *e = const_expr;
+        match &e.kind {
+            ExprKind::Binary(op, ref lhs, ref rhs) => {
+                if let Some(const_expr) = const_binop(builder, ty, op.node, lhs, rhs) {
+                    *e = const_expr;
+                }
             }
+            ExprKind::Ite(_cond, ref lhs, ref rhs) => {
+                if let (ExprKind::Lit(lhs_lit), ExprKind::Lit(rhs_lit)) =
+                    (&deref_cast(lhs).kind, &deref_cast(rhs).kind)
+                {
+                    if lhs_lit.node == rhs_lit.node {
+                        *e = lhs.clone();
+                    }
+                }
+            }
+            _ => (),
         }
 
         Ok(())
     }
 }
 
-fn is_zero_lit(e: &Expr) -> bool {
+fn deref_cast(e: &Expr) -> &Expr {
     match &e.kind {
+        ExprKind::Cast(inner) => deref_cast(inner),
+        _ => e,
+    }
+}
+
+fn is_zero_lit(e: &Expr) -> bool {
+    match &deref_cast(e).kind {
         ExprKind::Lit(lit) => match &lit.node {
             LitKind::UInt(v) => *v == 0,
             LitKind::Frac(ratio) => Zero::is_zero(ratio),
             _ => false,
         },
-        ExprKind::Cast(inner) => is_zero_lit(inner),
         _ => false,
     }
 }
 
 fn is_one_lit(e: &Expr) -> bool {
-    match &e.kind {
+    match &deref_cast(e).kind {
         ExprKind::Lit(lit) => match &lit.node {
             LitKind::UInt(v) => *v == 1,
             LitKind::Frac(ratio) => One::is_one(ratio),
             _ => false,
         },
-        ExprKind::Cast(inner) => is_one_lit(inner),
         _ => false,
     }
 }
 
 fn extract_const_number(e: &Expr) -> Option<ConcreteEUReal> {
-    match &e.kind {
+    match &deref_cast(e).kind {
         ExprKind::Lit(lit) => match &lit.node {
             LitKind::UInt(v) => Some(ConcreteEUReal::Real(BigRational::from_u128(*v).unwrap())),
             LitKind::Frac(ratio) => Some(ConcreteEUReal::Real(ratio.clone())),
             LitKind::Infinity => Some(ConcreteEUReal::Infinity),
             _ => None,
         },
-        ExprKind::Cast(inner) => extract_const_number(inner),
         _ => None,
     }
 }
