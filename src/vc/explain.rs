@@ -179,7 +179,7 @@ pub(super) fn explain_subst(
 pub(super) fn explain_annotated_while(
     vcgen: &mut Vcgen,
     stmt: &Stmt,
-    _post: &Expr,
+    post: &Expr,
 ) -> Result<Expr, VerifyError> {
     if let StmtKind::Annotation(anno_span, ident, args, inner_stmt) = &stmt.node {
         if let StmtKind::While(_, body) = &inner_stmt.node {
@@ -199,7 +199,7 @@ pub(super) fn explain_annotated_while(
                     .downcast_ref::<UnrollAnnotation>()
                     .is_some()
                 {
-                    return explain_unroll(vcgen, inner_stmt, args, stmt.span, *anno_span);
+                    return explain_unroll(vcgen, inner_stmt, args, stmt.span, *anno_span, post);
                 }
             }
         }
@@ -255,6 +255,7 @@ fn explain_unroll(
     args: &[Expr],
     stmt_span: Span,
     call_span: Span,
+    post: &Expr,
 ) -> Result<Expr, VerifyError> {
     let k = proof_rules::lit_u128(&args[0]);
     let terminator = &args[1];
@@ -289,7 +290,7 @@ fn explain_unroll(
 
     // generate pre-vc of unrolled loop with temporary vcgen
     let mut temp_vcgen = Vcgen::new(vcgen.tcx, &vcgen.limits_ref, None);
-    let mut return_expr = temp_vcgen.vcgen_block(&unrolled_block, terminator.clone())?;
+    let mut return_expr = temp_vcgen.vcgen_block(&unrolled_block, post.clone())?;
 
     // apply substitutions and simplify the pre-vc of the unrolled loop, add it
     // to our explanations in `vcgen`.
