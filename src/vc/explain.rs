@@ -260,19 +260,6 @@ fn explain_unroll(
     let k = proof_rules::lit_u128(&args[0]);
     let terminator = &args[1];
     let direction = *vcgen.explanation.as_ref().unwrap().direction;
-
-    // 1. generate the explanations for the loop body in the initial iteration
-    if let StmtKind::While(_d, body) = &loop_stmt.node {
-        // we do not use the pre-vc of the initial iteration, but the generated
-        // explanations are stored in `vcgen`.
-        let _inner_pre = vcgen.vcgen_block(body, terminator.clone());
-    } else {
-        unreachable!();
-    }
-
-    // 2. compute the pre-vc of of unrolling
-
-    // unroll the loop
     let enc_env = EncodingEnvironment {
         // this name is not used during unrolling, so we use a dummy
         base_proc_ident: Ident::with_dummy_span(Symbol::intern("unroll_env")),
@@ -280,23 +267,54 @@ fn explain_unroll(
         call_span,
         direction,
     };
-    let unrolled_stmts = encode_unroll(
-        &enc_env,
-        loop_stmt,
-        k,
-        hey_const(&enc_env, terminator, direction, vcgen.tcx),
-    );
-    let unrolled_block = Spanned::new(enc_env.stmt_span, unrolled_stmts);
 
-    // generate pre-vc of unrolled loop with temporary vcgen
-    let mut temp_vcgen = Vcgen::new(vcgen.tcx, &vcgen.limits_ref, None);
-    let mut return_expr = temp_vcgen.vcgen_block(&unrolled_block, post.clone())?;
+    // 1. generate the explanations for the loop body in k-1 iterations
+    if k > 0 {
+        let prev_iter_expr = vcgen_unroll(vcgen, loop_stmt, &enc_env, post, k - 1, terminator)?;
+
+        if let StmtKind::While(_d, body) = &loop_stmt.node {
+            // we do not use the pre-vc of the initial iteration, but the generated
+            // explanations are stored in `vcgen`.
+            let _inner_pre = vcgen.vcgen_block(body, prev_iter_expr);
+        } else {
+            unreachable!();
+        }
+    }
+
+    // 2. compute the pre-vc of of unrolling
+
+    // unroll the loop
+    let temp_vcgen = Vcgen::new(vcgen.tcx, &vcgen.limits_ref, None);
+    let mut return_expr = vcgen_unroll(&temp_vcgen, loop_stmt, &enc_env, post, k, terminator)?;
 
     // apply substitutions and simplify the pre-vc of the unrolled loop, add it
     // to our explanations in `vcgen`.
     explain_subst(vcgen, stmt_span, &mut return_expr)?;
 
     Ok(return_expr)
+}
+
+/// Generate the verification conditions for unrolling of depth `k`.
+///
+/// This is used for the explanations inside the loop body (with `k-1`) and for
+/// the pre of the unrolled loop (with `k`).
+fn vcgen_unroll(
+    vcgen: &Vcgen<'_>,
+    loop_stmt: &Stmt,
+    enc_env: &EncodingEnvironment,
+    post: &Expr,
+    k: u128,
+    terminator: &Expr,
+) -> Result<Expr, VerifyError> {
+    let mut temp_vcgen = Vcgen::new(vcgen.tcx, &vcgen.limits_ref, None);
+    let unrolled_stmts = encode_unroll(
+        enc_env,
+        loop_stmt,
+        k,
+        hey_const(enc_env, terminator, enc_env.direction, vcgen.tcx),
+    );
+    let unrolled_block = Spanned::new(enc_env.stmt_span, unrolled_stmts);
+    temp_vcgen.vcgen_block(&unrolled_block, post.clone())
 }
 
 /// To explain a proc call, we just return the pre with the parameters
