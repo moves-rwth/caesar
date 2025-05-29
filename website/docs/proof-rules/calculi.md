@@ -37,7 +37,7 @@ See the section [What Is *Not* Checked](#what-is-not-checked) for more informati
 
 Simply add the respective annotation to your `proc` or `coproc`.
 
-For example, the following `proc` declaration will not compile because [induction](./induction.md) is not a sound proof rule to be used with `wp` reasoning about lower bounds.
+For example, the following `proc` declaration will **not compile** because [induction](./induction.md) is not a sound proof rule to be used with `wp` reasoning about lower bounds.
 A valid proof rule would be [ω-invariants](./omega-invariants.md).
 
 ```heyvl
