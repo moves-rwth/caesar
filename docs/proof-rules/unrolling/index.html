@@ -16,7 +16,7 @@
 <link rel="search" type="application/opensearchdescription+xml" title="Caesar" href="/opensearch.xml">
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.13.24/dist/katex.min.css" integrity="sha384-odtC+0UGzzFL/6PNoE8rX/SPcQDXBJ+uRepguP4QkPCm2LBxH3FA3y+fKSiJ+AmM" crossorigin="anonymous"><link rel="stylesheet" href="/assets/css/styles.194e9fbb.css">
-<script src="/assets/js/runtime~main.479d26a2.js" defer="defer"></script>
+<script src="/assets/js/runtime~main.55b79366.js" defer="defer"></script>
 <script src="/assets/js/main.4e03cc2f.js" defer="defer"></script>
 </head>
 <body class="navigation-with-keyboard">
@@ -32,6 +32,9 @@ For example, it <em>under-approximates</em> least fixed-point semantics (<code>w
 <li><a href="#bounded-model-checking"><strong>Refutation</strong></a>: Refuting specifications of loops. This is often called <em>bounded model checking</em>.</li>
 </ol>
 <p>Read the <a href="#soundness"><em>Soundness</em> section</a> for details on the soundness of the proof rule.</p>
+<div class="theme-admonition theme-admonition-note admonition_xJq3 alert alert--secondary"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 14 16"><path fill-rule="evenodd" d="M6.3 5.69a.942.942 0 0 1-.28-.7c0-.28.09-.52.28-.7.19-.18.42-.28.7-.28.28 0 .52.09.7.28.18.19.28.42.28.7 0 .28-.09.52-.28.7a1 1 0 0 1-.7.3c-.28 0-.52-.11-.7-.3zM8 7.99c-.02-.25-.11-.48-.31-.69-.2-.19-.42-.3-.69-.31H6c-.27.02-.48.13-.69.31-.2.2-.3.44-.31.69h1v3c.02.27.11.5.31.69.2.2.42.31.69.31h1c.27 0 .48-.11.69-.31.2-.19.3-.42.31-.69H8V7.98v.01zM7 2.3c-3.14 0-5.7 2.54-5.7 5.68 0 3.14 2.56 5.7 5.7 5.7s5.7-2.55 5.7-5.7c0-3.15-2.56-5.69-5.7-5.69v.01zM7 .98c3.86 0 7 3.14 7 7s-3.14 7-7 7-7-3.12-7-7 3.14-7 7-7z"></path></svg></span>Relation to Probabilistic Model Checking (Bounded)</div><div class="admonitionContent_BuS1"><p><a href="/docs/model-checking">Caesar supports using <em>probabilistic model checking</em></a> to compute and verify expected values of probabilistic programs.
+For probabilistic model checking, one would bound the <em>number of explored states</em> as opposed to the <em>number of loop iterations</em> like is done here.
+Both techniques are related, but <a href="/docs/model-checking#relation-to-caesars-unrolling-proof-rule">we explain the difference between applying the two techniques in more detail here</a>.</p></div></div>
 <h2 class="anchor anchorWithStickyNavbar_LWe7" id="usage">Usage<a href="#usage" class="hash-link" aria-label="Direct link to Usage" title="Direct link to Usage">​</a></h2>
 <p>A <code>while</code> loop is annotated by the <code>@unroll(k, terminator)</code> annotation where <code>k</code> is a number literal and <code>terminator</code> is an expression of type <code>EUReal</code>.</p>
 <p>The <code>terminator</code> expression must correspond to the initial value of the fixed-point iteration semantics of the loop.
