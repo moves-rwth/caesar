@@ -20,6 +20,14 @@ There are three main applications of loop unrolling:
 
 Read the [*Soundness* section](#soundness) for details on the soundness of the proof rule.
 
+:::note Relation to Probabilistic Model Checking (Bounded)
+
+[Caesar supports using *probabilistic model checking*](../model-checking.md) to compute and verify expected values of probabilistic programs.
+For probabilistic model checking, one would bound the *number of explored states* as opposed to the *number of loop iterations* like is done here.
+Both techniques are related, but [we explain the difference between applying the two techniques in more detail here](../model-checking.md#relation-to-caesars-unrolling-proof-rule).
+
+:::
+
 ## Usage
 
 A `while` loop is annotated by the `@unroll(k, terminator)` annotation where `k` is a number literal and `terminator` is an expression of type `EUReal`.
