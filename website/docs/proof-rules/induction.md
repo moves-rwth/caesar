@@ -54,7 +54,7 @@ $$
 $$
 
 See the [section on soundness](#soundness) below for more information when it is sound to use induction.
-The [section on semantics](#semantics) below explains the precise encoding and behavior also when the invariant is not inductive.
+The [section on internal details](#internal-details) below explains the precise encoding and behavior also when the invariant is not inductive.
 
 ### Using k-Induction
 
@@ -78,7 +78,7 @@ This program will not verify if `k` is set to `1` because the invariant `c + 1` 
 
 Just like induction, the `@k_induction` annotation will result in a HeyVL encoding of the loop that checks whether the invariant is inductive.
 Again, Caesar will encode the *super-invariant* version for upper bounds in a `coproc` and the *sub-invariant* version for lower bounds in a `proc`.
-Check the [soundness section](#soundness) and the [semantics section](#semantics) below for more details.
+Check the [soundness section](#soundness) and the [details section](#internal-details) below for more details.
 
 We recommend reading the [*Latticed k-induction* paper](https://link.springer.com/chapter/10.1007/978-3-030-81688-9_25) for more details on the principle of k-induction applied to the verification of probabilistic programs.
 
@@ -105,17 +105,21 @@ Stated in terms of fixed points:
 
 The same statements hold for _k-induction_ (`@k_induction(k, I)`).
 
-## Semantics
+## Internal Details
+
+The following section describes the internal details of the encoding of the `@invariant` and `@k_induction` proof rules in Caesar.
+We describe the [encoding](#heyvl-encoding) of the proof rules in HeyVL, the [verification pre-expectation semantics](#verification-pre-expectation-semantics) of the encoding, and a more detailed proof of [soundness](#soundness-of-the-encoding) of the encoding.
 
 :::note
 
-More formal details on the HeyVL encodings and the (simplified) semantics of the above proof rules are provided in the [extended version of our OOPSLA '23 paper](https://arxiv.org/abs/2309.07781), both in the main text and in Appendix C.
+More polished formal details on the HeyVL encodings and the (simplified) semantics of the above proof rules are provided in the [extended version of our OOPSLA '23 paper](https://arxiv.org/abs/2309.07781), both in the main text and in Appendix C.
 
 :::
 
-Let `@invariant(I) while G { Body }` be a loop with an invariant candidate `I`.
-We consider the encoding in a `proc` below, i.e. Park induction for lower bounds on greatest fixed-point semantics.
+For most of this section, we focus on the encoding of loops with `@invariant` in a `proc` below, i.e. Park induction for lower bounds on greatest fixed-point semantics.
 The `coproc`/least-fixed point case is dual.
+[k-induction details](#k-induction-encoding-and-interpretation) are similar, and handled at the end of this section.
+Let `@invariant(I) while G { Body }` be a loop with an invariant candidate `I`.
 
 ### HeyVL Encoding
 
@@ -242,7 +246,7 @@ Using the invariant annotation `@invariant(ite(p < 1, ite(cont, 1/(1-p), 0), \in
 </details>
 
 
-### Soundness of the Semantics
+### Soundness of the Encoding
 
 The above semantics guarantees [soundness](#soundness) of the `@invariant` proof rule in `proc`s for all post-expectations $f$ and initial states $\sigma$:
 $$
@@ -259,8 +263,64 @@ However, $0$ is the trivial lower bound on the `wlp`-semantics of a loop, thus s
 The cases are dual for upper bound semantics in `coproc`s: If the invariant $I$ is not inductive, then the trivial *upper bound* $0$ is returned.
 If the invariant is inductive, $I$ is returned as before.
 
-### k-Induction Semantics
+### k-Induction Encoding and Interpretation
 
 The encoding is similar for k-induction (`@k_induction`).
 It also evaluates to `I` if the invariant is *k-inductive* and to $0$ otherwise.
+
 Refer to the [k-induction paper](https://link.springer.com/chapter/10.1007/978-3-030-81688-9_25) for the precise definition and properties of k-inductive invariants.
+
+For *2-induction* for lower bounds, one obtains an encoding of the following form:
+```heyvl
+assert I            // I must hold before the loop
+havoc modified_vars // forget values of all variables modified by the loop
+validate
+assume I            // assume I holds before each iteration
+if G {
+    Body
+    if ⊔ {              // angelic choice
+        assert I        // I must hold after the loop body
+        assume ?(false) // nothing else to establish but I
+    } else {
+        if G {
+            Body
+            assert I        // I must hold after the loop body
+            assume ?(false) // nothing else to establish but I
+        } else {}
+    }
+} else {}
+```
+
+One can go for an intuitive Boolean interpretation of this encoding of 2-induction.
+It is similar to the [interpretation for (1-)induction](#heyvl-encoding), with the relevant difference in step 6 (marked in bold):
+ 1. The `assert I` statement checks that the invariant holds before the loop.
+ 2. The `havoc modified_vars` statement forgets the values of all variables that are modified by the loop body.
+ 3. The `validate` statement ensures that the following inductivity check is "classically" valid.
+ 4. The `assume I` statement checks that the invariant holds before each loop iteration.
+ 5. The `if G { Body ... } else {}` statement executes the loop body if the guard `G` holds.
+ 6. **The `if ⊔ { ... } else { ... }` allows choosing *angelically* whether to run the loop functional once or twice.**
+ 7. The `assert I` statements check that the invariant holds after each branch of the loop body.
+ 8. The `assume ?(false)` statements say that there is nothing else to establish after the loop body, i.e., the invariant is the only thing we care about.
+
+Choosing higher values of `k` in the `@k_induction(k, I)` annotation will result in a similar encoding with nested angelic choices, *allowing to run the loop body up to $k$ times* to establish the invariant again.
+
+Note that the angelic choices `if ⊔ { ... } else { ... }` can also be rewritten via `coassert` statements.
+For the encoding of the loop iteration:
+```heyvl
+... // omitted
+if G {
+    Body
+    coassert I // may stop here and establish I
+    if G {
+        Body
+        assert I        // I must hold after the loop body
+        assume ?(false) // nothing else to establish but I
+    } else {}
+}
+```
+
+The above explanation follows the version of $k$-induction for lower bounds on greatest fixed-point semantics.
+However, in the literature, $k$-induction is often defined for upper bounds on least fixed-point semantics.[^literature-kind-upper-bounds]
+Then, the explanation is dual, and the encoding is similar, but essentially just with the angelic choices `if ⊔ { ... } else { ... }` replaced by demonic choices `if ⊓ { ... } else { ... }`.
+
+[^literature-kind-upper-bounds]: For example, the [Latticed k-induction paper](https://link.springer.com/chapter/10.1007/978-3-030-81688-9_25) defines and interprets latticed $k$-induction only for upper bounds on least fixed-point semantics.
