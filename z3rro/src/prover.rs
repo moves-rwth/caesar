@@ -47,7 +47,14 @@ pub enum ProveResult {
     Unknown(ReasonUnknown),
 }
 
-/// The result from solver.
+/// If z3 is used as the SMT solver, it is not necessary to store 
+/// a counterexample (for Sat) or reason (for Unknown), since the 
+/// Z3 solver already retains this information internallz. 
+/// In this case, it is only used to store the SAT result.
+/// 
+/// For SwInE, this can be used either to
+/// 1) transport the result from SwInE, or
+/// 2) store SAT result alonq with a reason for Unknown.
 #[derive(Debug, Clone)]
 pub enum SolverResult {
     Unsat,
@@ -298,7 +305,22 @@ impl<'ctx> Prover<'ctx> {
 
         match self.smt_solver {
             SolverType::SWINE => {
-                let res = execute_swine(self, assumptions)?;
+                let res = match &self.last_result {
+                    Some(cached_result) if assumptions.is_empty() => {
+                        cached_result.last_result.clone()
+                    }
+                    _ => {
+                        let solver_result = execute_swine(self, assumptions)?;
+
+                        if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
+                            let solver = self.get_solver();
+                            solver.from_string(cex);
+                        };
+
+                        self.cache_result(solver_result.clone());
+                        solver_result
+                    }
+                };
 
                 match res {
                     SolverResult::Unsat => Ok(ProveResult::Proof),
@@ -306,16 +328,9 @@ impl<'ctx> Prover<'ctx> {
                         let reason = r.unwrap_or(ReasonUnknown::Other("".to_string()));
                         Ok(ProveResult::Unknown(reason))
                     }
-                    SolverResult::Sat(c) => {
-                        if let Some(cex) = c {
-                            let solver = self.get_solver();
-                            solver.from_string(cex);
-                        }
-                        Ok(ProveResult::Counterexample)
-                    }
+                    SolverResult::Sat(_) => Ok(ProveResult::Counterexample),
                 }
             }
-
             SolverType::Z3 => {
                 let res = match &self.last_result {
                     Some(cached_result) if assumptions.is_empty() => {
