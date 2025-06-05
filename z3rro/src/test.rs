@@ -22,7 +22,7 @@ pub fn test_prove(f: impl for<'ctx> FnOnce(&'ctx Context, &mut SmtScope<'ctx>) -
     scope.add_assumptions_to_prover(&mut prover);
     assert_eq!(
         prover.check_sat(),
-        SatResult::Sat,
+        Ok(SatResult::Sat),
         "SmtScope is inconsistent"
     );
 

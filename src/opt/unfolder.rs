@@ -98,7 +98,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
             // here we want to do a SAT check and not a proof search. if the
             // expression is e.g. `false`, then we want to get `Unsat` from the
             // solver and not `Proof`!
-            if this.prover.check_sat() == SatResult::Unsat {
+            if this.prover.check_sat() == Ok(SatResult::Unsat) {
                 tracing::trace!(solver=?this.prover, "eliminated zero expr");
                 None
             } else {

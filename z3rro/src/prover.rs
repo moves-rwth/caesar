@@ -2,13 +2,7 @@
 use itertools::Itertools;
 use thiserror::Error;
 
-use std::{
-    collections::VecDeque,
-    fmt::Display,
-    io::{self, Write},
-    process::Command,
-    time::Duration,
-};
+use std::{collections::VecDeque, fmt::Display, io::Write, process::Command, time::Duration};
 
 use tempfile::NamedTempFile;
 
@@ -23,10 +17,10 @@ use crate::{
     util::{set_solver_timeout, ReasonUnknown},
 };
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum ProverCommandError {
     #[error("Process execution failed: {0}")]
-    ProcessError(#[from] io::Error),
+    ProcessError(String),
     #[error("Parse error")]
     ParseError,
     #[error("Unexpected result from prover: {0}")]
@@ -54,7 +48,7 @@ pub enum ProveResult {
 /// 
 /// For SwInE, this can be used either to
 /// 1) transport the result from SwInE, or
-/// 2) store SAT result alonq with a reason for Unknown.
+/// 2) store SAT result along with a reason for Unknown.
 #[derive(Debug, Clone)]
 pub enum SolverResult {
     Unsat,
@@ -94,6 +88,7 @@ fn execute_swine(
     match output {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
+            println!("{:}", stdout);
             let mut lines_buffer: VecDeque<&str> = stdout.lines().collect();
             let first_line = lines_buffer
                 .pop_front()
@@ -117,7 +112,7 @@ fn execute_swine(
                 ))
             }
         }
-        Err(e) => Err(ProverCommandError::ProcessError(e)),
+        Err(e) => Err(ProverCommandError::ProcessError(e.to_string())),
     }
 }
 
@@ -310,6 +305,7 @@ impl<'ctx> Prover<'ctx> {
                         cached_result.last_result.clone()
                     }
                     _ => {
+                        println!("check_proof_assuming");
                         let solver_result = execute_swine(self, assumptions)?;
 
                         if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
@@ -374,21 +370,40 @@ impl<'ctx> Prover<'ctx> {
     }
 
     /// Do the regular SAT check.
-    pub fn check_sat(&mut self) -> SatResult {
+    pub fn check_sat(&mut self) -> Result<SatResult, ProverCommandError> {
         if let Some(cached_result) = &self.last_result {
-            return cached_result.last_result.to_sat_result();
+            return Ok(cached_result.last_result.to_sat_result());
         }
 
-        let sat_result = self.get_solver().check();
+        let sat_result = match self.smt_solver {
+            SolverType::Z3 => {
+                let sat_result = self.get_solver().check();
 
-        let solver_result = match sat_result {
-            SatResult::Unsat => SolverResult::Unsat,
-            SatResult::Unknown => SolverResult::Unknown(None),
-            SatResult::Sat => SolverResult::Sat(None),
+                let solver_result = match sat_result {
+                    SatResult::Unsat => SolverResult::Unsat,
+                    SatResult::Unknown => SolverResult::Unknown(None),
+                    SatResult::Sat => SolverResult::Sat(None),
+                };
+                self.cache_result(solver_result);
+
+                sat_result
+            }
+            SolverType::SWINE => {
+                println!("check_sat");
+                let solver_result = execute_swine(self, &[])?;
+
+                if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
+                    let solver = self.get_solver();
+                    solver.from_string(cex);
+                };
+
+                self.cache_result(solver_result.clone());
+
+                solver_result.to_sat_result()
+            }
         };
-        self.cache_result(solver_result);
 
-        sat_result
+        Ok(sat_result)
     }
 
     /// Save the result of the last SAT/proof check.
@@ -534,16 +549,16 @@ mod test {
             let ctx = Context::new(&Config::default());
             let mut prover = Prover::new(&ctx, mode, SolverType::Z3);
             assert!(matches!(prover.check_proof(), Ok(ProveResult::Proof)));
-            assert_eq!(prover.check_sat(), SatResult::Sat);
+            assert_eq!(prover.check_sat(), Ok(SatResult::Sat));
 
             prover.push();
             prover.add_assumption(&Bool::from_bool(&ctx, true));
             assert!(matches!(prover.check_proof(), Ok(ProveResult::Proof)));
-            assert_eq!(prover.check_sat(), SatResult::Sat);
+            assert_eq!(prover.check_sat(), Ok(SatResult::Sat));
             prover.pop();
 
             assert!(matches!(prover.check_proof(), Ok(ProveResult::Proof)));
-            assert_eq!(prover.check_sat(), SatResult::Sat);
+            assert_eq!(prover.check_sat(), Ok(SatResult::Sat));
         }
     }
 }

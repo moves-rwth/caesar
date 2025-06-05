@@ -218,7 +218,11 @@ impl<'ctx> SliceSolver<'ctx> {
             options,
             limits_ref,
         )?;
-        if exists_forall_solver.check_sat() == SatResult::Sat {
+        println!("slice_verifying_exists_forall");
+        let sat_res = exists_forall_solver
+            .check_sat()
+            .map_err(|err| VerifyError::ProverError(err))?;
+        if sat_res == SatResult::Sat {
             let model = exists_forall_solver.get_model().unwrap();
             let slice_model =
                 SliceModel::from_model(SliceMode::Verify, &self.slice_stmts, selection, &model);
@@ -509,7 +513,11 @@ fn slice_sat_binary_search<'ctx>(
         if let Some(timeout) = limits_ref.time_left() {
             prover.set_timeout(timeout);
         }
-        let res = prover.check_sat();
+        println!("slice_sat_binary_search 1");
+
+        let res = prover
+            .check_sat()
+            .map_err(|err| VerifyError::ProverError(err))?;
 
         entered.record("res", tracing::field::debug(res));
 
@@ -574,7 +582,10 @@ fn slice_sat_binary_search<'ctx>(
             if let Some(timeout) = limits_ref.time_left() {
                 prover.set_timeout(timeout);
             }
-            let res = prover.check_sat();
+            println!("slice_sat_binary_search 2");
+            let res = prover
+                .check_sat()
+                .map_err(|err| VerifyError::ProverError(err))?;
             if minimize.min_accept().is_some() {
                 assert!(res == SatResult::Sat || res == SatResult::Unknown);
             } else if minimize.max_reject().is_some() {
