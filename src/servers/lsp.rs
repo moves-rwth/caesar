@@ -354,10 +354,14 @@ impl Server for LspServer {
         source_unit: &mut Item<SourceUnit>,
     ) -> Result<(), VerifyError> {
         let name = source_unit.name().clone();
-        if let SourceUnit::Decl(DeclKind::ProcDecl(_)) = source_unit.enter().deref() {
-            self.statuses.update_status(&name, VerifyStatus::Todo);
-            self.publish_verify_statuses()
-                .map_err(VerifyError::ServerError)?;
+        // only register source units that are procedures
+        if let SourceUnit::Decl(DeclKind::ProcDecl(decl)) = source_unit.enter().deref() {
+            // ... and they must have a body, otherwise they trivially verify
+            if decl.borrow().body.borrow().is_some() {
+                self.statuses.update_status(&name, VerifyStatus::Todo);
+                self.publish_verify_statuses()
+                    .map_err(VerifyError::ServerError)?;
+            }
         }
         Ok(())
     }
