@@ -2,11 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://www.caesarverifier.org/blog</id>
     <title>Caesar Blog</title>
-    <updated>2025-05-23T00:00:00.000Z</updated>
+    <updated>2025-06-10T00:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://www.caesarverifier.org/blog"/>
     <subtitle>Caesar Blog</subtitle>
     <icon>https://www.caesarverifier.org/img/laurel-square.svg</icon>
+    <entry>
+        <title type="html"><![CDATA[Caesar at Summer School for Formal Techniques '25]]></title>
+        <id>https://www.caesarverifier.org/blog/2025/06/10/caesar-at-ssft-25</id>
+        <link href="https://www.caesarverifier.org/blog/2025/06/10/caesar-at-ssft-25"/>
+        <updated>2025-06-10T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[We had the pleasure to present Caesar at the 14th Summer School for Formal Techniques at Menlo College in Menlo Park, California, organized by the SRI Formal Methods Group.]]></summary>
+        <content type="html"><![CDATA[<p>We had the pleasure to present Caesar at the 14th <a href="https://ssft-sri.github.io/" target="_blank" rel="noopener noreferrer">Summer School for Formal Techniques</a> at Menlo College in Menlo Park, California, organized by the <a href="https://www.csl.sri.com/programs/formalmethods/" target="_blank" rel="noopener noreferrer">SRI Formal Methods Group</a>.
+It took place from May 24th to May 30th.</p>
+<p><a href="https://moves.rwth-aachen.de/people/katoen/" target="_blank" rel="noopener noreferrer">Joost-Pieter Katoen</a> gave two lectures on the theoretical foundations of probabilistic programming and their verification, and together we hosted two accompanying lab sessions where students could try out Caesar and HeyVL.</p>
+<p>Here is the lecture abstract:</p>
+<blockquote>
+<p>Probabilistic programs encode randomized algorithms, robot controllers, learning components, security mechanisms, and much more. They are however hard to grasp. Not only by humans, also by computers: checking elementary properties related to e.g., termination are "more undecidable" than for ordinary programs. The analysis of probabilistic programs requires manipulating irrational or even transcendental numbers.</p>
+<p>Although this all sounds like a no-go for (semi-)automated analysis, I will present a deductive verification technique to analyse probabilistic programs. In contrast to simulation (like MCMC), this analysis yields exact results. Our technique is based on weakest precondition reasoning. We will explain the foundations of this approach, present some proof rules to reason about probabilistic while-loops, and discuss how the analysis can be automated — either fully or with the help of invariants.</p>
+</blockquote>
+<p>The <a href="https://www.caesarverifier.org/blog/2025/06/10/caesar-at-ssft-25#materials">material is available online</a>.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="materials">Materials<a href="https://www.caesarverifier.org/blog/2025/06/10/caesar-at-ssft-25#materials" class="hash-link" aria-label="Direct link to Materials" title="Direct link to Materials">​</a></h2>
+<p>The slides and exercise sheets for the lectures and labs are available online:</p>
+<ul>
+<li><a href="https://www.caesarverifier.org/assets/ssft25/SSFT25-lectures.pdf" target="_blank" rel="noopener noreferrer">Lecture Slides: Deductive Verification of Probabilistic Programs</a></li>
+<li><a href="https://www.caesarverifier.org/assets/ssft25/SSFT25-labs.pdf" target="_blank" rel="noopener noreferrer">Exercises for the two lab sessions</a>
+<ul>
+<li>Solutions are available on request (email us at <a href="mailto:phisch@cs.rwth-aachen.de" target="_blank" rel="noopener noreferrer">phisch@cs.rwth-aachen.de</a>).</li>
+</ul>
+</li>
+</ul>
+<p><a href="https://ssft-sri.github.io/materials/zoom.txt" target="_blank" rel="noopener noreferrer">Video recordings are also available online</a>.</p>
+<p>Further recommended materials were:</p>
+<ul>
+<li><a href="https://doi.org/10.1017/9781108770750.007" target="_blank" rel="noopener noreferrer">Foundations of Probabilistic Programming Ch. 6: Expected Runtime Analysis by Program Verification</a></li>
+<li>Annabelle McIver, Carroll Morgan, Benjamin Lucien Kaminski, Joost-Pieter Katoen: <a href="https://doi.org/10.1145/3158121" target="_blank" rel="noopener noreferrer">A new proof rule for almost-sure termination</a>. Proc. ACM Program. Lang. 2(POPL): 33:1-33:28 (2018)</li>
+<li>Joost-Pieter Katoen, Friedrich Gretz, Nils Jansen, Benjamin Lucien Kaminski, Federico Olmedo: <a href="https://doi.org/10.1007/978-3-319-23506-6_4" target="_blank" rel="noopener noreferrer">Understanding Probabilistic Programs</a>. Correct System Design 2015: 15-32</li>
+<li>Joost-Pieter Katoen: <a href="https://www.youtube.com/watch?v=I3sOp_mbs8k" target="_blank" rel="noopener noreferrer">Deductive Verification of Probabilistic Programs: From Theory to Automation</a>. Tutorial at ETAPS 2023.</li>
+</ul>]]></content>
+        <author>
+            <name>Philipp Schroer</name>
+            <uri>https://moves.rwth-aachen.de/people/philipp-schroer/</uri>
+        </author>
+        <category label="talks" term="talks"/>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Caesar 2.2: Timeout Handling, Recursion Checks, Improved Model Checking, and More]]></title>
         <id>https://www.caesarverifier.org/blog/2025/05/23/caesar-2-2</id>
