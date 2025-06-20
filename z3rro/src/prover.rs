@@ -311,6 +311,7 @@ impl<'ctx> Prover<'ctx> {
                         if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
                             let solver = self.get_solver();
                             solver.from_string(cex);
+                            solver.check();
                         };
 
                         self.cache_result(solver_result.clone());
@@ -395,6 +396,7 @@ impl<'ctx> Prover<'ctx> {
                 if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
                     let solver = self.get_solver();
                     solver.from_string(cex);
+                    solver.check();
                 };
 
                 self.cache_result(solver_result.clone());
