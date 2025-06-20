@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use std::{collections::VecDeque, fmt::Display, io::Write, process::Command, time::Duration};
 
-use tempfile::NamedTempFile;
+use tempfile::{Builder, NamedTempFile};
 
 use z3::{
     ast::{forall_const, Ast, Bool, Dynamic},
@@ -27,10 +27,11 @@ pub enum ProverCommandError {
     UnexpectedResultError(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum SolverType {
     Z3,
     SWINE,
+    SMTLIB(String),
 }
 
 /// The result of a prove query.
@@ -41,11 +42,11 @@ pub enum ProveResult {
     Unknown(ReasonUnknown),
 }
 
-/// If z3 is used as the SMT solver, it is not necessary to store 
-/// a counterexample (for Sat) or reason (for Unknown), since the 
-/// Z3 solver already retains this information internallz. 
+/// If z3 is used as the SMT solver, it is not necessary to store
+/// a counterexample (for Sat) or reason (for Unknown), since the
+/// Z3 solver already retains this information internally.
 /// In this case, it is only used to store the SAT result.
-/// 
+///
 /// For SwInE, this can be used either to
 /// 1) transport the result from SwInE, or
 /// 2) store SAT result along with a reason for Unknown.
@@ -66,8 +67,8 @@ impl SolverResult {
     }
 }
 
-/// Execute swine on the file located at file_path
-fn execute_swine(
+/// Execute an SMT solver (other than z3)
+fn execute_solver(
     prover: &mut Prover<'_>,
     assumptions: &[Bool<'_>],
 ) -> Result<SolverResult, ProverCommandError> {
@@ -78,12 +79,30 @@ fn execute_swine(
         smtlib.add_check_sat_assuming(assumptions.iter().map(|a| a.to_string()).collect());
     };
     let smtlib = smtlib.into_string();
-    let mut smt_file: NamedTempFile = NamedTempFile::new().unwrap();
-    smt_file
-        .write_all(remove_lines_for_swine(&smtlib).as_bytes())
-        .unwrap();
-    let file_path = smt_file.path();
-    let output = Command::new("swine").arg(file_path).output();
+
+    let output = match &prover.smt_solver {
+        SolverType::Z3 => {
+            unreachable!("The function 'execute_solver' should never be called for z3");
+        }
+        SolverType::SWINE => {
+            let mut smt_file = NamedTempFile::new().unwrap();
+            smt_file
+                .write_all(remove_lines(&smtlib, SolverType::SWINE).as_bytes())
+                .unwrap();
+
+            let file_path = smt_file.path();
+
+            Command::new("swine").arg(file_path).output()
+        }
+        SolverType::SMTLIB(solver) => {
+            let mut smt_file = Builder::new().suffix(".smt2").tempfile().unwrap();
+            smt_file
+                .write_all(remove_lines(&smtlib, SolverType::SMTLIB("".to_string())).as_bytes())
+                .unwrap();
+            let file_path = smt_file.path();
+            Command::new(solver).arg(file_path).output()
+        }
+    };
 
     match output {
         Ok(output) => {
@@ -115,13 +134,31 @@ fn execute_swine(
     }
 }
 
-/// In order to execute the program, it is necessary to remove lines that
-/// contain a forall quantifier or the declaration of the exponential function (exp).
-fn remove_lines_for_swine(input: &str) -> String {
-    let mut output = String::new();
+/// To execute the SMT solver correctly, specific modifications to the input are required:
+/// 1) For SwInE, remove lines that contain a `forall` quantifier or the declaration of the exponential function (`exp``).
+/// 2) For other solvers, add a line to set logic, and remove incorrect assertions such as `(assert add)`.
+fn remove_lines(input: &str, solver: SolverType) -> String {
+    let mut output = match solver {
+        SolverType::SMTLIB(_) => {
+            let mut output = String::new();
+            let logic = if input.contains("*") || input.contains("/") {
+                "(set-logic QF_NIRA)"
+            } else {
+                "(set-logic QF_LIRA)"
+            };
+            output.push_str(logic);
+            output
+        }
+        _ => String::new(),
+    };
     let mut tmp_buffer: VecDeque<char> = VecDeque::new();
     let mut input_buffer: VecDeque<char> = input.chars().collect();
     let mut cnt = 0;
+
+    let condition = |tmp: &str| match solver {
+        SolverType::SWINE => !tmp.contains("declare-fun exp") && !tmp.contains("forall"),
+        _ => !tmp.contains("(assert and)"),
+    };
 
     // Collect characters until all opened parentheses are closed, and
     // keep this block if it does not contain 'declare-fun exp' or 'forall'.
@@ -135,7 +172,7 @@ fn remove_lines_for_swine(input: &str) -> String {
                 cnt -= 1;
                 if cnt == 0 {
                     let tmp: String = tmp_buffer.iter().collect();
-                    if !tmp.contains("declare-fun exp") && !tmp.contains("forall") {
+                    if condition(&tmp) {
                         output.push_str(&tmp);
                     }
                     tmp_buffer.clear();
@@ -298,34 +335,6 @@ impl<'ctx> Prover<'ctx> {
         }
 
         match self.smt_solver {
-            SolverType::SWINE => {
-                let res = match &self.last_result {
-                    Some(cached_result) if assumptions.is_empty() => {
-                        cached_result.last_result.clone()
-                    }
-                    _ => {
-                        let solver_result = execute_swine(self, assumptions)?;
-
-                        if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
-                            let solver = self.get_solver();
-                            solver.from_string(cex);
-                            solver.check();
-                        };
-
-                        self.cache_result(solver_result.clone());
-                        solver_result
-                    }
-                };
-
-                match res {
-                    SolverResult::Unsat => Ok(ProveResult::Proof),
-                    SolverResult::Unknown(r) => {
-                        let reason = r.unwrap_or(ReasonUnknown::Other("".to_string()));
-                        Ok(ProveResult::Unknown(reason))
-                    }
-                    SolverResult::Sat(_) => Ok(ProveResult::Counterexample),
-                }
-            }
             SolverType::Z3 => {
                 let res = match &self.last_result {
                     Some(cached_result) if assumptions.is_empty() => {
@@ -353,6 +362,34 @@ impl<'ctx> Prover<'ctx> {
                     SolverResult::Unsat => Ok(ProveResult::Proof),
                     SolverResult::Unknown(_) => {
                         Ok(ProveResult::Unknown(self.get_reason_unknown().unwrap()))
+                    }
+                    SolverResult::Sat(_) => Ok(ProveResult::Counterexample),
+                }
+            }
+            _ => {
+                let res = match &self.last_result {
+                    Some(cached_result) if assumptions.is_empty() => {
+                        cached_result.last_result.clone()
+                    }
+                    _ => {
+                        let solver_result = execute_solver(self, assumptions)?;
+
+                        if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
+                            let solver = self.get_solver();
+                            solver.from_string(cex);
+                            solver.check();
+                        };
+
+                        self.cache_result(solver_result.clone());
+                        solver_result
+                    }
+                };
+
+                match res {
+                    SolverResult::Unsat => Ok(ProveResult::Proof),
+                    SolverResult::Unknown(r) => {
+                        let reason = r.unwrap_or(ReasonUnknown::Other("".to_string()));
+                        Ok(ProveResult::Unknown(reason))
                     }
                     SolverResult::Sat(_) => Ok(ProveResult::Counterexample),
                 }
@@ -387,15 +424,14 @@ impl<'ctx> Prover<'ctx> {
 
                 sat_result
             }
-            SolverType::SWINE => {
-                let solver_result = execute_swine(self, &[])?;
+            _ => {
+                let solver_result = execute_solver(self, &[])?;
 
                 if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
                     let solver = self.get_solver();
                     solver.from_string(cex);
                     solver.check();
                 };
-
                 self.cache_result(solver_result.clone());
 
                 solver_result.to_sat_result()

@@ -701,7 +701,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
             ctx,
             translate,
             &self.vc,
-            options.smt_solver_options.smt_solver,
+            options.smt_solver_options.smt_solver.clone(),
         );
 
         if options.debug_options.probe {
@@ -834,6 +834,7 @@ fn mk_valid_query_prover<'smt, 'ctx>(
     let solver_type = match smt_solver {
         SMTSolverType::Swine => SolverType::SWINE,
         SMTSolverType::Z3 => SolverType::Z3,
+        SMTSolverType::SMTLIB(solver) => SolverType::SMTLIB(solver),
     };
 
     // create the prover and set the params
