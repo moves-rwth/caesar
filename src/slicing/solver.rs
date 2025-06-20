@@ -218,7 +218,6 @@ impl<'ctx> SliceSolver<'ctx> {
             options,
             limits_ref,
         )?;
-        println!("slice_verifying_exists_forall");
         let sat_res = exists_forall_solver
             .check_sat()
             .map_err(|err| VerifyError::ProverError(err))?;
@@ -513,7 +512,6 @@ fn slice_sat_binary_search<'ctx>(
         if let Some(timeout) = limits_ref.time_left() {
             prover.set_timeout(timeout);
         }
-        println!("slice_sat_binary_search 1");
 
         let res = prover
             .check_sat()
@@ -582,7 +580,6 @@ fn slice_sat_binary_search<'ctx>(
             if let Some(timeout) = limits_ref.time_left() {
                 prover.set_timeout(timeout);
             }
-            println!("slice_sat_binary_search 2");
             let res = prover
                 .check_sat()
                 .map_err(|err| VerifyError::ProverError(err))?;

@@ -88,7 +88,6 @@ fn execute_swine(
     match output {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            println!("{:}", stdout);
             let mut lines_buffer: VecDeque<&str> = stdout.lines().collect();
             let first_line = lines_buffer
                 .pop_front()
@@ -305,7 +304,6 @@ impl<'ctx> Prover<'ctx> {
                         cached_result.last_result.clone()
                     }
                     _ => {
-                        println!("check_proof_assuming");
                         let solver_result = execute_swine(self, assumptions)?;
 
                         if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
@@ -390,7 +388,6 @@ impl<'ctx> Prover<'ctx> {
                 sat_result
             }
             SolverType::SWINE => {
-                println!("check_sat");
                 let solver_result = execute_swine(self, &[])?;
 
                 if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
