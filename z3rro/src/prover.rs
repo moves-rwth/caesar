@@ -92,7 +92,7 @@ fn execute_solver(
 
             let file_path = smt_file.path();
 
-            Command::new("swine").arg(file_path).output()
+            Command::new("swine").arg("--no-version").arg(file_path).output()
         }
         SolverType::SMTLIB(solver) => {
             let mut smt_file = Builder::new().suffix(".smt2").tempfile().unwrap();
@@ -114,9 +114,6 @@ fn execute_solver(
             if first_line.trim().to_lowercase() == "unsat" {
                 Ok(SolverResult::Unsat)
             } else if first_line.trim().to_lowercase() == "sat" {
-                lines_buffer
-                    .pop_back()
-                    .ok_or(ProverCommandError::ParseError)?;
                 let cex = lines_buffer.iter().join("");
                 Ok(SolverResult::Sat(Some(cex)))
             } else if first_line.trim().to_lowercase() == "unknown" {
