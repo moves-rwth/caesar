@@ -398,6 +398,7 @@ pub enum SMTSolverType {
     #[default]
     Z3,
     Swine,
+    CVC5,
     SMTLIB(String),
 }
 
@@ -408,6 +409,7 @@ impl std::str::FromStr for SMTSolverType {
         match s {
             "z3" => Ok(SMTSolverType::Z3),
             "swine" => Ok(SMTSolverType::Swine),
+            "cvc5" => Ok(SMTSolverType::CVC5),
             solver => Ok(SMTSolverType::SMTLIB(solver.to_string())),
         }
     }

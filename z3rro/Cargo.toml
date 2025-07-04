@@ -16,6 +16,7 @@ im-rc = "15"
 enum-map = "2.7.3"
 itertools = "0.14.0"
 smtlib-lowlevel = "0.3.0"
+regex = "1"
 
 [features]
 datatype-eureal = []

@@ -17,6 +17,8 @@ use crate::{
     util::{set_solver_timeout, ReasonUnknown},
 };
 
+use regex::Regex;
+
 #[derive(Debug, Error, PartialEq)]
 pub enum ProverCommandError {
     #[error("Process execution failed: {0}")]
@@ -31,6 +33,7 @@ pub enum ProverCommandError {
 pub enum SolverType {
     Z3,
     SWINE,
+    CVC5,
     SMTLIB(String),
 }
 
@@ -87,17 +90,25 @@ fn execute_solver(
         SolverType::SWINE => {
             let mut smt_file = NamedTempFile::new().unwrap();
             smt_file
-                .write_all(remove_lines(&smtlib, SolverType::SWINE).as_bytes())
+                .write_all(transform_input_lines(&smtlib, SolverType::SWINE).as_bytes())
                 .unwrap();
 
             let file_path = smt_file.path();
 
             Command::new("swine").arg("--no-version").arg(file_path).output()
         }
+        SolverType::CVC5 => {
+            let mut smt_file = Builder::new().suffix(".smt2").tempfile().unwrap();
+            smt_file
+                .write_all(transform_input_lines(&smtlib, SolverType::CVC5).as_bytes())
+                .unwrap();
+            let file_path = smt_file.path();
+            Command::new("cvc5").arg("--produce-models").arg(file_path).output()
+        }
         SolverType::SMTLIB(solver) => {
             let mut smt_file = Builder::new().suffix(".smt2").tempfile().unwrap();
             smt_file
-                .write_all(remove_lines(&smtlib, SolverType::SMTLIB("".to_string())).as_bytes())
+                .write_all(transform_input_lines(&smtlib, SolverType::SMTLIB("".to_string())).as_bytes())
                 .unwrap();
             let file_path = smt_file.path();
             Command::new(solver).arg(file_path).output()
@@ -134,9 +145,10 @@ fn execute_solver(
 /// To execute the SMT solver correctly, specific modifications to the input are required:
 /// 1) For SwInE, remove lines that contain a `forall` quantifier or the declaration of the exponential function (`exp``).
 /// 2) For other solvers, add a line to set logic, and remove incorrect assertions such as `(assert add)`.
-fn remove_lines(input: &str, solver: SolverType) -> String {
+/// 3) For solvers that do not support at-most, convert those assertions into equivalent logic.
+fn transform_input_lines(input: &str, solver: SolverType) -> String {
     let mut output = match solver {
-        SolverType::SMTLIB(_) => {
+        SolverType::CVC5 | SolverType::SMTLIB(_) => {
             let mut output = String::new();
             let logic = if input.contains("*") || input.contains("/") {
                 "(set-logic QF_NIRA)"
@@ -170,7 +182,11 @@ fn remove_lines(input: &str, solver: SolverType) -> String {
                 if cnt == 0 {
                     let tmp: String = tmp_buffer.iter().collect();
                     if condition(&tmp) {
-                        output.push_str(&tmp);
+                        if tmp.contains("at-most"){
+                            output.push_str(&convert_at_most(&tmp, &solver));
+                        } else{
+                            output.push_str(&tmp);
+                        }
                     }
                     tmp_buffer.clear();
                 }
@@ -179,6 +195,23 @@ fn remove_lines(input: &str, solver: SolverType) -> String {
         }
     }
     output
+}
+
+fn convert_at_most(input: &str, solver: &SolverType) -> String{
+    if solver != &SolverType::CVC5 {
+        unreachable!("The function 'convert_at_most' should only be called for cvc5");
+    }
+    let re = Regex::new(r#"\(assert\s+\(\(_\s+at-most\s+(\d+)\)\s+([^\)]+)\)\)"#).unwrap();
+
+    if let Some(re_cap) =re.captures(input) {
+        let n = &re_cap[1];
+        let var_list: Vec<&str> = (&re_cap[2]).split_whitespace().collect();
+
+        let mut expr_list = var_list.iter().map(|v| format!("(ite {} 1 0)", v));
+        return format!("\n(assert (>= {} (+ {})))", n, expr_list.join(" "));
+    }
+    
+    String::new()
 }
 
 impl Display for ProveResult {

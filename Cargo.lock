@@ -2750,6 +2750,7 @@ dependencies = [
  "num",
  "once_cell",
  "ref-cast",
+ "regex",
  "smtlib-lowlevel",
  "tempfile",
  "thiserror 1.0.69",

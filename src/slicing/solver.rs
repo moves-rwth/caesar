@@ -475,8 +475,10 @@ fn slice_sat_binary_search<'ctx>(
         prover.push();
 
         let ctx = prover.get_context();
-        let at_most_n_true = Bool::pb_le(ctx, &slice_vars, at_most_n as i32);
-        prover.add_assumption(&at_most_n_true);
+        if !slice_vars.is_empty(){
+            let at_most_n_true = Bool::pb_le(ctx, &slice_vars, at_most_n as i32);
+            prover.add_assumption(&at_most_n_true);
+        }
     };
 
     // TODO: we could have min_least_bound set to 1 if we could conclude for
