@@ -393,26 +393,15 @@ pub struct SMTSolverOptions {
     pub smt_solver: SMTSolverType,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
 pub enum SMTSolverType {
     #[default]
+    #[value(name = "z3")]
     Z3,
+    #[value(name = "swine")]
     Swine,
+    #[value(name = "cvc5")]
     CVC5,
-    SMTLIB(String),
-}
-
-impl std::str::FromStr for SMTSolverType {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "z3" => Ok(SMTSolverType::Z3),
-            "swine" => Ok(SMTSolverType::Swine),
-            "cvc5" => Ok(SMTSolverType::CVC5),
-            solver => Ok(SMTSolverType::SMTLIB(solver.to_string())),
-        }
-    }
 }
 
 #[derive(Debug, Default, Args)]

@@ -34,7 +34,6 @@ pub enum SolverType {
     Z3,
     SWINE,
     CVC5,
-    SMTLIB(String),
 }
 
 /// The result of a prove query.
@@ -105,14 +104,6 @@ fn execute_solver(
             let file_path = smt_file.path();
             Command::new("cvc5").arg("--produce-models").arg(file_path).output()
         }
-        SolverType::SMTLIB(solver) => {
-            let mut smt_file = Builder::new().suffix(".smt2").tempfile().unwrap();
-            smt_file
-                .write_all(transform_input_lines(&smtlib, SolverType::SMTLIB("".to_string())).as_bytes())
-                .unwrap();
-            let file_path = smt_file.path();
-            Command::new(solver).arg(file_path).output()
-        }
     };
 
     match output {
@@ -148,7 +139,7 @@ fn execute_solver(
 /// 3) For solvers that do not support at-most, convert those assertions into equivalent logic.
 fn transform_input_lines(input: &str, solver: SolverType) -> String {
     let mut output = match solver {
-        SolverType::CVC5 | SolverType::SMTLIB(_) => {
+        SolverType::CVC5 => {
             let mut output = String::new();
             let logic = if input.contains("*") || input.contains("/") {
                 "(set-logic QF_NIRA)"
