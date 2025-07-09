@@ -6,7 +6,11 @@ use std::{
 use indexmap::IndexSet;
 use itertools::Itertools;
 use tracing::{instrument, trace};
-use z3::{ast::Bool, Context, SatResult, Solver};
+use z3::{
+    ast::{Bool, Int},
+    Context, SatResult, Solver,
+};
+use z3rro::prover::SolverType;
 
 /// A result of a test during the partial minimization. Either we accept all
 /// values from this value upwards, we reject all values from this value
@@ -197,10 +201,20 @@ impl<'ctx> SubsetExploration<'ctx> {
     }
 
     /// Block all models which have size at least `size`.
-    pub fn block_at_least(&mut self, size: usize) {
-        let variables = self.variables.iter().map(|v| (v, 1)).collect_vec();
-        self.solver
-            .assert(&Bool::pb_ge(self.solver.get_context(), &variables, size as i32).not())
+    pub fn block_at_least(&mut self, size: usize, solver_type: SolverType) {
+        let ctx = self.solver.get_context();
+        match solver_type {
+            SolverType::CVC5 => {
+                let vars_vec: Vec<Bool> = self.variables.iter().cloned().collect();
+                self.solver
+                    .assert(&at_least_k(ctx, size as i64, &vars_vec).not())
+            }
+            _ => {
+                let variables = self.variables.iter().map(|v| (v, 1)).collect_vec();
+                self.solver
+                    .assert(&Bool::pb_ge(ctx, &variables, size as i32).not())
+            }
+        }
     }
 
     /// Block all models which are not subsets of the given set.
@@ -410,4 +424,30 @@ impl<'ctx> SubsetExploration<'ctx> {
         tracing::Span::current().record("ret.len", current.len());
         current
     }
+}
+
+/// Create an SMT expression that is true if at most k of the given boolean variables evaluate to true
+pub fn at_most_k<'ctx>(ctx: &'ctx Context, k: i64, values: &[Bool<'ctx>]) -> Bool<'ctx> {
+    let int_values: Vec<Int<'ctx>> = values
+        .iter()
+        .map(|b| b.ite(&Int::from_i64(ctx, 1), &Int::from_i64(ctx, 0)))
+        .collect();
+
+    let sum = Int::add(ctx, &int_values);
+
+    let k_int = Int::from_i64(ctx, k);
+    sum.le(&k_int)
+}
+
+/// Create an SMT expression that is true if at least k of the given boolean variables evaluate to true
+pub fn at_least_k<'ctx>(ctx: &'ctx Context, k: i64, values: &[Bool<'ctx>]) -> Bool<'ctx> {
+    let int_values: Vec<Int<'ctx>> = values
+        .iter()
+        .map(|b| b.ite(&Int::from_i64(ctx, 1), &Int::from_i64(ctx, 0)))
+        .collect();
+
+    let sum = Int::add(ctx, &int_values);
+
+    let k_int = Int::from_i64(ctx, k);
+    sum.ge(&k_int)
 }

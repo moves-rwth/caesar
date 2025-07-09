@@ -9,7 +9,7 @@ use z3::{
 };
 use z3rro::{
     model::{InstrumentedModel, ModelConsistency},
-    prover::{ProveResult, Prover, ProverCommandError},
+    prover::{ProveResult, Prover, ProverCommandError, SolverType},
     util::ReasonUnknown,
 };
 
@@ -18,7 +18,7 @@ use crate::{
     resource_limits::LimitsRef,
     slicing::{
         model::{SliceMode, SliceModel},
-        util::{PartialMinimizeResult, SubsetExploration},
+        util::{at_most_k, PartialMinimizeResult, SubsetExploration},
     },
     smt::translate_exprs::TranslateExprs,
     VerifyError,
@@ -475,8 +475,11 @@ fn slice_sat_binary_search<'ctx>(
         prover.push();
 
         let ctx = prover.get_context();
-        if !slice_vars.is_empty(){
-            let at_most_n_true = Bool::pb_le(ctx, &slice_vars, at_most_n as i32);
+        if !slice_vars.is_empty() {
+            let at_most_n_true = match prover.get_smt_solver() {
+                SolverType::CVC5 => at_most_k(ctx, at_most_n as i64, active_slice_vars),
+                _ => Bool::pb_le(ctx, &slice_vars, at_most_n as i32),
+            };
             prover.add_assumption(&at_most_n_true);
         }
     };
@@ -631,7 +634,9 @@ pub fn slice_unsat_search<'ctx>(
                 match options.minimality {
                     SliceMinimality::Any => break,
                     SliceMinimality::Subset => exploration.block_non_subset(&res),
-                    SliceMinimality::Size => exploration.block_at_least(res.len()),
+                    SliceMinimality::Size => {
+                        exploration.block_at_least(res.len(), prover.get_smt_solver())
+                    }
                 }
             }
             Ok(ProveResult::Counterexample) => {

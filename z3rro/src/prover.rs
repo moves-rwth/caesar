@@ -29,7 +29,7 @@ pub enum ProverCommandError {
     UnexpectedResultError(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum SolverType {
     Z3,
     SWINE,
@@ -94,7 +94,10 @@ fn execute_solver(
 
             let file_path = smt_file.path();
 
-            Command::new("swine").arg("--no-version").arg(file_path).output()
+            Command::new("swine")
+                .arg("--no-version")
+                .arg(file_path)
+                .output()
         }
         SolverType::CVC5 => {
             let mut smt_file = Builder::new().suffix(".smt2").tempfile().unwrap();
@@ -102,7 +105,10 @@ fn execute_solver(
                 .write_all(transform_input_lines(&smtlib, SolverType::CVC5).as_bytes())
                 .unwrap();
             let file_path = smt_file.path();
-            Command::new("cvc5").arg("--produce-models").arg(file_path).output()
+            Command::new("cvc5")
+                .arg("--produce-models")
+                .arg(file_path)
+                .output()
         }
     };
 
@@ -173,9 +179,9 @@ fn transform_input_lines(input: &str, solver: SolverType) -> String {
                 if cnt == 0 {
                     let tmp: String = tmp_buffer.iter().collect();
                     if condition(&tmp) {
-                        if tmp.contains("at-most"){
+                        if tmp.contains("at-most") {
                             output.push_str(&convert_at_most(&tmp, &solver));
-                        } else{
+                        } else {
                             output.push_str(&tmp);
                         }
                     }
@@ -188,20 +194,20 @@ fn transform_input_lines(input: &str, solver: SolverType) -> String {
     output
 }
 
-fn convert_at_most(input: &str, solver: &SolverType) -> String{
+fn convert_at_most(input: &str, solver: &SolverType) -> String {
     if solver != &SolverType::CVC5 {
         input.to_owned()
-    } else{
+    } else {
         let re = Regex::new(r#"\(assert\s+\(\(_\s+at-most\s+(\d+)\)\s+([^\)]+)\)\)"#).unwrap();
 
-        if let Some(re_cap) =re.captures(input) {
+        if let Some(re_cap) = re.captures(input) {
             let n = &re_cap[1];
             let var_list: Vec<&str> = (&re_cap[2]).split_whitespace().collect();
 
             let mut expr_list = var_list.iter().map(|v| format!("(ite {} 1 0)", v));
             return format!("\n(assert (>= {} (+ {})))", n, expr_list.join(" "));
         }
-        
+
         String::new()
     }
 }
@@ -589,6 +595,10 @@ impl<'ctx> Prover<'ctx> {
     /// Return the SMT-LIB that represents the solver state.
     pub fn get_smtlib(&self) -> Smtlib {
         Smtlib::from_solver(self.get_solver())
+    }
+
+    pub fn get_smt_solver(&self) -> SolverType {
+        self.smt_solver.clone()
     }
 }
 
