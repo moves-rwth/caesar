@@ -179,11 +179,7 @@ fn transform_input_lines(input: &str, solver: SolverType) -> String {
                 if cnt == 0 {
                     let tmp: String = tmp_buffer.iter().collect();
                     if condition(&tmp) {
-                        if tmp.contains("at-most") {
-                            output.push_str(&convert_at_most(&tmp, &solver));
-                        } else {
-                            output.push_str(&tmp);
-                        }
+                        output.push_str(&tmp);
                     }
                     tmp_buffer.clear();
                 }
@@ -192,24 +188,6 @@ fn transform_input_lines(input: &str, solver: SolverType) -> String {
         }
     }
     output
-}
-
-fn convert_at_most(input: &str, solver: &SolverType) -> String {
-    if solver != &SolverType::CVC5 {
-        input.to_owned()
-    } else {
-        let re = Regex::new(r#"\(assert\s+\(\(_\s+at-most\s+(\d+)\)\s+([^\)]+)\)\)"#).unwrap();
-
-        if let Some(re_cap) = re.captures(input) {
-            let n = &re_cap[1];
-            let var_list: Vec<&str> = (&re_cap[2]).split_whitespace().collect();
-
-            let mut expr_list = var_list.iter().map(|v| format!("(ite {} 1 0)", v));
-            return format!("\n(assert (>= {} (+ {})))", n, expr_list.join(" "));
-        }
-
-        String::new()
-    }
 }
 
 impl Display for ProveResult {
