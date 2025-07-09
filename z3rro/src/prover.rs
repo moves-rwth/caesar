@@ -17,8 +17,6 @@ use crate::{
     util::{set_solver_timeout, ReasonUnknown},
 };
 
-use regex::Regex;
-
 #[derive(Debug, Error, PartialEq)]
 pub enum ProverCommandError {
     #[error("Process execution failed: {0}")]
