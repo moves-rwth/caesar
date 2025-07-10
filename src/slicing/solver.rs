@@ -634,9 +634,7 @@ pub fn slice_unsat_search<'ctx>(
                 match options.minimality {
                     SliceMinimality::Any => break,
                     SliceMinimality::Subset => exploration.block_non_subset(&res),
-                    SliceMinimality::Size => {
-                        exploration.block_at_least(res.len(), prover.get_smt_solver())
-                    }
+                    SliceMinimality::Size => exploration.block_at_least(res.len()),
                 }
             }
             Ok(ProveResult::Counterexample) => {
