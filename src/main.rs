@@ -389,15 +389,17 @@ pub struct DebugOptions {
 #[derive(Debug, Default, Args)]
 #[command(next_help_heading = "SMT Solver Options")]
 pub struct SMTSolverOptions {
-    #[arg(long, default_value = "z3")]
+    #[arg(long, default_value = "default")]
     pub smt_solver: SMTSolverType,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
 pub enum SMTSolverType {
     #[default]
+    #[value(name = "default")]
+    InternalZ3,
     #[value(name = "z3")]
-    Z3,
+    ExternalZ3,
     #[value(name = "swine")]
     Swine,
     #[value(name = "cvc5")]

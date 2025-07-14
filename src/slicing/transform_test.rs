@@ -125,7 +125,7 @@ fn prove_equiv(
     let smt_ctx = SmtCtx::new(&ctx, tcx);
     let mut translate = TranslateExprs::new(&smt_ctx);
     let eq_expr_z3 = translate.t_bool(&eq_expr);
-    let mut prover = Prover::new(&ctx, IncrementalMode::Native, SolverType::Z3);
+    let mut prover = Prover::new(&ctx, IncrementalMode::Native, SolverType::InternalZ3);
     translate
         .local_scope()
         .add_assumptions_to_prover(&mut prover);

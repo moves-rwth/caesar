@@ -18,7 +18,7 @@ pub fn test_prove(f: impl for<'ctx> FnOnce(&'ctx Context, &mut SmtScope<'ctx>) -
     let mut scope = SmtScope::new();
     let theorem = f(&ctx, &mut scope);
 
-    let mut prover = Prover::new(&ctx, IncrementalMode::Native, SolverType::Z3);
+    let mut prover = Prover::new(&ctx, IncrementalMode::Native, SolverType::InternalZ3);
     scope.add_assumptions_to_prover(&mut prover);
     assert_eq!(
         prover.check_sat(),

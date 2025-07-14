@@ -832,8 +832,9 @@ fn mk_valid_query_prover<'smt, 'ctx>(
     smt_solver: SMTSolverType,
 ) -> Prover<'ctx> {
     let solver_type = match smt_solver {
+        SMTSolverType::InternalZ3 => SolverType::InternalZ3,
+        SMTSolverType::ExternalZ3 => SolverType::ExternalZ3,
         SMTSolverType::Swine => SolverType::SWINE,
-        SMTSolverType::Z3 => SolverType::Z3,
         SMTSolverType::CVC5 => SolverType::CVC5,
     };
 

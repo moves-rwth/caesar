@@ -60,7 +60,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
         // it's important that we use the native incremental mode here, because
         // the performance benefit from the unfolder relies on many very fast
         // SAT checks.
-        let prover = Prover::new(ctx.ctx(), IncrementalMode::Native, SolverType::Z3);
+        let prover = Prover::new(ctx.ctx(), IncrementalMode::Native, SolverType::InternalZ3);
 
         Unfolder {
             subst: Subst::new(ctx.tcx(), &limits_ref),

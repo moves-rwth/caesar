@@ -29,7 +29,8 @@ pub enum ProverCommandError {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum SolverType {
-    Z3,
+    InternalZ3,
+    ExternalZ3,
     SWINE,
     CVC5,
 }
@@ -81,8 +82,16 @@ fn execute_solver(
     let smtlib = smtlib.into_string();
 
     let output = match &prover.smt_solver {
-        SolverType::Z3 => {
+        SolverType::InternalZ3 => {
             unreachable!("The function 'execute_solver' should never be called for z3");
+        }
+        SolverType::ExternalZ3 => {
+            let mut smt_file = NamedTempFile::new().unwrap();
+            smt_file.write_all(&smtlib.as_bytes()).unwrap();
+
+            let file_path = smt_file.path();
+
+            Command::new("z3").arg(file_path).output()
         }
         SolverType::SWINE => {
             let mut smt_file = NamedTempFile::new().unwrap();
@@ -339,7 +348,7 @@ impl<'ctx> Prover<'ctx> {
         }
 
         match self.smt_solver {
-            SolverType::Z3 => {
+            SolverType::InternalZ3 => {
                 let res = match &self.last_result {
                     Some(cached_result) if assumptions.is_empty() => {
                         cached_result.last_result.clone()
@@ -416,7 +425,7 @@ impl<'ctx> Prover<'ctx> {
         }
 
         let sat_result = match self.smt_solver {
-            SolverType::Z3 => {
+            SolverType::InternalZ3 => {
                 let sat_result = self.get_solver().check();
 
                 let solver_result = match sat_result {
@@ -563,7 +572,7 @@ impl<'ctx> Prover<'ctx> {
             &[],
             &Bool::and(self.ctx, &self.get_assertions()).not(),
         );
-        let mut res = Prover::new(self.ctx, IncrementalMode::Native, SolverType::Z3); // TODO
+        let mut res = Prover::new(self.ctx, IncrementalMode::Native, SolverType::InternalZ3); // TODO
         res.add_assumption(&theorem);
         res
     }
@@ -590,7 +599,7 @@ mod test {
     fn test_prover() {
         for mode in [IncrementalMode::Native, IncrementalMode::Emulated] {
             let ctx = Context::new(&Config::default());
-            let mut prover = Prover::new(&ctx, mode, SolverType::Z3);
+            let mut prover = Prover::new(&ctx, mode, SolverType::InternalZ3);
             assert!(matches!(prover.check_proof(), Ok(ProveResult::Proof)));
             assert_eq!(prover.check_sat(), Ok(SatResult::Sat));
 
