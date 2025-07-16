@@ -448,7 +448,7 @@ mod test {
 
     use crate::{generate_smt_branch_tests, generate_smt_partial_ord_tests};
 
-    generate_smt_branch_tests!(|ctx| EURealFactory::new(ctx), EUReal);
+    generate_smt_branch_tests!(EURealFactory::new, EUReal);
 
-    generate_smt_partial_ord_tests!(|ctx| EURealFactory::new(ctx), EUReal);
+    generate_smt_partial_ord_tests!(EURealFactory::new, EUReal);
 }

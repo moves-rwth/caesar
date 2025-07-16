@@ -26,9 +26,7 @@ impl Display for ProveResult {
         match self {
             ProveResult::Proof => f.write_str("Proof"),
             ProveResult::Counterexample => f.write_str("Counterexample"),
-            ProveResult::Unknown(reason) => {
-                f.write_fmt(format_args!("Unknown (reason: {})", reason))
-            }
+            ProveResult::Unknown(reason) => f.write_fmt(format_args!("Unknown (reason: {reason})")),
         }
     }
 }

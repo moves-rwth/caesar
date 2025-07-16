@@ -146,7 +146,7 @@ fn prove_equiv(
             stmt1, stmt2, assumptions, &model, translate.t_eureal(&stmt1_vc).eval(&model).unwrap(), translate.t_eureal(&stmt2_vc).eval(&model).unwrap()
         ))
         }
-        ProveResult::Unknown(reason) => Err(format!("unknown result ({})", reason)),
+        ProveResult::Unknown(reason) => Err(format!("unknown result ({reason})")),
     };
     x
 }

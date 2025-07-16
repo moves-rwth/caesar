@@ -53,11 +53,7 @@ impl TyCtx {
         let ident = decl.name();
         tracing::trace!(ident=?ident, "declare");
         let prev = self.declarations.borrow_mut().insert(ident, Rc::new(decl));
-        assert!(
-            prev.is_none(),
-            "{} already has a previous declaration",
-            ident
-        );
+        assert!(prev.is_none(), "{ident} already has a previous declaration");
     }
 
     /// Removes an existing declaration.

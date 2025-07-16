@@ -61,7 +61,7 @@ impl<'ctx> RecFunFunctionEncoder<'ctx> {
             .map(|var| {
                 let symbolic = translate.t_symbolic(&var);
                 if symbolic.smt_invariant().is_some() {
-                    let type_name = var.ty.clone().map(|ty| format!("{}", ty)).unwrap_or_else(|| "<unknown>".into());
+                    let type_name = var.ty.clone().map(|ty| format!("{ty}")).unwrap_or_else(|| "<unknown>".into());
                     panic!("define-fun-rec encoding only supports parameter types without side conditions.\nParameter {} of function {} has type {}, which has a side condition.", var, func.name, type_name)
                 }
                 symbolic.into_dynamic(translate.ctx)

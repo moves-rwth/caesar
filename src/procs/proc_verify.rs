@@ -46,7 +46,7 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
         let span = expr.span.variant(SpanVariant::ProcVerify);
         block.node.push(wrap_with_success_message(
             Spanned::new(span, StmtKind::Assume(direction, expr.clone())),
-            &format!("{} pre #{} is not necessary", proc_kind, i),
+            &format!("{proc_kind} pre #{i} is not necessary"),
         ));
     }
 
@@ -58,7 +58,7 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
         let span = expr.span.variant(SpanVariant::ProcVerify);
         block.node.push(wrap_with_error_message(
             Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
-            &format!("{} post #{} is part of the error", proc_kind, i),
+            &format!("{proc_kind} post #{i} is part of the error"),
         ));
     }
 

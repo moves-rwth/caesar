@@ -151,7 +151,7 @@ impl<'tcx> SpecCall<'tcx> {
                             );
                             buf.push(wrap_with_error_message(
                                 Spanned::new(span, StmtKind::Assert(direction, assert_expr)),
-                                &format!("pre#{} might not hold", i),
+                                &format!("pre#{i} might not hold"),
                             ));
                         }
                         _ => {}
@@ -207,7 +207,7 @@ impl<'tcx> SpecCall<'tcx> {
                             let stmt_kind = StmtKind::Compare(direction, compare_expr);
                             buf.push(wrap_with_success_message(
                                 Spanned::new(span, stmt_kind),
-                                &format!("post #{} is not necessary", i),
+                                &format!("post #{i} is not necessary"),
                             ));
                         };
                     }
@@ -301,7 +301,7 @@ mod test {
             }
         "#;
         let res = verify_test(source).0.unwrap();
-        assert_eq!(res, false);
+        assert!(!res);
     }
 
     #[test]

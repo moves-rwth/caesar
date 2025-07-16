@@ -129,8 +129,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         assert_eq!(
             &expr.ty,
             &Some(TyKind::Bool),
-            "expr is not of type Bool: {:?}",
-            expr
+            "expr is not of type Bool: {expr:?}"
         );
 
         if is_expr_worth_caching(expr) {
@@ -234,8 +233,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         assert_eq!(
             &expr.ty,
             &Some(TyKind::Int),
-            "expr is not of type Int: {:?}",
-            expr
+            "expr is not of type Int: {expr:?}"
         );
 
         if is_expr_worth_caching(expr) {
@@ -295,8 +293,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         assert_eq!(
             &expr.ty,
             &Some(TyKind::UInt),
-            "expr is not of type UInt: {:?}",
-            expr
+            "expr is not of type UInt: {expr:?}"
         );
 
         if is_expr_worth_caching(expr) {
@@ -354,8 +351,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         assert_eq!(
             &expr.ty,
             &Some(TyKind::Real),
-            "expr is not of type Real: {:?}",
-            expr
+            "expr is not of type Real: {expr:?}"
         );
 
         if is_expr_worth_caching(expr) {
@@ -423,8 +419,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         assert_eq!(
             &expr.ty,
             &Some(TyKind::UReal),
-            "expr is not of type UReal: {:?}",
-            expr
+            "expr is not of type UReal: {expr:?}"
         );
 
         if is_expr_worth_caching(expr) {
@@ -493,8 +488,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         assert_eq!(
             &expr.ty,
             &Some(TyKind::EUReal),
-            "expr is not of type EUReal: {:?}",
-            expr
+            "expr is not of type EUReal: {expr:?}"
         );
 
         let res = match &expr.kind {
@@ -673,7 +667,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                     .translate_call(self.ctx, &func.borrow(), args)
             }
             Some(DeclKind::FuncIntrin(intrin)) => intrin.translate_call(self, args),
-            res => panic!("cannot call {:?}", res),
+            res => panic!("cannot call {res:?}"),
         }
     }
 
@@ -681,7 +675,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         let t_a = self.t_symbolic(a);
         let t_b = self.t_symbolic(b);
         SymbolicPair::from_untypeds(t_a, t_b)
-            .unwrap_or_else(|| panic!("type mismatch during translation: {:?} and {:?}", a, b))
+            .unwrap_or_else(|| panic!("type mismatch during translation: {a:?} and {b:?}"))
     }
 
     pub fn get_local(&mut self, ident: Ident) -> &ScopeSymbolic<'ctx> {
@@ -696,7 +690,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             .ctx
             .tcx()
             .get(ident)
-            .unwrap_or_else(|| panic!("{} is not declared", ident));
+            .unwrap_or_else(|| panic!("{ident} is not declared"));
         match decl.as_ref() {
             DeclKind::VarDecl(var_ref) => var_ref.borrow().ty.clone(),
             _ => panic!("variable is not declared"),

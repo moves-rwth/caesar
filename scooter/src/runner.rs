@@ -41,7 +41,7 @@ impl CaesarExitStatus {
             Some(1) => CaesarExitStatus::Error,
             Some(2) | Some(130) => CaesarExitStatus::Timeout,
             Some(3) => CaesarExitStatus::OutOfMemory,
-            _ => panic!("unexpected exit status of process: {}", exit_status),
+            _ => panic!("unexpected exit status of process: {exit_status}"),
         }
     }
 }
@@ -54,7 +54,7 @@ impl Display for CaesarExitStatus {
             CaesarExitStatus::Timeout => "TO",
             CaesarExitStatus::Error => "ERR",
         };
-        write!(f, "{}", res)
+        write!(f, "{res}")
     }
 }
 

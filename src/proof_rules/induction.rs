@@ -272,7 +272,7 @@ fn encode_loop_spec(
         Direction::Down => "pre ≰ I",
         Direction::Up => "pre ≱ I",
     };
-    let error_msg = format!("pre might not entail the invariant ({})", error_condition);
+    let error_msg = format!("pre might not entail the invariant ({error_condition})");
     vec![
         wrap_with_error_message(
             Spanned::new(span, StmtKind::Assert(direction, invariant.clone())),
@@ -299,7 +299,7 @@ fn park_iteration_terminator(
         Direction::Down => "I ≰ 𝚽(I)",
         Direction::Up => "I ≱ 𝚽(I)",
     };
-    let error_msg = format!("invariant might not be inductive ({})", error_condition);
+    let error_msg = format!("invariant might not be inductive ({error_condition})");
     let builder = ExprBuilder::new(span);
     let extreme_lit = match direction {
         Direction::Up => builder.top_lit(tcx.spec_ty()),

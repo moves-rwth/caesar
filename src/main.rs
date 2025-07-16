@@ -576,7 +576,7 @@ fn finalize_verify_result(
             ExitCode::from(1)
         }
         Err(VerifyError::IoError(err)) => {
-            eprintln!("IO Error: {}", err);
+            eprintln!("IO Error: {err}");
             ExitCode::from(1)
         }
         Err(VerifyError::LimitError(LimitError::Timeout)) => {
@@ -591,7 +591,7 @@ fn finalize_verify_result(
             std::process::exit(3); // exit ASAP
         }
         Err(VerifyError::UserError(err)) => {
-            eprintln!("Error: {}", err);
+            eprintln!("Error: {err}");
             ExitCode::from(1)
         }
         Err(VerifyError::ServerError(err)) => panic!("{}", err),
@@ -726,7 +726,7 @@ fn parse_and_tycheck(
         if debug_options.print_parsed {
             println!("{}: Parsed file:\n", file.path);
             for unit in &new_units {
-                println!("{}", unit);
+                println!("{unit}");
             }
         }
 
@@ -760,9 +760,8 @@ fn parse_and_tycheck(
 
     // filter source units if requested
     if let Some(filter) = &input_options.filter {
-        let filter = Regex::new(filter).map_err(|err| {
-            VerifyError::UserError(format!("Invalid filter regex: {}", err).into())
-        })?;
+        let filter = Regex::new(filter)
+            .map_err(|err| VerifyError::UserError(format!("Invalid filter regex: {err}").into()))?;
         source_units.retain(|source_unit| filter.is_match(&source_unit.name().to_string()));
     };
 
@@ -919,7 +918,7 @@ fn verify_files_main(
     if options.debug_options.print_core_procs {
         println!("HeyVL query with generated procs:");
         for source_unit in &mut source_units {
-            println!("{}", source_unit);
+            println!("{source_unit}");
         }
     }
 
@@ -1105,10 +1104,7 @@ fn verify_files_main(
         } else {
             ""
         };
-        println!(
-            "{} verified, {} failed.{}",
-            num_proven, num_failures, ending
-        );
+        println!("{num_proven} verified, {num_failures} failed.{ending}");
     }
 
     Ok(num_failures == 0)
@@ -1168,7 +1164,7 @@ fn run_model_checking(
         if options.run_storm.is_some() {
             temp_dir = Some(tempfile::tempdir().map_err(|err| {
                 VerifyError::UserError(
-                    format!("Could not create temporary directory: {}", err).into(),
+                    format!("Could not create temporary directory: {err}").into(),
                 )
             })?);
             options.jani_dir = temp_dir.as_ref().map(|dir| dir.path().to_owned());
@@ -1215,7 +1211,7 @@ fn print_timings() {
         .iter()
         .map(|(key, value)| (*key, format!("{}", value.as_nanos())))
         .collect();
-    eprintln!("Timings: {:?}", timings);
+    eprintln!("Timings: {timings:?}");
 }
 
 fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {

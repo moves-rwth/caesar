@@ -147,7 +147,7 @@ impl DeclKindName {
 impl Display for DeclKindName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            DeclKindName::Var(kind) => f.write_fmt(format_args!("{} variable", kind)),
+            DeclKindName::Var(kind) => f.write_fmt(format_args!("{kind} variable")),
             DeclKindName::Proc => f.write_str("proc"),
             DeclKindName::Domain => f.write_str("domain"),
             DeclKindName::Func => f.write_str("func"),

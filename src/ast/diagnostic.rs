@@ -565,7 +565,7 @@ impl Diagnostic {
                     uri: document_id.uri.clone(),
                     range,
                 },
-                message: format!("Note: {}", note),
+                message: format!("Note: {note}"),
             })
         }
         let diagnostic = lsp_types::Diagnostic {
@@ -607,7 +607,7 @@ impl Display for Diagnostic {
                 NumberOrString::Number(code) => &code.to_string(),
                 NumberOrString::String(code) => code,
             };
-            write!(f, "[{}] ", code)?;
+            write!(f, "[{code}] ")?;
         }
         write!(f, "{}: ", self.0.kind)?;
         if let Some(msg) = &self.0.msg {

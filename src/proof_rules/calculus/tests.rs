@@ -31,7 +31,7 @@ fn test_wp_with_kind_ok() {
     }
     "#;
     let res = verify_test(source).0.unwrap();
-    assert_eq!(res, false)
+    assert!(!res)
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn test_wlp_with_kind_ok() {
     }
     "#;
     let res = verify_test(source).0.unwrap();
-    assert_eq!(res, false)
+    assert!(!res)
 }
 
 #[test]

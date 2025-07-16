@@ -65,7 +65,7 @@ impl JaniConversionError {
         match &self {
             JaniConversionError::UnsupportedType(ty, span) => {
                 Diagnostic::new(ReportKind::Error, *span)
-                    .with_message(format!("JANI: Type {} is not supported", ty))
+                    .with_message(format!("JANI: Type {ty} is not supported"))
                     .with_label(Label::new(*span).with_message("here"))
             }
             JaniConversionError::UnsupportedExpr(expr) => {
@@ -123,7 +123,7 @@ impl JaniConversionError {
                     .with_label(Label::new(*span).with_message("must be a func with a body"))
             }
             JaniConversionError::UnsupportedCalculus { proc, calculus }=> Diagnostic::new(ReportKind::Error, proc.span)
-                .with_message(format!("JANI: Calculus '{}' is not supported", calculus))
+                .with_message(format!("JANI: Calculus '{calculus}' is not supported"))
                 .with_label(Label::new(proc.span).with_message("here")),
         }
         .with_code(NumberOrString::String("model checking".to_owned()))

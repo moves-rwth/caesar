@@ -22,7 +22,7 @@ pub struct Smtlib(String);
 
 impl Smtlib {
     pub fn from_solver(solver: &Solver<'_>) -> Self {
-        Smtlib(format!("{}", solver))
+        Smtlib(format!("{solver}"))
     }
 
     /// Add a `(check-sat)` command at the end.

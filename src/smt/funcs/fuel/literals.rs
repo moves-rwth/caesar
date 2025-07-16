@@ -172,8 +172,7 @@ impl VisitorMut for LiteralExprCollector {
             ExprKind::Quant(_, _, _, _) => {}
             ExprKind::Subst(_, _, _) => {
                 panic!(
-                    "cannot determine literal subexpressions in expressions with substitutions: {}",
-                    expr
+                    "cannot determine literal subexpressions in expressions with substitutions: {expr}"
                 );
             }
             ExprKind::Lit(_) => {

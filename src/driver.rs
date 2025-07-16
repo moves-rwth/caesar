@@ -764,7 +764,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
 
         if options.debug_options.print_z3_stats {
             let stats = slice_solver.get_statistics();
-            eprintln!("Z3 statistics for {}: {:?}", name, stats);
+            eprintln!("Z3 statistics for {name}: {stats:?}");
         }
 
         if let Some(smtlib) = &smtlib {
@@ -852,7 +852,7 @@ fn write_smtlib(
         }
         let smtlib = smtlib.into_string();
         if options.print_smt {
-            println!("\n; --- Solver SMT-LIB ---\n{}\n", smtlib);
+            println!("\n; --- Solver SMT-LIB ---\n{smtlib}\n");
         }
         if let Some(smt_dir) = &options.smt_dir {
             let file_path = smt_dir.join(name.to_file_name("smt2"));
@@ -860,7 +860,7 @@ fn write_smtlib(
             let mut file = File::create(&file_path)?;
             let mut comment_writer = PrefixWriter::new("; ".as_bytes(), &mut file);
             write_detailed_command_info(&mut comment_writer)?;
-            writeln!(comment_writer, "Source unit: {}", name)?;
+            writeln!(comment_writer, "Source unit: {name}")?;
             if let Some(prove_result) = prove_result {
                 writeln!(comment_writer, "Prove result: {}", &prove_result)?;
             }
@@ -890,7 +890,7 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
         let files = server.get_files_internal().lock().unwrap();
         match &mut self.prove_result {
             ProveResult::Proof => {
-                println!("{}: Verified.", name);
+                println!("{name}: Verified.");
                 if let Some(slice_model) = &self.slice_model {
                     let mut w = Vec::new();
                     let doc = pretty_slice(&files, slice_model);
@@ -903,7 +903,7 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
             }
             ProveResult::Counterexample => {
                 let model = self.model.as_ref().unwrap();
-                println!("{}: Counter-example to verification found!", name);
+                println!("{name}: Counter-example to verification found!");
                 let mut w = Vec::new();
                 let doc = pretty_model(
                     &files,
@@ -916,7 +916,7 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
                 println!("    {}", String::from_utf8(w).unwrap());
             }
             ProveResult::Unknown(reason) => {
-                println!("{}: Unknown result! (reason: {})", name, reason);
+                println!("{name}: Unknown result! (reason: {reason})");
                 if let Some(slice_model) = &self.slice_model {
                     let doc = pretty_slice(&files, slice_model);
                     if let Some(doc) = doc {
@@ -1002,7 +1002,7 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
             ProveResult::Unknown(reason) => {
                 server.add_diagnostic(
                     Diagnostic::new(ReportKind::Error, span)
-                        .with_message(format!("Unknown result: SMT solver returned {}", reason))
+                        .with_message(format!("Unknown result: SMT solver returned {reason}"))
                         .with_note(
                             "For many queries, the query to the SMT solver is inherently undecidable. \
                              There are various tricks to help the SMT solver, which can be found in the Caesar documentation:

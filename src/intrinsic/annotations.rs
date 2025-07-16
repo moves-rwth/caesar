@@ -79,8 +79,7 @@ impl AnnotationError {
                 annotation_name,
             } => Diagnostic::new(ReportKind::Error, span)
                 .with_message(format!(
-                    "The annotation `{}` can only be used inside a procedure.",
-                    annotation_name
+                    "The annotation `{annotation_name}` can only be used inside a procedure."
                 ))
                 .with_label(Label::new(annotation_name.span).with_message("here")),
             AnnotationError::NotOnWhile {
@@ -89,8 +88,7 @@ impl AnnotationError {
                 annotated,
             } => Diagnostic::new(ReportKind::Error, span)
                 .with_message(format!(
-                    "The proof rule `{}` must be used on a while loop.",
-                    annotation_name
+                    "The proof rule `{annotation_name}` must be used on a while loop."
                 ))
                 .with_label(
                     Label::new(annotated.span).with_message("This should be a while statement."),

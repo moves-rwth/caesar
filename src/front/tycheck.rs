@@ -277,7 +277,7 @@ impl TycheckError {
     pub fn diagnostic(&self) -> Diagnostic {
         match &self {
             TycheckError::NotDeclared { span, name } => Diagnostic::new(ReportKind::Error, *span)
-                .with_message(format!("Not declared: {}", name))
+                .with_message(format!("Not declared: {name}"))
                 .with_label(Label::new(*span)),
             TycheckError::ExpectedKind { span, expr, kind } => {
                 let expected = match &kind {
@@ -287,9 +287,9 @@ impl TycheckError {
                     ExpectedKind::List => "list",
                 };
                 Diagnostic::new(ReportKind::Error, *span)
-                    .with_message(format!("Expected a {} here", expected))
+                    .with_message(format!("Expected a {expected} here"))
                     .with_label(
-                        Label::new(expr.span).with_message(format!("Expected {}", expected)),
+                        Label::new(expr.span).with_message(format!("Expected {expected}")),
                     )
             }
             TycheckError::CannotCast { span, target, expr } => {
@@ -312,7 +312,7 @@ impl TycheckError {
                 callee,
                 caller,
             } => Diagnostic::new(ReportKind::Error, *span)
-                .with_message(format!("Expected {} arguments, got {}", callee, caller))
+                .with_message(format!("Expected {callee} arguments, got {caller}"))
                 .with_label(Label::new(*span).with_message("here")),
             TycheckError::WrongOperandType {
                 span,
@@ -336,7 +336,7 @@ impl TycheckError {
                     unreachable!();
                 }
                 Diagnostic::new(ReportKind::Error, *span)
-                    .with_message(format!("Cannot assign to variable `{}`", lhs))
+                    .with_message(format!("Cannot assign to variable `{lhs}`"))
                     .with_label(Label::new(lhs_decl.span).with_message(format!("`{}` is declared as {}...", lhs, lhs_decl.kind)))
                     .with_label(
                         Label::new(*span).with_message("... so this assignment is not allowed"),
@@ -351,11 +351,10 @@ impl TycheckError {
                 assert_eq!(var_decl.kind, VarKind::Output);
                 let lhs = var_decl.name;
                 Diagnostic::new(ReportKind::Error, *span)
-                    .with_message(format!("Cannot access variable `{}`", lhs))
+                    .with_message(format!("Cannot access variable `{lhs}`"))
                     .with_label(
                         Label::new(var_decl.span).with_message(format!(
-                            "`{}` is declared as an output variable...",
-                            lhs
+                            "`{lhs}` is declared as an output variable..."
                         )),
                     )
                     .with_label(
@@ -369,7 +368,7 @@ impl TycheckError {
             .with_message("Trigger does not capture all quantified variables")
             .with_label(Label::new(*span).with_message(format!(
                 "Trigger captures {}",
-                join_commas(captured.iter().map(|ident| format!("`{}`", ident)))
+                join_commas(captured.iter().map(|ident| format!("`{ident}`")))
             )))
             .with_note(
                 "Triggers on quantifiers must capture all variables bound by the quantifier.",
@@ -378,7 +377,7 @@ impl TycheckError {
                 ReportKind::Error,
                 *span,
             )
-            .with_message(format!("Cannot call proc `{}` nested inside of an expression", ident))
+            .with_message(format!("Cannot call proc `{ident}` nested inside of an expression"))
             .with_label(Label::new(*span).with_message("here"))
             .with_note(
                 "Procedures must only be called on as the immediate right-hand side expression in an assignment. This makes execution order of assignments with side-effects explicit."

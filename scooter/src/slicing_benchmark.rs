@@ -62,7 +62,7 @@ impl Display for SliceResult {
                 original_size: _,
                 time,
             } => {
-                write!(f, "✗ {:?}", time)
+                write!(f, "✗ {time:?}")
             }
             SliceResult::NotFound => write!(f, "BUG"),
             SliceResult::AmbiguousProcs => write!(f, "BUG"),
