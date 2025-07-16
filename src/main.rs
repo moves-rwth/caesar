@@ -16,7 +16,6 @@ use std::{
 
 use crate::{
     ast::TyKind,
-    driver::mk_z3_ctx,
     front::{resolve::Resolve, tycheck::Tycheck},
     smt::{
         funcs::{
@@ -47,6 +46,7 @@ use timing::DispatchBuilder;
 use tokio::task::JoinError;
 use tracing::{error, info, warn};
 use vc::explain::VcExplanation;
+use z3::{Config, Context};
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
 pub mod ast;
@@ -1024,43 +1024,9 @@ fn verify_files_main(
         }
 
         // 11. Translate to Z3
-        let ctx = mk_z3_ctx(options);
-        let function_encoding = match options.opt_options.function_encoding {
-            FunctionEncodingOption::Axiomatic => {
-                AxiomaticFunctionEncoder::new(AxiomInstantiation::Bidirectional).into_boxed()
-            }
-            FunctionEncodingOption::Decreasing => {
-                AxiomaticFunctionEncoder::new(AxiomInstantiation::Decreasing).into_boxed()
-            }
-            FunctionEncodingOption::FuelMono => {
-                FuelMonoFunctionEncoder::new(options.opt_options.max_fuel, false).into_boxed()
-            }
-            FunctionEncodingOption::FuelParam => {
-                FuelParamFunctionEncoder::new(options.opt_options.max_fuel, false).into_boxed()
-            }
-            FunctionEncodingOption::FuelMonoComputation => {
-                FuelMonoFunctionEncoder::new(options.opt_options.max_fuel, true).into_boxed()
-            }
-            FunctionEncodingOption::FuelParamComputation => {
-                FuelParamFunctionEncoder::new(options.opt_options.max_fuel, true).into_boxed()
-            }
-            FunctionEncodingOption::DefineFunRec => RecFunFunctionEncoder::new().into_boxed(),
-        };
-        // Warn if using fuel encoding with non-ematching quantifier
-        // instantiation. The exception is the [`FuelEncodingOption::FuelMono`]
-        // encoding, which does not rely on Z3 not creating new terms for termination.
-        if matches!(
-            options.opt_options.function_encoding,
-            FunctionEncodingOption::FuelParam
-                | FunctionEncodingOption::FuelMonoComputation
-                | FunctionEncodingOption::FuelParamComputation
-        ) && options.opt_options.quantifier_instantiation != QuantifierInstantiation::EMatching
-        {
-            tracing::error!(
-                "Using fuel function encoding with MBQI does not guarantee termination and thus defeats the purpose of the fuel encoding. Set the `--quantifier-instantiation e-matching` option to use the fuel encoding with MBQI.",
-            );
-        }
-        let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoding);
+        let ctx = Context::new(&Config::default());
+        let function_encoder = mk_function_encoder(options);
+        let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoder);
         let mut translate = TranslateExprs::new(&smt_ctx);
         let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
 
@@ -1224,15 +1190,44 @@ fn print_timings() {
 }
 
 fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
-    // the parameters are set as globals since params set via (Solver::set_params) sometimes get ignored.
+    // see also dafny's options:
+    // https://github.com/dafny-lang/dafny/blob/220fdecb25920d2f72ceb4c57af6cb032fdd337d/Source/DafnyCore/DafnyOptions.cs#L1273-L1309
 
-    // default
+    // we disable order axioms, as this seems to fix all of our performance
+    // issues after upgrading from 4.12.1 to 4.15.1.
+    //
+    // see also this commit in 4.15.2:
+    // https://github.com/Z3Prover/z3/commit/bba10c7a8892f1067ee68751fd9989037a3386de.
+    // maybe this will solve the problem?
+    z3::set_global_param("smt.arith.nl.order", "false");
+
+    // enable tracing if requested
+    if command.debug_options.z3_trace {
+        z3::set_global_param("trace", "true");
+        z3::set_global_param("proof", "true");
+        z3::set_global_param("trace_file_name", "z3.log");
+    }
+
+    // set random seed
+    if let Some(seed) = command.debug_options.z3_seed {
+        z3::set_global_param("smt.random_seed", &seed.to_string());
+    }
+
+    // set quantifier instantiation options
     z3::set_global_param("smt.qi.eager_threshold", "100");
     z3::set_global_param("smt.qi.lazy_threshold", "1000");
     match command.opt_options.quantifier_instantiation {
         QuantifierInstantiation::EMatching => {
+            // we *could* fully disable MBQI (and thus also auto-config) like so:
+            // ```
             // z3::set_global_param("auto-config", "false");
             // z3::set_global_param("smt.mbqi", "false");
+            // ```
+            // but this can have some strange side effects (turns out MBQI can
+            // be rather useful sometimes).
+            //
+            // therefore, we set a specific prefix for quantifiers, so that MBQI
+            // only acts on quantifiers whose id starts with that prefix.
             z3::set_global_param("smt.mbqi.id", "mbqi");
         }
         QuantifierInstantiation::MBQI => {
@@ -1240,12 +1235,60 @@ fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
         }
         QuantifierInstantiation::All => {}
     }
-    if let Some(seed) = command.debug_options.z3_seed {
-        z3::set_global_param("smt.random_seed", &seed.to_string());
+
+    // enable the quantifier instantiation profile if requested
+    if command.debug_options.z3_qi_profile {
+        z3::set_global_param("smt.qi.profile", "true");
+        z3::set_global_param("smt.qi.profile_freq", "1000");
     }
+
+    // set verbosity level
+    if let Some(verbosity) = command.debug_options.z3_verbose {
+        z3::set_global_param("verbose", &verbosity.to_string());
+    }
+
     if let Some(timeout) = limits_ref.time_left() {
         z3::set_global_param("timeout", &timeout.as_millis().to_string())
     }
+}
+
+fn mk_function_encoder(options: &VerifyCommand) -> Box<dyn FunctionEncoder<'_> + '_> {
+    let function_encoding = match options.opt_options.function_encoding {
+        FunctionEncodingOption::Axiomatic => {
+            AxiomaticFunctionEncoder::new(AxiomInstantiation::Bidirectional).into_boxed()
+        }
+        FunctionEncodingOption::Decreasing => {
+            AxiomaticFunctionEncoder::new(AxiomInstantiation::Decreasing).into_boxed()
+        }
+        FunctionEncodingOption::FuelMono => {
+            FuelMonoFunctionEncoder::new(options.opt_options.max_fuel, false).into_boxed()
+        }
+        FunctionEncodingOption::FuelParam => {
+            FuelParamFunctionEncoder::new(options.opt_options.max_fuel, false).into_boxed()
+        }
+        FunctionEncodingOption::FuelMonoComputation => {
+            FuelMonoFunctionEncoder::new(options.opt_options.max_fuel, true).into_boxed()
+        }
+        FunctionEncodingOption::FuelParamComputation => {
+            FuelParamFunctionEncoder::new(options.opt_options.max_fuel, true).into_boxed()
+        }
+        FunctionEncodingOption::DefineFunRec => RecFunFunctionEncoder::new().into_boxed(),
+    };
+    // Warn if using fuel encoding with non-ematching quantifier
+    // instantiation. The exception is the [`FuelEncodingOption::FuelMono`]
+    // encoding, which does not rely on Z3 not creating new terms for termination.
+    if matches!(
+        options.opt_options.function_encoding,
+        FunctionEncodingOption::FuelParam
+            | FunctionEncodingOption::FuelMonoComputation
+            | FunctionEncodingOption::FuelParamComputation
+    ) && options.opt_options.quantifier_instantiation != QuantifierInstantiation::EMatching
+    {
+        tracing::error!(
+            "Using fuel function encoding with MBQI does not guarantee termination and thus defeats the purpose of the fuel encoding. Set the `--quantifier-instantiation e-matching` option to use the fuel encoding with MBQI.",
+        );
+    }
+    function_encoding
 }
 
 fn run_generate_completions(options: ShellCompletionsCommand) -> ExitCode {
