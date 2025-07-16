@@ -16,7 +16,7 @@ use std::ops::{BitOr, BitOrAssign};
 use crate::{
     ast::{Expr, ExprKind, Ident, LitKind, Param, Span, Spanned, Symbol, TyKind},
     front::tycheck::{Tycheck, TycheckError},
-    intrinsic::annotations::{check_annotation_call, AnnotationDecl},
+    intrinsic::annotations::{tycheck_annotation_call, AnnotationDecl},
 };
 
 /// The effect of slicing a certain program statement in its context. Depending
@@ -133,7 +133,7 @@ impl SliceAnnotation {
                 }
             }
         };
-        check_annotation_call(tycheck, call_span, &annotation, args)
+        tycheck_annotation_call(tycheck, call_span, &annotation, args)
     }
 }
 

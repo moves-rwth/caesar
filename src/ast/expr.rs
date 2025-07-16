@@ -2,7 +2,7 @@
 
 use std::{fmt, str::FromStr};
 
-use num::{BigRational, Zero};
+use num::{BigRational, One, Zero};
 
 use crate::{
     pretty::{parens_group, pretty_list, Doc, SimplePretty},
@@ -485,6 +485,13 @@ impl ExprBuilder {
     }
 
     pub fn cast(&self, ty: TyKind, operand: Expr) -> Expr {
+        let cast_not_needed = operand
+            .ty
+            .as_ref()
+            .is_some_and(|operand_ty| operand_ty == &ty);
+        if cast_not_needed {
+            return operand;
+        }
         Shared::new(ExprData {
             kind: ExprKind::Cast(operand),
             ty: Some(ty),
@@ -579,6 +586,36 @@ impl ExprBuilder {
                 span: self.span,
             }),
             _ => panic!("type {} has no bottom element", ty),
+        }
+    }
+
+    /// Return the zero element for this type. Panics if there is none.
+    pub fn zero_lit(&self, ty: &TyKind) -> Expr {
+        match ty {
+            TyKind::Bool | TyKind::UInt | TyKind::UReal | TyKind::EUReal => self.bot_lit(ty),
+            TyKind::Int => self.cast(TyKind::Int, self.uint(0)),
+            TyKind::Real => self.cast(TyKind::Real, self.frac_lit(Zero::zero())),
+            _ => panic!("type {} has no zero element", ty),
+        }
+    }
+
+    /// Return the multiplicative identity for this type. Panics if there is none.
+    pub fn one_lit(&self, ty: &TyKind) -> Expr {
+        match ty {
+            TyKind::Bool => self.bool_lit(true),
+            TyKind::UInt => self.uint(1),
+            TyKind::UReal => self.cast(TyKind::UReal, self.uint(1)),
+            TyKind::EUReal => self.cast(TyKind::EUReal, self.uint(1)),
+            TyKind::Int => self.cast(TyKind::Int, self.uint(1)),
+            TyKind::Real => self.cast(
+                TyKind::Real,
+                Shared::new(ExprData {
+                    kind: ExprKind::Lit(Spanned::new(self.span, LitKind::Frac(BigRational::one()))),
+                    ty: Some(TyKind::Real),
+                    span: self.span,
+                }),
+            ),
+            _ => panic!("type {} has no `one` element", ty),
         }
     }
 

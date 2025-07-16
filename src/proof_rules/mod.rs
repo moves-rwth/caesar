@@ -1,5 +1,7 @@
 //! This module provides annotations that encode proof rules and their desugaring transformations.
 
+pub mod calculus;
+
 mod induction;
 pub mod negations;
 pub use induction::*;
@@ -19,13 +21,13 @@ pub use util::*;
 #[cfg(test)]
 mod tests;
 
-use std::{any::Any, fmt, ops::DerefMut, rc::Rc};
+use std::{any::Any, fmt, rc::Rc};
 
 use crate::{
     ast::{
         visit::{walk_stmt, VisitorMut},
-        Block, DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprKind, Files, Ident, Param,
-        ProcDecl, ProcSpec, SourceFilePath, Span, Stmt, StmtKind,
+        Block, DeclKind, DeclRef, Diagnostic, Direction, Expr, Files, Ident, Param, ProcDecl,
+        ProcSpec, Span, Stmt, StmtKind,
     },
     driver::{Item, SourceUnit},
     front::{
@@ -48,8 +50,9 @@ pub struct ProcInfo {
     direction: Direction,
 }
 
-/// The result of transforming an annotation call, it can contain generated statements and declarations
-pub struct EncodingGenerated {
+/// The result of transforming an annotation call. It contains generated
+/// statements and declarations.
+pub struct GeneratedEncoding {
     block: Block,
     decls: Option<Vec<DeclKind>>,
 }
@@ -89,7 +92,7 @@ pub trait Encoding: fmt::Debug {
         args: &[Expr],
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
-    ) -> Result<EncodingGenerated, AnnotationError>;
+    ) -> Result<GeneratedEncoding, AnnotationError>;
 
     /// Check if the given calculus annotation is compatible with the encoding annotation
     fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool;
@@ -132,12 +135,12 @@ pub fn init_encodings(files: &mut Files, tcx: &mut TyCtx) {
     tcx.declare(DeclKind::AnnotationDecl(ast));
 }
 
-struct ProcContext {
-    name: Ident,
-    direction: Direction,
-    calculus: Option<Calculus>,
+/// A struct to keep track of current procedure context when visiting the body of a procedure with a ['VisitorMut'].
+pub struct ProcContext {
+    pub name: Ident,
+    pub direction: Direction,
+    pub calculus: Option<Calculus>,
 }
-
 /// Walks the AST and transforms encoding annotations into their desugared form.
 /// Correct and sound usage of the encoding annotations are also checked during this process.
 pub struct EncodingVisitor<'tcx, 'sunit> {
@@ -180,33 +183,6 @@ impl EncodingVisitorError {
 
 impl<'tcx, 'sunit> VisitorMut for EncodingVisitor<'tcx, 'sunit> {
     type Err = EncodingVisitorError;
-
-    fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
-        if let ExprKind::Call(ref ident, _) = e.deref_mut().kind {
-            if let DeclKind::ProcDecl(proc_ref) = self.tcx.get(*ident).unwrap().as_ref() {
-                let proc_ref = proc_ref.clone(); // lose the reference to &mut self
-                let proc = proc_ref.borrow();
-
-                if let Some(proc_context) = &self.proc_context {
-                    if let Some(context_calculus) = proc_context.calculus {
-                        if let Some(call_calculus_ident) = proc.calculus {
-                            if context_calculus.name != call_calculus_ident {
-                                // Throw mismatched calculus unsoundness error
-                                return Err(EncodingVisitorError::UnsoundnessError(
-                                    AnnotationUnsoundnessError::CalculusCallMismatch {
-                                        span: e.span,
-                                        context_calculus: context_calculus.name,
-                                        call_calculus: call_calculus_ident,
-                                    },
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
 
     fn visit_proc(&mut self, proc_ref: &mut DeclRef<ProcDecl>) -> Result<(), Self::Err> {
         let proc_ref = proc_ref.clone(); // lose the reference to &mut self
@@ -280,15 +256,16 @@ impl<'tcx, 'sunit> VisitorMut for EncodingVisitor<'tcx, 'sunit> {
                     // Unpack the current procedure context
                     let direction = proc_context.direction;
                     let base_proc_ident = proc_context.name;
+                    let annotation_span = *annotation_span;
 
                     // Check whether the calculus annotation is actually on a while loop (annotations can only be on while loops)
                     if let StmtKind::While(_, _) = inner_stmt.node {
                     } else {
                         return Err(EncodingVisitorError::AnnotationError(
                             AnnotationError::NotOnWhile {
-                                span: *annotation_span,
+                                span: annotation_span,
                                 annotation_name: *ident,
-                                annotated: inner_stmt.as_ref().clone(),
+                                annotated: Box::new(inner_stmt.as_ref().clone()),
                             },
                         ));
                     }
@@ -303,25 +280,10 @@ impl<'tcx, 'sunit> VisitorMut for EncodingVisitor<'tcx, 'sunit> {
                         ));
                     }
 
-                    // Check if the calculus annotation is compatible with the encoding annotation
-                    if let Some(calculus) = proc_context.calculus {
-                        // If calculus is not allowed, return an error
-                        if !anno_ref.is_calculus_allowed(calculus, direction) {
-                            return Err(EncodingVisitorError::UnsoundnessError(
-                                AnnotationUnsoundnessError::CalculusEncodingMismatch {
-                                    direction,
-                                    span: s.span,
-                                    calculus_name: calculus.name,
-                                    enc_name: anno_ref.name(),
-                                },
-                            ));
-                        };
-                    }
-
                     let enc_env = EncodingEnvironment {
                         base_proc_ident,
                         stmt_span: s.span,
-                        call_span: *annotation_span, // TODO: if I change this to stmt_span, explain core vc works :(
+                        call_span: annotation_span, // TODO: if I change this to stmt_span, explain core vc works :(
                         direction,
                     };
 
@@ -349,8 +311,10 @@ impl<'tcx, 'sunit> VisitorMut for EncodingVisitor<'tcx, 'sunit> {
                         let items: Vec<Item<SourceUnit>> = decls
                             .iter_mut()
                             .map(|decl| {
-                                SourceUnit::Decl(decl.to_owned())
-                                    .wrap_item(&SourceFilePath::Generated)
+                                SourceUnit::from_generated_decl(
+                                    decl.to_owned(),
+                                    base_proc_ident.span,
+                                )
                             })
                             .collect();
 

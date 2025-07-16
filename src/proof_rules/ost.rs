@@ -21,12 +21,12 @@ use crate::{
         tycheck::{Tycheck, TycheckError},
     },
     intrinsic::annotations::{
-        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+        tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
     },
     tyctx::TyCtx,
 };
 
-use super::{Encoding, EncodingEnvironment, EncodingGenerated, ProcInfo};
+use super::{Encoding, EncodingEnvironment, GeneratedEncoding, ProcInfo};
 
 use super::util::*;
 
@@ -75,7 +75,7 @@ impl Encoding for OSTAnnotation {
         call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), TycheckError> {
-        check_annotation_call(tycheck, call_span, &self.0, args)?;
+        tycheck_annotation_call(tycheck, call_span, &self.0, args)?;
         Ok(())
     }
 
@@ -102,7 +102,7 @@ impl Encoding for OSTAnnotation {
         args: &[Expr],
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
-    ) -> Result<EncodingGenerated, AnnotationError> {
+    ) -> Result<GeneratedEncoding, AnnotationError> {
         // Unpack values from struct
         let annotation_span = enc_env.call_span;
         let base_proc_ident = enc_env.base_proc_ident;
@@ -137,7 +137,7 @@ impl Encoding for OSTAnnotation {
             return Err(AnnotationError::NotOnWhile {
                 span: annotation_span,
                 annotation_name: self.name(),
-                annotated: inner_stmt.clone(),
+                annotated: Box::new(inner_stmt.clone()),
             });
         };
 
@@ -361,7 +361,7 @@ impl Encoding for OSTAnnotation {
             StmtKind::Assign(modified_vars, proc_call),
         )];
 
-        Ok(EncodingGenerated {
+        Ok(GeneratedEncoding {
             block: Spanned::new(annotation_span, buf),
             decls: Some(vec![
                 cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,

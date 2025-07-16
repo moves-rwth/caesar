@@ -35,7 +35,7 @@ cohavoc x
 coassume ?!(j / N <= x && x <= (j+1) / N)
 ```
 
-We sample a random integer $j$ from the *discrete* uniform distribution over $[0,N)$ using the [built-in `unif` distribution](/docs/stdlib/distributions.md).
+We sample a random integer $j$ from the *discrete* uniform distribution over $[0,N)$ using the [built-in `unif` distribution](/docs/stdlib/distributions).
 The sampled integer $j$ is then used to select the subinterval $I = [j/N, (j+1)/N)$.
 To overapproximate the expected value on the subinterval $I$, we *nondeterministically* select a value $x \in I$ such that the expected value is maximized.
 This is done using the `cohavoc` and `coassume` statements.

@@ -20,6 +20,7 @@ use crate::ast::{
 };
 
 pub mod boolify;
+pub mod constfold;
 pub mod egraph;
 #[cfg(test)]
 mod fuzz_test;

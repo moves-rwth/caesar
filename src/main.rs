@@ -31,12 +31,13 @@ use crate::{
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
 };
-use ast::{DeclKind, Diagnostic, FileId};
+use ast::{visit::VisitorMut, Diagnostic, FileId};
 use clap::{crate_description, Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use mc::run_storm::{run_storm, storm_result_to_diagnostic};
-use proof_rules::init_encodings;
+use proof_rules::calculus::{find_recursive_procs, CalculusVisitor};
+use proof_rules::{init_encodings, EncodingVisitor};
 use regex::Regex;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef, MemorySize};
 use servers::{run_lsp_server, CliServer, LspServer, Server, ServerError};
@@ -72,7 +73,7 @@ mod version;
     name = "caesar",
     about = crate_description!(),
     long_about = "Caesar is a deductive verifier for probabilistic programs. Run the caesar binary with a subcommand to use it. Usually, you'll want to use the `verify` command.",
-    version = version::detailed_version_info_string()
+    version = version::clap_detailed_version_info()
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -523,7 +524,7 @@ async fn main() -> ExitCode {
     if let Some(debug_options) = options.debug_options() {
         if debug_options.debug {
             let mut stderr = io::stderr().lock();
-            version::write_detailed_version_info(&mut stderr).unwrap();
+            version::write_detailed_command_info(&mut stderr).unwrap();
         }
         // install global collector configured based on RUST_LOG env var.
         setup_tracing(debug_options);
@@ -768,6 +769,51 @@ fn parse_and_tycheck(
     Ok((source_units, tcx))
 }
 
+/// Apply encodings from annotations. This might generate new source units for side conditions.
+/// Returns existing and generated source units together.
+pub fn apply_encodings(
+    tcx: &mut TyCtx,
+    mut source_units: Vec<Item<SourceUnit>>,
+    server: &mut dyn Server,
+) -> Result<Vec<Item<SourceUnit>>, VerifyError> {
+    let mut new_source_units = vec![];
+
+    let mut encoding_visitor = EncodingVisitor::new(tcx, &mut new_source_units);
+
+    for source_unit in &mut source_units {
+        match source_unit.enter().deref_mut() {
+            SourceUnit::Decl(decl) => encoding_visitor.visit_decl(decl),
+            SourceUnit::Raw(block) => encoding_visitor.visit_block(block),
+        }
+        .map_err(|ann_err| ann_err.diagnostic())?;
+    }
+
+    for source_unit in &mut new_source_units {
+        server.register_source_unit(source_unit)?;
+    }
+
+    source_units.extend(new_source_units);
+    Ok(source_units)
+}
+
+pub fn check_calculus_rules(
+    source_units: &mut Vec<Item<SourceUnit>>,
+    tcx: &mut TyCtx,
+) -> Result<(), VerifyError> {
+    // Find potentially 'recursive' (co)procs i.e. (co)procs that contain a proc call which might result in a recursive loop.
+    let recursive_procs = find_recursive_procs(tcx, source_units);
+
+    let mut visitor = CalculusVisitor::new(tcx, recursive_procs);
+    for source_unit in source_units {
+        match source_unit.enter().deref_mut() {
+            SourceUnit::Decl(decl) => visitor.visit_decl(decl),
+            SourceUnit::Raw(block) => visitor.visit_block(block),
+        }
+        .map_err(|ann_err| ann_err.diagnostic())?;
+    }
+    Ok(())
+}
+
 /// Synchronously verify the given source code. This is used for tests. The
 /// `--werr` option is enabled by default.
 #[cfg(test)]
@@ -814,14 +860,9 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, VerifyError> {
     )?;
 
     assert_eq!(source_units.len(), 1);
-    let mut source_unit = source_units.into_iter().next().unwrap();
 
-    let mut new_source_units: Vec<Item<SourceUnit>> = vec![];
-    source_unit
-        .enter()
-        .apply_encodings(&mut tcx, &mut new_source_units)?;
-
-    new_source_units.push(source_unit);
+    let new_source_units: Vec<Item<SourceUnit>> =
+        apply_encodings(&mut tcx, source_units, &mut server)?;
 
     Ok(new_source_units
         .into_iter()
@@ -846,16 +887,7 @@ fn verify_files_main(
 
     // Register all relevant source units with the server
     for source_unit in &mut source_units {
-        let source_unit = source_unit.enter();
-        match *source_unit {
-            SourceUnit::Decl(ref decl) => {
-                // only register procs since we do not check any other decls
-                if let DeclKind::ProcDecl(proc_decl) = decl {
-                    server.register_source_unit(proc_decl.borrow().name.span)?;
-                }
-            }
-            SourceUnit::Raw(ref block) => server.register_source_unit(block.span)?,
-        }
+        server.register_source_unit(source_unit)?;
     }
 
     // explain high-level HeyVL if requested
@@ -876,15 +908,13 @@ fn verify_files_main(
         false,
     )?;
 
-    // Desugar encodings from source units. They might generate new source
+    // Visit every source unit and check possible cases of unsoundness
+    // based on the provided calculus annotations
+    check_calculus_rules(&mut source_units, &mut tcx)?;
+
+    // Desugar encodings from source units. This might generate new source
     // units (for side conditions).
-    let mut source_units_buf = vec![];
-    for source_unit in &mut source_units {
-        source_unit
-            .enter()
-            .apply_encodings(&mut tcx, &mut source_units_buf)?;
-    }
-    source_units.extend(source_units_buf);
+    let mut source_units = apply_encodings(&mut tcx, source_units, server)?;
 
     if options.debug_options.print_core_procs {
         println!("HeyVL query with generated procs:");
@@ -927,7 +957,7 @@ fn verify_files_main(
         limits_ref.check_limits()?;
 
         // Set the current unit as ongoing
-        server.set_ongoing_unit(verify_unit.span)?;
+        server.set_ongoing_unit(name)?;
 
         // 4. Desugaring: transforming spec calls to procs
         verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
@@ -1064,7 +1094,7 @@ fn verify_files_main(
         limits_ref.check_limits()?;
 
         server
-            .handle_vc_check_result(name, verify_unit.span, &mut result, &mut translate)
+            .handle_vc_check_result(name, &mut result, &mut translate)
             .map_err(VerifyError::ServerError)?;
     }
 

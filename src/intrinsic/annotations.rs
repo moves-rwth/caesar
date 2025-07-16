@@ -12,6 +12,7 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
+    proof_rules::calculus::RecursiveProcBlame,
     proof_rules::Encoding,
     slicing::selection::SliceAnnotation,
     tyctx::TyCtx,
@@ -33,7 +34,7 @@ pub enum AnnotationError {
     NotOnWhile {
         span: Span,
         annotation_name: Ident,
-        annotated: Stmt,
+        annotated: Box<Stmt>,
     },
     WrongArgument {
         span: Span,
@@ -63,6 +64,11 @@ pub enum AnnotationUnsoundnessError {
         context_calculus: Ident,
         call_calculus: Ident,
     },
+    UnsoundRecursion {
+        direction: Direction,
+        calculus_name: Ident,
+        blame: RecursiveProcBlame,
+    },
 }
 
 impl AnnotationError {
@@ -87,7 +93,7 @@ impl AnnotationError {
                     annotation_name
                 ))
                 .with_label(
-                    Label::new(annotated.span).with_message("This should be a while statement"),
+                    Label::new(annotated.span).with_message("This should be a while statement."),
                 ),
             AnnotationError::WrongArgument { span, arg, message } => {
                 Diagnostic::new(ReportKind::Error, span)
@@ -99,7 +105,7 @@ impl AnnotationError {
                 annotation_name,
             } => Diagnostic::new(ReportKind::Error, span)
                 .with_message(format!(
-                    "The '{}' annotation is unknown.",
+                    "The `{}` annotation is unknown.",
                     annotation_name.name
                 ))
                 .with_label(Label::new(span).with_message("This annotation is not defined.")),
@@ -113,7 +119,7 @@ impl AnnotationUnsoundnessError {
             AnnotationUnsoundnessError::NotTerminator{span, enc_name} => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "The '{}' annotation must annotate the last statement of the program.",
+                        "The `{}` annotation must annotate the last statement of the program.",
                         enc_name.name
                     ))
                     .with_label(Label::new(span).with_message(
@@ -123,7 +129,7 @@ impl AnnotationUnsoundnessError {
             AnnotationUnsoundnessError::CalculusEncodingMismatch{direction, span, calculus_name, enc_name } => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "In {}s, the '{}' calculus does not support the '{}' encoding.",
+                        "In {}s, the `{}` calculus does not support the `{}` proof rule.",
                         direction.prefix("proc"), calculus_name.name, enc_name.name
                     ))
                     .with_label(Label::new(span).with_message(
@@ -133,12 +139,32 @@ impl AnnotationUnsoundnessError {
             AnnotationUnsoundnessError::CalculusCallMismatch{span,context_calculus,call_calculus} => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
-                        "Cannot call '{}' proc from '{}' proc.",
+                        "Cannot call `{}` proc from `{}` proc.",
                          call_calculus.name, context_calculus.name
                     ))
                     .with_label(Label::new(span).with_message(
                         "The calculus of the called procedure must match the calculus of the calling procedure.",
                     ))
+            }
+            AnnotationUnsoundnessError::UnsoundRecursion{direction,calculus_name , blame } => {
+                Diagnostic::new(ReportKind::Error, blame.call_span)
+                    .with_message(format!(
+                        "Potentially recursive calls are not allowed in a {} with the `{}` calculus.",
+                        direction.prefix("proc"), calculus_name.name,
+                    ))
+                    .with_label(Label::new(blame.call_span).with_message({
+                        if blame.called_proc_name == blame.recursive_proc_name {
+                            format!("This call to `{}` is potentially recursive.", blame.called_proc_name.name)
+                        } else {
+                            format!(
+                            "This call to `{}` can lead to a recursive call to `{}` again.",
+                            blame.called_proc_name.name, blame.recursive_proc_name.name
+                            )
+                        }
+                    }))
+                    .with_note(
+                        "(Co)Procedure calls make use of Park induction, which is not sound in this setting in general.",
+                    )
             }
         }
     }
@@ -155,6 +181,17 @@ pub enum CalculusType {
     Wp,
     Wlp,
     Ert,
+}
+
+impl CalculusType {
+    pub fn is_induction_allowed(&self, direction: Direction) -> bool {
+        matches!(
+            (self, direction),
+            (CalculusType::Wlp, Direction::Down)
+                | (CalculusType::Wp, Direction::Up)
+                | (CalculusType::Ert, Direction::Up)
+        )
+    }
 }
 
 pub struct CalculusAnnotationError;
@@ -202,8 +239,8 @@ impl AnnotationKind {
     }
 }
 
-/// Typecheck annotation call
-pub fn check_annotation_call(
+/// Typecheck an annotation call.
+pub fn tycheck_annotation_call(
     tycheck: &mut Tycheck<'_>,
     span: Span,
     annotation: &AnnotationDecl,

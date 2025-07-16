@@ -202,12 +202,12 @@ impl Files {
 impl<'a> Cache<FileId> for &'a Files {
     type Storage = String;
 
-    fn fetch(&mut self, id: &FileId) -> Result<&Source, Box<dyn std::fmt::Debug + '_>> {
+    fn fetch(&mut self, id: &FileId) -> Result<&Source<Self::Storage>, impl fmt::Debug> {
         let stored_file = self.get(*id).unwrap();
-        Ok(&stored_file.lines)
+        Ok::<&ariadne::Source, ()>(&stored_file.lines)
     }
 
-    fn display<'b>(&self, id: &'b FileId) -> Option<Box<dyn std::fmt::Display + 'b>> {
+    fn display<'b>(&self, id: &'b FileId) -> Option<impl fmt::Display + 'b> {
         let stored_file = self.get(*id).unwrap();
         Some(Box::new(format!("{}", stored_file.path)))
     }
@@ -215,6 +215,7 @@ impl<'a> Cache<FileId> for &'a Files {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SpanVariant {
+    Combined,
     Parser,
     VC,
     ImplicitCast,
@@ -322,6 +323,7 @@ impl Span {
 impl fmt::Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let prefix = match self.variant {
+            SpanVariant::Combined => "?/",
             SpanVariant::Parser => "",
             SpanVariant::VC => "vc/",
             SpanVariant::ImplicitCast => "cast/",

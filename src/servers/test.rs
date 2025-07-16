@@ -1,23 +1,23 @@
 use std::{
-    collections::HashMap,
+    ops::Deref,
     sync::{Arc, Mutex},
 };
 
 use crate::{
-    ast::{Diagnostic, FileId, Files, Span, StoredFile},
-    driver::{SmtVcCheckResult, SourceUnitName},
+    ast::{DeclKind, Diagnostic, FileId, Files, StoredFile},
+    driver::{Item, SmtVcCheckResult, SourceUnit, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
     VerifyCommand, VerifyError,
 };
 
-use super::{unless_fatal_error, Server, ServerError, VerifyResult};
+use super::{unless_fatal_error, Server, ServerError, VerifyStatus, VerifyStatusList};
 
 pub struct TestServer {
     pub files: Arc<Mutex<Files>>,
     werr: bool,
     pub diagnostics: Vec<Diagnostic>,
-    pub statuses: HashMap<Span, VerifyResult>,
+    pub statuses: VerifyStatusList,
 }
 
 impl TestServer {
@@ -55,28 +55,33 @@ impl Server for TestServer {
     }
 
     fn add_vc_explanation(&mut self, _explanation: VcExplanation) -> Result<(), VerifyError> {
-        // TODO
         Ok(())
     }
 
-    fn register_source_unit(&mut self, _span: Span) -> Result<(), VerifyError> {
-        // TODO
+    fn register_source_unit(
+        &mut self,
+        source_unit: &mut Item<SourceUnit>,
+    ) -> Result<(), VerifyError> {
+        let name = source_unit.name().clone();
+        if let SourceUnit::Decl(DeclKind::ProcDecl(_)) = source_unit.enter().deref() {
+            self.statuses.update_status(&name, VerifyStatus::Todo);
+        }
         Ok(())
     }
 
-    fn set_ongoing_unit(&mut self, _span: Span) -> Result<(), VerifyError> {
+    fn set_ongoing_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError> {
+        self.statuses.update_status(name, VerifyStatus::Ongoing);
         Ok(())
     }
 
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
-        _name: &SourceUnitName,
-        span: Span,
+        name: &SourceUnitName,
         result: &mut SmtVcCheckResult<'ctx>,
         _translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError> {
         self.statuses
-            .insert(span, VerifyResult::from_prove_result(&result.prove_result));
+            .update_status(name, VerifyStatus::from_prove_result(&result.prove_result));
         Ok(())
     }
 }

@@ -19,7 +19,7 @@ use crate::{
         tycheck::{Tycheck, TycheckError},
     },
     intrinsic::annotations::{
-        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+        tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
     },
     slicing::{wrap_with_error_message, wrap_with_success_message},
     tyctx::TyCtx,
@@ -27,7 +27,7 @@ use crate::{
 
 use super::{
     util::{encode_extend, encode_iter, intrinsic_param, lit_u128, one_arg, two_args},
-    Encoding, EncodingEnvironment, EncodingGenerated,
+    Encoding, EncodingEnvironment, GeneratedEncoding,
 };
 
 /// The "@induction" encoding is just syntactic sugar for 1-induction.
@@ -72,7 +72,7 @@ impl Encoding for InvariantAnnotation {
         call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), TycheckError> {
-        check_annotation_call(tycheck, call_span, &self.0, args)?;
+        tycheck_annotation_call(tycheck, call_span, &self.0, args)?;
         Ok(())
     }
 
@@ -99,7 +99,7 @@ impl Encoding for InvariantAnnotation {
         args: &[Expr],
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
-    ) -> Result<EncodingGenerated, AnnotationError> {
+    ) -> Result<GeneratedEncoding, AnnotationError> {
         let [invariant] = one_arg(args);
         let k = 1;
         transform_k_induction(tcx, inner_stmt, enc_env, k, invariant)
@@ -165,7 +165,7 @@ impl Encoding for KIndAnnotation {
         call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), TycheckError> {
-        check_annotation_call(tycheck, call_span, &self.0, args)?;
+        tycheck_annotation_call(tycheck, call_span, &self.0, args)?;
         Ok(())
     }
 
@@ -183,7 +183,7 @@ impl Encoding for KIndAnnotation {
         args: &[Expr],
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
-    ) -> Result<EncodingGenerated, AnnotationError> {
+    ) -> Result<GeneratedEncoding, AnnotationError> {
         let [k, invariant] = two_args(args);
         let k_val: u128 = lit_u128(k);
 
@@ -215,7 +215,7 @@ fn transform_k_induction(
     enc_env: EncodingEnvironment,
     k: u128,
     invariant: &Expr,
-) -> Result<EncodingGenerated, AnnotationError> {
+) -> Result<GeneratedEncoding, AnnotationError> {
     let annotation_span = enc_env.call_span;
     let direction = enc_env.direction;
 
@@ -255,7 +255,7 @@ fn transform_k_induction(
     // Encode the last iteration in the normal direction
     buf.push(encode_iter(&enc_env, inner_stmt, next_iter).unwrap());
 
-    Ok(EncodingGenerated {
+    Ok(GeneratedEncoding {
         block: Spanned::new(enc_env.stmt_span, buf),
         decls: None,
     })

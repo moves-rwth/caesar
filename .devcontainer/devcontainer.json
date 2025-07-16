@@ -1,0 +1,7 @@
+// For format details, see https://aka.ms/devcontainer.json.
+{
+    "name": "Rust",
+    "build": {
+        "dockerfile": "Dockerfile"
+    }
+}

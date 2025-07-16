@@ -29,7 +29,7 @@ use crate::{
     },
     procs::proc_verify::verify_proc,
     tyctx::TyCtx,
-    version::caesar_version_info,
+    version::caesar_detailed_version,
     ModelCheckingOptions,
 };
 
@@ -46,12 +46,18 @@ pub enum JaniConversionError {
     UnsupportedPre(Expr),
     UnsupportedAssume(Expr),
     UnsupportedAssert(Expr),
-    UnsupportedHavoc { stmt: Stmt, can_eliminate: bool },
+    UnsupportedHavoc {
+        stmt: Box<Stmt>,
+        can_eliminate: bool,
+    },
     UnsupportedInftyPost(Expr),
     NondetSelection(Span),
     MismatchedDirection(Span),
     UnsupportedCall(Span, Ident),
-    UnsupportedCalculus { proc: Ident, calculus: Ident },
+    UnsupportedCalculus {
+        proc: Ident,
+        calculus: Ident,
+    },
 }
 
 impl JaniConversionError {
@@ -167,7 +173,7 @@ pub fn proc_to_model(
         description: Some(
             format!(
                 "Created by the Caesar deductive verifier ({}).",
-                caesar_version_info()
+                caesar_detailed_version()
             )
             .into_boxed_str(),
         ),

@@ -3,6 +3,7 @@
 use std::{
     fmt,
     fs::{create_dir_all, File},
+    hash::Hash,
     io::Write,
     ops::{Deref, DerefMut},
     path::PathBuf,
@@ -30,7 +31,6 @@ use crate::{
         proc_verify::{to_direction_lower_bounds, verify_proc},
         SpecCall,
     },
-    proof_rules::EncodingVisitor,
     resource_limits::{LimitError, LimitsRef},
     servers::Server,
     slicing::{
@@ -53,7 +53,7 @@ use crate::{
         subst::apply_subst,
         vcgen::Vcgen,
     },
-    version::write_detailed_version_info,
+    version::write_detailed_command_info,
     DebugOptions, SliceOptions, SliceVerifyMethod, VerifyCommand, VerifyError,
 };
 
@@ -73,15 +73,23 @@ use z3rro::{
 
 use tracing::{info_span, instrument, trace};
 
-/// Human-readable name for a source unit. Used for debugging and error messages.
-#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone)]
+/// Human-readable name for a source unit consisting of a file path, an
+/// optionally qualified name, and a span for reporting.
+#[derive(Debug, Hash, Clone, PartialEq, Eq)]
 pub struct SourceUnitName {
     short_path: String,
     decl_name: Option<String>,
+    /// The span used for reporting, such as the name of the procedure. We use
+    /// this span position e.g. the gutter icons in the IDE.
+    span: Span,
 }
 
 impl SourceUnitName {
-    fn new_raw(source_file_path: &SourceFilePath) -> SourceUnitName {
+    fn new(
+        source_file_path: &SourceFilePath,
+        decl_name: Option<String>,
+        span: Span,
+    ) -> SourceUnitName {
         let short_path = source_file_path
             .relative_to_cwd()
             .unwrap()
@@ -89,14 +97,9 @@ impl SourceUnitName {
             .to_string();
         SourceUnitName {
             short_path,
-            decl_name: None,
+            decl_name,
+            span,
         }
-    }
-
-    fn new_decl(source_file_path: &SourceFilePath, decl: &DeclKind) -> SourceUnitName {
-        let mut res = Self::new_raw(source_file_path);
-        res.decl_name = Some(decl.name().name.to_string());
-        res
     }
 
     /// Create a file name for this source unit with the given file extension.
@@ -113,6 +116,10 @@ impl SourceUnitName {
             None => format!("{}.{}", &self.short_path, extension),
         };
         PathBuf::from(file_name)
+    }
+
+    pub fn span(&self) -> Span {
+        self.span
     }
 }
 
@@ -139,22 +146,6 @@ impl<T> Item<T> {
         Item { name, span, item }
     }
 
-    pub fn init(name: SourceUnitName, init: impl FnOnce() -> T) -> Self {
-        Item::new(name, ()).map(|()| init())
-    }
-
-    pub fn try_init<E>(
-        name: SourceUnitName,
-        init: impl FnOnce() -> Result<T, E>,
-    ) -> Result<Item<T>, E> {
-        let res = Item::init(name, init);
-        Ok(Item {
-            name: res.name,
-            span: res.span,
-            item: res.item?,
-        })
-    }
-
     pub fn name(&self) -> &SourceUnitName {
         &self.name
     }
@@ -173,14 +164,6 @@ impl<T> Item<T> {
             _entered: self.span.enter(),
         };
         (name, entered)
-    }
-
-    pub fn map<S>(self, f: impl FnOnce(T) -> S) -> Item<S> {
-        let name = self.name;
-        let span = self.span;
-        let item = self.item;
-        let item = span.in_scope(|| f(item));
-        Item { name, span, item }
     }
 
     pub fn flat_map<S>(self, f: impl FnOnce(T) -> Option<S>) -> Option<Item<S>> {
@@ -247,19 +230,17 @@ pub enum SourceUnit {
 }
 
 impl SourceUnit {
-    /// Return a new [`Item`] by wrapping it around the [`SourceUnit`]
-    /// and set the file path of the new [`SourceUnitName`] to the given file_path argument
-    /// This function is used to generate [`Item`]s from generated [`SourceUnit`] objects (through AST transformations)
-    pub fn wrap_item(self, file_path: &SourceFilePath) -> Item<SourceUnit> {
-        match self {
-            SourceUnit::Decl(decl) => Item::new(
-                SourceUnitName::new_decl(file_path, &decl),
-                SourceUnit::Decl(decl),
+    /// Return a new generated source unit (with [`SourceFilePath::Generated`])
+    /// for the given declaration and span in an [`Item`].
+    pub fn from_generated_decl(decl: DeclKind, span: Span) -> Item<SourceUnit> {
+        Item::new(
+            SourceUnitName::new(
+                &SourceFilePath::Generated,
+                Some(decl.name().name.to_owned()),
+                span,
             ),
-            SourceUnit::Raw(block) => {
-                Item::new(SourceUnitName::new_raw(file_path), SourceUnit::Raw(block))
-            }
-        }
+            SourceUnit::Decl(decl),
+        )
     }
 
     /// The span where to report diagnostics.
@@ -272,11 +253,10 @@ impl SourceUnit {
 
     pub fn parse(file: &StoredFile, raw: bool) -> Result<Vec<Item<Self>>, ParseError> {
         if raw {
-            let name = SourceUnitName::new_raw(&file.path);
-            let item = Item::try_init(name, || {
-                let block = parser::parse_raw(file.id, &file.source)?;
-                Ok(SourceUnit::Raw(block))
-            })?;
+            let block = info_span!("parse", path=%file.path.to_string_lossy(), raw=raw)
+                .in_scope(|| parser::parse_raw(file.id, &file.source))?;
+            let name = SourceUnitName::new(&file.path, None, block.span);
+            let item = Item::new(name, SourceUnit::Raw(block));
             Ok(vec![item])
         } else {
             let decls =
@@ -290,7 +270,11 @@ impl SourceUnit {
                 .into_iter()
                 .map(|decl| {
                     Item::new(
-                        SourceUnitName::new_decl(&file.path, &decl),
+                        SourceUnitName::new(
+                            &file.path,
+                            Some(decl.name().name.to_owned()),
+                            decl.name().span,
+                        ),
                         SourceUnit::Decl(decl),
                     )
                 })
@@ -401,21 +385,6 @@ impl SourceUnit {
         }
     }
 
-    /// Apply encodings from annotations.
-    #[instrument(skip(self, tcx, source_units_buf))]
-    pub fn apply_encodings(
-        &mut self,
-        tcx: &mut TyCtx,
-        source_units_buf: &mut Vec<Item<SourceUnit>>,
-    ) -> Result<(), VerifyError> {
-        let mut encoding_visitor = EncodingVisitor::new(tcx, source_units_buf);
-        let res = match self {
-            SourceUnit::Decl(decl) => encoding_visitor.visit_decl(decl),
-            SourceUnit::Raw(block) => encoding_visitor.visit_block(block),
-        };
-        Ok(res.map_err(|ann_err| ann_err.diagnostic())?)
-    }
-
     /// Convert this source unit into a [`VerifyUnit`].
     /// Some declarations, such as domains or functions, do not generate any verify units.
     /// In these cases, `None` is returned.
@@ -430,7 +399,6 @@ impl SourceUnit {
                 }
             }
             SourceUnit::Raw(block) => Some(VerifyUnit {
-                span: block.span,
                 direction: Direction::Down,
                 block,
             }),
@@ -456,7 +424,6 @@ impl fmt::Display for SourceUnit {
 /// A block of HeyVL statements to be verified with a certain [`Direction`].
 #[derive(Debug, Clone)]
 pub struct VerifyUnit {
-    pub span: Span,
     pub direction: Direction,
     pub block: Block,
 }
@@ -892,7 +859,7 @@ fn write_smtlib(
             create_dir_all(file_path.parent().unwrap())?;
             let mut file = File::create(&file_path)?;
             let mut comment_writer = PrefixWriter::new("; ".as_bytes(), &mut file);
-            write_detailed_version_info(&mut comment_writer)?;
+            write_detailed_command_info(&mut comment_writer)?;
             writeln!(comment_writer, "Source unit: {}", name)?;
             if let Some(prove_result) = prove_result {
                 writeln!(comment_writer, "Prove result: {}", &prove_result)?;
