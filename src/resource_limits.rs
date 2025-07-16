@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use simple_process_stats::ProcessStats;
+use memory_stats::memory_stats;
 use thiserror::Error;
 use tokio::{
     select,
@@ -115,15 +115,15 @@ async fn wait_for_oom(mem_limit: MemorySize) {
     interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
     loop {
         interval.tick().await;
-        let process_stats_res = ProcessStats::get().await;
-        match process_stats_res {
-            Ok(process_stats) => {
-                let current_usage = MemorySize::bytes(process_stats.memory_usage_bytes as usize);
+        let memory_stats_res = memory_stats();
+        match memory_stats_res {
+            Some(memory_stats) => {
+                let current_usage = MemorySize::bytes(memory_stats.physical_mem as usize);
                 if current_usage > mem_limit {
                     return;
                 }
             }
-            Err(err) => {
+            None => {
                 // We have observed that the call `ProcessStats::get()` fails on
                 // x86 Linux-based Docker images running virtualized in an ARM
                 // environment on Apple M1 chips. This seems to be due to
@@ -133,7 +133,7 @@ async fn wait_for_oom(mem_limit: MemorySize) {
                 // cases. This seems acceptable since it's a very specific set
                 // of circumstances and likely a bug in QEMU that is going to be
                 // fixed.
-                error!(err=%err, "Could not fetch process stats to check memory limit. Memory limit checking is disabled. This error may occur in virtual machines. For memory limit checking, please consider using a native environment.");
+                error!("Could not fetch process stats to check memory limit. Memory limit checking is disabled. This error may occur in virtual machines. For memory limit checking, please consider using a native environment.");
                 pending().await // do not terminate this function
             }
         }

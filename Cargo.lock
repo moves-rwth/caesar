@@ -168,9 +168,9 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bindgen"
-version = "0.70.1"
+version = "0.72.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f49d8fed880d473ea71efb9bf597651e77201bdd4893efe54c9e5d65ae04ce6f"
+checksum = "4f72209734318d0b619a5e0f5129918b848c416e122a3c4ce054e03cb87b726f"
 dependencies = [
  "bitflags 2.9.1",
  "cexpr",
@@ -274,6 +274,7 @@ dependencies = [
  "libtest-mimic",
  "lsp-server",
  "lsp-types",
+ "memory-stats",
  "num",
  "os_info",
  "pathdiff",
@@ -287,7 +288,6 @@ dependencies = [
  "serde",
  "serde_json",
  "shlex",
- "simple-process-stats",
  "stacker",
  "string-interner",
  "tempfile",
@@ -333,9 +333,7 @@ checksum = "c469d952047f47f91b68d1cba3f10d63c11d73e4636f24f08daf0278abf01c4d"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
- "js-sys",
  "num-traits",
- "wasm-bindgen",
  "windows-link",
 ]
 
@@ -519,21 +517,6 @@ checksum = "7d02f3b0da4c6504f86e9cd789d8dbafab48c2321be74e9987593de5a894d93d"
 dependencies = [
  "memchr",
 ]
-
-[[package]]
-name = "darwin-libproc"
-version = "0.2.0"
-source = "git+https://github.com/Orycterope/darwin-libproc.git?rev=f73ddb1002d51ae74c1b41670fae56bd5896b7a3#f73ddb1002d51ae74c1b41670fae56bd5896b7a3"
-dependencies = [
- "darwin-libproc-sys",
- "libc",
- "memchr",
-]
-
-[[package]]
-name = "darwin-libproc-sys"
-version = "0.2.0"
-source = "git+https://github.com/Orycterope/darwin-libproc.git?rev=f73ddb1002d51ae74c1b41670fae56bd5896b7a3#f73ddb1002d51ae74c1b41670fae56bd5896b7a3"
 
 [[package]]
 name = "dashmap"
@@ -838,12 +821,6 @@ name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
-
-[[package]]
-name = "hex"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "iana-time-zone"
@@ -1270,6 +1247,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0"
 
 [[package]]
+name = "memory-stats"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c73f5c649995a115e1a0220b35e4df0a1294500477f97a91d0660fb5abeb574a"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1609,21 +1596,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "procfs"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab8809e0c18450a2db0f236d2a44ec0b4c1412d0eb936233579f0990faa5d5cd"
-dependencies = [
- "bitflags 1.3.2",
- "byteorder",
- "chrono",
- "flate2",
- "hex",
- "lazy_static",
- "libc",
-]
-
-[[package]]
 name = "proptest"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1822,9 +1794,9 @@ checksum = "989e6739f80c4ad5b13e0fd7fe89531180375b18520cc8c82080e4dc4035b84f"
 
 [[package]]
 name = "rustc-hash"
-version = "1.1.0"
+version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
+checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
 
 [[package]]
 name = "rustix"
@@ -1957,20 +1929,6 @@ name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
-
-[[package]]
-name = "simple-process-stats"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbac11c9c71488f54be642954a9d41eefeecbe009fe2c98a6d0ad8c785565199"
-dependencies = [
- "darwin-libproc",
- "libc",
- "procfs",
- "thiserror 1.0.69",
- "tokio",
- "winapi",
-]
 
 [[package]]
 name = "siphasher"
@@ -2794,8 +2752,8 @@ dependencies = [
 
 [[package]]
 name = "z3"
-version = "0.12.1"
-source = "git+https://github.com/ole-thoeb/z3.rs.git?rev=f785da2c606e622162b939b948df2a3dc8c61e6e#f785da2c606e622162b939b948df2a3dc8c61e6e"
+version = "0.13.2"
+source = "git+https://github.com/prove-rs/z3.rs.git?rev=8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989#8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989"
 dependencies = [
  "log",
  "num",
@@ -2804,11 +2762,10 @@ dependencies = [
 
 [[package]]
 name = "z3-sys"
-version = "0.8.1"
-source = "git+https://github.com/ole-thoeb/z3.rs.git?rev=f785da2c606e622162b939b948df2a3dc8c61e6e#f785da2c606e622162b939b948df2a3dc8c61e6e"
+version = "0.9.3"
+source = "git+https://github.com/prove-rs/z3.rs.git?rev=8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989#8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989"
 dependencies = [
  "bindgen",
- "cc",
  "cmake",
  "pkg-config",
 ]
