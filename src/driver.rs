@@ -805,6 +805,18 @@ pub fn mk_z3_ctx(options: &VerifyCommand) -> Context {
         config.set_bool_param_value("trace", true);
         config.set_bool_param_value("proof", true);
     }
+
+    // enable the quantifier instantiation profile if requested
+    if options.debug_options.z3_qi_profile {
+        z3::set_global_param("smt.qi.profile", "true");
+        z3::set_global_param("smt.qi.profile_freq", "1000");
+    }
+
+    // set verbosity level
+    if let Some(verbosity) = options.debug_options.z3_verbose {
+        z3::set_global_param("verbose", &verbosity.to_string());
+    }
+
     Context::new(&config)
 }
 

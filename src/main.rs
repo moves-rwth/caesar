@@ -438,6 +438,15 @@ pub struct DebugOptions {
     #[arg(long)]
     pub z3_seed: Option<u32>,
 
+    /// Enable Z3's quantifier instantiation profiling. Output will be sent
+    /// every 1000 instantiations to standard error.
+    #[arg(long)]
+    pub z3_qi_profile: bool,
+
+    /// Set Z3's verbosity level.
+    #[arg(long)]
+    pub z3_verbose: Option<u32>,
+
     /// Print Z3's statistics after the final SAT check.
     #[arg(long)]
     pub print_z3_stats: bool,
