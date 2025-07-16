@@ -310,7 +310,7 @@ impl<'ctx> ScopeSymbolic<'ctx> {
     pub fn fresh_fuel(ctx: &SmtCtx<'ctx>) -> Self {
         let factory = ctx.fuel_factory();
         let mut scope = SmtScope::new();
-        let value = Fuel::fresh(&factory, &mut scope, "fuel");
+        let value = Fuel::fresh(factory, &mut scope, "$f");
         ScopeSymbolic::new(Symbolic::Fuel(value), scope)
     }
 

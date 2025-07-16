@@ -67,10 +67,11 @@ pub enum ExprKind {
 }
 
 impl Expr {
-    pub fn children_mut(&mut self) -> Vec<&mut Expr> {
-        match &mut self.kind {
+    /// Return a list of references to all _direct_ children of this expression.
+    pub fn children(&self) -> Vec<&Expr> {
+        match &self.kind {
             ExprKind::Var(_) | ExprKind::Lit(_) => vec![],
-            ExprKind::Call(_, args) => args.iter_mut().collect(),
+            ExprKind::Call(_, args) => args.iter().collect(),
             ExprKind::Ite(cond, branch1, branch2) => vec![cond, branch1, branch2],
             ExprKind::Binary(_, lhs, rhs) => vec![lhs, rhs],
             ExprKind::Unary(_, operand) => vec![operand],

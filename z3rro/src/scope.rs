@@ -9,8 +9,17 @@ use z3::{
 
 use crate::{prover::Prover, Factory, SmtFactory, SmtInvariant};
 
-/// Default weight for quantifiers.
-pub const WEIGHT_DEFAULT: u32 = 1;
+/// Weights for quantifiers.
+///
+/// The weights are used to prioritize quantifier instantiation in the SMT solver.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[repr(transparent)]
+pub struct Weight(pub u32);
+
+impl Weight {
+    /// Default weight for quantifiers.
+    pub const DEFAULT: Weight = Weight(1);
+}
 
 /// An SmtScope can be used to construct a quantifier like `forall` or `exists`.
 /// The scope has a list of bound expressions (usually just variables) and a
@@ -83,7 +92,7 @@ impl<'ctx> SmtScope<'ctx> {
     pub fn forall(
         &self,
         qid: impl Into<Symbol>,
-        weight: u32,
+        weight: Weight,
         patterns: &[&Pattern<'ctx>],
         body: &Bool<'ctx>,
     ) -> Bool<'ctx> {
@@ -91,7 +100,7 @@ impl<'ctx> SmtScope<'ctx> {
         quantifier_const(
             ctx,
             true,
-            weight,
+            weight.0,
             qid,
             "",
             &self.bounds_dyn(),

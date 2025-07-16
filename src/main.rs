@@ -14,12 +14,19 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::smt::FunctionEncoding;
 use crate::{
     ast::TyKind,
     driver::mk_z3_ctx,
     front::{resolve::Resolve, tycheck::Tycheck},
-    smt::{translate_exprs::TranslateExprs, SmtCtx},
+    smt::{
+        funcs::{
+            axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder},
+            fuel::{FuelMonoFunctionEncoder, FuelParamFunctionEncoder},
+            FunctionEncoder, RecFunFunctionEncoder,
+        },
+        translate_exprs::TranslateExprs,
+        SmtCtx,
+    },
     timing::TimingLayer,
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
@@ -268,32 +275,42 @@ impl ModelCheckingOptions {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
 pub enum QuantifierInstantiation {
-    /// Use both E-matching and MBQI for quantifier instantiation.
+    /// Use all available quantifier instantiation heuristics, in particular
+    /// both e-matching and MBQI are enabled.
     #[default]
-    Both,
+    All,
     /// Only use E-matching for quantifier instantiation.
+    #[value(alias = "ematching")]
     EMatching,
     /// Only use MBQI for quantifier instantiation.
     MBQI,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
-pub enum FunctionEncodingValue {
-    /// Apply no encoding.
+pub enum FunctionEncodingOption {
+    /// The the most direct encoding with FO + uninterpreted functions, allowing
+    /// for unbounded computations and arbitrary quantifier instaniations.
     #[default]
-    Default,
-    /// Add a version of the function for each fuel value (f_0, f_1, ...).
-    FixedFuel,
-    /// Add a fuel parameter to the function.
-    VariableFuel,
-    /// Like [FunctionEncodingValue::FixedFuel] with additionally allowing unbounded unfolding
-    /// if the parameter values are known.
-    FixedFuelComputation,
-    /// Like [FunctionEncodingValue::VariableFuel] with additionally allowing unbounded unfolding
-    /// if the parameter values are known.
-    VariableFuelComputation,
-    /// Uses `define-fun-rec` defined by SMT-Lib to encode functions.
-    /// Only supports parameters without side conditions.
+    Axiomatic,
+    /// Like axiomatic encoding but only allows decreasing instantiations, where
+    /// the defining axiom is only instantiated based on occurrences of the
+    /// function it defines, not other functions in the definition. These
+    /// instantiations are unbounded.
+    Decreasing,
+    /// Add a version of the function for each fuel value (f_0, f_1, ...) and
+    /// recursive calls decrease the fuel value.
+    FuelMono,
+    /// Add a symbolic fuel parameter to the function.
+    FuelParam,
+    /// Like `fuel-mono`, additionally allowing unbounded unfolding if the
+    /// parameter values are literals.
+    FuelMonoComputation,
+    /// Like `fuel-param`, additionally allowing unbounded unfolding if the
+    /// parameter values are literals.
+    FuelParamComputation,
+    /// Uses SMT-LIB's `define-fun-rec` to encode functions. Only supports input
+    /// parameter types without SMT invariants right now.
+    #[value(alias = "recfun")]
     DefineFunRec,
 }
 
@@ -330,16 +347,16 @@ pub struct OptimizationOptions {
 
     /// Determine how user-defined functions are encoded.
     /// The fuel encodings require `--quantifier-instantiation e-matching`.
-    #[arg(long, default_value = "default")]
-    pub function_encoding: FunctionEncodingValue,
+    #[arg(long, alias = "fe", default_value = "axiomatic")]
+    pub function_encoding: FunctionEncodingOption,
 
     /// The number of times a function declaration can be recursively instantiated/unfolded when
     /// using one of the fuel encodings.
     #[arg(long, default_value = "2")]
-    pub max_fuel: u8,
+    pub max_fuel: usize,
 
     /// Select which heuristics for quantifier instantiation should be used by the SMT solver.
-    #[arg(long, alias = "qi", default_value = "both")]
+    #[arg(long, alias = "qi", default_value = "all")]
     pub quantifier_instantiation: QuantifierInstantiation,
 }
 
@@ -971,21 +988,40 @@ fn verify_files_main(
         // 11. Translate to Z3
         let ctx = mk_z3_ctx(options);
         let function_encoding = match options.opt_options.function_encoding {
-            FunctionEncodingValue::Default => FunctionEncoding::default(),
-            FunctionEncodingValue::FixedFuel => {
-                FunctionEncoding::fixed(options.opt_options.max_fuel, false)
+            FunctionEncodingOption::Axiomatic => {
+                AxiomaticFunctionEncoder::new(AxiomInstantiation::Bidirectional).into_boxed()
             }
-            FunctionEncodingValue::VariableFuel => {
-                FunctionEncoding::variable(options.opt_options.max_fuel, false)
+            FunctionEncodingOption::Decreasing => {
+                AxiomaticFunctionEncoder::new(AxiomInstantiation::Decreasing).into_boxed()
             }
-            FunctionEncodingValue::FixedFuelComputation => {
-                FunctionEncoding::fixed(options.opt_options.max_fuel, true)
+            FunctionEncodingOption::FuelMono => {
+                FuelMonoFunctionEncoder::new(options.opt_options.max_fuel, false).into_boxed()
             }
-            FunctionEncodingValue::VariableFuelComputation => {
-                FunctionEncoding::variable(options.opt_options.max_fuel, true)
+            FunctionEncodingOption::FuelParam => {
+                FuelParamFunctionEncoder::new(options.opt_options.max_fuel, false).into_boxed()
             }
-            FunctionEncodingValue::DefineFunRec => FunctionEncoding::define_fun_rec(),
+            FunctionEncodingOption::FuelMonoComputation => {
+                FuelMonoFunctionEncoder::new(options.opt_options.max_fuel, true).into_boxed()
+            }
+            FunctionEncodingOption::FuelParamComputation => {
+                FuelParamFunctionEncoder::new(options.opt_options.max_fuel, true).into_boxed()
+            }
+            FunctionEncodingOption::DefineFunRec => RecFunFunctionEncoder::new().into_boxed(),
         };
+        // Warn if using fuel encoding with non-ematching quantifier
+        // instantiation. The exception is the [`FuelEncodingOption::FuelMono`]
+        // encoding, which does not rely on Z3 not creating new terms for termination.
+        if matches!(
+            options.opt_options.function_encoding,
+            FunctionEncodingOption::FuelParam
+                | FunctionEncodingOption::FuelMonoComputation
+                | FunctionEncodingOption::FuelParamComputation
+        ) && options.opt_options.quantifier_instantiation != QuantifierInstantiation::EMatching
+        {
+            tracing::error!(
+                "Using fuel function encoding with MBQI does not guarantee termination and thus defeats the purpose of the fuel encoding. Set the `--quantifier-instantiation e-matching` option to use the fuel encoding with MBQI.",
+            );
+        }
         let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoding);
         let mut translate = TranslateExprs::new(&smt_ctx);
         let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
@@ -1167,7 +1203,7 @@ fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
         QuantifierInstantiation::MBQI => {
             z3::set_global_param("smt.ematching", "false");
         }
-        QuantifierInstantiation::Both => {}
+        QuantifierInstantiation::All => {}
     }
     if let Some(seed) = command.debug_options.z3_seed {
         z3::set_global_param("smt.random_seed", &seed.to_string());

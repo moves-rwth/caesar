@@ -14,26 +14,25 @@ use crate::{
         Trigger, TyKind, UnOpKind,
     },
     scope_map::ScopeMap,
+    smt::funcs::fuel::literals::LiteralExprSet,
 };
 
 use super::{
     symbolic::{ScopeSymbolic, Symbolic, SymbolicPair},
     SmtCtx,
 };
-use crate::ast::{ExprData, PointerHashShared};
-use crate::smt::function_encodings::{FunctionEncoder, LiteralExprs};
-use z3rro::scope::WEIGHT_DEFAULT;
+use crate::ast::{ExprData, RefEqShared};
 use z3rro::{
     eureal::EUReal,
     orders::{
         smt_bool_embed, smt_max, smt_min, SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering,
         SmtPartialOrd,
     },
-    scope::SmtScope,
+    scope::{SmtScope, Weight},
     List, LitWrap, SmtBranch, SmtEq, UInt, UReal,
 };
 
-/// Translates caesar expressions to Z3 formulas.
+/// Translates Caesar expressions to Z3 formulas.
 /// Fresh variables are created for local variables that occur in the expression.
 ///
 /// Translations of expressions are cached.
@@ -42,7 +41,7 @@ pub struct TranslateExprs<'smt, 'ctx> {
     limits_stack: Vec<SmtScope<'ctx>>,
     locals: ScopeMap<Ident, ScopeSymbolic<'ctx>>,
     cache: TranslateCache<'ctx>,
-    literal_exprs: LiteralExprs,
+    literal_exprs: LiteralExprSet,
 }
 
 impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
@@ -52,7 +51,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             limits_stack: vec![SmtScope::new()],
             locals: ScopeMap::new(),
             cache: TranslateCache::new(),
-            literal_exprs: LiteralExprs::default(),
+            literal_exprs: LiteralExprSet::default(),
         }
     }
 
@@ -76,19 +75,20 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         scope
     }
 
-    /// Defines what expressions should be considered literal from now (until reset
-    /// by [Self::clear_literal_exprs]). An expression is literal if it always has the same value
-    /// under all interpretations.
-    /// If enabled, literal expressions are marked during translation by wrapping them in
-    /// `Lit`-functions. Quantifier instantiation using Lit values does not consume fuel.
+    /// Defines what expressions should be considered literal from now. Literal
+    /// expressions are marked during translation by wrapping them in
+    /// `Lit`-functions. An expression is literal if it always has the same
+    /// value under all interpretations. Quantifier instantiation using Lit
+    /// values does not consume fuel.
     ///
-    /// See [crate::smt::limited]
-    pub fn set_literal_exprs(&mut self, literal_exprs: LiteralExprs) {
+    /// See [crate::smt::funcs::fuel]
+    pub fn set_literal_exprs(&mut self, literal_exprs: LiteralExprSet) {
         self.literal_exprs = literal_exprs;
+        self.clear_cache();
     }
 
-    pub fn clear_literal_exprs(&mut self) {
-        self.literal_exprs = LiteralExprs::default();
+    pub fn clear_cache(&mut self) {
+        self.cache.clear();
     }
 
     fn wrap_if_literal<A: LitWrap<'ctx>>(&self, expr: &Expr, ast: A) -> A {
@@ -202,12 +202,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 let patterns: Vec<_> = self.t_triggers(&ann.triggers);
                 let patterns: Vec<_> = patterns.iter().collect();
                 let quant = match quant_op.node {
-                    QuantOpKind::Forall | QuantOpKind::Inf => scope.forall(
-                        format!("{:?}", quant_op.span),
-                        WEIGHT_DEFAULT,
-                        &patterns,
-                        &operand,
-                    ),
+                    QuantOpKind::Forall | QuantOpKind::Inf => {
+                        let qid = format!("{:?}", quant_op.span);
+                        scope.forall(qid, Weight::DEFAULT, &patterns, &operand)
+                    }
                     QuantOpKind::Exists | QuantOpKind::Sup => scope.exists(&patterns, &operand),
                 };
                 quant
@@ -629,8 +627,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             Some(DeclKind::FuncDecl(func)) => {
                 let args = args.iter().map(|arg| self.t_symbolic(arg)).collect_vec();
                 self.ctx
-                    .function_encoding()
-                    .call_function(self.ctx, &func.borrow(), args)
+                    .function_encoder()
+                    .translate_call(self.ctx, &func.borrow(), args)
             }
             Some(DeclKind::FuncIntrin(intrin)) => intrin.translate_call(self, args),
             res => panic!("cannot call {:?}", res),
@@ -742,6 +740,13 @@ impl<'ctx> TranslateCache<'ctx> {
     fn get(&self, expr: &Expr) -> Option<&Symbolic<'ctx>> {
         self.cache.last().unwrap().get(CacheExpr::ref_cast(expr))
     }
+
+    /// Clear all levels of the cache.
+    fn clear(&mut self) {
+        for cache in &mut self.cache {
+            cache.clear();
+        }
+    }
 }
 
-type CacheExpr = PointerHashShared<ExprData>;
+type CacheExpr = RefEqShared<ExprData>;

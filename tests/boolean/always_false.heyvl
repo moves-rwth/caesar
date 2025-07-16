@@ -1,4 +1,4 @@
-// RUN: @caesar verify --function-encoding variable-fuel --quantifier-instantiation e-matching @file
+// RUN: @caesar verify --function-encoding fuel-param --quantifier-instantiation e-matching @file
 // CHECK: Verified
 
 domain Dom {

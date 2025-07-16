@@ -1,4 +1,4 @@
-// RUN: @caesar verify --function-encoding variable-fuel --quantifier-instantiation e-matching @file
+// RUN: @caesar verify --function-encoding fuel-param --quantifier-instantiation e-matching @file
 
 // Sum examples from the paper "Reasoning about Comprehensions with First-Order SMT Solvers" (Section 4.1)
 

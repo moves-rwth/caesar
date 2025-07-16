@@ -19,9 +19,9 @@ impl<'ctx> FuelFactory<'ctx> {
 
         // Clashes with user defined code are avoided by `$` in names
         let datatype = DatatypeBuilder::new(ctx, "$Fuel")
-            .variant("$Z", vec![])
+            .variant("$FZ", vec![])
             .variant(
-                "$S",
+                "$FS",
                 vec![("f", DatatypeAccessor::Datatype(Symbol::from("$Fuel")))],
             )
             .finish();
@@ -60,7 +60,7 @@ impl<'ctx> FuelFactory<'ctx> {
     }
 }
 
-/// Datatype representing peano numbers. Used to control how often quantifiers are instantiated.
+/// Datatype representing Peano numbers. Used to control how often quantifiers are instantiated.
 /// Equivalent to the rust type:
 /// ```
 /// enum Fuel {
@@ -75,7 +75,8 @@ pub struct Fuel<'ctx> {
 }
 
 impl<'ctx> Fuel<'ctx> {
-    pub fn new(factory: Factory<'ctx, Self>, n: u32) -> Self {
+    /// Create a new fuel value from constant `n`.
+    pub fn from_constant(factory: &Factory<'ctx, Self>, n: usize) -> Self {
         let mut fuel = Self::zero(factory);
         for _ in 0..n {
             fuel = Self::succ(fuel);
@@ -83,17 +84,39 @@ impl<'ctx> Fuel<'ctx> {
         fuel
     }
 
-    pub fn zero(factory: Factory<'ctx, Self>) -> Self {
+    /// Zero fuel.
+    pub fn zero(factory: &Factory<'ctx, Self>) -> Self {
         let value = factory.zero.apply(&[]);
-
-        Self { factory, value }
+        Self {
+            factory: factory.clone(),
+            value,
+        }
     }
 
+    /// Increment the fuel value by one.
     pub fn succ(fuel: Self) -> Self {
         let factory = fuel.factory;
         let value = factory.succ.apply(&[&fuel.value as &dyn Ast<'ctx>]);
-
         Self { factory, value }
+    }
+
+    /// If the fuel variable is not a literal, extract the free variable inside
+    /// this fuel expression. If it is a literal, return `None`.
+    pub fn extract_var(&self) -> Option<Fuel<'ctx>> {
+        let mut ast = self.value.clone();
+        while !ast.is_const() {
+            assert_eq!(ast.num_children(), 1);
+            debug_assert_eq!(ast.decl().name(), self.factory.succ.name());
+            ast = ast.nth_child(0).unwrap();
+        }
+        if ast.decl().name() == self.factory.zero.name() {
+            None
+        } else {
+            Some(Fuel {
+                factory: self.factory.clone(),
+                value: ast,
+            })
+        }
     }
 
     pub fn as_dynamic(&self) -> Dynamic<'ctx> {

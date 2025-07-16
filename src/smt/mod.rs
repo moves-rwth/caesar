@@ -1,8 +1,7 @@
 //! Encodings of declarations, definitions, and expressions into SMT.
 
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
-use crate::ast::{DeclKind, FuncDecl};
-use crate::smt::function_encodings::is_eligible_for_limited_function;
+use crate::smt::funcs::FunctionEncoder;
 use crate::{
     ast::{DeclRef, DomainDecl, DomainSpec, Ident, TyKind},
     tyctx::TyCtx,
@@ -16,8 +15,7 @@ use z3rro::{
     eureal::EURealSuperFactory, EUReal, Factory, FuelFactory, ListFactory, LitDecl, LitFactory,
 };
 
-mod function_encodings;
-pub use function_encodings::{FunctionEncoder, FunctionEncoding, LiteralExprCollector};
+pub mod funcs;
 
 pub mod pretty_model;
 pub mod symbolic;
@@ -25,6 +23,8 @@ mod symbols;
 pub mod translate_exprs;
 mod uninterpreted;
 
+/// An extension of the Z3 context with additional components to create
+/// values of Caesar-specific SMT types.
 pub struct SmtCtx<'ctx> {
     ctx: &'ctx Context,
     tcx: &'ctx TyCtx,
@@ -33,7 +33,7 @@ pub struct SmtCtx<'ctx> {
     lists: RefCell<HashMap<TyKind, Rc<ListFactory<'ctx>>>>,
     lits: RefCell<Vec<(Sort<'ctx>, LitDecl<'ctx>)>>,
     uninterpreteds: Uninterpreteds<'ctx>,
-    function_encoding: FunctionEncoding<'ctx>,
+    function_encoder: Box<dyn FunctionEncoder<'ctx>>,
     lit_wrap: bool,
 }
 
@@ -41,16 +41,16 @@ impl<'ctx> SmtCtx<'ctx> {
     pub fn new(
         ctx: &'ctx Context,
         tcx: &'ctx TyCtx,
-        function_encoding: FunctionEncoding<'ctx>,
+        function_encoder: Box<dyn FunctionEncoder<'ctx>>,
     ) -> Self {
         let domains: Vec<_> = tcx.domains_owned();
-        // disable lit-wrapping if there are no limited functions that can profit from it
-        let lit_wrap = function_encoding.needs_lit_wrapping()
-            && domains.iter().any(|d| {
-                d.borrow()
-                    .function_decls()
-                    .any(|func| is_eligible_for_limited_function(&func.borrow()))
-            });
+        // do not enable lit-wrapping if there are no limited functions that can
+        // profit from it
+        let lit_wrap = domains.iter().any(|d| {
+            d.borrow()
+                .function_decls()
+                .any(|func| function_encoder.needs_lit_wrapping(func))
+        });
 
         let mut res = SmtCtx {
             ctx,
@@ -60,7 +60,7 @@ impl<'ctx> SmtCtx<'ctx> {
             lists: RefCell::new(HashMap::new()),
             lits: RefCell::new(Vec::new()),
             uninterpreteds: Uninterpreteds::new(ctx),
-            function_encoding,
+            function_encoder,
             lit_wrap,
         };
         res.declare_domains(domains.as_slice());
@@ -80,7 +80,7 @@ impl<'ctx> SmtCtx<'ctx> {
                 if let DomainSpec::Function(func_ref) = &spec {
                     let func = func_ref.borrow();
                     for (name, domain, range) in
-                        self.function_encoding.declare_function(self, &func)
+                        self.function_encoder.translate_signature(self, &func)
                     {
                         let domain = domain.iter().collect_vec();
                         self.uninterpreteds.add_function(name, &domain, &range)
@@ -90,13 +90,6 @@ impl<'ctx> SmtCtx<'ctx> {
         }
 
         // Step 3. translate & add axioms and function definitions
-
-        // note: you may ask yourself, why not use z3's RecFuncDecl's to declare
-        // functions that have a body? Because that only allows for declarations
-        // that quantify over constants (i.e. variables), not expressions. this
-        // is a problem when dealing with more complex types such as the
-        // pair::realplus representation which needs to quantify over two
-        // variables (a Boolean and a Real).
         let mut translate = TranslateExprs::new(self);
         let mut axioms: Vec<(Ident, Bool<'ctx>)> = Vec::new();
         for decl_ref in domains {
@@ -105,22 +98,16 @@ impl<'ctx> SmtCtx<'ctx> {
                 match &spec {
                     DomainSpec::Function(func_ref) => {
                         let func = func_ref.borrow();
-
-                        fn with_name<'ctx>(
-                            name: Ident,
-                        ) -> impl Fn(Bool<'ctx>) -> (Ident, Bool<'ctx>) {
-                            move |axiom: Bool<'ctx>| (name, axiom)
-                        }
-
-                        // TODO: create a new name for the axioms
+                        let name = func.name;
                         axioms.extend(
-                            self.function_encoding
-                                .axioms(&mut translate, &func)
+                            self.function_encoder
+                                .translate_axioms(&mut translate, &func)
                                 .into_iter()
-                                .map(with_name(func.name)),
+                                .map(move |axiom| (name, axiom)),
                         );
                     }
                     DomainSpec::Axiom(axiom_ref) => {
+                        // TODO: translate axiom name as qid?
                         let axiom = axiom_ref.borrow();
                         axioms.push((axiom.name, translate.t_bool(&axiom.axiom)));
                     }
@@ -170,8 +157,8 @@ impl<'ctx> SmtCtx<'ctx> {
         lists.get(element_ty).unwrap().clone()
     }
 
-    fn fuel_factory(&self) -> Rc<FuelFactory<'ctx>> {
-        self.fuel.clone()
+    fn fuel_factory(&self) -> &Rc<FuelFactory<'ctx>> {
+        &self.fuel
     }
 
     /// Get a reference to the smt ctx's uninterpreteds.
@@ -193,25 +180,8 @@ impl<'ctx> SmtCtx<'ctx> {
         }
     }
 
-    pub fn is_limited_function(&self, ident: Ident) -> bool {
-        if !self.function_encoding.is_limited_encoding() {
-            return false;
-        }
-        self.tcx
-            .get(ident)
-            .filter(|decl| match decl.as_ref() {
-                DeclKind::FuncDecl(func) => self.is_limited_function_decl(&func.borrow()),
-                _ => false,
-            })
-            .is_some()
-    }
-
-    pub fn is_limited_function_decl(&self, func: &FuncDecl) -> bool {
-        self.function_encoding.is_limited_encoding() && is_eligible_for_limited_function(func)
-    }
-
-    pub fn function_encoding(&self) -> &FunctionEncoding<'ctx> {
-        &self.function_encoding
+    pub fn function_encoder(&self) -> &dyn FunctionEncoder<'ctx> {
+        &*self.function_encoder
     }
 
     pub fn computable_functions(&self) -> Vec<Ident> {

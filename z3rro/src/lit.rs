@@ -1,4 +1,4 @@
-use crate::scope::WEIGHT_DEFAULT;
+use crate::scope::Weight;
 use crate::SmtEq;
 use std::fmt::Debug;
 use z3::ast::{quantifier_const, Ast, Bool, Dynamic};
@@ -65,7 +65,7 @@ impl<'ctx> LitDecl<'ctx> {
             quantifier_const(
                 self.ctx,
                 true,
-                WEIGHT_DEFAULT,
+                Weight::DEFAULT.0,
                 format!("Lit{}(definitional)", self.arg_sort),
                 "",
                 &[&x],
@@ -109,10 +109,11 @@ impl<'ctx> LitDecl<'ctx> {
     }
 }
 
-/// Object that does the actual `Lit` wrapping on SMT level including monomorphization.
+/// Object that does the actual `Lit` wrapping on SMT level including
+/// monomorphization.
 pub trait LitFactory<'ctx> {
-    /// Wrap a [Dynamic] Z3 object in a `Lit` marker. The sort of the returned value must be
-    /// the same as the sort of the argument.
+    /// Wrap a [Dynamic] Z3 object in a `Lit` marker. The sort of the returned
+    /// value must be the same as the sort of the argument.
     fn lit_wrap_dynamic(&self, arg: &Dynamic<'ctx>) -> Dynamic<'ctx>;
 }
 
@@ -122,7 +123,8 @@ pub trait LitWrap<'ctx> {
     fn lit_wrap(&self, factory: &impl LitFactory<'ctx>) -> Self;
 }
 
-/// Any built-in Z3 [Ast] object that can be converted to/from [Dynamic] trivially implements [LitWrap]
+/// Any built-in Z3 [Ast] object that can be converted to/from [Dynamic]
+/// trivially implements [LitWrap].
 impl<'ctx, A: Ast<'ctx>> LitWrap<'ctx> for A
 where
     A: TryFrom<Dynamic<'ctx>> + Into<Dynamic<'ctx>> + Clone,

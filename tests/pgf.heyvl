@@ -1,4 +1,4 @@
-// RUN: @caesar verify @file --qi e-matching --function-encoding variable-fuel
+// RUN: @caesar verify @file --qi e-matching --function-encoding fuel-param
 
 domain Exp {
     func pow(base: UReal, exponent: UInt): UReal = ite(exponent == 0, 1, base * pow(base, exponent))

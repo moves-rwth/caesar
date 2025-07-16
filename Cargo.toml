@@ -89,7 +89,6 @@ opt-level = 3
 [patch.crates-io]
 z3 = { git = 'https://github.com/ole-thoeb/z3.rs.git', rev = 'f785da2c606e622162b939b948df2a3dc8c61e6e' }
 z3-sys = { git = 'https://github.com/ole-thoeb/z3.rs.git', rev = 'f785da2c606e622162b939b948df2a3dc8c61e6e' }
-# to work on z3.rs locally, clone it into the main directory and use the following directive instead:
 
 # see https://github.com/heim-rs/darwin-libproc/pull/3#issuecomment-1645444056
 darwin-libproc = { git = "https://github.com/Orycterope/darwin-libproc.git", rev = "f73ddb1002d51ae74c1b41670fae56bd5896b7a3" }

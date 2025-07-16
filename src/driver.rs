@@ -40,6 +40,7 @@ use crate::{
         transform::{SliceStmts, StmtSliceVisitor},
     },
     smt::{
+        funcs::{axiomatic::AxiomaticFunctionEncoder, fuel::literals::LiteralExprCollector},
         pretty_model::{
             pretty_model, pretty_slice, pretty_unaccessed, pretty_var_value, pretty_vc_value,
         },
@@ -70,7 +71,6 @@ use z3rro::{
     util::{PrefixWriter, ReasonUnknown},
 };
 
-use crate::smt::{FunctionEncoding, LiteralExprCollector};
 use tracing::{info_span, instrument, trace};
 
 /// Human-readable name for a source unit. Used for debugging and error messages.
@@ -559,7 +559,7 @@ impl QuantVcUnit {
         let _entered = span.enter();
         if !options.opt_options.strict {
             let ctx = Context::new(&Config::default());
-            let smt_ctx = SmtCtx::new(&ctx, tcx, FunctionEncoding::default());
+            let smt_ctx = SmtCtx::new(&ctx, tcx, Box::new(AxiomaticFunctionEncoder::default()));
             let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
             unfolder.visit_expr(&mut self.expr)
         } else {
@@ -667,10 +667,10 @@ impl BoolVcUnit {
         translate.set_literal_exprs(
             LiteralExprCollector::new()
                 .with_computable_functions(translate.ctx.computable_functions().as_slice())
-                .collect(&mut self.vc),
+                .add_literals(&mut self.vc),
         );
         let bool_vc = translate.t_bool(&self.vc);
-        translate.clear_literal_exprs();
+        translate.set_literal_exprs(Default::default());
 
         SmtVcUnit {
             quant_vc: self.quant_vc,

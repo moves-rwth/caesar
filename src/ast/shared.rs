@@ -76,12 +76,17 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Shared<T> {
     }
 }
 
-/// [Shared] wrapper that provides pointer based [Eq] and [Hash] implementations.
+/// [Shared] wrapper that provides pointer-based trait implementations for
+/// shared pointers, to store them in sets or maps based on their pointer
+/// identity (reference equality).
+///
+/// Use [RefCast] to efficiently convert between this type and a reference to a
+/// [Shared] object.
 #[repr(transparent)]
 #[derive(RefCast, Clone)]
-pub struct PointerHashShared<T>(Shared<T>);
+pub struct RefEqShared<T>(Shared<T>);
 
-impl<T> PointerHashShared<T> {
+impl<T> RefEqShared<T> {
     pub fn new(shared: Shared<T>) -> Self {
         Self(shared)
     }
@@ -95,27 +100,27 @@ impl<T> PointerHashShared<T> {
     }
 }
 
-impl<T> PartialEq for PointerHashShared<T> {
+impl<T> PartialEq for RefEqShared<T> {
     fn eq(&self, other: &Self) -> bool {
         Shared::as_ptr(&self.0) == Shared::as_ptr(&other.0)
     }
 }
 
-impl<T> Eq for PointerHashShared<T> {}
+impl<T> Eq for RefEqShared<T> {}
 
-impl<T> Ord for PointerHashShared<T> {
+impl<T> Ord for RefEqShared<T> {
     fn cmp(&self, other: &Self) -> Ordering {
         Shared::as_ptr(&self.0).cmp(&Shared::as_ptr(&other.0))
     }
 }
 
-impl<T> PartialOrd for PointerHashShared<T> {
+impl<T> PartialOrd for RefEqShared<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(Shared::as_ptr(&self.0).cmp(&Shared::as_ptr(&other.0)))
     }
 }
 
-impl<T> Hash for PointerHashShared<T> {
+impl<T> Hash for RefEqShared<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         Shared::as_ptr(&self.0).hash(state)
     }

@@ -18,8 +18,10 @@ use super::{
     scope::{SmtFresh, SmtScope},
     SmtBranch,
 };
-use crate::scope::WEIGHT_DEFAULT;
-use crate::{scope::SmtAlloc, Factory, SmtFactory, SmtInvariant};
+use crate::{
+    scope::{SmtAlloc, Weight},
+    Factory, SmtFactory, SmtInvariant,
+};
 
 /// The different ordering relations. It's like [`std::cmp::Ordering`], but with
 /// more options to allow for more specialization.
@@ -218,7 +220,7 @@ pub trait SmtCompleteLattice<'ctx>: SmtFresh<'ctx> + SmtLattice<'ctx> {
         // infimum is a lower bound to all self
         let inf_is_lower_bound = &inf_vars.forall(
             "mbqi_inf_lower_bound",
-            WEIGHT_DEFAULT,
+            Weight::DEFAULT,
             patterns,
             &inf.smt_le(self),
         );
@@ -229,7 +231,7 @@ pub trait SmtCompleteLattice<'ctx>: SmtFresh<'ctx> + SmtLattice<'ctx> {
         let other_lb = Self::fresh(&factory, &mut inf_vars_and_other, "bound");
         let other_is_lb = inf_vars.forall(
             "mbqi_inf_other_lower_bound",
-            WEIGHT_DEFAULT,
+            Weight::DEFAULT,
             patterns,
             &other_lb.smt_le(self),
         );
@@ -237,7 +239,7 @@ pub trait SmtCompleteLattice<'ctx>: SmtFresh<'ctx> + SmtLattice<'ctx> {
         let inf_glb = other_is_lb.implies(&other_lb.smt_le(&inf));
         ctx.add_constraint(&inf_vars_and_other.forall(
             "mbqi_inf_greatest_lower_bound",
-            WEIGHT_DEFAULT,
+            Weight::DEFAULT,
             &[],
             &inf_glb,
         ));
