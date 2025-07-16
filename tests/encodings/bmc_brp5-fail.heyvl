@@ -1,5 +1,5 @@
-// RUN: bash -c '! @caesar @file'
-// 
+// RUN: bash -c '@caesar @file --slice-error-first 2>&1 | grep -q "Counter-example to verification found"'
+//
 // Test file to check refute_brp5_bmc.pgcl with caesar encodings
 // k = 14, invariant = totalFailed + 1
 
@@ -25,5 +25,5 @@ coproc bounded_model_checking(init_toSend: UInt, init_sent: UInt, init_maxFailed
             totalFailed = totalFailed + 1
         }
 
-    } 
+    }
 }

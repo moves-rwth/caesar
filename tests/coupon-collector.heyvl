@@ -1,4 +1,4 @@
-// RUN: @caesar @file --no-simplify --function-encoding fuel-param-computation --quantifier-instantiation e-matching
+// RUN: @caesar @file --function-encoding fuel-param
 
 domain Sums {
 

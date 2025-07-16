@@ -1,4 +1,4 @@
-// RUN: @caesar verify --function-encoding fuel-param-computation --quantifier-instantiation e-matching @file
+// RUN: @caesar verify --function-encoding fuel-param-computation @file
 
 // Peano number example form the paper "Computing with an SMT solver" (Section 5) that tests the computation capabilities
 

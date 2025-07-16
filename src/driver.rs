@@ -788,6 +788,19 @@ impl<'ctx> SmtVcUnit<'ctx> {
 
 pub fn mk_z3_ctx(options: &VerifyCommand) -> Context {
     let mut config = Config::default();
+
+    // see also dafny's options:
+    // https://github.com/dafny-lang/dafny/blob/220fdecb25920d2f72ceb4c57af6cb032fdd337d/Source/DafnyCore/DafnyOptions.cs#L1273-L1309
+
+    // we disable order axioms, as this seems to fix all of our performance
+    // issues after upgrading from 4.12.1 to 4.15.1.
+    //
+    // see also this commit in 4.15.2:
+    // https://github.com/Z3Prover/z3/commit/bba10c7a8892f1067ee68751fd9989037a3386de.
+    // maybe this will solve the problem?
+    z3::set_global_param("smt.arith.nl.order", "false");
+
+    // enable tracing if requested
     if options.debug_options.z3_trace {
         config.set_bool_param_value("trace", true);
         config.set_bool_param_value("proof", true);

@@ -1,4 +1,4 @@
-// RUN: @caesar verify --function-encoding fuel-param-computation --quantifier-instantiation e-matching @file
+// RUN: @caesar verify --function-encoding fuel-param-computation @file
 
 // Triangle example form the paper "Computing with an SMT solver" (Section 3) that requires computation
 
