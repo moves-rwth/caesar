@@ -188,7 +188,7 @@ pub struct InputOptions {
 #[command(next_help_heading = "Resource Limit Options")]
 pub struct ResourceLimitOptions {
     /// Time limit in seconds.
-    #[arg(long, default_value = "300")]
+    #[arg(long, default_value = "30")]
     pub timeout: u64,
 
     /// Memory usage limit in megabytes.

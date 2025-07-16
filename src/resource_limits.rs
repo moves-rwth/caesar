@@ -118,7 +118,7 @@ async fn wait_for_oom(mem_limit: MemorySize) {
         let memory_stats_res = memory_stats();
         match memory_stats_res {
             Some(memory_stats) => {
-                let current_usage = MemorySize::bytes(memory_stats.physical_mem as usize);
+                let current_usage = MemorySize::bytes(memory_stats.physical_mem);
                 if current_usage > mem_limit {
                     return;
                 }
