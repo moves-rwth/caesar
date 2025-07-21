@@ -404,6 +404,8 @@ pub enum SMTSolverType {
     Swine,
     #[value(name = "cvc5")]
     CVC5,
+    #[value(name = "yices")]
+    Yices,
 }
 
 #[derive(Debug, Default, Args)]

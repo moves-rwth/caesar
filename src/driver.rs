@@ -836,6 +836,7 @@ fn mk_valid_query_prover<'smt, 'ctx>(
         SMTSolverType::ExternalZ3 => SolverType::ExternalZ3,
         SMTSolverType::Swine => SolverType::SWINE,
         SMTSolverType::CVC5 => SolverType::CVC5,
+        SMTSolverType::Yices => SolverType::YICES,
     };
 
     // create the prover and set the params

@@ -477,7 +477,7 @@ fn slice_sat_binary_search<'ctx>(
         let ctx = prover.get_context();
         if !slice_vars.is_empty() {
             let at_most_n_true = match prover.get_smt_solver() {
-                SolverType::CVC5 => at_most_k(ctx, at_most_n as i64, active_slice_vars),
+                SolverType::CVC5 | SolverType::YICES => at_most_k(ctx, at_most_n as i64, active_slice_vars),
                 _ => Bool::pb_le(ctx, &slice_vars, at_most_n as i32),
             };
             prover.add_assumption(&at_most_n_true);
