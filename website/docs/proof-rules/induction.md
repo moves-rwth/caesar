@@ -263,6 +263,9 @@ However, $0$ is the trivial lower bound on the `wlp`-semantics of a loop, thus s
 The cases are dual for upper bound semantics in `coproc`s: If the invariant $I$ is not inductive, then the trivial *upper bound* $0$ is returned.
 If the invariant is inductive, $I$ is returned as before.
 
+Case 2 is the one which would change when the `validate` statement was removed from the encoding.
+For the very similar encoding of procedure calls, we give [an example where removing the `validate` statement leads to unsoundness](../heyvl/procs.md#procs-without-body), showing that the `validate` statement is crucial for soundness.
+
 ### k-Induction Encoding and Interpretation
 
 The encoding is similar for k-induction (`@k_induction`).
