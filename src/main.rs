@@ -210,7 +210,7 @@ pub enum RunWhichStorm {
 }
 
 #[derive(Debug, Default, Clone, Args)]
-#[command(next_help_heading = "JANI Output Options")]
+#[command(next_help_heading = "Model Checking Options")]
 pub struct ModelCheckingOptions {
     /// Export declarations to JANI files in the provided directory.
     #[arg(long)]
