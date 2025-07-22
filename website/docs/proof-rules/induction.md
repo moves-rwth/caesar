@@ -206,7 +206,6 @@ Consider the following example, where an upper bound is verified on the expected
     var cont: Bool = true
     @invariant(ite(cont, 1/(1-p), 0))
     while cont {
-        p = p // removing this makes the program verify
         reward 1
         cont = flip(p)
         if cont { c = c + 1 } else {}
