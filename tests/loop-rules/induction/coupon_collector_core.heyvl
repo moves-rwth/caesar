@@ -1,0 +1,18 @@
+// RUN: @caesar @file
+
+domain Harmonic {
+    func harmonic(n: UInt): UReal = ite(n == 0, 0, 1/n + harmonic(n - 1))
+}
+
+coproc harmonic_sum(init_x: UReal, init_n: UInt) -> (x: UReal, n: UInt)
+    pre init_x + harmonic(init_n)
+    post x
+{
+    x = init_x
+    n = init_n
+    @invariant(x + harmonic(n))
+    while n > 0 {
+        x = x + 1/n
+        n = n - 1
+    }
+}

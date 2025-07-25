@@ -1,0 +1,13 @@
+// RUN: bash -c '@caesar @file 2>&1 | grep -q "post #0 is part of the error"'
+
+proc M(n: UInt) -> (r: UInt)
+    pre ?(true)
+    post ?(r == ite(n <= 100, 92, n - 10))
+{
+    if (n > 100) {
+        r = n - 10
+    } else {
+        r = M(n + 11)
+        r = M(r)
+    }
+}

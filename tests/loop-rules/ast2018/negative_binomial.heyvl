@@ -1,0 +1,23 @@
+// RUN: @caesar @file
+
+// The "Negative-Binomial Loop" example from the "A New Proof Rule for Almost-Sure Termination" paper, Section 5.1
+
+proc escaping_spline() -> ()
+    pre 1
+    post 1
+{
+    var x: UInt
+    @ast(
+        /* invariant: */    x >= 0,
+        /* variant: */      x,
+        /* variable: */     v,
+        /* prob(v): */      0.5,
+        /* decrease(v): */  1
+    )
+    while x != 0 {
+        var prob_choice: Bool = flip(0.5)
+        if prob_choice {
+            x = x - 1
+        } else {}
+    }
+}
