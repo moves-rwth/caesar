@@ -347,8 +347,9 @@ pub struct OptimizationOptions {
     pub no_simplify: bool,
 
     /// Determine how user-defined functions are encoded.
-    /// The fuel encodings require `--quantifier-instantiation e-matching`.
-    #[arg(long, alias = "fe", default_value = "axiomatic")]
+    /// The fuel encodings require `--quantifier-instantiation e-matching` for
+    /// guaranteed termination.
+    #[arg(long, alias = "fe", default_value = "fuel-param")]
     pub function_encoding: FunctionEncodingOption,
 
     /// The number of times a function declaration can be recursively instantiated/unfolded when
@@ -1284,8 +1285,8 @@ fn mk_function_encoder(options: &VerifyCommand) -> Box<dyn FunctionEncoder<'_> +
             | FunctionEncodingOption::FuelParamComputation
     ) && options.opt_options.quantifier_instantiation != QuantifierInstantiation::EMatching
     {
-        tracing::error!(
-            "Using fuel function encoding with MBQI does not guarantee termination and thus defeats the purpose of the fuel encoding. Set the `--quantifier-instantiation e-matching` option to use the fuel encoding with MBQI.",
+        tracing::warn!(
+            "Using fuel function encoding with MBQI still enabled does not guarantee termination. Set the `--quantifier-instantiation e-matching` option to use the fuel encoding without MBQI.",
         );
     }
     function_encoding
