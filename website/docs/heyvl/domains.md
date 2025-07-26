@@ -1,98 +1,146 @@
 ---
-description: Domain blocks are used to create user-defined types and uninterpreted functions.
+description: User-defined functions, both definitional and uninterpreted with equality (EUF).
 sidebar_position: 4
 ---
 
-# Domains, Uninterpreted Functions, and Axioms
+# Functions, Axioms, and Domains
 
-`domain` blocks are used to create user-defined types and uninterpreted functions.
-A domain has a name which can be used as a type in HeyVL code.
-The domain block contains a list of `func`s and `axiom`s defined on this domain.
+This section covers how to extend HeyVL with custom functionality through domains.
+Domains allow you to define your own functions and data types that can be used throughout your HeyVL programs.
+This is useful for modeling operations or data structures that aren't built into the language.
 
-Every domain type supports the binary operators `==` and `!=`.
-All other operations must be encoded using functions and axioms.
+Functions (`func`s) and axioms are always contained inside `domain` declarations.
+A `domain` declaration is a way to group related functions and axioms together, and it also [creates a new type](#defining-types-with-domains) that can be used in HeyVL code.
 
-:::warning Unsoundness from Axioms
+There are two ways to define `func`s:
+ 1. [Definitional functions](#definitional-functions) with a body, which are preferred.
+ 2. [Uninterpreted functions](#axiomatizing-uninterpreted-functions) without a body, which are more flexible but allow less optimizations.
 
-`axiom` declarations behave like [`assume` statements](./statements.md) and can quickly make verification unsound.
-E.g. `axiom unsound ?(false)` behaves like `assume ?(false)`, making everything verify.
-[See below for a longer example](#unsoundness-from-axioms).
+---
 
-:::
+:::note Incompleteness
 
-:::tip Incompleteness from Quantifiers
-
-Note that axioms with quantifiers quickly introduce *incompleteness* of Caesar, making it unable to prove or disprove verification.
+Note that definitional functions or axioms with quantifiers quickly introduce *incompleteness* of Caesar, making it unable to prove or disprove verification.
 Read the documentation section on [SMT Theories and Incompleteness](../caesar/debugging.md#incompleteness) for more information.
 
 :::
 
-## Example: Exponentials of ½
+## Definitional Functions
 
-HeyVL does not support exponentiation expressions natively.
-But we can define an uninterpreted function `ohfive_exp` and add axioms that specify its result.
-`ohfive_exp(n)` should evaluate to `(½)ⁿ`, so we add two axioms that define this exponential recursively.
+The preferred way to declare `func`s is to give a definition of the body with them.
 
-`ohfive_exp_base` states that `ohfive_exp(0) == 1` and `ohfive_exp_step` ensures that `ohfive_exp(exponent + 1) == 0.5 * ohfive_exp(exponent)` holds.
-This is sufficient to axiomatize our exponential function.
-
+Consider the following silly example, declaring a function for exponentials of ½.
 ```heyvl
 domain Exponentials {
-    func ohfive_exp(exponent: UInt): EUReal
-
-    axiom ohfive_exp_base ohfive_exp(0) == 1
-    axiom ohfive_exp_step forall exponent: UInt. ohfive_exp(exponent + 1) == 0.5 * ohfive_exp(exponent)
+    func exp_05(exponent: UInt): UInt = ite(exponent == 0, 1, 0.5 * exp_05(exponent - 1))
 }
-```
-Note that this domain declaration creates a new type `Exponentials`, but we do not use it.
 
-We can check that `ohfive_exp(3)` evaluates to `0.125` by declaring a [procedure](procs.md) with pre-condition `true` and post-condition `ohfive_exp(3) == 0.125`.
-This procedure verifies:
-```heyvl
-proc ohfive_3() -> ()
+proc ohfive_6() -> ()
     pre ?(true)
-    post ?(ohfive_exp(3) == 0.125)
+    post ?(exp_05(6) == 0.5 * 0.5 * 0.5 * 0.125)
 {}
 ```
 
-Do not forget the _empty_ block of statements `{}` at the end.
-If you omit it, [Caesar will not attempt to verify the procedure](./procs.md#procs-without-body) and thus will not check the specification.
 
-## Pure Functions
+The domain `Exponentials` contains one func declaration `exp_05` with one parameter, `exponent` of type `UInt`.
+It returns a value of type `UInt`, and its recursive definition is given after the equality sign.
 
-You can also declare _pure_ or _interpreted_ functions.
-These are defined by a single expression that computes the result of the function.
+## Axiomatizing Uninterpreted Functions
 
-The following function declaration has a such a definition (`= x + 1`):
+The alternative to defining funcs with bodies is to define them *uninterpreted*, that is, only defined by a bunch of axioms.
+
+This is how the above example would look like then:
 ```heyvl
-func plus_one(x: UInt): UInt = x + 1
-```
+domain Exponentials {
+    func exp_05(exponent: UInt): EUReal
 
-One can intuitively understand the above syntax as syntactic sugar for a function declaration with an additional axiom, i.e.
-```heyvl
-func plus_one(x: UInt): UInt
-axiom plus_one_def forall x: UInt. plus_one(x) == x + 1
-```
-However, the *pure* function syntax allows Caesar to make certain optimizations, therefore it should always be preferred.
-
-## Unsoundness From Axioms
-
-Axioms are a dangerous feature because they can make verification unsound.
-
-An easy example is this one:
-```heyvl
-domain Unsound {
-    axiom unsound false
+    axiom exp_05_base exp_05(0) == 1
+    axiom exp_05_step forall exponent: UInt. exp_05(exponent + 1) == 0.5 * exp_05(exponent)
 }
 
-proc wrong() -> ()
+proc ohfive_6() -> ()
     pre ?(true)
-    post ?(true)
-{
-    assert ?(false)
+    post ?(exp_05(6) == 0.5 * 0.5 * 0.5 * 0.125)
+{}
+```
+
+Here, we do not specify a body for `exp_05`.
+Instead, we give two axioms, with names `exp_05_base` and `exp_05_step` respectively, to define both cases.
+The first axiom simply specifies that `exp_05(0) == 1` holds (the base case), and the second one specifies that for all `exponent`, we can equate `exp_05(exponent + 1)` with `0.5 * exp_05(exponent)` (inductive case).
+
+This way of defining functions is more flexible than [definitional functions](#definitional-functions), but Caesar cannot apply important optimizations this way.
+Therefore, definitional functions should always be preferred if possible.
+
+## Axioms
+
+### Axioms for Hints
+
+Axioms can be used for both definitional functions and for uninterpreted functions.
+For example, the verifier might need to know the fact that `exp_05(x) >= 1` always holds.
+We can add the following axiom for both of the above definitions to let Caesar know this fact:
+```heyvl
+axiom exp_05_one forall exponent: UInt. exp_05(exponent) >= 1
+```
+
+### Axioms as Assumptions
+
+One can see any axiom simply as an [`(co)assume` statement](./statements.md) added before the procedure to be verified.
+For example,
+```heyvl
+axiom exp_05_step forall exponent: UInt. exp_05(exponent + 1) == 0.5 * exp_05(exponent)
+```
+can be written via an `assume` in just the same way:
+```heyvl
+assume ?(forall exponent: UInt. exp_05(exponent + 1) == 0.5 * exp_05(exponent))
+```
+
+:::warning Unsoundness from Axioms
+
+Because axiom declarations behave like `assume` statements, they can introduce unsoundness in the same way.
+
+<details>
+    <summary>Example for unsoundness from axioms.</summary>
+
+    ```heyvl
+    domain Unsound {
+        axiom unsound false
+    }
+
+    proc wrong() -> ()
+        pre ?(true)
+        post ?(true)
+    {
+        assert ?(false)
+    }
+    ```
+    The axiom `unsound` always evaluates to `false`.
+    But for verification, Caesar assumes the axioms hold for all program states.
+    In other words, Caesar only verifies the program states in which the axioms evaluate to `true`.
+    Thus, Caesar does not verify any program state and the procedure `wrong` incorrectly verifies!
+
+</details>
+
+:::
+
+## Defining Types with Domains
+
+A `domain` declaration always creates a new uninterpreted type that can also be axiomatized.
+
+Every domain type supports the binary operators `==` and `!=`.
+All other operations must be encoded using functions and axioms.
+
+The following example declares a `Tree` type with left and right branches, and where each leaf has a value of type `Int`.
+
+```heyvl
+domain Tree {
+    func leaf(value: Int): Tree
+    func node(left: Tree, right: Tree): Tree
+
+    func is_leaf(tree: Tree): Bool
+    axiom is_leaf_leaf forall value: Int. is_leaf(leaf(value)) == true
+    axiom is_leaf_node forall t1: Tree, t2: Tree. is_leaf(node(t1, t2)) == false
+
+    func get_value(tree: Tree): Int
+    axiom get_value_def forall value: Int. get_value(leaf(value)) == value
 }
 ```
-The axiom `unsound` always evaluates to `false`.
-But for verification, Caesar assumes the axioms hold for all program states.
-In other words, Caesar only verifies the program states in which the axioms evaluate to `true`.
-Thus, Caesar does not verify any program state and the procedure `wrong` incorrectly verifies!

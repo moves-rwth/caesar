@@ -132,5 +132,5 @@ However, some items from the list below might also be disallowed in the future.
 
  * You can easily introduce contradictions that lead to unsoundness.
     * E.g. `assume ?(false)` can be used in `proc`s to make everything verify trivially.
-    * [Unsoundness may come from axioms with contradictions](../heyvl/domains.md#unsoundness-from-axioms).
+    * [Unsoundness may come from axioms with contradictions](../heyvl/domains.md#axioms-as-assumptions).
  * `tick` statements may be used with `@wp` and `@wlp`, and it is not checked that a `tick` statement actually occurs in an `@ert` procedure.
