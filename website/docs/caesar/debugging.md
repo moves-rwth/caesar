@@ -142,6 +142,11 @@ Where the columns represent the following:[^z3-qi-profile-docs]
 
 [^z3-qi-profile-docs]: [Z3's documentation on `smt.qi.profile`](https://microsoft.github.io/z3guide/programming/Parameters/#smt.qi.profile) is rather sparse. The description is based on the [source code of `smt_quantifier.cpp` of Z3](https://github.com/Z3Prover/z3/blob/f77123c13cc8dabe8d1d0217a3312738da834eba/src/smt/smt_quantifier.cpp#L169-L189) and [this issue comment by Nikolaj Bjorner](https://github.com/Z3Prover/z3/issues/4522#issuecomment-644454562).
 
+### MBQI Tracing
+
+When using MBQI, you can enable tracing of the quantifier instantiation process with the `--z3-mbqi-trace` command-line flag.
+It will enable Z3's `smt.mbqi.trace` option, which will print a message before every round of MBQI.
+
 ### Debugging with SMTscope
 
 The [SMTscope tool](https://viperproject.github.io/smt-scope/) by the [Viper project](https://viper.ethz.ch/) can be used to debug quantifier instantiations in SMT queries.

@@ -444,6 +444,10 @@ pub struct DebugOptions {
     #[arg(long)]
     pub z3_qi_profile: bool,
 
+    /// Enable Z3's MBQI tracing. Will print a message before every round of MBQI
+    #[arg(long)]
+    pub z3_mbqi_trace: bool,
+
     /// Set Z3's verbosity level.
     #[arg(long)]
     pub z3_verbose: Option<u32>,
@@ -1241,6 +1245,11 @@ fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
     if command.debug_options.z3_qi_profile {
         z3::set_global_param("smt.qi.profile", "true");
         z3::set_global_param("smt.qi.profile_freq", "1000");
+    }
+
+    // enable MBQI tracing if requested
+    if command.debug_options.z3_mbqi_trace {
+        z3::set_global_param("smt.mbqi.trace", "true");
     }
 
     // set verbosity level
