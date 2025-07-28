@@ -20,7 +20,7 @@ There are two ways to define `func`s:
 
 :::note Incompleteness
 
-Note that definitional functions or axioms with quantifiers quickly introduce *incompleteness* of Caesar, making it unable to prove or disprove verification.
+Note that definitional functions and axioms with quantifiers quickly introduce *incompleteness* of Caesar, making it unable to prove or disprove verification.
 Read the documentation section on [SMT Theories and Incompleteness](../caesar/debugging.md#incompleteness) for more information.
 
 :::
@@ -32,7 +32,7 @@ The preferred way to declare `func`s is to give a definition of the body with th
 Consider the following silly example, declaring a function for exponentials of ½.
 ```heyvl
 domain Exponentials {
-    func exp_05(exponent: UInt): UInt = ite(exponent == 0, 1, 0.5 * exp_05(exponent - 1))
+    func exp_05(exponent: UInt): UReal = ite(exponent == 0, 1, 0.5 * exp_05(exponent - 1))
 }
 
 proc ohfive_6() -> ()
@@ -44,6 +44,15 @@ proc ohfive_6() -> ()
 
 The domain `Exponentials` contains one func declaration `exp_05` with one parameter, `exponent` of type `UInt`.
 It returns a value of type `UInt`, and its recursive definition is given after the equality sign.
+
+:::note Function Encodings
+
+Caesar supports many different encodings of definitional functions, which can be selected via the `--function-encoding` command-line option.
+These can be used to tweak the SMT solver's reasoning and even guarantee termination of the underlying quantifier instantiation strategy.
+[More information can be found in the debugging documentation](../caesar/debugging.md#function-encodings-and-limited-functions).
+
+:::
+
 
 ## Axiomatizing Uninterpreted Functions
 
@@ -70,6 +79,20 @@ The first axiom simply specifies that `exp_05(0) == 1` holds (the base case), an
 
 This way of defining functions is more flexible than [definitional functions](#definitional-functions), but Caesar cannot apply important optimizations this way.
 Therefore, definitional functions should always be preferred if possible.
+
+### Computable Annotation
+
+The `@computable` annotation should be used on uninterpreted functions which are computable when given *literal* parameters.
+This is only relevant when using the [`fuel-mono-computation` or `fuel-param-computation` function encodings](../caesar/debugging.md#function-encodings-and-limited-functions).
+Then, calls to uninterpreted functions *inside definitional functions* with literal parameters are also considered literals, and the definitional function can be unfolded as many times as needed.
+
+The annotation follows the definition, e.g.:
+```heyvl
+domain Exponentials {
+    func exp_05(exponent: UInt): EUReal @computable
+    // ...
+}
+```
 
 ## Axioms
 
