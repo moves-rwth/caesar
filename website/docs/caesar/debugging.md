@@ -62,7 +62,36 @@ In general, it is seldom useful to micro-optimize these metrics.
 
 With the `--print-z3-stats` command-line flag, Caesar will print Z3 statistics to standard error.
 
-## Debugging Quantifier Instantiations with SMTscope
+## Debugging Quantifier Instantiations
+
+### Simple QI Profiling
+
+With Caesar's `--z3-qi-profile` command-line flag, you can enable logging of quantifier instantiations.
+This will enable [Z3's `smt.qi.profile` option](https://microsoft.github.io/z3guide/programming/Parameters/#smt).
+
+Currently, this will print Z3's quantifier instantiation statistics to standard error every 1000 instantiations.
+
+The output will look like this:
+
+```
+[quantifier_instances]    135-141 :     11 :   0 :   0 :   0 : 1
+[quantifier_instances] exp(return_invariant) :     57 :   0 :   0 :   3 : 4
+[quantifier_instances] exp(fuel_synonym) :     30 :   0 :   0 :   2 : 3
+[quantifier_instances] exp(definitional) :     30 :   0 :   0 :   2 : 3
+```
+
+Where the columns represent the following:[^z3-qi-profile-docs]
+  1. The quantifier instance name, e.g. `exp(return_invariant)`.
+  2. The number of instantiations of this quantifier.
+  3. <small>(always zero?)</small>
+  4. <small>(always zero?)</small>
+  5. Maximum generation depth of the quantifier instantiation.
+      * <small>Let's say we have `forall x . p(x) => p(x + 1)`, and `p(0)`. Then `p(1)` has generation 1, `p(2)` has generation 2, etc.</small>
+  6. Maximum cost of the quantifier instantiation.
+
+[^z3-qi-profile-docs]: [Z3's documentation on `smt.qi.profile`](https://microsoft.github.io/z3guide/programming/Parameters/#smt.qi.profile) is rather sparse. The description is based on the [source code of `smt_quantifier.cpp` of Z3](https://github.com/Z3Prover/z3/blob/f77123c13cc8dabe8d1d0217a3312738da834eba/src/smt/smt_quantifier.cpp#L169-L189) and [this issue comment by Nikolaj Bjorner](https://github.com/Z3Prover/z3/issues/4522#issuecomment-644454562).
+
+### Debugging with SMTscope
 
 The [SMTscope tool](https://viperproject.github.io/smt-scope/) by the [Viper project](https://viper.ethz.ch/) can be used to debug quantifier instantiations in SMT queries.
 SMTscope is a graphical tool that allows you to visualize the quantifier instantiations that Z3 performs during the solving process.
