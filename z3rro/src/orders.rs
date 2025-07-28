@@ -8,20 +8,16 @@
 //! free. Most traits have some default implementations of functions using
 //! [`Opp`].
 
+use std::borrow::Cow;
+
 use ref_cast::RefCast;
-use z3::{
-    ast::{Ast, Bool, Int, Real},
-    Pattern,
-};
+use z3::ast::{Ast, Bool, Int, Real};
 
 use super::{
     scope::{SmtFresh, SmtScope},
     SmtBranch,
 };
-use crate::{
-    scope::{SmtAlloc, Weight},
-    Factory, SmtFactory, SmtInvariant,
-};
+use crate::{quantifiers::QuantifierMeta, scope::SmtAlloc, Factory, SmtFactory, SmtInvariant};
 
 /// The different ordering relations. It's like [`std::cmp::Ordering`], but with
 /// more options to allow for more specialization.
@@ -209,7 +205,7 @@ pub trait SmtCompleteLattice<'ctx>: SmtFresh<'ctx> + SmtLattice<'ctx> {
     fn infimum(
         &self,
         inf_vars: SmtScope<'ctx>,
-        patterns: &[&Pattern<'ctx>],
+        meta: QuantifierMeta<'ctx>,
         ctx: &mut SmtScope<'ctx>,
     ) -> Self {
         let factory = self.factory();
@@ -218,31 +214,22 @@ pub trait SmtCompleteLattice<'ctx>: SmtFresh<'ctx> + SmtLattice<'ctx> {
         let inf = Self::fresh(&factory, ctx, "extremum");
 
         // infimum is a lower bound to all self
-        let inf_is_lower_bound = &inf_vars.forall(
-            "mbqi_inf_lower_bound",
-            Weight::DEFAULT,
-            patterns,
-            &inf.smt_le(self),
-        );
+        let inf_is_lower_bound =
+            &inf_vars.forall(&meta.variant(Cow::Borrowed("is_bound")), &inf.smt_le(self));
         ctx.add_constraint(inf_is_lower_bound);
 
         // `other_lb` is another lower bound to self...
         let mut inf_vars_and_other = inf_vars.clone();
         let other_lb = Self::fresh(&factory, &mut inf_vars_and_other, "bound");
         let other_is_lb = inf_vars.forall(
-            "mbqi_inf_other_lower_bound",
-            Weight::DEFAULT,
-            patterns,
+            &meta.variant(Cow::Borrowed("is_other_bound")),
             &other_lb.smt_le(self),
         );
         // infimum is the greatest lower bound, i.e. `other_lb <= inf`
         let inf_glb = other_is_lb.implies(&other_lb.smt_le(&inf));
-        ctx.add_constraint(&inf_vars_and_other.forall(
-            "mbqi_inf_greatest_lower_bound",
-            Weight::DEFAULT,
-            &[],
-            &inf_glb,
-        ));
+        ctx.add_constraint(
+            &inf_vars_and_other.forall(&meta.variant(Cow::Borrowed("is_extremum")), &inf_glb),
+        );
 
         inf
     }
@@ -251,10 +238,10 @@ pub trait SmtCompleteLattice<'ctx>: SmtFresh<'ctx> + SmtLattice<'ctx> {
     fn supremum(
         &self,
         sup_vars: SmtScope<'ctx>,
-        patterns: &[&Pattern<'ctx>],
+        meta: QuantifierMeta<'ctx>,
         ctx: &mut SmtScope<'ctx>,
     ) -> Self {
-        Opp::with_opp(self, |a| a.infimum(sup_vars, patterns, ctx))
+        Opp::with_opp(self, |a| a.infimum(sup_vars, meta, ctx))
     }
 }
 
@@ -342,7 +329,7 @@ impl<'ctx, L: SmtCompleteLattice<'ctx>> SmtCompleteLattice<'ctx> for Opp<L> {}
 mod test {
     use z3::ast::{Ast, Int};
 
-    use crate::{scope::SmtFresh, test::test_prove};
+    use crate::{quantifiers::QuantifierMeta, scope::SmtFresh, test::test_prove};
 
     use super::SmtCompleteLattice;
 
@@ -355,7 +342,8 @@ mod test {
         test_prove(|ctx, scope| {
             let x = Int::fresh(&ctx, scope, "x");
             let x_is_5 = x._eq(&Int::from_u64(ctx, 5));
-            let inf = x_is_5.infimum(scope.clone(), &[], scope);
+            let meta = QuantifierMeta::new("test_inf");
+            let inf = x_is_5.infimum(scope.clone(), meta, scope);
             inf.not()
         });
     }

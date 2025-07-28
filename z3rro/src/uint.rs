@@ -144,6 +144,7 @@ mod test {
 
     use crate::{
         generate_smt_branch_tests, generate_smt_partial_ord_tests,
+        quantifiers::QuantifierMeta,
         scope::{SmtFresh, SmtScope},
         test::test_prove,
         SmtEq,
@@ -161,7 +162,8 @@ mod test {
             let zero = UInt::from_u64(ctx, 0);
             let one = UInt::from_u64(ctx, 1);
             let x = UInt::fresh(&ctx, &mut inner_scope, "x");
-            inner_scope.exists(&[], &(x + one).smt_eq(&zero)).not()
+            let meta = QuantifierMeta::new("ex_neg");
+            inner_scope.exists(&meta, &(x + one).smt_eq(&zero)).not()
         });
     }
 }

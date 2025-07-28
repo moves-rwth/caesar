@@ -4,7 +4,8 @@ use z3::{
     Pattern, Sort,
 };
 use z3rro::{
-    scope::{SmtScope, Weight},
+    quantifiers::{QuantifierMeta, Weight},
+    scope::SmtScope,
     SmtEq, SmtInvariant,
 };
 
@@ -59,9 +60,10 @@ pub fn translate_equational_axiom<'ctx>(
     name: &str,
     weight: Weight,
 ) -> Bool<'ctx> {
-    let patterns = generate_patterns(instantiation, head);
-    let patterns = patterns.iter().collect_vec();
-    scope.forall(name, weight, &patterns, &head.smt_eq(body))
+    let mut meta = QuantifierMeta::new(name);
+    meta.weight = weight;
+    meta.set_patterns(generate_patterns(instantiation, head));
+    scope.forall(&meta, &head.smt_eq(body))
 }
 
 /// Builds an axiom for the return type invariant of a func based on the
@@ -79,10 +81,11 @@ pub fn translate_return_invariant<'ctx, 'smt>(
     let app_translated = translate.t_symbolic(&app);
 
     app_translated.smt_invariant().map(|invariant| {
+        let mut meta = QuantifierMeta::new(name);
+        meta.weight = Weight::DEFAULT;
         let app_z3 = app_translated.clone().into_dynamic(translate.ctx);
-        let patterns = generate_patterns(instantiation, &app_z3);
-        let patterns = patterns.iter().collect_vec();
-        scope.forall(name, Weight::DEFAULT, &patterns, &invariant)
+        meta.set_patterns(generate_patterns(instantiation, &app_z3));
+        scope.forall(&meta, &invariant)
     })
 }
 

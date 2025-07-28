@@ -47,7 +47,7 @@ use tokio::task::JoinError;
 use tracing::{error, info, warn};
 use vc::explain::VcExplanation;
 use z3::{Config, Context};
-use z3rro::{prover::ProveResult, util::ReasonUnknown};
+use z3rro::{prover::ProveResult, quantifiers::QuantifierMeta, util::ReasonUnknown};
 
 pub mod ast;
 mod driver;
@@ -1229,7 +1229,7 @@ fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
             //
             // therefore, we set a specific prefix for quantifiers, so that MBQI
             // only acts on quantifiers whose id starts with that prefix.
-            z3::set_global_param("smt.mbqi.id", "mbqi");
+            z3::set_global_param("smt.mbqi.id", QuantifierMeta::MBQI_PREFIX);
         }
         QuantifierInstantiation::MBQI => {
             z3::set_global_param("smt.ematching", "false");

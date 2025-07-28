@@ -3,23 +3,15 @@
 //! of fresh instances in a surrounding scope.
 
 use z3::{
-    ast::{exists_const, quantifier_const, Ast, Bool, Datatype, Dynamic, Int, Real},
-    Context, Pattern, Symbol,
+    ast::{Ast, Bool, Datatype, Dynamic, Int, Real},
+    Context,
 };
 
-use crate::{prover::Prover, Factory, SmtFactory, SmtInvariant};
-
-/// Weights for quantifiers.
-///
-/// The weights are used to prioritize quantifier instantiation in the SMT solver.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(transparent)]
-pub struct Weight(pub u32);
-
-impl Weight {
-    /// Default weight for quantifiers.
-    pub const DEFAULT: Weight = Weight(1);
-}
+use crate::{
+    prover::Prover,
+    quantifiers::{mk_quantifier, QuantifierMeta, QuantifierType},
+    Factory, SmtFactory, SmtInvariant,
+};
 
 /// An SmtScope can be used to construct a quantifier like `forall` or `exists`.
 /// The scope has a list of bound expressions (usually just variables) and a
@@ -77,37 +69,18 @@ impl<'ctx> SmtScope<'ctx> {
 
     /// Create a new existential quantifier around `body`, quantifying over all
     /// bound expressions in this solver.
-    pub fn exists(&self, patterns: &[&Pattern<'ctx>], body: &Bool<'ctx>) -> Bool<'ctx> {
+    pub fn exists(&self, meta: &QuantifierMeta<'ctx>, body: &Bool<'ctx>) -> Bool<'ctx> {
         let ctx = body.get_ctx();
-        exists_const(
-            ctx,
-            &self.bounds_dyn(),
-            patterns,
-            &Bool::and(ctx, &[&self.all_constraints(ctx), body]),
-        )
+        let body = Bool::and(ctx, &[&self.all_constraints(ctx), body]);
+        mk_quantifier(meta, QuantifierType::Exists, &self.bounds_dyn(), &body)
     }
 
     /// Create a new universal quantifier around `body`, quantifying over all
     /// bound expressions in this solver.
-    pub fn forall(
-        &self,
-        qid: impl Into<Symbol>,
-        weight: Weight,
-        patterns: &[&Pattern<'ctx>],
-        body: &Bool<'ctx>,
-    ) -> Bool<'ctx> {
+    pub fn forall(&self, meta: &QuantifierMeta<'ctx>, body: &Bool<'ctx>) -> Bool<'ctx> {
         let ctx = body.get_ctx();
-        quantifier_const(
-            ctx,
-            true,
-            weight.0,
-            qid,
-            "",
-            &self.bounds_dyn(),
-            patterns,
-            &[],
-            &self.all_constraints(ctx).implies(body),
-        )
+        let body = self.all_constraints(ctx).implies(body);
+        mk_quantifier(meta, QuantifierType::Forall, &self.bounds_dyn(), &body)
     }
 
     pub fn get_bounds(&self) -> impl Iterator<Item = &Dynamic<'ctx>> {

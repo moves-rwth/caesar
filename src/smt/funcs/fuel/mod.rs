@@ -7,7 +7,7 @@ pub use fuel_param::FuelParamFunctionEncoder;
 
 use itertools::Itertools;
 use z3::ast::Bool;
-use z3rro::scope::Weight;
+use z3rro::quantifiers::Weight;
 
 use crate::{
     ast::FuncDecl,

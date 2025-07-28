@@ -8,6 +8,7 @@ pub mod axiomatic;
 mod recfun;
 mod util;
 pub use recfun::RecFunFunctionEncoder;
+use z3rro::quantifiers::Weight;
 pub mod fuel;
 
 use crate::{
@@ -15,7 +16,6 @@ use crate::{
     smt::{symbolic::Symbolic, translate_exprs::TranslateExprs, SmtCtx},
 };
 use z3::{ast::Bool, Sort};
-use z3rro::scope::Weight;
 
 /// Higher weight that is used to deprioritize the computation axiom (c.f.
 /// [`Weight::DEFAULT`]).

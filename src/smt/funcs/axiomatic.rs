@@ -1,5 +1,5 @@
 use z3::ast::Bool;
-use z3rro::scope::Weight;
+use z3rro::quantifiers::Weight;
 
 use crate::{
     ast::{DeclRef, Expr, FuncDecl},

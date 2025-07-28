@@ -1,4 +1,4 @@
-use crate::scope::Weight;
+use crate::quantifiers::Weight;
 use crate::SmtEq;
 use std::fmt::Debug;
 use z3::ast::{quantifier_const, Ast, Bool, Dynamic};

@@ -27,6 +27,7 @@ pub mod scope;
 pub mod model;
 pub mod probes;
 pub mod prover;
+pub mod quantifiers;
 pub mod smtlib;
 mod uint;
 pub use uint::UInt;
