@@ -1,7 +1,7 @@
-use crate::quantifiers::Weight;
+use crate::quantifiers::{mk_quantifier, QuantifierMeta, QuantifierType};
 use crate::SmtEq;
 use std::fmt::Debug;
-use z3::ast::{quantifier_const, Ast, Bool, Dynamic};
+use z3::ast::{Ast, Bool, Dynamic};
 use z3::{Context, FuncDecl, Pattern, Sort};
 
 /// Identity function that is used to mark constants values. They allow for axioms instantiation
@@ -59,20 +59,14 @@ impl<'ctx> LitDecl<'ctx> {
 
     pub fn defining_axiom(&self) -> Vec<Bool<'ctx>> {
         let generic_forall = || {
-            // identity function: forall x: ArgSort . Lit(x) == x
+            // identity function: forall x: ArgSort. Lit(x) == x
             let x = Dynamic::fresh_const(self.ctx, "x", &self.arg_sort);
             let app = self.func.apply(&[&x]);
-            quantifier_const(
-                self.ctx,
-                true,
-                Weight::DEFAULT.0,
-                format!("Lit{}(definitional)", self.arg_sort),
-                "",
-                &[&x],
-                &[&Pattern::new(self.ctx, &[&app])],
-                &[],
-                &app.smt_eq(&x),
-            )
+            let body = app.smt_eq(&x);
+
+            let mut meta = QuantifierMeta::new(format!("Lit{}(definitional)", self.arg_sort));
+            meta.set_patterns(vec![Pattern::new(self.ctx, &[&app])]);
+            mk_quantifier(&meta, QuantifierType::Forall, &[&x], &body)
         };
         /*match self.arg_sort.kind() {
             SortKind::Bool => [true, false]
