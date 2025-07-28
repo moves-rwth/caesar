@@ -493,6 +493,10 @@ pub struct FuncDecl {
     /// The body is in a [`RefCell`] so that we can have an exclusive reference
     /// to it while still retrieving a shared reference to the declaration
     pub body: RefCell<Option<Expr>>,
+    /// Whether this function is **explicitly marked** as computable, i.e.
+    /// whether a call to it with literal parameters is considered literal as
+    /// well. Functions with bodies are always computable, but this field will
+    /// be `false` (because not explicitly marked).
     pub computable: bool,
     pub span: Span,
 }

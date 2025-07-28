@@ -264,10 +264,10 @@ DomainDecl: DomainDecl = {
 }
 
 DomainSpec: DomainSpec = {
-    <l: @L> <comp:"@computable"?> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> <r: @R>
+    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> <comp:"@computable"?> <r: @R>
         => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(None), computable: comp.is_some(), span: span(file, l, r) })),
-    <l: @L> <comp:"@computable"?> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> "=" <body: Expr> <r: @R>
-        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(Some(body)), computable: comp.is_some(), span: span(file, l, r) })),
+    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> "=" <body: Expr> <r: @R>
+        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(Some(body)), computable: false, span: span(file, l, r) })),
     <l: @L> "axiom" <name: Ident> <axiom: Expr> <r: @R>
         => DomainSpec::Axiom(DeclRef::new(AxiomDecl{ name, axiom, span: span(file, l, r) }))
 }

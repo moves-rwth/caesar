@@ -4,14 +4,14 @@
 
 // Peano numbers
 domain Nat {
-    @computable func Z(): Nat
-    @computable func S(N: Nat): Nat
+    func Z(): Nat @computable
+    func S(N: Nat): Nat @computable
 
-    @computable func isZ(n: Nat): Bool
+    func isZ(n: Nat): Bool @computable
     axiom isZ_true isZ(Z()) == true
     axiom isZ_false forall n: Nat @trigger(isZ(S(n))). isZ(S(n)) == false
 
-    @computable func getPrev(n: Nat): Nat
+    func getPrev(n: Nat): Nat @computable
     axiom getPrev_def forall n: Nat @trigger(getPrev(S(n))). getPrev(S(n)) == n
 
     func plus(n: Nat, m: Nat): Nat = ite(isZ(n), m, S(plus(getPrev(n), m)))
