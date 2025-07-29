@@ -477,7 +477,7 @@ pub struct VerifyUnit {
 
 impl VerifyUnit {
     /// Desugar assignments with procedure calls.
-    #[instrument(skip(self, tcx))]
+    #[instrument(skip_all)]
     pub fn desugar_spec_calls(&mut self, tcx: &mut TyCtx, name: String) -> Result<(), VerifyError> {
         // Pass the context direction to the SpecCall so that it can check direction compatibility with called procedures
         let mut spec_call = SpecCall::new(tcx, self.direction, name);
@@ -741,7 +741,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
 
         let prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc);
 
-        if options.debug_options.probe {
+        if options.debug_options.z3_probe {
             let goal = Goal::new(ctx, false, false, false);
             for assertion in prover.get_assertions() {
                 goal.assert(&assertion);
@@ -828,7 +828,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
             }
         }
 
-        if options.debug_options.print_z3_stats {
+        if options.debug_options.z3_stats {
             let stats = slice_solver.get_statistics();
             eprintln!("Z3 statistics for {name}: {stats:?}");
         }

@@ -455,12 +455,12 @@ pub struct DebugOptions {
     pub z3_verbose: Option<u32>,
 
     /// Print Z3's statistics after the final SAT check.
-    #[arg(long)]
-    pub print_z3_stats: bool,
+    #[arg(long, alias = "print-z3-stats")]
+    pub z3_stats: bool,
 
-    /// Run a bunch of probes on the SMT solver.
-    #[arg(long)]
-    pub probe: bool,
+    /// Run a bunch of Z3's probes on the SAT goal.
+    #[arg(long, alias = "probe")]
+    pub z3_probe: bool,
 }
 
 #[derive(Debug, Default, Args)]
@@ -933,7 +933,7 @@ fn verify_files_main(
     // core VC, we can return early.
     if options.debug_options.no_verify
         && !options.lsp_options.explain_core_vc
-        && !options.debug_options.probe
+        && !options.debug_options.z3_probe
         && !options.debug_options.print_smt
         && !options.debug_options.print_core
         && !options.debug_options.print_core_procs
