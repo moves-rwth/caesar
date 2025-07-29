@@ -1,4 +1,4 @@
-// RUN: bash -c '@caesar @file --slice-error-first 2>&1 | grep -q "Counter-example to verification found"'
+// RUN: bash -c '@caesar @file --no-slice-error --timeout 60 2>&1 | grep -q "Counter-example to verification found"'
 
 // Test file to check refute_brp5_bmc.pgcl with caesar encodings
 // k = 14, invariant = totalFailed + 1

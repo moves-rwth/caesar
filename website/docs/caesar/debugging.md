@@ -6,6 +6,17 @@ sidebar_position: 1
 
 Follow this guide if you are debugging verification with Caesar.
 
+## Disabling Slicing
+
+By default, Caesar will use [slicing](./slicing.md) for error localization.
+If you're just interested in simple results (verified/not verified), it might be helpful to disable/limit slicing.
+
+ * Use `--no-slice-error` to disable error localization completely.
+   * This will disable any slicing-related encoding in the SMT formula.
+   * For HeyVL programs with many assert-like statements, this can massively improve performance. This occurs when using e.g. [k-induction](../proof-rules/induction.md).
+ * Use `--slice-error-first` to tell Caesar not to attempt to minimize the error slice, but use the first one it finds.
+    * The generated SMT formula will still contain slicing-related logic.
+
 
 ## SMT Theories and Incompleteness {#incompleteness}
 
