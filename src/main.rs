@@ -21,7 +21,7 @@ use crate::{
     smt::{
         funcs::{
             axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder},
-            fuel::{FuelMonoFunctionEncoder, FuelParamFunctionEncoder},
+            fuel::{FuelEncodingOptions, FuelMonoFunctionEncoder, FuelParamFunctionEncoder},
             FunctionEncoder, RecFunFunctionEncoder,
         },
         translate_exprs::TranslateExprs,
@@ -358,6 +358,12 @@ pub struct OptimizationOptions {
     /// using one of the fuel encodings.
     #[arg(long, default_value = "2")]
     pub max_fuel: usize,
+
+    /// Do not add the "synonym" axiom when translating definitional functions
+    /// with the fuel-based encodings. This will allow spurious counter-examples
+    /// (unsound!), but sometimes this is acceptable or even desired.
+    #[arg(long)]
+    pub no_synonym_axiom: bool,
 
     /// Select which heuristics for quantifier instantiation should be used by the SMT solver.
     #[arg(long, alias = "qi", default_value = "all")]
@@ -1263,24 +1269,37 @@ fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
 }
 
 fn mk_function_encoder(options: &VerifyCommand) -> Box<dyn FunctionEncoder<'_> + '_> {
-    let function_encoding = match options.opt_options.function_encoding {
+    let fe_opt = options.opt_options.function_encoding;
+    let function_encoding = match fe_opt {
         FunctionEncodingOption::Axiomatic => {
             AxiomaticFunctionEncoder::new(AxiomInstantiation::Bidirectional).into_boxed()
         }
         FunctionEncodingOption::Decreasing => {
             AxiomaticFunctionEncoder::new(AxiomInstantiation::Decreasing).into_boxed()
         }
-        FunctionEncodingOption::FuelMono => {
-            FuelMonoFunctionEncoder::new(options.opt_options.max_fuel, false).into_boxed()
-        }
-        FunctionEncodingOption::FuelParam => {
-            FuelParamFunctionEncoder::new(options.opt_options.max_fuel, false).into_boxed()
-        }
-        FunctionEncodingOption::FuelMonoComputation => {
-            FuelMonoFunctionEncoder::new(options.opt_options.max_fuel, true).into_boxed()
-        }
-        FunctionEncodingOption::FuelParamComputation => {
-            FuelParamFunctionEncoder::new(options.opt_options.max_fuel, true).into_boxed()
+        FunctionEncodingOption::FuelMono
+        | FunctionEncodingOption::FuelParam
+        | FunctionEncodingOption::FuelMonoComputation
+        | FunctionEncodingOption::FuelParamComputation => {
+            let fuel_options = FuelEncodingOptions {
+                max_fuel: options.opt_options.max_fuel,
+                computation: matches!(
+                    fe_opt,
+                    FunctionEncodingOption::FuelMonoComputation
+                        | FunctionEncodingOption::FuelParamComputation
+                ),
+                synonym_axiom: !options.opt_options.no_synonym_axiom,
+            };
+            match fe_opt {
+                FunctionEncodingOption::FuelMono | FunctionEncodingOption::FuelMonoComputation => {
+                    FuelMonoFunctionEncoder::new(fuel_options).into_boxed()
+                }
+                FunctionEncodingOption::FuelParam
+                | FunctionEncodingOption::FuelParamComputation => {
+                    FuelParamFunctionEncoder::new(fuel_options).into_boxed()
+                }
+                _ => unreachable!(),
+            }
         }
         FunctionEncodingOption::DefineFunRec => RecFunFunctionEncoder::new().into_boxed(),
     };

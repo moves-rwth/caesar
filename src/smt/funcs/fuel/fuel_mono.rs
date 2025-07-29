@@ -9,7 +9,7 @@ use crate::{
             axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder},
             fuel::{
                 fuel_computation_axiom, fuel_definitional_axiom, fuel_return_invariant,
-                fuel_synonym_axiom, FuelEncoder, FuelType,
+                fuel_synonym_axiom, FuelEncoder, FuelEncodingOptions, FuelType,
             },
             is_eligible_for_limited_function,
             util::{translate_func_domain, translate_plain_call, InputsEncoder},
@@ -54,21 +54,19 @@ use crate::{
 /// where `n` ranges from 1 to `max_fuel` and `<body>` is translated using
 /// `func_name$n` again (i.e. the fuel value is *not* decremented).`
 pub struct FuelMonoFunctionEncoder {
+    options: FuelEncodingOptions,
     default_encoding: AxiomaticFunctionEncoder,
-    computation: bool,
-    /// The maximum fuel value up to which function definitions are generated.
-    max_fuel: usize,
     /// The current fuel value used in the translation.
     current_fuel: Cell<usize>,
 }
 
 impl FuelMonoFunctionEncoder {
-    pub fn new(max_fuel: usize, computation: bool) -> Self {
+    pub fn new(options: FuelEncodingOptions) -> Self {
+        let current_fuel = Cell::new(options.max_fuel);
         Self {
+            options,
             default_encoding: AxiomaticFunctionEncoder::new(AxiomInstantiation::Decreasing),
-            computation,
-            max_fuel,
-            current_fuel: Cell::new(max_fuel),
+            current_fuel,
         }
     }
 }
@@ -91,7 +89,7 @@ impl<'ctx> FuelEncoder<'ctx> for FuelMonoFunctionEncoder {
     ) -> Self::Fuel {
         Self::assert_translate_this_encoder(self, translate);
         translate.clear_cache();
-        assert!(fuel <= self.max_fuel);
+        assert!(fuel <= self.options.max_fuel);
         self.current_fuel.replace(fuel)
     }
 }
@@ -112,7 +110,7 @@ impl<'ctx> FunctionEncoder<'ctx> for FuelMonoFunctionEncoder {
 
         let range = ty_to_sort(ctx, &func.output);
         let domain = translate_func_domain(ctx, func, false);
-        (0..=self.max_fuel)
+        (0..=self.options.max_fuel)
             .map(|fuel| {
                 (
                     Self::ident_with_fuel(func, fuel),
@@ -136,25 +134,29 @@ impl<'ctx> FunctionEncoder<'ctx> for FuelMonoFunctionEncoder {
 
         // definitional axioms (these are all generated defining for `succ(fuel)`)
         axioms.extend(
-            (0..self.max_fuel).map(|fuel| fuel_definitional_axiom(self, &fuel, translate, func)),
+            (0..self.options.max_fuel)
+                .map(|fuel| fuel_definitional_axiom(self, &fuel, translate, func)),
         );
 
         // return invariants (generated for `fuel`)
         axioms.extend(
-            (0..=self.max_fuel)
+            (0..=self.options.max_fuel)
                 .filter_map(|fuel| fuel_return_invariant(self, &fuel, translate, func)),
         );
 
         // synonym axioms, equating values of `succ(fuel)` and `fuel`. generated
         // up to max_fuel - 1, so that the last synonym axiom is for `fuel = max_fuel`
-        axioms.extend(
-            (0..self.max_fuel).map(|fuel| fuel_synonym_axiom(self, &fuel, translate, func)),
-        );
+        if self.options.synonym_axiom {
+            axioms.extend(
+                (0..self.options.max_fuel)
+                    .map(|fuel| fuel_synonym_axiom(self, &fuel, translate, func)),
+            );
+        }
 
         // computation axioms, allowing unbounded computation for `fuel`.
-        if self.computation {
+        if self.options.computation {
             axioms.extend(
-                (1..=self.max_fuel)
+                (1..=self.options.max_fuel)
                     .map(|fuel| fuel_computation_axiom(self, &fuel, translate, func)),
             )
         }
@@ -180,7 +182,7 @@ impl<'ctx> FunctionEncoder<'ctx> for FuelMonoFunctionEncoder {
     }
 
     fn func_uses_lit_wrap(&self, func: &DeclRef<FuncDecl>) -> bool {
-        self.computation && is_eligible_for_limited_function(&func.borrow())
+        self.options.computation && is_eligible_for_limited_function(&func.borrow())
     }
 }
 

@@ -24,6 +24,18 @@ use crate::{
     },
 };
 
+#[derive(Debug)]
+pub struct FuelEncodingOptions {
+    /// The maximum fuel value to use in the encoding.
+    pub max_fuel: usize,
+    /// Whether to add computation axioms.
+    pub computation: bool,
+    /// Whether to add synonym axioms.
+    /// If `false`, the synonym axiom is not added, which may lead to spurious
+    /// counter-examples.
+    pub synonym_axiom: bool,
+}
+
 trait FuelType: Clone + Sized {
     fn succ(&self) -> Self;
 }

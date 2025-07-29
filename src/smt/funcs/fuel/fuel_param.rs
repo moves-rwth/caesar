@@ -13,7 +13,7 @@ use crate::{
             axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder},
             fuel::{
                 fuel_computation_axiom, fuel_definitional_axiom, fuel_return_invariant,
-                fuel_synonym_axiom, FuelEncoder, FuelType,
+                fuel_synonym_axiom, FuelEncoder, FuelEncodingOptions, FuelType,
             },
             is_eligible_for_limited_function,
             util::{translate_func_domain, translate_plain_call, InputsEncoder},
@@ -55,29 +55,27 @@ use crate::{
 /// forall fuel: Fuel, <args...> @trigger(func_name(fuel, Lit(<args...>))) . func_name(fuel, Lit(<args...>)) = <body>
 /// ```
 pub struct FuelParamFunctionEncoder<'ctx> {
+    options: FuelEncodingOptions,
     default_encoding: AxiomaticFunctionEncoder,
-    computation: bool,
     /// The current fuel value used in the translation.
     /// It is wrapped in a `RefCell` to allow for mutable access during the translation
     /// process. The value is `None` if the fuel is not initialized yet.
     current_fuel: RefCell<Option<Fuel<'ctx>>>,
-    max_fuel: usize,
 }
 
 impl<'ctx> FuelParamFunctionEncoder<'ctx> {
-    pub fn new(max_fuel: usize, computation: bool) -> Self {
+    pub fn new(options: FuelEncodingOptions) -> Self {
         FuelParamFunctionEncoder {
-            computation,
+            options,
             default_encoding: AxiomaticFunctionEncoder::new(AxiomInstantiation::Decreasing),
             current_fuel: RefCell::new(None),
-            max_fuel,
         }
     }
 
     fn get_fuel(&self, ctx: &SmtCtx<'ctx>) -> Fuel<'ctx> {
         self.current_fuel
             .borrow_mut()
-            .get_or_insert_with(|| Fuel::from_constant(ctx.fuel_factory(), self.max_fuel))
+            .get_or_insert_with(|| Fuel::from_constant(ctx.fuel_factory(), self.options.max_fuel))
             .clone()
     }
 }
@@ -154,12 +152,12 @@ impl<'ctx> FunctionEncoder<'ctx> for FuelParamFunctionEncoder<'ctx> {
         let mut scope = SmtScope::new();
         let fuel = Fuel::fresh(translate.ctx.fuel_factory(), &mut scope, "$f");
 
-        let mut axioms = vec![
-            fuel_definitional_axiom(self, &fuel, translate, func),
-            fuel_synonym_axiom(self, &fuel, translate, func),
-        ];
+        let mut axioms = vec![fuel_definitional_axiom(self, &fuel, translate, func)];
+        if self.options.synonym_axiom {
+            axioms.push(fuel_synonym_axiom(self, &fuel, translate, func));
+        }
         axioms.extend(fuel_return_invariant(self, &fuel, translate, func));
-        if self.computation {
+        if self.options.computation {
             axioms.push(fuel_computation_axiom(self, &fuel, translate, func));
         }
         axioms
@@ -179,6 +177,6 @@ impl<'ctx> FunctionEncoder<'ctx> for FuelParamFunctionEncoder<'ctx> {
     }
 
     fn func_uses_lit_wrap(&self, func: &DeclRef<FuncDecl>) -> bool {
-        self.computation && is_eligible_for_limited_function(&func.borrow())
+        self.options.computation && is_eligible_for_limited_function(&func.borrow())
     }
 }
