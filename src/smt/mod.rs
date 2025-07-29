@@ -96,7 +96,7 @@ impl<'ctx> SmtCtx<'ctx> {
                         _ => {}
                     }
                     self.lit_wrap =
-                        self.lit_wrap || self.function_encoder.func_uses_lit_wrap(&func_ref);
+                        self.lit_wrap || self.function_encoder.func_uses_lit_wrap(func_ref);
                     for (name, domain, range) in
                         self.function_encoder.translate_signature(self, &func)
                     {

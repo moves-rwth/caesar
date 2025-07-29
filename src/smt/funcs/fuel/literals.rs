@@ -7,10 +7,13 @@ use std::{
 use ref_cast::RefCast;
 use tracing::info_span;
 
-use crate::{ast::{
-    visit::{walk_expr, VisitorMut},
-    Expr, ExprData, ExprKind, Ident, RefEqShared,
-}, smt::SmtCtx};
+use crate::{
+    ast::{
+        visit::{walk_expr, VisitorMut},
+        Expr, ExprData, ExprKind, Ident, RefEqShared,
+    },
+    smt::SmtCtx,
+};
 
 type RefEqExpr = RefEqShared<ExprData>;
 
@@ -77,9 +80,7 @@ impl LiteralExprCollector {
         Self {
             literal_exprs: LiteralExprSet::default(),
             literal_vars: HashSet::new(),
-            computable_functions: ctx.computable_functions()
-                .into_iter()
-                .collect(),
+            computable_functions: ctx.computable_functions().into_iter().collect(),
         }
     }
 
