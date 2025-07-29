@@ -5,7 +5,6 @@ use z3::{
     ast::{Ast, Bool},
     RecFuncDecl,
 };
-use z3rro::SmtInvariant;
 
 use crate::{
     ast::{DeclRef, ExprBuilder, FuncDecl, Ident, SpanVariant},
@@ -60,10 +59,18 @@ impl<'ctx> RecFunFunctionEncoder<'ctx> {
             .map(|param| builder.var(param.name, translate.ctx.tcx))
             .map(|var| {
                 let symbolic = translate.t_symbolic(&var);
-                if symbolic.smt_invariant().is_some() {
-                    let type_name = var.ty.clone().map(|ty| format!("{ty}")).unwrap_or_else(|| "<unknown>".into());
-                    panic!("define-fun-rec encoding only supports parameter types without side conditions.\nParameter {} of function {} has type {}, which has a side condition.", var, func.name, type_name)
-                }
+                // note that we do not translate smt invariants here. this is
+                // impossible with Z3's [RecFunDecl] (if we don't go so far as
+                // to create new uninterpreted sorts for such types). still, I
+                // believe it is sound. in essence, the constrainted definition
+                // would be something like:
+                //
+                //  (forall ((x T)) (=> (smt_invariant x) (f x)))
+                //
+                // we translate that definition without the smt invariant here,
+                // but importantly every call to this function must be
+                // well-typed (and will therefore satisfy the constraints on the
+                // parameters).
                 symbolic.into_dynamic(translate.ctx)
             })
             .collect();

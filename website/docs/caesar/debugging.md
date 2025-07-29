@@ -93,7 +93,7 @@ Available function encodings:
 - **`fuel-mono-computation`**: Like `fuel-mono`, additionally allowing unbounded unfolding if the parameter values are literals.
 - **`fuel-param-computation`**: Like `fuel-param`, additionally allowing unbounded unfolding if the parameter values are literals.
 - **`define-fun-rec`** (alias: `recfun`): Uses [SMT-LIB's `define-fun-rec`](https://microsoft.github.io/z3guide/docs/logic/Recursive%20Functions/) to encode functions.
-  - Only supports input parameter types without SMT invariants right now.
+  - Does not translate SMT invariants like `x >= 0` for `UInt`s into the definition, which *might* over-constrain the function in very strange circumstances.
 
 #### Literals
 
