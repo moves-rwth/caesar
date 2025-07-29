@@ -4,10 +4,83 @@
         <title>Caesar Blog</title>
         <link>https://www.caesarverifier.org/blog</link>
         <description>Caesar Blog</description>
-        <lastBuildDate>Tue, 10 Jun 2025 00:00:00 GMT</lastBuildDate>
+        <lastBuildDate>Tue, 29 Jul 2025 00:00:00 GMT</lastBuildDate>
         <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
         <generator>https://github.com/jpmonette/feed</generator>
         <language>en</language>
+        <item>
+            <title><![CDATA[Caesar 3.0: Better Reasoning with Limited Functions]]></title>
+            <link>https://www.caesarverifier.org/blog/2025/07/29/caesar-3-0</link>
+            <guid>https://www.caesarverifier.org/blog/2025/07/29/caesar-3-0</guid>
+            <pubDate>Tue, 29 Jul 2025 00:00:00 GMT</pubDate>
+            <description><![CDATA[Caesar 3.0 improves the SMT reasoning capabilities of Caesar, making verification more powerful, stable, and predictable.]]></description>
+            <content:encoded><![CDATA[<p><em>Caesar 3.0</em> improves the SMT reasoning capabilities of Caesar, making verification more powerful, stable, and predictable.
+This release marks the conclusion of a project that started more than 9 months ago, including a successful Master's thesis by Emil-Beothy Elo.</p>
+<p><strong>Overview:</strong></p>
+<ol>
+<li><a href="https://www.caesarverifier.org/blog/2025/07/29/caesar-3-0#limited-functions">Limited Functions</a></li>
+<li><a href="https://www.caesarverifier.org/blog/2025/07/29/caesar-3-0#other-smt-related-improvements">Other SMT-related Improvements</a></li>
+<li><a href="https://www.caesarverifier.org/blog/2025/07/29/caesar-3-0#other-improvements">Other Improvements</a></li>
+</ol>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="limited-functions">Limited Functions<a href="https://www.caesarverifier.org/blog/2025/07/29/caesar-3-0#limited-functions" class="hash-link" aria-label="Direct link to Limited Functions" title="Direct link to Limited Functions">​</a></h2>
+<p>The most important change in Caesar 3.0 is the introduction of <em>limited functions</em>, which are enabled by default.
+This is a change in how <a href="https://www.caesarverifier.org/docs/heyvl/domains#definitional-functions"><em>definitional</em> <code>func</code></a> are translated into SMT.
+Whereas we previously translated definitional functions by using the "obvious" encoding, as uninterpreted functions and an axiom for its definition, we now guide the SMT solver by encoding <em>fuel</em>.</p>
+<p>Prior to this change, <code>coupon-collector</code> benchmark manually encoded this idea as part of a series of declarations to define harmonic numbers:</p>
+<div class="language-heyvl codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#403f53;--prism-background-color:#FBFBFB"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-heyvl codeBlock_bY9V thin-scrollbar" style="color:#403f53;background-color:#FBFBFB"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#403f53"><span class="token keyword" style="color:rgb(12, 150, 155)">func</span><span class="token plain"> harmonic(n: </span><span class="token builtin" style="color:rgb(72, 118, 214)">UInt</span><span class="token plain">): </span><span class="token builtin" style="color:rgb(72, 118, 214)">UReal</span><span class="token plain"></span><br></span><span class="token-line" style="color:#403f53"><span class="token plain"></span><span class="token keyword" style="color:rgb(12, 150, 155)">func</span><span class="token plain"> harmonic0(n: </span><span class="token builtin" style="color:rgb(72, 118, 214)">UInt</span><span class="token plain">): </span><span class="token builtin" style="color:rgb(72, 118, 214)">UReal</span><span class="token plain"></span><br></span><span class="token-line" style="color:#403f53"><span class="token plain"></span><span class="token keyword" style="color:rgb(12, 150, 155)">axiom</span><span class="token plain"> harmonic_def </span><span class="token operator" style="color:rgb(12, 150, 155)">forall</span><span class="token plain"> n: </span><span class="token builtin" style="color:rgb(72, 118, 214)">UInt</span><span class="token plain">.</span><br></span><span class="token-line" style="color:#403f53"><span class="token plain">    (harmonic(n) </span><span class="token operator" style="color:rgb(12, 150, 155)">==</span><span class="token plain"> </span><span class="token builtin" style="color:rgb(72, 118, 214)">ite</span><span class="token plain">(n</span><span class="token operator" style="color:rgb(12, 150, 155)">==</span><span class="token number" style="color:rgb(170, 9, 130)">0</span><span class="token punctuation" style="color:rgb(153, 76, 195)">,</span><span class="token plain"> </span><span class="token number" style="color:rgb(170, 9, 130)">0</span><span class="token punctuation" style="color:rgb(153, 76, 195)">,</span><span class="token plain"> (</span><span class="token number" style="color:rgb(170, 9, 130)">1</span><span class="token operator" style="color:rgb(12, 150, 155)">/</span><span class="token plain">n) </span><span class="token operator" style="color:rgb(12, 150, 155)">+</span><span class="token plain"> harmonic0(n</span><span class="token number" style="color:rgb(170, 9, 130)">-1</span><span class="token plain">)))</span><br></span><span class="token-line" style="color:#403f53"><span class="token plain"></span><span class="token keyword" style="color:rgb(12, 150, 155)">axiom</span><span class="token plain"> harmonic_zero </span><span class="token operator" style="color:rgb(12, 150, 155)">forall</span><span class="token plain"> n: </span><span class="token builtin" style="color:rgb(72, 118, 214)">UInt</span><span class="token plain">.</span><br></span><span class="token-line" style="color:#403f53"><span class="token plain">    (harmonic(n) </span><span class="token operator" style="color:rgb(12, 150, 155)">&gt;=</span><span class="token plain"> </span><span class="token number" style="color:rgb(170, 9, 130)">0</span><span class="token plain">)</span><br></span><span class="token-line" style="color:#403f53"><span class="token plain"></span><span class="token keyword" style="color:rgb(12, 150, 155)">axiom</span><span class="token plain"> harmonic0_zero </span><span class="token operator" style="color:rgb(12, 150, 155)">forall</span><span class="token plain"> n: </span><span class="token builtin" style="color:rgb(72, 118, 214)">UInt</span><span class="token plain">.</span><br></span><span class="token-line" style="color:#403f53"><span class="token plain">    (harmonic0(n) </span><span class="token operator" style="color:rgb(12, 150, 155)">&gt;=</span><span class="token plain"> </span><span class="token number" style="color:rgb(170, 9, 130)">0</span><span class="token plain">)</span><br></span></code></pre></div></div>
+<p>Now, we simply write:</p>
+<div class="language-heyvl codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#403f53;--prism-background-color:#FBFBFB"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-heyvl codeBlock_bY9V thin-scrollbar" style="color:#403f53;background-color:#FBFBFB"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#403f53"><span class="token keyword" style="color:rgb(12, 150, 155)">func</span><span class="token plain"> harmonic(n: </span><span class="token builtin" style="color:rgb(72, 118, 214)">UInt</span><span class="token plain">) : </span><span class="token builtin" style="color:rgb(72, 118, 214)">UReal</span><span class="token plain"> </span><span class="token operator" style="color:rgb(12, 150, 155)">=</span><span class="token plain"> </span><span class="token builtin" style="color:rgb(72, 118, 214)">ite</span><span class="token plain">(n</span><span class="token operator" style="color:rgb(12, 150, 155)">==</span><span class="token number" style="color:rgb(170, 9, 130)">0</span><span class="token punctuation" style="color:rgb(153, 76, 195)">,</span><span class="token plain"> </span><span class="token number" style="color:rgb(170, 9, 130)">0</span><span class="token punctuation" style="color:rgb(153, 76, 195)">,</span><span class="token plain"> (</span><span class="token number" style="color:rgb(170, 9, 130)">1</span><span class="token operator" style="color:rgb(12, 150, 155)">/</span><span class="token plain">n) </span><span class="token operator" style="color:rgb(12, 150, 155)">+</span><span class="token plain"> harmonic(n</span><span class="token number" style="color:rgb(170, 9, 130)">-1</span><span class="token plain">))</span><br></span></code></pre></div></div>
+<p>and Caesar does the rest automatically, with additional improvements:</p>
+<ul>
+<li>Caesar generates appropriate <a href="https://www.caesarverifier.org/docs/heyvl/domains#triggers">triggers</a> to guide the SMT solver.</li>
+<li>Caesar generates an additional <em>synonym axiom</em>, which is actually crucial to prevent <em>spurious counter-examples</em>.</li>
+</ul>
+<p>Our implementation supports a wide variety of options, which are documented in the <a href="https://www.caesarverifier.org/docs/caesar/debugging/#function-encodings-and-limited-functions">debugging documentation</a>.</p>
+<ul>
+<li><strong>Function Encodings</strong>, can be set via the <code>--function-encoding</code> command-line option:<!-- -->
+<ul>
+<li><strong><code>axiomatic</code>:</strong> The old encoding, which naively encodes the function as an uninterpreted function and adds an axiom for its definition.</li>
+<li><strong><code>decreasing</code>:</strong> Like axiomatic encoding but only allows decreasing instantiations, where the defining axiom is only instantiated based on occurrences of the function it defines, not other functions in the definition.</li>
+<li><strong><code>fuel-mono</code>:</strong> Add a version of the function for each fuel value (f_0, f_1, ...) and recursive calls decrease the fuel value.</li>
+<li><strong><code>fuel-param</code></strong> (default): Add a symbolic fuel parameter to the function.</li>
+<li><strong><code>define-fun-rec</code>:</strong> Uses <a href="https://microsoft.github.io/z3guide/docs/logic/Recursive%20Functions/" target="_blank" rel="noopener noreferrer">SMT-LIB's <code>define-fun-rec</code></a> to encode functions.</li>
+</ul>
+</li>
+<li><strong>Fuel Values:</strong> The fuel-based encodings allow the user to specify a maximum fuel value via the <code>--max-fuel</code> command-line option. The default is 2.</li>
+<li><strong>Literals:</strong> The <code>fuel-mono</code> and <code>fuel-param</code> encodings have variants that additionally allow unbounded computations in the SMT solver with <em>literal</em> values.</li>
+<li><strong>Quantifier Instantiation Strategies:</strong> Users can now disable MBQI with <code>--qi e-matching</code>. When combined with the fuel-based encodings, we have <em>termination guarantee</em> for the quantifier instantiation strategy.</li>
+<li><strong>No Synonym Axiom:</strong> The <code>--no-synonym-axiom</code> command-line option can be used to disable the generation of the synonym axiom. This might lead to <em>spurious counter-examples</em> (unsound!), but sometimes this is acceptable or even desired.</li>
+</ul>
+<p>We also support the use of limited functions in combination with <em>uninterpreted</em> functions.
+For this, we added a new <a href="https://www.caesarverifier.org/docs/heyvl/domains#computable-annotation"><code>@computable</code> annotation</a>, which can be used to mark uninterpreted functions that are computable when given <em>literal</em> parameters.</p>
+<p>These changes were made possible by the work of Emil-Beothy Elo in his Master's thesis and his <a href="https://github.com/moves-rwth/caesar/pull/54" target="_blank" rel="noopener noreferrer">pull request #54</a>.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="other-smt-related-improvements">Other SMT-related Improvements<a href="https://www.caesarverifier.org/blog/2025/07/29/caesar-3-0#other-smt-related-improvements" class="hash-link" aria-label="Direct link to Other SMT-related Improvements" title="Direct link to Other SMT-related Improvements">​</a></h2>
+<p>Caesar now performs <strong>dependency tracking</strong> for SMT queries—meaning it analyzes which declarations (such as functions, axioms, and domains) are actually needed for each verification task and only includes those in the SMT query — reducing the number of declarations sent to the SMT solver.
+Previously, Caesar would send <em>all</em> declarations in the HeyVL file to the SMT solver, which could cause performance issues even when these declarations were irrelevant to the current verification task.
+This optimization is particularly beneficial when verifying individual procedures in files containing declarations that could interfere with counter-example generation.
+Now, only declarations that are actually relevant to the specific verification task are included in SMT queries.</p>
+<ul>
+<li>As a side-effect, we now <em>disallow</em> axioms that do not mention any domain or func, as these would never be included in SMT queries.
+If such an axiom is present, Caesar will emit an error indicating that the axiom is ignored because it is not relevant to any verification task.</li>
+</ul>
+<p>We <strong>updated Z3 to version 4.15.1</strong>, and now set Z3's <code>smt.arith.nl.order</code> to <code>false</code>.
+Many other Z3 options have been tweaked to improve quantifier instantiation stability and performance.</p>
+<ul>
+<li>We now set the default quantifier weight to <code>1</code> instead of <code>0</code>, which now aligns with the defaults used by other SMT solver integrations and APIs.</li>
+<li>Caesar now emits quantifier IDs for all quantifiers, making it easier to trace and debug quantifier instantiations in SMT solver outputs.</li>
+</ul>
+<p>Caesar 3.0 adds some <strong>new debugging tools</strong> for Z3's SMT reasoning.</p>
+<ul>
+<li><code>--z3-seed</code> allows users to set a seed for Z3. This is useful for debugging verification brittleness.</li>
+<li><code>--z3-qi-profile</code> will print Z3's quantifier instantiation statistics to the console.</li>
+<li><code>--z3-mbqi-trace</code> will print Z3's model-based quantifier instantiation trace to the console.</li>
+<li><code>--z3-verbose</code> allows users to set Z3's verbosity level.</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="other-improvements">Other Improvements<a href="https://www.caesarverifier.org/blog/2025/07/29/caesar-3-0#other-improvements" class="hash-link" aria-label="Direct link to Other Improvements" title="Direct link to Other Improvements">​</a></h2>
+<p>This release also features rewritten documentation for <a href="https://www.caesarverifier.org/docs/proof-rules/induction">the induction-based proof rules</a> and minor improvements in various other places.</p>
+<p>We re-organized and extended the test suite, so that we now regularly run more than 150 tests in CI.</p>]]></content:encoded>
+            <category>releases</category>
+        </item>
         <item>
             <title><![CDATA[Caesar at Summer School for Formal Techniques '25]]></title>
             <link>https://www.caesarverifier.org/blog/2025/06/10/caesar-at-ssft-25</link>
