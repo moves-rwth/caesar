@@ -114,6 +114,11 @@ Then:
 - **`fuel-param` and `fuel-param-computation`** guarantee termination.
 - **`define-fun-rec`** does not guarantee termination.
 
+#### No Synonym Axiom Option
+
+Fuel-based encodings generate a *synonym axiom* for each definitional function that specifies that all fuel versions of the function are equivalent.
+The `--no-synonym-axiom` command-line option can be used to disable the generation of the synonym axiom.
+This might lead to *spurious counter-examples* (unsound!), but sometimes this is acceptable or even desired.
 
 ### Selecting Quantifier Instantiation Strategies
 
