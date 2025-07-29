@@ -499,7 +499,7 @@ async fn handle_verify_request(
                     .map_err(VerifyError::ServerError)?;
                 Response::new_ok(id.clone(), Value::Null)
             }
-            _ => Response::new_err(id, 0, format!("{}", err)),
+            _ => Response::new_err(id, 0, format!("{err}")),
         },
     };
 

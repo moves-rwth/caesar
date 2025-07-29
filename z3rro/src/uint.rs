@@ -10,7 +10,7 @@ use crate::{
     forward_binary_op,
     model::{InstrumentedModel, SmtEval, SmtEvalError},
     scope::SmtAlloc,
-    Factory, SmtFactory, SmtInvariant,
+    Factory, LitFactory, LitWrap, SmtFactory, SmtInvariant,
 };
 
 use super::{
@@ -90,6 +90,12 @@ impl<'ctx> SmtPartialOrd<'ctx> for UInt<'ctx> {
     }
 }
 
+impl<'ctx> LitWrap<'ctx> for UInt<'ctx> {
+    fn lit_wrap(&self, factory: &impl LitFactory<'ctx>) -> Self {
+        UInt::unchecked_from_int(self.as_int().lit_wrap(factory))
+    }
+}
+
 impl<'ctx> SmtEval<'ctx> for UInt<'ctx> {
     type Value = BigInt;
 
@@ -138,6 +144,7 @@ mod test {
 
     use crate::{
         generate_smt_branch_tests, generate_smt_partial_ord_tests,
+        quantifiers::QuantifierMeta,
         scope::{SmtFresh, SmtScope},
         test::test_prove,
         SmtEq,
@@ -155,7 +162,8 @@ mod test {
             let zero = UInt::from_u64(ctx, 0);
             let one = UInt::from_u64(ctx, 1);
             let x = UInt::fresh(&ctx, &mut inner_scope, "x");
-            inner_scope.exists(&[], &(x + one).smt_eq(&zero)).not()
+            let meta = QuantifierMeta::new("ex_neg");
+            inner_scope.exists(&meta, &(x + one).smt_eq(&zero)).not()
         });
     }
 }

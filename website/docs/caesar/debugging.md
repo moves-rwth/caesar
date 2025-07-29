@@ -6,6 +6,17 @@ sidebar_position: 1
 
 Follow this guide if you are debugging verification with Caesar.
 
+## Disabling Slicing
+
+By default, Caesar will use [slicing](./slicing.md) for error localization.
+If you're just interested in simple results (verified/not verified), it might be helpful to disable/limit slicing.
+
+ * Use `--no-slice-error` to disable error localization completely.
+   * This will disable any slicing-related encoding in the SMT formula.
+   * For HeyVL programs with many assert-like statements, this can massively improve performance. This occurs when using e.g. [k-induction](../proof-rules/induction.md).
+ * Use `--slice-error-first` to tell Caesar not to attempt to minimize the error slice, but use the first one it finds.
+    * The generated SMT formula will still contain slicing-related logic.
+
 
 ## SMT Theories and Incompleteness {#incompleteness}
 
@@ -27,6 +38,7 @@ Here are some rules of thumb for (in-)completeness:
  * Nonlinear real arithmetic (QF_NRA) is decidable for algebraic reals.
  * Quantifiers usually introduce undecidability, although there are [a bunch of strategies and fragments in Z3 that allow decidability](https://microsoft.github.io/z3guide/docs/logic/Quantifiers#model-based-quantifier-instantiation).
    * In particular, restrictive [quantifier triggers](../heyvl/expressions.md#triggers) can help e-matching prove many instances.
+ * [Definitional functions](../heyvl/domains.md#definitional-functions) can introduce nontermination. See the section on [function encodings and limited functions](#function-encodings-and-limited-functions) for more information.
  * HeyVL's [quantitative quantifiers](../heyvl/expressions.md#quantifiers) (`inf` and `sup`) currently have a very naive default encoding that is problematic for Z3.  If the quantitative quantifiers cannot be eliminated by Caesar's quantifier elimination (QE) procedure, then they are often a cause of nontermination of Caesar.
    * Quantitative quantifiers also come from the semantics of [`havoc` and `cohavoc`](../heyvl/statements.md#havoc). However, for e.g. the [induction-based proof rules](../proof-rules/induction.md), the HeyVL encodings fall into a fragment where Caesar's QE applies and the generated quantifiers are eliminated.
  * In practice, the SMT solver can often *prove* correctness, but it often has problems with *refutations* (i.e. providing counter-examples).
@@ -62,7 +74,96 @@ In general, it is seldom useful to micro-optimize these metrics.
 
 With the `--print-z3-stats` command-line flag, Caesar will print Z3 statistics to standard error.
 
-## Debugging Quantifier Instantiations with SMTscope
+## Debugging Quantifier Instantiations
+
+
+### Function Encodings and Limited Functions
+
+Caesar supports many different encodings of [definitional functions](../heyvl/domains.md#definitional-functions), which can be selected via the `--function-encoding` command-line option.
+
+The default is `--function-encoding fuel-param`, which uses a *fuel parameter* to limit how many times a function can be unfolded in the SMT query by the *e-matching* quantifier instantiation strategy.
+For example, a simple recursive definition of exponentials, `exp(x)` will only be unfolded at most `2` times (c.f. [Definitional Functions](../heyvl/domains.md#definitional-functions) for a definition).
+
+Available function encodings:
+
+- **`axiomatic`**: The most direct encoding with FO + uninterpreted functions, allowing for unbounded computations and arbitrary quantifier instantiations.
+- **`decreasing`**: Like axiomatic encoding but only allows decreasing instantiations, where the defining axiom is only instantiated based on occurrences of the function it defines, not other functions in the definition. These instantiations are unbounded.
+- **`fuel-mono`**: Add a version of the function for each fuel value (f_0, f_1, ...) and recursive calls decrease the fuel value.
+- **`fuel-param`** (default): Add a symbolic fuel parameter to the function.
+- **`fuel-mono-computation`**: Like `fuel-mono`, additionally allowing unbounded unfolding if the parameter values are literals.
+- **`fuel-param-computation`**: Like `fuel-param`, additionally allowing unbounded unfolding if the parameter values are literals.
+- **`define-fun-rec`** (alias: `recfun`): Uses [SMT-LIB's `define-fun-rec`](https://microsoft.github.io/z3guide/docs/logic/Recursive%20Functions/) to encode functions.
+  - Does not translate SMT invariants like `x >= 0` for `UInt`s into the definition, which *might* over-constrain the function in very strange circumstances.
+
+#### Literals
+
+The `fuel-mono-computation` and `fuel-param-computation` encodings additionally allow unbounded unfolding if the parameter values are *literals*.
+Literals are expressions that do not contain variables.
+Caesar will also mark calls to *definitional* functions with literal parameters as literals, so that e.g. `exp(5)` is a literal and the definition of `exp` can be unfolded as many times as needed.
+Calls to [uninterpreted functions](../heyvl/domains.md#axiomatizing-uninterpreted-functions) are never considered literals, except when [annotated with the `@computable` annotation](../heyvl/domains.md#computable-annotation).
+
+#### Termination
+
+Specific encodings can guarantee termination of the SMT query, which in practice means that we can quickly and stably obtain a result of either "verified", "counter-example found", or "unknown".
+Termination guarantees can only be given when using the [`--quantifier-instantiation e-matching` command-line option](#selecting-quantifier-instantiation-strategies) (disabling MBQI).
+
+Then:
+- **`axiomatic`** does not guarantee termination.
+- **`decreasing`** guarantees termination only if the defined functions are terminating.
+- **`fuel-mono` and `fuel-mono-computation`** guarantee termination.
+- **`fuel-param` and `fuel-param-computation`** guarantee termination.
+- **`define-fun-rec`** does not guarantee termination.
+
+#### No Synonym Axiom Option
+
+Fuel-based encodings generate a *synonym axiom* for each definitional function that specifies that all fuel versions of the function are equivalent.
+The `--no-synonym-axiom` command-line option can be used to disable the generation of the synonym axiom.
+This might lead to *spurious counter-examples* (unsound!), but sometimes this is acceptable or even desired.
+
+### Selecting Quantifier Instantiation Strategies
+
+You can select which strategies Z3 is allowed to use with Caesar's `--quantifier-instantiation` command-line option.
+When restricting the quantifier instantiation to `e-matching`, the fuel encodings guarantee termination of the SMT query.
+Available quantifier instantiation strategies:
+
+- **`all`** (default): Use all available quantifier instantiation heuristics, in particular both e-matching and MBQI are enabled.
+- **`e-matching`**: Only use E-matching for quantifier instantiation.
+    * This disables MBQI; when using the fuel encodings, e-matching is guaranteed to terminate.
+- **`mbqi`**: Only use [MBQI](https://microsoft.github.io/z3guide/docs/logic/Quantifiers/#model-based-quantifier-instantiation) for quantifier instantiation.
+
+### Simple QI Profiling
+
+With Caesar's `--z3-qi-profile` command-line flag, you can enable logging of quantifier instantiations.
+This will enable [Z3's `smt.qi.profile` option](https://microsoft.github.io/z3guide/programming/Parameters/#smt).
+
+Currently, this will print Z3's quantifier instantiation statistics to standard error every 1000 instantiations.
+
+The output will look like this:
+
+```
+[quantifier_instances]    135-141 :     11 :   0 :   0 :   0 : 1
+[quantifier_instances] exp(return_invariant) :     57 :   0 :   0 :   3 : 4
+[quantifier_instances] exp(fuel_synonym) :     30 :   0 :   0 :   2 : 3
+[quantifier_instances] exp(definitional) :     30 :   0 :   0 :   2 : 3
+```
+
+Where the columns represent the following:[^z3-qi-profile-docs]
+  1. The quantifier instance name, e.g. `exp(return_invariant)`.
+  2. The number of instantiations of this quantifier.
+  3. <small>(always zero?)</small>
+  4. <small>(always zero?)</small>
+  5. Maximum generation depth of the quantifier instantiation.
+      * <small>Let's say we have `forall x . p(x) => p(x + 1)`, and `p(0)`. Then `p(1)` has generation 1, `p(2)` has generation 2, etc.</small>
+  6. Maximum cost of the quantifier instantiation.
+
+[^z3-qi-profile-docs]: [Z3's documentation on `smt.qi.profile`](https://microsoft.github.io/z3guide/programming/Parameters/#smt.qi.profile) is rather sparse. The description is based on the [source code of `smt_quantifier.cpp` of Z3](https://github.com/Z3Prover/z3/blob/f77123c13cc8dabe8d1d0217a3312738da834eba/src/smt/smt_quantifier.cpp#L169-L189) and [this issue comment by Nikolaj Bjorner](https://github.com/Z3Prover/z3/issues/4522#issuecomment-644454562).
+
+### MBQI Tracing
+
+When using MBQI, you can enable tracing of the quantifier instantiation process with the `--z3-mbqi-trace` command-line flag.
+It will enable Z3's `smt.mbqi.trace` option, which will print a message before every round of MBQI.
+
+### Debugging with SMTscope
 
 The [SMTscope tool](https://viperproject.github.io/smt-scope/) by the [Viper project](https://viper.ethz.ch/) can be used to debug quantifier instantiations in SMT queries.
 SMTscope is a graphical tool that allows you to visualize the quantifier instantiations that Z3 performs during the solving process.

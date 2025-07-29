@@ -1,31 +1,31 @@
-//! Generates the HeyVL code to verify a procedure implementation.
-//!
-//! A procedure
-//! ```
-//! proc myproc(param1: typ1) -> (ret2: typ2)
-//!     pre e1
-//!     pre e2
-//!     post e3
-//!     post e4
-//!     { body }
-//! ```
-//! is translated for verification into a HeyVL program of the form
-//! ```
-//! assume e1;
-//! assume e2;
-//! body;
-//! assert e3;
-//! assert e4;
-//! ```
-
 use crate::{
-    ast::{Direction, ProcDecl, SpanVariant, Spanned, StmtKind},
+    ast::{Block, Direction, ProcDecl, SpanVariant, Spanned, StmtKind},
     driver::VerifyUnit,
     slicing::{wrap_with_error_message, wrap_with_success_message},
 };
 
-/// Returns `None` if the proc has no body does not need verification.
-pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
+/// Generates the HeyVL code to verify a procedure implementation. Returns
+/// `None` if the proc has no body does not need verification.
+///
+/// ## The Encoding
+/// A procedure
+/// ```
+/// proc myproc(param1: typ1) -> (ret2: typ2)
+///     pre e1
+///     pre e2
+///     post e3
+///     post e4
+///     { body }
+/// ```
+/// is translated for verification into a HeyVL program of the form
+/// ```
+/// assume e1;
+/// assume e2;
+/// body;
+/// assert e3;
+/// assert e4;
+/// ```
+pub fn encode_proc_verify(proc: &ProcDecl) -> Option<(Direction, Block)> {
     let direction = proc.direction;
 
     let body_ref = proc.body.borrow();
@@ -46,7 +46,7 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
         let span = expr.span.variant(SpanVariant::ProcVerify);
         block.node.push(wrap_with_success_message(
             Spanned::new(span, StmtKind::Assume(direction, expr.clone())),
-            &format!("{} pre #{} is not necessary", proc_kind, i),
+            &format!("{proc_kind} pre #{i} is not necessary"),
         ));
     }
 
@@ -58,11 +58,11 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
         let span = expr.span.variant(SpanVariant::ProcVerify);
         block.node.push(wrap_with_error_message(
             Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
-            &format!("{} post #{} is part of the error", proc_kind, i),
+            &format!("{proc_kind} post #{i} is part of the error"),
         ));
     }
 
-    Some(VerifyUnit { direction, block })
+    Some((direction, block))
 }
 
 /// Turn the direction of this verification unit to lower bounds by adding

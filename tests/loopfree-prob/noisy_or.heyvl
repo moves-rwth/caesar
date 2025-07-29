@@ -1,0 +1,36 @@
+// RUN: @caesar @file
+
+proc noisy_or(what_n3: Bool) -> (n3: Bool)
+    pre [what_n3] * (130307/160000) + [!what_n3] * (29693/160000)
+    post [n3 == what_n3]
+{
+    var n1: Bool = false; var n21: Bool = false; var n22: Bool = false; var n31: Bool = false; var n32: Bool = false; var n33: Bool = false;
+    var n0: Bool = flip(1/2)
+    var n4: Bool = flip(1/2)
+    if n0 {
+        n1 = flip(4/5)
+        n21 = flip(4/5)
+    } else {
+        n1 = flip(1/10)
+        n21 = flip(1/10)
+    }
+    if n4 {
+        n22 = flip(4/5)
+        n33 = flip(4/5)
+    } else {
+        n22 = flip(1/10)
+        n33 = flip(1/10)
+    }
+    var n2: Bool = n21 || n22
+    if n1 {
+        n31 = flip(4/5)
+    } else {
+        n31 = flip(1/10)
+    }
+    if n2 {
+        n32 = flip(4/5)
+    } else {
+        n32 = flip(1/10)
+    }
+    n3 = n31 || n32 || n33
+}

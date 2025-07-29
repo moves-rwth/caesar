@@ -1,0 +1,49 @@
+// RUN: @caesar verify --function-encoding fuel-param-computation @file
+
+// Peano number example form the paper "Computing with an SMT solver" (Section 5) that tests the computation capabilities
+
+// Peano numbers
+domain Nat {
+    func Z(): Nat @computable
+    func S(N: Nat): Nat @computable
+
+    func isZ(n: Nat): Bool @computable
+    axiom isZ_true isZ(Z()) == true
+    axiom isZ_false forall n: Nat @trigger(isZ(S(n))). isZ(S(n)) == false
+
+    func getPrev(n: Nat): Nat @computable
+    axiom getPrev_def forall n: Nat @trigger(getPrev(S(n))). getPrev(S(n)) == n
+
+    func plus(n: Nat, m: Nat): Nat = ite(isZ(n), m, S(plus(getPrev(n), m)))
+
+    func mult(n: Nat, m: Nat): Nat = ite(isZ(n), Z(), plus(m, mult(getPrev(n), m)))
+
+    func factorial(n: Nat): Nat = ite(isZ(n), S(Z()), mult(n, factorial(getPrev(n))))
+
+    func toNat(n: UInt): Nat = ite(n == 0, Z(), S(toNat(n - 1)))
+}
+
+proc test_toNat() -> ()
+    post ?(toNat(4) == S(S(S(S(Z())))))
+{
+}
+
+proc test_plus() -> ()
+    post ?(plus(toNat(4), toNat(3)) == toNat(7))
+{
+}
+
+proc test_mult() -> ()
+    post ?(mult(toNat(4), toNat(3)) == toNat(12))
+{
+}
+
+proc test_factorial0() -> ()
+    post ?(factorial(toNat(3)) == toNat(6))
+{
+}
+
+proc test_factorial1() -> ()
+    post ?(factorial(toNat(5)) == mult(toNat(10), toNat(12)))
+{
+}

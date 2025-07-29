@@ -1,0 +1,39 @@
+// RUN: @caesar verify @file
+
+// Sum examples from the paper "Reasoning about Comprehensions with First-Order SMT Solvers" (Section 4.1)
+
+domain Sum {
+    // Induction below axiom
+    func elementSum(lo: UInt, hi: UInt, a: []Int): Int = ite(lo < hi, select(a, lo) + elementSum(lo + 1, hi, a), 0)
+}
+
+// Test that we can also verify Sum1 by equivalently assume(ing) the axiom in the proc body
+proc Sum1(a: []Int) -> (s: Int)
+    post ?(s == elementSum(0, len(a), a))
+{
+    s = 0;
+    var n: UInt = 0;
+
+    // induction_above
+    assume ?(forall lo: UInt, hi: UInt, a: []Int @trigger(elementSum(lo, hi, a)) .
+                   elementSum(lo, hi, a) == ite(lo < hi, select(a, hi - 1) + elementSum(lo, hi - 1, a), 0))
+
+    @invariant(?(n <= len(a) && s == elementSum(0, n, a)))
+    while (n < len(a)) {
+        s = s + select(a, n);
+        n = n + 1;
+    }
+}
+
+proc Sum2(a: []Int) -> (s: Int)
+    post ?(s == elementSum(0, len(a), a))
+{
+    s = 0;
+
+    var n: UInt = len(a);
+    @invariant(?(n <= len(a) && s == elementSum(n, len(a), a)))
+    while (1 <= n) {
+        s = s + select(a, n - 1);
+        n = n - 1;
+    }
+}

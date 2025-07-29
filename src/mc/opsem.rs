@@ -1,8 +1,9 @@
 //! Translation of executable HeyVL programs to JANI by the operational
 //! semantics ("opsem"). This module is concerned mostly with statements.
 
-use std::{collections::HashMap, rc::Rc};
+use std::rc::Rc;
 
+use indexmap::IndexMap;
 use jani::{
     exprs::Expression,
     models::{Assignment, Automaton, Destination, Edge, Location, ModelType, VariableDeclaration},
@@ -23,7 +24,7 @@ use super::{
 /// expected rewards.
 pub struct OpAutomaton<'a> {
     expr_translator: &'a ExprTranslator<'a>,
-    distributions: HashMap<Ident, Rc<DistributionProc>>,
+    distributions: IndexMap<Ident, Rc<DistributionProc>>,
     pub variables: Vec<VariableDeclaration>,
     pub locations: Vec<Location>,
     pub edges: Vec<Edge>,

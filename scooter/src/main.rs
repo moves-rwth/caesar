@@ -52,7 +52,7 @@ fn main() {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     panic!("Error: Benchmark task {:?} not found.", &args);
                 } else {
-                    panic!("Error: {}", e);
+                    panic!("Error: {e}");
                 }
             }
         }

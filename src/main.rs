@@ -16,9 +16,17 @@ use std::{
 
 use crate::{
     ast::TyKind,
-    driver::mk_z3_ctx,
+    depgraph::DepGraph,
     front::{resolve::Resolve, tycheck::Tycheck},
-    smt::{translate_exprs::TranslateExprs, SmtCtx},
+    smt::{
+        funcs::{
+            axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder},
+            fuel::{FuelEncodingOptions, FuelMonoFunctionEncoder, FuelParamFunctionEncoder},
+            FunctionEncoder, RecFunFunctionEncoder,
+        },
+        translate_exprs::TranslateExprs,
+        DepConfig, SmtCtx,
+    },
     timing::TimingLayer,
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
@@ -29,7 +37,7 @@ use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use mc::run_storm::{run_storm, storm_result_to_diagnostic};
 use proof_rules::calculus::{find_recursive_procs, CalculusVisitor};
-use proof_rules::{init_encodings, EncodingVisitor};
+use proof_rules::init_encodings;
 use regex::Regex;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef, MemorySize};
 use servers::{run_lsp_server, CliServer, LspServer, Server, ServerError};
@@ -38,11 +46,12 @@ use thiserror::Error;
 use timing::DispatchBuilder;
 use tokio::task::JoinError;
 use tracing::{error, info, warn};
-
 use vc::explain::VcExplanation;
-use z3rro::{prover::ProveResult, util::ReasonUnknown};
+use z3::{Config, Context};
+use z3rro::{prover::ProveResult, quantifiers::QuantifierMeta, util::ReasonUnknown};
 
 pub mod ast;
+pub mod depgraph;
 mod driver;
 pub mod front;
 pub mod intrinsic;
@@ -181,7 +190,7 @@ pub struct InputOptions {
 #[command(next_help_heading = "Resource Limit Options")]
 pub struct ResourceLimitOptions {
     /// Time limit in seconds.
-    #[arg(long, default_value = "300")]
+    #[arg(long, default_value = "30")]
     pub timeout: u64,
 
     /// Memory usage limit in megabytes.
@@ -267,6 +276,47 @@ impl ModelCheckingOptions {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+pub enum QuantifierInstantiation {
+    /// Use all available quantifier instantiation heuristics, in particular
+    /// both e-matching and MBQI are enabled.
+    #[default]
+    All,
+    /// Only use E-matching for quantifier instantiation.
+    #[value(alias = "ematching")]
+    EMatching,
+    /// Only use MBQI for quantifier instantiation.
+    MBQI,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+pub enum FunctionEncodingOption {
+    /// The the most direct encoding with FO + uninterpreted functions, allowing
+    /// for unbounded computations and arbitrary quantifier instaniations.
+    #[default]
+    Axiomatic,
+    /// Like axiomatic encoding but only allows decreasing instantiations, where
+    /// the defining axiom is only instantiated based on occurrences of the
+    /// function it defines, not other functions in the definition. These
+    /// instantiations are unbounded.
+    Decreasing,
+    /// Add a version of the function for each fuel value (f_0, f_1, ...) and
+    /// recursive calls decrease the fuel value.
+    FuelMono,
+    /// Add a symbolic fuel parameter to the function.
+    FuelParam,
+    /// Like `fuel-mono`, additionally allowing unbounded unfolding if the
+    /// parameter values are literals.
+    FuelMonoComputation,
+    /// Like `fuel-param`, additionally allowing unbounded unfolding if the
+    /// parameter values are literals.
+    FuelParamComputation,
+    /// Uses SMT-LIB's `define-fun-rec` to encode functions. Only supports input
+    /// parameter types without SMT invariants right now.
+    #[value(alias = "recfun")]
+    DefineFunRec,
+}
+
 #[derive(Debug, Default, Args)]
 #[command(next_help_heading = "Optimization Options")]
 pub struct OptimizationOptions {
@@ -297,6 +347,27 @@ pub struct OptimizationOptions {
     /// the current solver state.
     #[arg(long)]
     pub no_simplify: bool,
+
+    /// Determine how user-defined functions are encoded.
+    /// The fuel encodings require `--quantifier-instantiation e-matching` for
+    /// guaranteed termination.
+    #[arg(long, alias = "fe", default_value = "fuel-param")]
+    pub function_encoding: FunctionEncodingOption,
+
+    /// The number of times a function declaration can be recursively instantiated/unfolded when
+    /// using one of the fuel encodings.
+    #[arg(long, default_value = "2")]
+    pub max_fuel: usize,
+
+    /// Do not add the "synonym" axiom when translating definitional functions
+    /// with the fuel-based encodings. This will allow spurious counter-examples
+    /// (unsound!), but sometimes this is acceptable or even desired.
+    #[arg(long)]
+    pub no_synonym_axiom: bool,
+
+    /// Select which heuristics for quantifier instantiation should be used by the SMT solver.
+    #[arg(long, alias = "qi", default_value = "all")]
+    pub quantifier_instantiation: QuantifierInstantiation,
 }
 
 #[derive(Debug, Default, Args)]
@@ -372,13 +443,30 @@ pub struct DebugOptions {
     #[arg(long)]
     pub z3_trace: bool,
 
-    /// Print Z3's statistics after the final SAT check.
+    /// An explicit seed used by Z3 for the final SAT check.
     #[arg(long)]
-    pub print_z3_stats: bool,
+    pub z3_seed: Option<u32>,
 
-    /// Run a bunch of probes on the SMT solver.
+    /// Enable Z3's quantifier instantiation profiling. Output will be sent
+    /// every 1000 instantiations to standard error.
     #[arg(long)]
-    pub probe: bool,
+    pub z3_qi_profile: bool,
+
+    /// Enable Z3's MBQI tracing. Will print a message before every round of MBQI
+    #[arg(long)]
+    pub z3_mbqi_trace: bool,
+
+    /// Set Z3's verbosity level.
+    #[arg(long)]
+    pub z3_verbose: Option<u32>,
+
+    /// Print Z3's statistics after the final SAT check.
+    #[arg(long, alias = "print-z3-stats")]
+    pub z3_stats: bool,
+
+    /// Run a bunch of Z3's probes on the SAT goal.
+    #[arg(long, alias = "probe")]
+    pub z3_probe: bool,
 }
 
 #[derive(Debug, Default, Args)]
@@ -510,7 +598,7 @@ fn finalize_verify_result(
             ExitCode::from(1)
         }
         Err(VerifyError::IoError(err)) => {
-            eprintln!("IO Error: {}", err);
+            eprintln!("IO Error: {err}");
             ExitCode::from(1)
         }
         Err(VerifyError::LimitError(LimitError::Timeout)) => {
@@ -525,7 +613,7 @@ fn finalize_verify_result(
             std::process::exit(3); // exit ASAP
         }
         Err(VerifyError::UserError(err)) => {
-            eprintln!("Error: {}", err);
+            eprintln!("Error: {err}");
             ExitCode::from(1)
         }
         Err(VerifyError::ServerError(err)) => panic!("{}", err),
@@ -660,7 +748,7 @@ fn parse_and_tycheck(
         if debug_options.print_parsed {
             println!("{}: Parsed file:\n", file.path);
             for unit in &new_units {
-                println!("{}", unit);
+                println!("{unit}");
             }
         }
 
@@ -694,9 +782,8 @@ fn parse_and_tycheck(
 
     // filter source units if requested
     if let Some(filter) = &input_options.filter {
-        let filter = Regex::new(filter).map_err(|err| {
-            VerifyError::UserError(format!("Invalid filter regex: {}", err).into())
-        })?;
+        let filter = Regex::new(filter)
+            .map_err(|err| VerifyError::UserError(format!("Invalid filter regex: {err}").into()))?;
         source_units.retain(|source_unit| filter.is_match(&source_unit.name().to_string()));
     };
 
@@ -711,21 +798,12 @@ pub fn apply_encodings(
     server: &mut dyn Server,
 ) -> Result<Vec<Item<SourceUnit>>, VerifyError> {
     let mut new_source_units = vec![];
-
-    let mut encoding_visitor = EncodingVisitor::new(tcx, &mut new_source_units);
-
     for source_unit in &mut source_units {
-        match source_unit.enter().deref_mut() {
-            SourceUnit::Decl(decl) => encoding_visitor.visit_decl(decl),
-            SourceUnit::Raw(block) => encoding_visitor.visit_block(block),
-        }
-        .map_err(|ann_err| ann_err.diagnostic())?;
+        new_source_units.extend(source_unit.enter().apply_encodings(tcx)?);
     }
-
     for source_unit in &mut new_source_units {
         server.register_source_unit(source_unit)?;
     }
-
     source_units.extend(new_source_units);
     Ok(source_units)
 }
@@ -853,7 +931,7 @@ fn verify_files_main(
     if options.debug_options.print_core_procs {
         println!("HeyVL query with generated procs:");
         for source_unit in &mut source_units {
-            println!("{}", source_unit);
+            println!("{source_unit}");
         }
     }
 
@@ -861,7 +939,7 @@ fn verify_files_main(
     // core VC, we can return early.
     if options.debug_options.no_verify
         && !options.lsp_options.explain_core_vc
-        && !options.debug_options.probe
+        && !options.debug_options.z3_probe
         && !options.debug_options.print_smt
         && !options.debug_options.print_core
         && !options.debug_options.print_core_procs
@@ -870,14 +948,23 @@ fn verify_files_main(
         return Ok(true);
     }
 
+    // populate dependency graph
+    let mut depgraph = DepGraph::new();
+    for source_unit in &mut source_units {
+        source_unit.enter().populate_depgraph(&mut depgraph)?;
+    }
+
     let mut verify_units: Vec<Item<VerifyUnit>> = source_units
         .into_iter()
-        .flat_map(|item| item.flat_map(SourceUnit::into_verify_unit))
+        .flat_map(|item| item.flat_map(|unit| SourceUnit::into_verify_unit(unit, &mut depgraph)))
         .collect();
 
     if options.debug_options.z3_trace && verify_units.len() > 1 {
         warn!("Z3 tracing is enabled with multiple verification units. Intermediate tracing results will be overwritten.");
     }
+
+    // set requested global z3 options
+    set_global_z3_options(options, &limits_ref);
 
     let mut num_proven: usize = 0;
     let mut num_failures: usize = 0;
@@ -947,8 +1034,10 @@ fn verify_files_main(
         }
 
         // 11. Translate to Z3
-        let ctx = mk_z3_ctx(options);
-        let smt_ctx = SmtCtx::new(&ctx, &tcx);
+        let ctx = Context::new(&Config::default());
+        let function_encoder = mk_function_encoder(options);
+        let dep_config = DepConfig::Set(vc_is_valid.get_dependencies());
+        let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoder, dep_config);
         let mut translate = TranslateExprs::new(&smt_ctx);
         let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
 
@@ -1001,10 +1090,7 @@ fn verify_files_main(
         } else {
             ""
         };
-        println!(
-            "{} verified, {} failed.{}",
-            num_proven, num_failures, ending
-        );
+        println!("{num_proven} verified, {num_failures} failed.{ending}");
     }
 
     Ok(num_failures == 0)
@@ -1064,7 +1150,7 @@ fn run_model_checking(
         if options.run_storm.is_some() {
             temp_dir = Some(tempfile::tempdir().map_err(|err| {
                 VerifyError::UserError(
-                    format!("Could not create temporary directory: {}", err).into(),
+                    format!("Could not create temporary directory: {err}").into(),
                 )
             })?);
             options.jani_dir = temp_dir.as_ref().map(|dir| dir.path().to_owned());
@@ -1111,7 +1197,127 @@ fn print_timings() {
         .iter()
         .map(|(key, value)| (*key, format!("{}", value.as_nanos())))
         .collect();
-    eprintln!("Timings: {:?}", timings);
+    eprintln!("Timings: {timings:?}");
+}
+
+fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
+    // see also dafny's options:
+    // https://github.com/dafny-lang/dafny/blob/220fdecb25920d2f72ceb4c57af6cb032fdd337d/Source/DafnyCore/DafnyOptions.cs#L1273-L1309
+
+    // we disable order axioms, as this seems to fix all of our performance
+    // issues after upgrading from 4.12.1 to 4.15.1.
+    //
+    // see also this commit in 4.15.2:
+    // https://github.com/Z3Prover/z3/commit/bba10c7a8892f1067ee68751fd9989037a3386de.
+    // maybe this will solve the problem?
+    z3::set_global_param("smt.arith.nl.order", "false");
+
+    // enable tracing if requested
+    if command.debug_options.z3_trace {
+        z3::set_global_param("trace", "true");
+        z3::set_global_param("proof", "true");
+        z3::set_global_param("trace_file_name", "z3.log");
+    }
+
+    // set random seed
+    if let Some(seed) = command.debug_options.z3_seed {
+        z3::set_global_param("smt.random_seed", &seed.to_string());
+    }
+
+    // set quantifier instantiation options
+    z3::set_global_param("smt.qi.eager_threshold", "100");
+    z3::set_global_param("smt.qi.lazy_threshold", "1000");
+    match command.opt_options.quantifier_instantiation {
+        QuantifierInstantiation::EMatching => {
+            // we *could* fully disable MBQI (and thus also auto-config) like so:
+            // ```
+            // z3::set_global_param("auto-config", "false");
+            // z3::set_global_param("smt.mbqi", "false");
+            // ```
+            // but this can have some strange side effects (turns out MBQI can
+            // be rather useful sometimes).
+            //
+            // therefore, we set a specific prefix for quantifiers, so that MBQI
+            // only acts on quantifiers whose id starts with that prefix.
+            z3::set_global_param("smt.mbqi.id", QuantifierMeta::MBQI_PREFIX);
+        }
+        QuantifierInstantiation::MBQI => {
+            z3::set_global_param("smt.ematching", "false");
+        }
+        QuantifierInstantiation::All => {}
+    }
+
+    // enable the quantifier instantiation profile if requested
+    if command.debug_options.z3_qi_profile {
+        z3::set_global_param("smt.qi.profile", "true");
+        z3::set_global_param("smt.qi.profile_freq", "1000");
+    }
+
+    // enable MBQI tracing if requested
+    if command.debug_options.z3_mbqi_trace {
+        z3::set_global_param("smt.mbqi.trace", "true");
+    }
+
+    // set verbosity level
+    if let Some(verbosity) = command.debug_options.z3_verbose {
+        z3::set_global_param("verbose", &verbosity.to_string());
+    }
+
+    if let Some(timeout) = limits_ref.time_left() {
+        z3::set_global_param("timeout", &timeout.as_millis().to_string())
+    }
+}
+
+fn mk_function_encoder(options: &VerifyCommand) -> Box<dyn FunctionEncoder<'_> + '_> {
+    let fe_opt = options.opt_options.function_encoding;
+    let function_encoding = match fe_opt {
+        FunctionEncodingOption::Axiomatic => {
+            AxiomaticFunctionEncoder::new(AxiomInstantiation::Bidirectional).into_boxed()
+        }
+        FunctionEncodingOption::Decreasing => {
+            AxiomaticFunctionEncoder::new(AxiomInstantiation::Decreasing).into_boxed()
+        }
+        FunctionEncodingOption::FuelMono
+        | FunctionEncodingOption::FuelParam
+        | FunctionEncodingOption::FuelMonoComputation
+        | FunctionEncodingOption::FuelParamComputation => {
+            let fuel_options = FuelEncodingOptions {
+                max_fuel: options.opt_options.max_fuel,
+                computation: matches!(
+                    fe_opt,
+                    FunctionEncodingOption::FuelMonoComputation
+                        | FunctionEncodingOption::FuelParamComputation
+                ),
+                synonym_axiom: !options.opt_options.no_synonym_axiom,
+            };
+            match fe_opt {
+                FunctionEncodingOption::FuelMono | FunctionEncodingOption::FuelMonoComputation => {
+                    FuelMonoFunctionEncoder::new(fuel_options).into_boxed()
+                }
+                FunctionEncodingOption::FuelParam
+                | FunctionEncodingOption::FuelParamComputation => {
+                    FuelParamFunctionEncoder::new(fuel_options).into_boxed()
+                }
+                _ => unreachable!(),
+            }
+        }
+        FunctionEncodingOption::DefineFunRec => RecFunFunctionEncoder::new().into_boxed(),
+    };
+    // Warn if using fuel encoding with non-ematching quantifier
+    // instantiation. The exception is the [`FuelEncodingOption::FuelMono`]
+    // encoding, which does not rely on Z3 not creating new terms for termination.
+    if matches!(
+        options.opt_options.function_encoding,
+        FunctionEncodingOption::FuelParam
+            | FunctionEncodingOption::FuelMonoComputation
+            | FunctionEncodingOption::FuelParamComputation
+    ) && options.opt_options.quantifier_instantiation != QuantifierInstantiation::EMatching
+    {
+        tracing::warn!(
+            "Using fuel function encoding with MBQI still enabled does not guarantee termination. Set the `--quantifier-instantiation e-matching` option to use the fuel encoding without MBQI.",
+        );
+    }
+    function_encoding
 }
 
 fn run_generate_completions(options: ShellCompletionsCommand) -> ExitCode {

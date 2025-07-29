@@ -9,7 +9,11 @@ use crate::{
         BinOpKind, DeclKind, DeclRef, Expr, ExprBuilder, ExprData, ExprKind, Ident, LitKind,
         Shared, Span, Spanned, Symbol, TyKind, UnOpKind, VarDecl, VarKind,
     },
-    smt::{translate_exprs::TranslateExprs, SmtCtx},
+    smt::{
+        funcs::{axiomatic::AxiomaticFunctionEncoder, FunctionEncoder},
+        translate_exprs::TranslateExprs,
+        DepConfig, SmtCtx,
+    },
     tyctx::TyCtx,
 };
 
@@ -70,7 +74,7 @@ impl ExprGen {
 
     fn mk_strategy(&self) -> impl Strategy<Value = (Expr, Expr)> {
         let bool_leafs = prop_oneof![
-            3 => lit_strategy(prop::bool::ANY.prop_map(|lit| LitKind::Bool(lit)), TyKind::Bool),
+            3 => lit_strategy(prop::bool::ANY.prop_map(LitKind::Bool), TyKind::Bool),
             1 => prop::sample::select(self.bool_exprs.clone()),
         ];
         let eureal_variables = prop::sample::select(self.eureal_exprs.clone());
@@ -198,7 +202,12 @@ fn prove_equiv(expr: Expr, optimized: Expr, tcx: &TyCtx) -> TestCaseResult {
         optimized.clone(),
     );
     let ctx = z3::Context::new(&z3::Config::new());
-    let smt_ctx = SmtCtx::new(&ctx, tcx);
+    let smt_ctx = SmtCtx::new(
+        &ctx,
+        tcx,
+        AxiomaticFunctionEncoder::default().into_boxed(),
+        DepConfig::All,
+    );
     let mut translate = TranslateExprs::new(&smt_ctx);
     let eq_expr_z3 = translate.t_bool(&eq_expr);
     let mut prover = Prover::new(&ctx, IncrementalMode::Native);
@@ -211,12 +220,11 @@ fn prove_equiv(expr: Expr, optimized: Expr, tcx: &TyCtx) -> TestCaseResult {
         ProveResult::Counterexample => {
             let model = prover.get_model().unwrap();
             Err(TestCaseError::fail(format!(
-                "rewrote {} ...into... {}, but those are not equivalent:\n{}",
-                expr, optimized, model
+                "rewrote {expr} ...into... {optimized}, but those are not equivalent:\n{model}"
             )))
         }
         ProveResult::Unknown(reason) => {
-            Err(TestCaseError::fail(format!("unknown result ({})", reason)))
+            Err(TestCaseError::fail(format!("unknown result ({reason})")))
         }
     };
     x
@@ -245,7 +253,7 @@ pub fn fuzz_expr_opt_internal(
     });
     match res {
         Ok(_) => (),
-        Err(e) => panic!("{}\n{}", e, test_runner),
+        Err(e) => panic!("{e}\n{test_runner}"),
     }
 }
 
@@ -256,6 +264,6 @@ macro_rules! fuzz_expr_opt_test {
         config.test_name = Some(concat!(module_path!(), "::", stringify!($test_name)));
         config.source_file = Some(file!());
         config.cases = 1000;
-        crate::opt::fuzz_test::fuzz_expr_opt_internal(config, $optimize_fn);
+        $crate::opt::fuzz_test::fuzz_expr_opt_internal(config, $optimize_fn);
     }};
 }

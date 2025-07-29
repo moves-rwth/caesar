@@ -266,7 +266,7 @@ mod test {
 "#
                 );
             }
-            res => panic!("unexpected {:?}", res),
+            res => panic!("unexpected {res:?}"),
         }
     }
 }

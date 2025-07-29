@@ -27,7 +27,7 @@ use crate::{
         BinOpKind, DeclKind, DeclRef, Diagnostic, Expr, ExprBuilder, ExprData, ExprKind, Ident,
         Label, LitKind, ProcDecl, Shared, Span, Spanned, Stmt, TyKind, UnOpKind, VarDecl,
     },
-    procs::proc_verify::verify_proc,
+    procs::proc_verify::encode_proc_verify,
     tyctx::TyCtx,
     version::caesar_detailed_version,
     ModelCheckingOptions,
@@ -65,7 +65,7 @@ impl JaniConversionError {
         match &self {
             JaniConversionError::UnsupportedType(ty, span) => {
                 Diagnostic::new(ReportKind::Error, *span)
-                    .with_message(format!("JANI: Type {} is not supported", ty))
+                    .with_message(format!("JANI: Type {ty} is not supported"))
                     .with_label(Label::new(*span).with_message("here"))
             }
             JaniConversionError::UnsupportedExpr(expr) => {
@@ -123,7 +123,7 @@ impl JaniConversionError {
                     .with_label(Label::new(*span).with_message("must be a func with a body"))
             }
             JaniConversionError::UnsupportedCalculus { proc, calculus }=> Diagnostic::new(ReportKind::Error, proc.span)
-                .with_message(format!("JANI: Calculus '{}' is not supported", calculus))
+                .with_message(format!("JANI: Calculus '{calculus}' is not supported"))
                 .with_label(Label::new(proc.span).with_message("here")),
         }
         .with_code(NumberOrString::String("model checking".to_owned()))
@@ -141,12 +141,12 @@ pub fn proc_to_model(
 
     // initialize the spec automaton
     let spec_part = SpecAutomaton::new(proc.direction);
-    let mut verify_unit = verify_proc(proc).unwrap();
+    let (_direction, mut block) = encode_proc_verify(proc).unwrap();
     let property = extract_properties(
         proc.span,
         &spec_part,
         &expr_translator,
-        &mut verify_unit.block.node,
+        &mut block.node,
         options.jani_skip_quant_pre,
     )?;
 
@@ -159,7 +159,7 @@ pub fn proc_to_model(
 
     // translate the statements
     let next = op_automaton.spec_part.end_location();
-    let start = translate_block(&mut op_automaton, &verify_unit.block, next)?;
+    let start = translate_block(&mut op_automaton, &block, next)?;
 
     // now finish building the automaton
     let automaton_name = Identifier(proc.name.to_string());

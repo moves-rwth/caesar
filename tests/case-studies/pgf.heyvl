@@ -1,0 +1,110 @@
+// RUN: @caesar verify @file --qi e-matching --function-encoding fuel-param
+
+domain Exp {
+    func pow(base: UReal, exponent: UInt): UReal = ite(exponent == 0, 1, base * pow(base, exponent))
+}
+
+domain Pgf {
+    func pgf_bernoulli(X: UReal, p: UReal): UReal = 1 - p + p * X
+    func pgf_binomial(X: UReal, p: UReal, n: UInt): UReal = pow(pgf_bernoulli(X, p), n)
+}
+
+proc convolve(X: UReal) -> (res: UInt)
+    pre pgf_binomial(X, 0.5, 2)
+    post pow(X, res)
+{
+
+    var a: UInt = sample_bernoulli_scaled(X, 0.5, pgf_bernoulli(X, 0.5)) // @scale(pgf_bernoulli(X, 0.5)) sample_bernoulli(X, 0.5)
+    var b: UInt = sample_bernoulli_scaled(X, 0.5, pow(X, a)) // @scale(pow(X, a)) sample_bernoulli(X, 0.5)
+    res = a + b
+}
+
+proc sample_bernoulli(X: UReal, p: UReal) -> (res: UInt)
+    pre pgf_bernoulli(X, p)
+    post pow(X, res)
+proc sample_bernoulli_scaled(X: UReal, p: UReal, scale: EUReal) -> (res: UInt)
+    pre pgf_bernoulli(X, p) * scale
+    post pow(X, res) * scale
+
+proc sample_bernoulli_scaled2(X: UReal, p: UReal, scale1: EUReal, scale2: EUReal) -> (res: UInt)
+    pre scale1 * pgf_bernoulli(X, p) * scale2
+    post scale1 * pow(X, res) * scale2
+
+proc test(a: UInt, X: UReal, n: UInt) -> (res: UInt)
+{
+    var i: UInt
+    assume ?(1 < i)
+    assume ?(X > 0)
+    assume ?(forall bla: UInt. pow(X, bla) >= 1)
+    assume ?(a >= 1)
+
+
+    assert ?(pgf_binomial(X, 0.5, i) == ((pgf_bernoulli(X, 5/10) * pgf_binomial(X, 5/10, (i - 1)))))
+
+    // assert ?(a * pgf_binomial(X, 0.5, i) == a * ((pgf_bernoulli(X, 5/10) * pgf_binomial(X, 5/10, i - 1))))
+    // assert ?(pgf_binomial(X, 0.5, 1) * pgf_binomial(X, 0.5, 1) == pgf_binomial(X, 0.5, 2))
+}
+
+proc loop_invariant(X: UReal, n: UInt) -> (res: UInt)
+{
+    var i: UInt
+
+    assume ?(0 < i)
+    assume (pow(X, res) * pgf_binomial(X, 0.5, i))
+
+    // if i < n {
+
+        var a: UInt = sample_bernoulli_scaled2(X, 0.5, pow(X, res), pgf_binomial(X, 0.5, i - 1))
+
+        i = i - 1
+        res = a + res
+    // } else {}
+    assert (pow(X, res) * pgf_binomial(X, 0.5, i))
+}
+
+proc loop_invariant2(X: UReal, n: UInt) -> (res: UInt)
+{
+    var i: UInt
+
+    assume ?(i < n)
+    assume (pow(X, res) * pgf_binomial(X, 0.5, n-i))
+
+    if i < n {
+        var a: UInt = sample_bernoulli_scaled2(X, 0.5, pow(X, res), pgf_binomial(X, 0.5, (n - (i + 1))))
+
+        i = i + 1
+        res = a + res
+    } else {}
+    assert (pow(X, res) * pgf_binomial(X, 0.5, n-i))
+}
+
+proc convolve_n(X: UReal, n: UInt) -> (res: UInt)
+    pre pgf_binomial(X, 0.5, n)
+    post pow(X, res)
+{
+    var i: UInt = 0
+    res = 0
+    @invariant([i <= n] * (pow(X, res) * pgf_binomial(X, 0.5, n-i)))
+    while i < n {
+        var a: UInt = sample_bernoulli_scaled2(X, 0.5, pow(X, res), pgf_binomial(X, 0.5, n-(i+1)))
+
+        i = i + 1
+        res = res + a
+    }
+}
+
+proc convolve_count_down(X: UReal, n: UInt) -> (res: UInt)
+    pre pgf_binomial(X, 0.5, n)
+    post pow(X, res)
+{
+
+    var i: UInt = n
+    res = 0
+    @invariant((pow(X, res) * pgf_binomial(X, 0.5, i)))
+    while i > 0 {
+        var a: UInt = sample_bernoulli_scaled2(X, 0.5, pow(X, res), pgf_binomial(X, 0.5, i - 1))
+
+        i = i - 1
+        res = res + a
+    }
+}

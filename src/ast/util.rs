@@ -58,10 +58,7 @@ impl VisitorMut for FreeVariableCollector {
                 Ok(())
             }
             ExprKind::Subst(_, _, _) => {
-                panic!(
-                    "cannot find free variables in expressions with substitutions: {}",
-                    expr
-                )
+                panic!("cannot find free variables in expressions with substitutions: {expr}")
             }
             _ => walk_expr(self, expr),
         }

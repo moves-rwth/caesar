@@ -33,7 +33,7 @@ pub fn test_prove(f: impl for<'ctx> FnOnce(&'ctx Context, &mut SmtScope<'ctx>) -
             prover.get_model(),
             prover.get_assertions()
         ),
-        ProveResult::Unknown(reason) => panic!("solver returned unknown ({})", reason),
+        ProveResult::Unknown(reason) => panic!("solver returned unknown ({reason})"),
         ProveResult::Proof => {}
     };
 }
@@ -45,9 +45,9 @@ macro_rules! generate_smt_branch_tests {
     ($mk_factory:expr, $ty:ty) => {
         #[test]
         fn test_branch() {
-            use crate::test::test_prove;
-            use crate::{scope::SmtFresh, SmtBranch, SmtEq};
             use z3::ast::Bool;
+            use $crate::test::test_prove;
+            use $crate::{scope::SmtFresh, SmtBranch, SmtEq};
             test_prove(|ctx, scope| {
                 let factory = $mk_factory(ctx);
                 let x = <$ty>::fresh(&factory, scope, "x");
@@ -67,8 +67,8 @@ macro_rules! generate_smt_partial_ord_tests {
     ($mk_factory:expr, $ty:ty) => {
         #[test]
         fn test_reflexivity() {
-            use crate::test::test_prove;
-            use crate::{orders::SmtPartialOrd, scope::SmtFresh};
+            use $crate::test::test_prove;
+            use $crate::{orders::SmtPartialOrd, scope::SmtFresh};
             test_prove(|ctx, scope| {
                 let factory = $mk_factory(ctx);
                 let x = <$ty>::fresh(&factory, scope, "x");
@@ -78,8 +78,8 @@ macro_rules! generate_smt_partial_ord_tests {
 
         #[test]
         fn test_antisymmetry() {
-            use crate::test::test_prove;
-            use crate::{orders::SmtPartialOrd, scope::SmtFresh, SmtEq};
+            use $crate::test::test_prove;
+            use $crate::{orders::SmtPartialOrd, scope::SmtFresh, SmtEq};
             test_prove(|ctx, scope| {
                 let factory = $mk_factory(ctx);
                 let x = <$ty>::fresh(&factory, scope, "x");
@@ -90,8 +90,8 @@ macro_rules! generate_smt_partial_ord_tests {
 
         #[test]
         fn test_transitivity() {
-            use crate::test::test_prove;
-            use crate::{orders::SmtPartialOrd, scope::SmtFresh};
+            use $crate::test::test_prove;
+            use $crate::{orders::SmtPartialOrd, scope::SmtFresh};
             test_prove(|ctx, scope| {
                 let factory = $mk_factory(ctx);
                 let x = <$ty>::fresh(&factory, scope, "x");
@@ -103,8 +103,8 @@ macro_rules! generate_smt_partial_ord_tests {
 
         #[test]
         fn test_smt_cmp() {
-            use crate::test::test_prove;
-            use crate::{
+            use $crate::test::test_prove;
+            use $crate::{
                 orders::{SmtOrdering, SmtPartialOrd},
                 scope::SmtFresh,
                 SmtEq,

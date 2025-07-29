@@ -131,7 +131,7 @@ pub fn pretty_globals<'smt, 'ctx>(
     }
 
     for (kind_name, decls) in decls_by_kind {
-        let mut lines: Vec<Doc> = vec![Doc::text(format!("{}s:", kind_name))];
+        let mut lines: Vec<Doc> = vec![Doc::text(format!("{kind_name}s:"))];
 
         for decl_kind in decls {
             if let DeclKind::VarDecl(decl_ref) = &*decl_kind {
@@ -170,8 +170,8 @@ pub fn pretty_var_value<'smt, 'ctx>(
     let res = model.atomically(|| symbolic.eval(model));
 
     match res {
-        Ok(value) => format!("{}", value),
-        Err(err) => format!("({})", err),
+        Ok(value) => format!("{value}"),
+        Err(err) => format!("({err})"),
     }
 }
 
@@ -180,14 +180,14 @@ where
     T: Display,
 {
     match res {
-        Ok(value) => Doc::text(format!("{}", value)),
-        Err(err) => Doc::text(format!("({})", err)),
+        Ok(value) => Doc::text(format!("{value}")),
+        Err(err) => Doc::text(format!("({err})")),
     }
 }
 
 fn pretty_span(files: &Files, span: Span) -> Doc {
     if let Some(text) = files.format_span_start(span) {
-        let text = format!("({})", text);
+        let text = format!("({text})");
         let note_len = text.chars().count();
 
         // add padding to align the text to the right
@@ -213,17 +213,17 @@ pub fn pretty_slice(files: &Files, slice_model: &SliceModel) -> Option<Doc> {
             let line = match result {
                 SliceResult::PartOfError(msg) => {
                     let msg = msg.map(|msg| msg.to_string()).unwrap_or_else(|| {
-                        format!("statement in line {} is part of the error", line_number)
+                        format!("statement in line {line_number} is part of the error")
                     });
                     Doc::text("❌ ").append(Doc::text(msg))
                 }
                 SliceResult::NotNecessary(msg) => {
                     let msg = msg.map(|msg| msg.to_string()).unwrap_or_else(|| {
-                        format!("statement in line {} is not necessary", line_number)
+                        format!("statement in line {line_number} is not necessary")
                     });
                     Doc::text("🤷 ").append(Doc::text(msg))
                 }
-                SliceResult::Error(err) => Doc::text(format!("({}):", err)),
+                SliceResult::Error(err) => Doc::text(format!("({err}):")),
             };
             let line = line.append(pretty_span(files, stmt_span));
             lines.push(line);

@@ -207,7 +207,7 @@ impl<'ctx> SmtEval<'ctx> for Real<'ctx> {
             Ok(BigRational::new(num.into(), den.into()))
         } else {
             // we parse a string of the form "(/ num.0 denom.0)"
-            let division_expr = format!("{:?}", res);
+            let division_expr = format!("{res:?}");
             if !division_expr.starts_with("(/ ") || !division_expr.ends_with(".0)") {
                 return Err(SmtEvalError::ParseError);
             }

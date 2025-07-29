@@ -1,0 +1,32 @@
+// RUN: @caesar verify --function-encoding fuel-param-computation @file
+
+// Factorial example form the paper "Computing with an SMT solver" (Section 5)
+
+domain Fac {
+    func Factorial(n: UInt): UInt = ite(n == 0, 1, n * Factorial(n - 1))
+
+    func FactorialIter(n: UInt, acc: UInt): UInt = ite(n == 0, acc, FactorialIter(n - 1, acc * n))
+    func Factorial2(n: UInt): UInt = FactorialIter(n, 1)
+}
+
+
+proc lemmaFactorialStep(n: UInt, acc: UInt) -> ()
+    post ?(acc * Factorial(n) == FactorialIter(n, acc))
+{
+    // Boogie has support for induction builtin - we don't. Therefore, we need to encode the proof by induction
+    // manually.
+
+    var V: Int = n; // method variant to ensure termination
+
+    if (n == 0) {
+    } else {
+        assert ?(n - 1 < V); // method variant check
+        lemmaFactorialStep(n - 1, acc * n);
+    }
+}
+
+proc theoremFactorialEquiv(n: UInt) -> ()
+    post ?(Factorial(n) == Factorial2(n))
+{
+    lemmaFactorialStep(n, 1);
+}

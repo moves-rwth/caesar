@@ -86,17 +86,17 @@ impl fmt::Display for TyKind {
                 write!(f, "(")?;
                 if let [front @ .., last] = parts.as_slice() {
                     for part in front.iter() {
-                        write!(f, "{}, ", part)?;
+                        write!(f, "{part}, ")?;
                     }
-                    write!(f, "{}", last)?;
+                    write!(f, "{last}")?;
                 }
                 write!(f, ")")
             }
-            Self::List(element_ty) => write!(f, "[]{}", element_ty),
+            Self::List(element_ty) => write!(f, "[]{element_ty}"),
             Self::Domain(arg0) => write!(f, "{}", &arg0.borrow().name),
             Self::String => write!(f, "String"),
             Self::SpecTy => write!(f, "<spec ty>"),
-            Self::Unresolved(name) => write!(f, "{}", name),
+            Self::Unresolved(name) => write!(f, "{name}"),
             Self::None => write!(f, "<none>"),
         }
     }

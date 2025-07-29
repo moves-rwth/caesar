@@ -147,7 +147,7 @@ impl DeclKindName {
 impl Display for DeclKindName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            DeclKindName::Var(kind) => f.write_fmt(format_args!("{} variable", kind)),
+            DeclKindName::Var(kind) => f.write_fmt(format_args!("{kind} variable")),
             DeclKindName::Proc => f.write_str("proc"),
             DeclKindName::Domain => f.write_str("domain"),
             DeclKindName::Func => f.write_str("func"),
@@ -444,6 +444,15 @@ pub struct DomainDecl {
     pub span: Span,
 }
 
+impl DomainDecl {
+    pub fn function_decls(&self) -> impl Iterator<Item = &DeclRef<FuncDecl>> {
+        self.body.iter().filter_map(|spec| match spec {
+            DomainSpec::Function(func_ref) => Some(func_ref),
+            _ => None,
+        })
+    }
+}
+
 impl SimplePretty for DomainDecl {
     fn pretty(&self) -> Doc {
         Doc::text("domain")
@@ -484,6 +493,11 @@ pub struct FuncDecl {
     /// The body is in a [`RefCell`] so that we can have an exclusive reference
     /// to it while still retrieving a shared reference to the declaration
     pub body: RefCell<Option<Expr>>,
+    /// Whether this function is **explicitly marked** as computable, i.e.
+    /// whether a call to it with literal parameters is considered literal as
+    /// well. Functions with bodies are always computable, but this field will
+    /// be `false` (because not explicitly marked).
+    pub computable: bool,
     pub span: Span,
 }
 

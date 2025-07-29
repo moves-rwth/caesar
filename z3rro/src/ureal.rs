@@ -6,17 +6,17 @@ use z3::{
     Context,
 };
 
+use super::{
+    orders::{SmtOrdering, SmtPartialOrd},
+    scope::SmtFresh,
+    SmtBranch, SmtEq,
+};
+use crate::lit::{LitFactory, LitWrap};
 use crate::{
     forward_binary_op,
     model::{InstrumentedModel, SmtEval, SmtEvalError},
     scope::SmtAlloc,
     Factory, SmtFactory, SmtInvariant, UInt,
-};
-
-use super::{
-    orders::{SmtOrdering, SmtPartialOrd},
-    scope::SmtFresh,
-    SmtBranch, SmtEq,
 };
 
 /// Z3's [`Real`] type, but restricted to non-negative numbers.
@@ -91,6 +91,12 @@ impl<'ctx> SmtBranch<'ctx> for UReal<'ctx> {
 impl<'ctx> SmtPartialOrd<'ctx> for UReal<'ctx> {
     fn smt_cmp(&self, other: &Self, ordering: SmtOrdering) -> Bool<'ctx> {
         self.0.smt_cmp(&other.0, ordering)
+    }
+}
+
+impl<'ctx> LitWrap<'ctx> for UReal<'ctx> {
+    fn lit_wrap(&self, factory: &impl LitFactory<'ctx>) -> Self {
+        Self::unchecked_from_real(self.as_real().lit_wrap(factory))
     }
 }
 

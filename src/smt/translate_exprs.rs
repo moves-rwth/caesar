@@ -1,13 +1,8 @@
 //! Translation of Caesar expressions to Z3 expressions.
 
-use std::{
-    cmp::Ordering,
-    collections::HashMap,
-    convert::TryFrom,
-    hash::{Hash, Hasher},
-};
-
+use itertools::Itertools;
 use ref_cast::RefCast;
+use std::{collections::HashMap, convert::TryFrom, vec};
 use z3::{
     ast::{Ast, Bool, Dynamic, Int, Real},
     Pattern,
@@ -19,24 +14,26 @@ use crate::{
         Trigger, TyKind, UnOpKind,
     },
     scope_map::ScopeMap,
-};
-
-use z3rro::{
-    eureal::EUReal,
-    orders::{
-        smt_bool_embed, smt_max, smt_min, SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering,
-        SmtPartialOrd,
-    },
-    scope::SmtScope,
-    List, SmtBranch, SmtEq, UInt, UReal,
+    smt::funcs::fuel::literals::LiteralExprSet,
 };
 
 use super::{
     symbolic::{ScopeSymbolic, Symbolic, SymbolicPair},
     SmtCtx,
 };
+use crate::ast::{ExprData, RefEqShared};
+use z3rro::{
+    eureal::EUReal,
+    orders::{
+        smt_bool_embed, smt_max, smt_min, SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering,
+        SmtPartialOrd,
+    },
+    quantifiers::QuantifierMeta,
+    scope::SmtScope,
+    List, LitWrap, SmtBranch, SmtEq, UInt, UReal,
+};
 
-/// Translates caesar expressions to Z3 formulas.
+/// Translates Caesar expressions to Z3 formulas.
 /// Fresh variables are created for local variables that occur in the expression.
 ///
 /// Translations of expressions are cached.
@@ -45,6 +42,7 @@ pub struct TranslateExprs<'smt, 'ctx> {
     limits_stack: Vec<SmtScope<'ctx>>,
     locals: ScopeMap<Ident, ScopeSymbolic<'ctx>>,
     cache: TranslateCache<'ctx>,
+    literal_exprs: LiteralExprSet,
 }
 
 impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
@@ -54,6 +52,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             limits_stack: vec![SmtScope::new()],
             locals: ScopeMap::new(),
             cache: TranslateCache::new(),
+            literal_exprs: LiteralExprSet::default(),
         }
     }
 
@@ -75,6 +74,30 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         let mut scope = self.limits_stack.last().unwrap().clone();
         scope.extend(self.locals.local_iter().map(|(_ident, local)| &local.scope));
         scope
+    }
+
+    /// Defines what expressions should be considered literal from now. Literal
+    /// expressions are marked during translation by wrapping them in
+    /// `Lit`-functions. An expression is literal if it always has the same
+    /// value under all interpretations. Quantifier instantiation using Lit
+    /// values does not consume fuel.
+    ///
+    /// See [crate::smt::funcs::fuel]
+    pub fn set_literal_exprs(&mut self, literal_exprs: LiteralExprSet) {
+        self.literal_exprs = literal_exprs;
+        self.clear_cache();
+    }
+
+    pub fn clear_cache(&mut self) {
+        self.cache.clear();
+    }
+
+    fn wrap_if_literal<A: LitWrap<'ctx>>(&self, expr: &Expr, ast: A) -> A {
+        if self.literal_exprs.is_literal(expr) {
+            ast.lit_wrap(self.ctx)
+        } else {
+            ast
+        }
     }
 
     pub fn local_idents<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
@@ -107,8 +130,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         assert_eq!(
             &expr.ty,
             &Some(TyKind::Bool),
-            "expr is not of type Bool: {:?}",
-            expr
+            "expr is not of type Bool: {expr:?}"
         );
 
         if is_expr_worth_caching(expr) {
@@ -184,12 +206,14 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Quant(quant_op, quant_vars, ann, operand) => {
                 let operand = self.t_bool(operand);
                 let scope = self.mk_scope(quant_vars);
-                let patterns: Vec<_> = self.t_triggers(&ann.triggers);
-                let patterns: Vec<_> = patterns.iter().collect();
-                match quant_op.node {
-                    QuantOpKind::Forall | QuantOpKind::Inf => scope.forall(&patterns, &operand),
-                    QuantOpKind::Exists | QuantOpKind::Sup => scope.exists(&patterns, &operand),
-                }
+                let qid = format!("{:?}", quant_op.span);
+                let mut meta = QuantifierMeta::new(qid);
+                meta.set_patterns(self.t_triggers(&ann.triggers));
+                let quant = match quant_op.node {
+                    QuantOpKind::Forall | QuantOpKind::Inf => scope.forall(&meta, &operand),
+                    QuantOpKind::Exists | QuantOpKind::Sup => scope.exists(&meta, &operand),
+                };
+                quant
             }
             ExprKind::Subst(_, _, _) => panic!("illegal exprkind"),
             ExprKind::Lit(lit) => match lit.node {
@@ -201,15 +225,14 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         if is_expr_worth_caching(expr) {
             self.cache.insert(expr, Symbolic::Bool(res.clone()));
         }
-        res
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_int(&mut self, expr: &Expr) -> Int<'ctx> {
         assert_eq!(
             &expr.ty,
             &Some(TyKind::Int),
-            "expr is not of type Int: {:?}",
-            expr
+            "expr is not of type Int: {expr:?}"
         );
 
         if is_expr_worth_caching(expr) {
@@ -262,15 +285,14 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::Int(res.clone()));
         }
-        res
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_uint(&mut self, expr: &Expr) -> UInt<'ctx> {
         assert_eq!(
             &expr.ty,
             &Some(TyKind::UInt),
-            "expr is not of type UInt: {:?}",
-            expr
+            "expr is not of type UInt: {expr:?}"
         );
 
         if is_expr_worth_caching(expr) {
@@ -320,15 +342,15 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::UInt(res.clone()));
         }
-        res
+
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_real(&mut self, expr: &Expr) -> Real<'ctx> {
         assert_eq!(
             &expr.ty,
             &Some(TyKind::Real),
-            "expr is not of type Real: {:?}",
-            expr
+            "expr is not of type Real: {expr:?}"
         );
 
         if is_expr_worth_caching(expr) {
@@ -389,15 +411,14 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::Real(res.clone()));
         }
-        res
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_ureal(&mut self, expr: &Expr) -> UReal<'ctx> {
         assert_eq!(
             &expr.ty,
             &Some(TyKind::UReal),
-            "expr is not of type UReal: {:?}",
-            expr
+            "expr is not of type UReal: {expr:?}"
         );
 
         if is_expr_worth_caching(expr) {
@@ -458,18 +479,18 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             tracing::trace!(ref_count = Shared::ref_count(expr), "caching expr");
             self.cache.insert(expr, Symbolic::UReal(res.clone()));
         }
-        res
+
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_eureal(&mut self, expr: &Expr) -> EUReal<'ctx> {
         assert_eq!(
             &expr.ty,
             &Some(TyKind::EUReal),
-            "expr is not of type EUReal: {:?}",
-            expr
+            "expr is not of type EUReal: {expr:?}"
         );
 
-        match &expr.kind {
+        let res = match &expr.kind {
             ExprKind::Var(ident) => self
                 .get_local(*ident)
                 .symbolic
@@ -530,24 +551,35 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 let operand = self.t_eureal(operand);
                 let scope = self.mk_scope(quant_vars);
                 let patterns: Vec<_> = self.t_triggers(&ann.triggers);
-                let patterns: Vec<_> = patterns.iter().collect();
+                let qid = format!("{:?}", quant_op.span);
+
+                let mut meta = QuantifierMeta::new(qid);
+                meta.set_patterns(patterns);
+                // always allow MBQI for the quantifiers generated by the
+                // infimum/supremum encoding, otherwise they never work
+                meta.mbqi = true;
+
                 let outer_scope = &mut self.limits_stack.last_mut().unwrap();
                 match quant_op.node {
-                    QuantOpKind::Inf => operand.infimum(scope, &patterns, outer_scope),
-                    QuantOpKind::Sup => operand.supremum(scope, &patterns, outer_scope),
+                    QuantOpKind::Inf => operand.infimum(scope, meta, outer_scope),
+                    QuantOpKind::Sup => operand.supremum(scope, meta, outer_scope),
                     QuantOpKind::Forall | QuantOpKind::Exists => panic!("illegal quantopkind"),
                 }
             }
             ExprKind::Subst(_, _, _) => panic!("illegal exprkind"),
-            ExprKind::Lit(lit) => match &lit.node {
-                LitKind::Infinity => EUReal::infinity(self.ctx.eureal()),
-                LitKind::Frac(frac) => EUReal::from_ureal(
-                    self.ctx.eureal(),
-                    &UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac)),
-                ),
-                _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
-            },
-        }
+            ExprKind::Lit(lit) => {
+                let eureal = match &lit.node {
+                    LitKind::Infinity => EUReal::infinity(self.ctx.eureal()),
+                    LitKind::Frac(frac) => EUReal::from_ureal(
+                        self.ctx.eureal(),
+                        &UReal::unchecked_from_real(Real::from_big_rational(self.ctx.ctx, frac)),
+                    ),
+                    _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
+                };
+                eureal
+            }
+        };
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_uninterpreted(&mut self, expr: &Expr) -> Dynamic<'ctx> {
@@ -593,7 +625,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             self.cache
                 .insert(expr, Symbolic::Uninterpreted(res.clone()));
         }
-        res
+        self.wrap_if_literal(expr, res)
     }
 
     pub fn t_list(&mut self, expr: &Expr) -> List<'ctx> {
@@ -635,22 +667,13 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     fn t_call(&mut self, name: Ident, args: &[Expr]) -> Symbolic<'ctx> {
         match self.ctx.tcx().get(name).as_deref() {
             Some(DeclKind::FuncDecl(func)) => {
-                let args: Vec<Dynamic<'_>> = args
-                    .iter()
-                    .map(|arg| self.t_symbolic(arg).into_dynamic(self.ctx))
-                    .collect();
-                let args: Vec<&dyn Ast<'ctx>> = args
-                    .iter()
-                    .map(|ast| {
-                        let a: &dyn Ast<'ctx> = ast;
-                        a
-                    })
-                    .collect();
-                let res_dynamic = self.ctx.uninterpreteds().apply_function(name, &args);
-                Symbolic::from_dynamic(self.ctx, &func.borrow().output, &res_dynamic)
+                let args = args.iter().map(|arg| self.t_symbolic(arg)).collect_vec();
+                self.ctx
+                    .function_encoder()
+                    .translate_call(self.ctx, &func.borrow(), args)
             }
             Some(DeclKind::FuncIntrin(intrin)) => intrin.translate_call(self, args),
-            res => panic!("cannot call {:?}", res),
+            res => panic!("cannot call {res:?}"),
         }
     }
 
@@ -658,7 +681,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         let t_a = self.t_symbolic(a);
         let t_b = self.t_symbolic(b);
         SymbolicPair::from_untypeds(t_a, t_b)
-            .unwrap_or_else(|| panic!("type mismatch during translation: {:?} and {:?}", a, b))
+            .unwrap_or_else(|| panic!("type mismatch during translation: {a:?} and {b:?}"))
     }
 
     pub fn get_local(&mut self, ident: Ident) -> &ScopeSymbolic<'ctx> {
@@ -668,39 +691,47 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         self.locals.get(&ident).unwrap()
     }
 
-    fn init_local(&mut self, ident: Ident) {
+    fn get_local_ty(&self, ident: Ident) -> TyKind {
         let decl = self
             .ctx
             .tcx()
             .get(ident)
-            .unwrap_or_else(|| panic!("{} is not declared", ident));
-        let local = match decl.as_ref() {
-            DeclKind::VarDecl(var_ref) => match &var_ref.borrow().ty {
-                TyKind::Bool => ScopeSymbolic::fresh_bool(self.ctx, ident),
-                TyKind::Int => ScopeSymbolic::fresh_int(self.ctx, ident),
-                TyKind::UInt => ScopeSymbolic::fresh_uint(self.ctx, ident),
-                TyKind::Real => ScopeSymbolic::fresh_real(self.ctx, ident),
-                TyKind::UReal => ScopeSymbolic::fresh_ureal(self.ctx, ident),
-                TyKind::EUReal => ScopeSymbolic::fresh_eureal(self.ctx, ident),
-                TyKind::Domain(domain) => {
-                    let domain_name = domain.borrow().name;
-                    let domain_sort = self.ctx.uninterpreteds().get_sort(domain_name).unwrap();
-                    ScopeSymbolic::fresh_uninterpreted(self.ctx, ident, domain_sort)
-                }
-                TyKind::Tuple(_) => todo!(),
-                TyKind::List(element_ty) => ScopeSymbolic::fresh_list(self.ctx, ident, element_ty),
-                TyKind::String => unreachable!(),
-                TyKind::SpecTy => unreachable!(),
-                TyKind::Unresolved(_) => unreachable!(),
-                TyKind::None => unreachable!(),
-            },
+            .unwrap_or_else(|| panic!("{ident} is not declared"));
+        match decl.as_ref() {
+            DeclKind::VarDecl(var_ref) => var_ref.borrow().ty.clone(),
             _ => panic!("variable is not declared"),
+        }
+    }
+
+    fn init_local(&mut self, ident: Ident) {
+        let local = match &self.get_local_ty(ident) {
+            TyKind::Bool => ScopeSymbolic::fresh_bool(self.ctx, ident),
+            TyKind::Int => ScopeSymbolic::fresh_int(self.ctx, ident),
+            TyKind::UInt => ScopeSymbolic::fresh_uint(self.ctx, ident),
+            TyKind::Real => ScopeSymbolic::fresh_real(self.ctx, ident),
+            TyKind::UReal => ScopeSymbolic::fresh_ureal(self.ctx, ident),
+            TyKind::EUReal => ScopeSymbolic::fresh_eureal(self.ctx, ident),
+            TyKind::Domain(domain) => {
+                let domain_name = domain.borrow().name;
+                let domain_sort = self
+                    .ctx
+                    .uninterpreteds()
+                    .get_sort(domain_name)
+                    .unwrap_or_else(|| panic!("Domain sort not found for domain: {domain_name}"));
+                ScopeSymbolic::fresh_uninterpreted(self.ctx, ident, domain_sort)
+            }
+            TyKind::Tuple(_) => todo!(),
+            TyKind::List(element_ty) => ScopeSymbolic::fresh_list(self.ctx, ident, element_ty),
+            TyKind::String => unreachable!(),
+            TyKind::SpecTy => unreachable!(),
+            TyKind::Unresolved(_) => unreachable!(),
+            TyKind::None => unreachable!(),
         };
         self.locals.insert(ident, local);
     }
 
     /// Create a new scope with the given quantified variables.
-    fn mk_scope(&mut self, quant_vars: &[QuantVar]) -> SmtScope<'ctx> {
+    pub fn mk_scope(&mut self, quant_vars: &[QuantVar]) -> SmtScope<'ctx> {
         let mut bounds = SmtScope::new();
         for quant_var in quant_vars {
             bounds.append(&self.get_local(quant_var.name()).scope);
@@ -709,7 +740,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     /// Translate our [`Trigger`]s to z3's [`Pattern`]s.
-    fn t_triggers(&mut self, triggers: &[Trigger]) -> Vec<Pattern<'ctx>> {
+    pub fn t_triggers(&mut self, triggers: &[Trigger]) -> Vec<Pattern<'ctx>> {
         triggers
             .iter()
             .map(|trigger| {
@@ -749,40 +780,20 @@ impl<'ctx> TranslateCache<'ctx> {
     }
 
     fn insert(&mut self, expr: &Expr, value: Symbolic<'ctx>) {
-        let cache_expr = CacheExpr(expr.clone());
+        let cache_expr = CacheExpr::new(expr.clone());
         self.cache.last_mut().unwrap().insert(cache_expr, value);
     }
 
     fn get(&self, expr: &Expr) -> Option<&Symbolic<'ctx>> {
         self.cache.last().unwrap().get(CacheExpr::ref_cast(expr))
     }
-}
 
-#[repr(transparent)]
-#[derive(RefCast)]
-struct CacheExpr(Expr);
-
-impl PartialEq for CacheExpr {
-    fn eq(&self, other: &Self) -> bool {
-        Shared::as_ptr(&self.0) == Shared::as_ptr(&other.0)
-    }
-}
-impl Eq for CacheExpr {}
-
-impl Ord for CacheExpr {
-    fn cmp(&self, other: &Self) -> Ordering {
-        Shared::as_ptr(&self.0).cmp(&Shared::as_ptr(&other.0))
+    /// Clear all levels of the cache.
+    fn clear(&mut self) {
+        for cache in &mut self.cache {
+            cache.clear();
+        }
     }
 }
 
-impl PartialOrd for CacheExpr {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(Shared::as_ptr(&self.0).cmp(&Shared::as_ptr(&other.0)))
-    }
-}
-
-impl Hash for CacheExpr {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        Shared::as_ptr(&self.0).hash(state)
-    }
-}
+type CacheExpr = RefEqShared<ExprData>;

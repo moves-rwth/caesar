@@ -6,6 +6,10 @@ use z3rro::{
     prover::{IncrementalMode, ProveResult, Prover},
 };
 
+use super::{
+    selection::SliceSelection,
+    transform::{SliceStmt, SliceStmts, StmtSliceVisitor},
+};
 use crate::{
     ast::{
         visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Direction, Expr, ExprBuilder,
@@ -13,14 +17,13 @@ use crate::{
         VarDecl, VarKind,
     },
     resource_limits::LimitsRef,
-    smt::{translate_exprs::TranslateExprs, SmtCtx},
+    smt::{
+        funcs::{axiomatic::AxiomaticFunctionEncoder, FunctionEncoder},
+        translate_exprs::TranslateExprs,
+        DepConfig, SmtCtx,
+    },
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
-};
-
-use super::{
-    selection::SliceSelection,
-    transform::{SliceStmt, SliceStmts, StmtSliceVisitor},
 };
 
 /// Prove that the transformation for assert, assume, and tick statements is
@@ -122,7 +125,12 @@ fn prove_equiv(
         stmt2_vc.clone(),
     );
     let ctx = z3::Context::new(&z3::Config::new());
-    let smt_ctx = SmtCtx::new(&ctx, tcx);
+    let smt_ctx = SmtCtx::new(
+        &ctx,
+        tcx,
+        AxiomaticFunctionEncoder::default().into_boxed(),
+        DepConfig::All,
+    );
     let mut translate = TranslateExprs::new(&smt_ctx);
     let eq_expr_z3 = translate.t_bool(&eq_expr);
     let mut prover = Prover::new(&ctx, IncrementalMode::Native);
@@ -143,7 +151,7 @@ fn prove_equiv(
             stmt1, stmt2, assumptions, &model, translate.t_eureal(&stmt1_vc).eval(&model).unwrap(), translate.t_eureal(&stmt2_vc).eval(&model).unwrap()
         ))
         }
-        ProveResult::Unknown(reason) => Err(format!("unknown result ({})", reason)),
+        ProveResult::Unknown(reason) => Err(format!("unknown result ({reason})")),
     };
     x
 }

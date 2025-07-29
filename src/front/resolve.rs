@@ -76,10 +76,10 @@ impl ResolveError {
     pub fn diagnostic(self) -> Diagnostic {
         match self {
             ResolveError::AlreadyDefined(span, ident) => Diagnostic::new(ReportKind::Error, span)
-                .with_message(format!("Name `{}` is already defined", ident))
+                .with_message(format!("Name `{ident}` is already defined"))
                 .with_label(Label::new(span).with_message("already defined")),
             ResolveError::NotFound(ident) => Diagnostic::new(ReportKind::Error, ident.span)
-                .with_message(format!("Name `{}` is not declared", ident))
+                .with_message(format!("Name `{ident}` is not declared"))
                 .with_label(Label::new(ident.span).with_message("not declared")),
             ResolveError::NotIdent(span) => Diagnostic::new(ReportKind::Error, span)
                 .with_message("Expression must be an identifier")

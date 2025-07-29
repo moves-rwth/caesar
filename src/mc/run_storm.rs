@@ -27,7 +27,7 @@ pub fn storm_result_to_diagnostic(result: &StormResult, span: Span) -> Diagnosti
     match result {
         Ok(output) => match output.results.get("reward").unwrap() {
             StormValue::Value(reward) => Diagnostic::new(ReportKind::Advice, span)
-                .with_message(format!("Expected reward from Storm: {}", reward))
+                .with_message(format!("Expected reward from Storm: {reward}"))
                 .with_label(Label::new(span))
                 .with_code(NumberOrString::String("model checking".to_owned())),
             StormValue::NotFound => Diagnostic::new(ReportKind::Error, span)
@@ -214,7 +214,7 @@ fn find_property_result(
 ) -> StormValue {
     const RESULT_TEXT: &str = "Result (for initial states):";
 
-    let search_string = format!("Model checking property \"{}\"", property);
+    let search_string = format!("Model checking property \"{property}\"");
     if let Some(start) = output.find(&search_string) {
         if let Some(result_start) = output[start..].find(RESULT_TEXT) {
             let result_start = start + result_start + RESULT_TEXT.len();
@@ -236,7 +236,7 @@ fn find_property_result(
                     (false, Some(_)) => "⪆ ",
                     (false, None) => "≈ ",
                 };
-                let result = format!("{}{}", operator, result);
+                let result = format!("{operator}{result}");
                 return StormValue::Value(result);
             }
         }

@@ -7,7 +7,7 @@ members = [
 
 [package]
 name = "caesar"
-version = "2.2.1"
+version = "3.0.0"
 authors = ["Philipp Schroer <phisch@cs.rwth-aachen.de>"]
 description = "Caesar is a deductive verifier for probabilistic programs."
 homepage = "https://www.caesarverifier.org/"
@@ -18,9 +18,10 @@ edition = "2021"
 build = "build.rs" # LALRPOP preprocessing
 
 [features]
-default = ["static-link-z3"]
+default = ["static-link-z3", "datatype-fuel"]
 datatype-eureal = ["z3rro/datatype-eureal"]
 datatype-eureal-funcs = ["z3rro/datatype-eureal-funcs"]
+datatype-fuel=["z3rro/datatype-fuel"]
 static-link-z3 = ["z3/static-link-z3"]
 # Emit log messages to stderr without timing information. This is useful to diff logs.
 log-print-timeless = []
@@ -28,7 +29,7 @@ log-print-timeless = []
 [dependencies]
 string-interner = "0.18"
 lalrpop-util = { version = "0.22", features = ["lexer"] }
-z3 = "^0.12"
+z3 = "^0.13.2"
 ref-cast = "1.0"
 replace_with = "0.1"
 num = "0.4"
@@ -37,7 +38,6 @@ tracing-subscriber = { version = "^0.3.3", features = ["env-filter", "json"] }
 pathdiff = "0.2"
 egg = "0.9"
 tokio = { version = "1", features = ["time", "macros", "rt", "rt-multi-thread"] }
-simple-process-stats = "1.0"
 hdrhistogram = "7.5"
 ariadne = "0.5"
 thiserror = "2.0"
@@ -62,6 +62,7 @@ regex = "1.11.1"
 tempfile = "3.16.0"
 os_info = "3.11.0"
 petgraph = "0.8.0"
+memory-stats = "1.2.0"
 
 [build-dependencies]
 lalrpop = "0.22"
@@ -86,9 +87,8 @@ harness = false
 [profile.dev.package.z3-sys]
 opt-level = 3
 
+# we need to have cargo fetch z3.rs from the git repository, otherwise it will
+# not download the git submodule with z3's sources in them.
 [patch.crates-io]
-z3 = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = 'e8f03cdedfa4a2b4938ee0efc943ff003aed8687' }
-z3-sys = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = 'e8f03cdedfa4a2b4938ee0efc943ff003aed8687' }
-
-# see https://github.com/heim-rs/darwin-libproc/pull/3#issuecomment-1645444056
-darwin-libproc = { git = "https://github.com/Orycterope/darwin-libproc.git", rev = "f73ddb1002d51ae74c1b41670fae56bd5896b7a3" }
+z3 = { git = 'https://github.com/prove-rs/z3.rs.git', rev = "8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989" }
+z3-sys = { git = 'https://github.com/prove-rs/z3.rs.git', rev = "8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989" }

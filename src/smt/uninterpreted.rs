@@ -55,7 +55,7 @@ impl<'ctx> Uninterpreteds<'ctx> {
         let decl = self
             .functions
             .get(&ident)
-            .expect("function is not declared");
+            .unwrap_or_else(|| panic!("function {ident} is not declared"));
         decl.apply(args)
     }
 

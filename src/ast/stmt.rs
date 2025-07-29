@@ -174,7 +174,7 @@ impl Direction {
     pub fn prefix(&self, text: &str) -> String {
         match self {
             Direction::Down => text.to_owned(),
-            Direction::Up => format!("co{}", text),
+            Direction::Up => format!("co{text}"),
         }
     }
 

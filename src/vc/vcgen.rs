@@ -225,8 +225,8 @@ impl<'tcx> Vcgen<'tcx> {
                     return Ok(res);
                 }
                 Some(DeclKind::FuncDecl(_)) | Some(DeclKind::FuncIntrin(_)) => {}
-                Some(decl) => panic!("cannot do vc generation for {:?}", decl),
-                None => panic!("missing declaration for call of {}", ident),
+                Some(decl) => panic!("cannot do vc generation for {decl:?}"),
+                None => panic!("missing declaration for call of {ident}"),
             }
         };
         if let [lhs] = lhses {

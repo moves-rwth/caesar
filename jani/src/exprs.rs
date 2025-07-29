@@ -74,9 +74,9 @@ impl From<bool> for ConstantValue {
 impl Display for ConstantValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConstantValue::Number(n) => write!(f, "{}", n),
-            ConstantValue::Boolean(b) => write!(f, "{}", b),
-            ConstantValue::MathConstant(c) => write!(f, "{}", c),
+            ConstantValue::Number(n) => write!(f, "{n}"),
+            ConstantValue::Boolean(b) => write!(f, "{b}"),
+            ConstantValue::MathConstant(c) => write!(f, "{c}"),
         }
     }
 }
