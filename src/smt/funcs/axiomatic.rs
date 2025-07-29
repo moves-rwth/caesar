@@ -105,7 +105,7 @@ impl<'ctx> FunctionEncoder<'ctx> for AxiomaticFunctionEncoder {
         translate_plain_call(ctx, func.name, &func.output, args.into_iter().collect())
     }
 
-    fn needs_lit_wrapping(&self, _func: &DeclRef<FuncDecl>) -> bool {
+    fn func_uses_lit_wrap(&self, _func: &DeclRef<FuncDecl>) -> bool {
         false
     }
 }

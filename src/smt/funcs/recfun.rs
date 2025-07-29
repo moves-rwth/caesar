@@ -159,7 +159,7 @@ impl<'ctx> FunctionEncoder<'ctx> for RecFunFunctionEncoder<'ctx> {
         Symbolic::from_dynamic(ctx, &func.output, &res_dynamic)
     }
 
-    fn needs_lit_wrapping(&self, _func: &DeclRef<FuncDecl>) -> bool {
+    fn func_uses_lit_wrap(&self, _func: &DeclRef<FuncDecl>) -> bool {
         false
     }
 }

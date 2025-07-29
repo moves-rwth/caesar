@@ -100,6 +100,12 @@ impl<T> RefEqShared<T> {
     }
 }
 
+impl<T: fmt::Debug> fmt::Debug for RefEqShared<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&*self.0, f)
+    }
+}
+
 impl<T> PartialEq for RefEqShared<T> {
     fn eq(&self, other: &Self) -> bool {
         Shared::as_ptr(&self.0) == Shared::as_ptr(&other.0)

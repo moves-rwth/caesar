@@ -56,7 +56,7 @@ pub trait FunctionEncoder<'ctx>: 'ctx {
     /// Whether this function encoder would make use of lit wrapping for this
     /// function. This is only true for the fuel encodings and for funcs that
     /// have bodies.
-    fn needs_lit_wrapping(&self, func: &DeclRef<FuncDecl>) -> bool;
+    fn func_uses_lit_wrap(&self, func: &DeclRef<FuncDecl>) -> bool;
 }
 
 /// Returns true if the [FuncDecl] can be transformed into a limited function.

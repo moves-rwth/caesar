@@ -7,16 +7,16 @@ use std::{
 use ref_cast::RefCast;
 use tracing::info_span;
 
-use crate::ast::{
+use crate::{ast::{
     visit::{walk_expr, VisitorMut},
     Expr, ExprData, ExprKind, Ident, RefEqShared,
-};
+}, smt::SmtCtx};
 
 type RefEqExpr = RefEqShared<ExprData>;
 
 /// A set of expressions that are considered literal. Equality is determined by
 /// pointer equality of the expressions.
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct LiteralExprSet(HashSet<RefEqExpr>);
 
 impl LiteralExprSet {
@@ -65,7 +65,7 @@ impl Display for LiteralExprSet {
 /// literal information is forwarded to the SMT-solver (wrapping them in
 /// Lit-marker). Also, wrapping all the intermediate expressions severally
 /// degrades solver performance.
-#[derive(Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct LiteralExprCollector {
     literal_exprs: LiteralExprSet,
     literal_vars: HashSet<Ident>,
@@ -73,29 +73,34 @@ pub struct LiteralExprCollector {
 }
 
 impl LiteralExprCollector {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(ctx: &SmtCtx<'_>) -> Self {
+        Self {
+            literal_exprs: LiteralExprSet::default(),
+            literal_vars: HashSet::new(),
+            computable_functions: ctx.computable_functions()
+                .into_iter()
+                .collect(),
+        }
     }
 
     fn is_literal(&self, expr: &Expr) -> bool {
         self.literal_exprs.is_literal(expr)
     }
 
-    pub fn with_literal_vars(self, literal_vars: &[Ident]) -> Self {
+    /// Add some variables to the set of literals.
+    pub fn add_literal_vars(self, literal_vars: impl IntoIterator<Item = Ident>) -> Self {
         Self {
-            literal_vars: literal_vars.iter().cloned().collect(),
+            literal_vars: literal_vars.into_iter().collect(),
             ..self
         }
     }
 
-    pub fn with_computable_functions(self, computable_functions: &[Ident]) -> Self {
-        Self {
-            computable_functions: computable_functions.iter().cloned().collect(),
-            ..self
+    /// Collect literals in this expression using the [VisitorMut] impl.
+    pub fn collect_literals(mut self, expr: &mut Expr) -> LiteralExprSet {
+        if self.literal_vars.is_empty() && self.computable_functions.is_empty() {
+            return LiteralExprSet::default();
         }
-    }
 
-    pub fn add_literals(mut self, expr: &mut Expr) -> LiteralExprSet {
         let span = info_span!("collect literal expressions");
         let _enter = span.enter();
 

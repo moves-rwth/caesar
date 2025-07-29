@@ -693,13 +693,17 @@ impl BoolVcUnit {
         let span = info_span!("translation to Z3");
         let _entered = span.enter();
 
-        translate.set_literal_exprs(
-            LiteralExprCollector::new()
-                .with_computable_functions(translate.ctx.computable_functions().as_slice())
-                .add_literals(&mut self.vc),
-        );
+        if translate.ctx.lit_wrap {
+            let literal_exprs =
+                LiteralExprCollector::new(translate.ctx).collect_literals(&mut self.vc);
+            translate.set_literal_exprs(literal_exprs);
+        }
+
         let bool_vc = translate.t_bool(&self.vc);
-        translate.set_literal_exprs(Default::default());
+
+        if translate.ctx.lit_wrap {
+            translate.set_literal_exprs(Default::default());
+        }
 
         SmtVcUnit {
             quant_vc: self.quant_vc,

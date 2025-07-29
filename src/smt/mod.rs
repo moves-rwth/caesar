@@ -46,7 +46,7 @@ pub struct SmtCtx<'ctx> {
     lits: RefCell<Vec<(Sort<'ctx>, LitDecl<'ctx>)>>,
     uninterpreteds: Uninterpreteds<'ctx>,
     function_encoder: Box<dyn FunctionEncoder<'ctx>>,
-    lit_wrap: bool,
+    pub lit_wrap: bool,
 }
 
 impl<'ctx> SmtCtx<'ctx> {
@@ -56,15 +56,6 @@ impl<'ctx> SmtCtx<'ctx> {
         function_encoder: Box<dyn FunctionEncoder<'ctx>>,
         dep_config: DepConfig<'a>,
     ) -> Self {
-        let domains: Vec<_> = tcx.domains_owned();
-        // do not enable lit-wrapping if there are no limited functions that can
-        // profit from it
-        let lit_wrap = domains.iter().any(|d| {
-            d.borrow()
-                .function_decls()
-                .any(|func| function_encoder.needs_lit_wrapping(func))
-        });
-
         let mut res = SmtCtx {
             ctx,
             tcx,
@@ -74,7 +65,7 @@ impl<'ctx> SmtCtx<'ctx> {
             lits: RefCell::new(Vec::new()),
             uninterpreteds: Uninterpreteds::new(ctx),
             function_encoder,
-            lit_wrap,
+            lit_wrap: false,
         };
         res.init_dependencies(dep_config);
         res
@@ -104,6 +95,8 @@ impl<'ctx> SmtCtx<'ctx> {
                         DepConfig::Set(deps) if !deps.contains(&func.name) => continue,
                         _ => {}
                     }
+                    self.lit_wrap =
+                        self.lit_wrap || self.function_encoder.func_uses_lit_wrap(&func_ref);
                     for (name, domain, range) in
                         self.function_encoder.translate_signature(self, &func)
                     {
@@ -214,6 +207,8 @@ impl<'ctx> SmtCtx<'ctx> {
         &*self.function_encoder
     }
 
+    /// Return a list of functions that are computable, so that they are marked
+    /// as literals when called with literal parameters.
     pub fn computable_functions(&self) -> Vec<Ident> {
         self.tcx
             .get_function_decls()

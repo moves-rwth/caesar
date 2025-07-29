@@ -195,10 +195,9 @@ fn fuel_computation_axiom<'ctx, 'smt, E: FuelEncoder<'ctx>>(
         .map(|param| param.name)
         .collect_vec();
 
-    let mut literal_exprs = LiteralExprCollector::new()
-        .with_computable_functions(translate.ctx.computable_functions().as_slice())
-        .with_literal_vars(param_vars.as_slice())
-        .add_literals(func.body.borrow_mut().as_mut().unwrap());
+    let mut literal_exprs = LiteralExprCollector::new(translate.ctx)
+        .add_literal_vars(param_vars)
+        .collect_literals(func.body.borrow_mut().as_mut().unwrap());
 
     // The result of the computation axiom should itself never be considered literal in practice.
     // Otherwise, some computation examples hang.

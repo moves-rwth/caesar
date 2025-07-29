@@ -178,7 +178,7 @@ impl<'ctx> FunctionEncoder<'ctx> for FuelParamFunctionEncoder<'ctx> {
         translate_plain_call(ctx, func.name, &func.output, args)
     }
 
-    fn needs_lit_wrapping(&self, func: &DeclRef<FuncDecl>) -> bool {
+    fn func_uses_lit_wrap(&self, func: &DeclRef<FuncDecl>) -> bool {
         self.computation && is_eligible_for_limited_function(&func.borrow())
     }
 }
