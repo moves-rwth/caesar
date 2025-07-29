@@ -713,7 +713,11 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             TyKind::EUReal => ScopeSymbolic::fresh_eureal(self.ctx, ident),
             TyKind::Domain(domain) => {
                 let domain_name = domain.borrow().name;
-                let domain_sort = self.ctx.uninterpreteds().get_sort(domain_name).unwrap();
+                let domain_sort = self
+                    .ctx
+                    .uninterpreteds()
+                    .get_sort(domain_name)
+                    .unwrap_or_else(|| panic!("Domain sort not found for domain: {domain_name}"));
                 ScopeSymbolic::fresh_uninterpreted(self.ctx, ident, domain_sort)
             }
             TyKind::Tuple(_) => todo!(),

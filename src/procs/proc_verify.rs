@@ -1,31 +1,31 @@
-//! Generates the HeyVL code to verify a procedure implementation.
-//!
-//! A procedure
-//! ```
-//! proc myproc(param1: typ1) -> (ret2: typ2)
-//!     pre e1
-//!     pre e2
-//!     post e3
-//!     post e4
-//!     { body }
-//! ```
-//! is translated for verification into a HeyVL program of the form
-//! ```
-//! assume e1;
-//! assume e2;
-//! body;
-//! assert e3;
-//! assert e4;
-//! ```
-
 use crate::{
-    ast::{Direction, ProcDecl, SpanVariant, Spanned, StmtKind},
+    ast::{Block, Direction, ProcDecl, SpanVariant, Spanned, StmtKind},
     driver::VerifyUnit,
     slicing::{wrap_with_error_message, wrap_with_success_message},
 };
 
-/// Returns `None` if the proc has no body does not need verification.
-pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
+/// Generates the HeyVL code to verify a procedure implementation. Returns
+/// `None` if the proc has no body does not need verification.
+///
+/// ## The Encoding
+/// A procedure
+/// ```
+/// proc myproc(param1: typ1) -> (ret2: typ2)
+///     pre e1
+///     pre e2
+///     post e3
+///     post e4
+///     { body }
+/// ```
+/// is translated for verification into a HeyVL program of the form
+/// ```
+/// assume e1;
+/// assume e2;
+/// body;
+/// assert e3;
+/// assert e4;
+/// ```
+pub fn encode_proc_verify(proc: &ProcDecl) -> Option<(Direction, Block)> {
     let direction = proc.direction;
 
     let body_ref = proc.body.borrow();
@@ -62,7 +62,7 @@ pub fn verify_proc(proc: &ProcDecl) -> Option<VerifyUnit> {
         ));
     }
 
-    Some(VerifyUnit { direction, block })
+    Some((direction, block))
 }
 
 /// Turn the direction of this verification unit to lower bounds by adding

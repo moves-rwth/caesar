@@ -25,7 +25,7 @@ use crate::{
         InvariantAnnotation, UnrollAnnotation,
     },
     resource_limits::LimitsRef,
-    smt::{funcs::axiomatic::AxiomaticFunctionEncoder, SmtCtx},
+    smt::{funcs::axiomatic::AxiomaticFunctionEncoder, DepConfig, SmtCtx},
     tyctx::TyCtx,
     VerifyError,
 };
@@ -166,6 +166,7 @@ pub(super) fn explain_subst(
             &ctx,
             vcgen.tcx,
             Box::new(AxiomaticFunctionEncoder::default()),
+            DepConfig::SpecsOnly,
         );
         let mut unfolder = Unfolder::new(vcgen.limits_ref.clone(), &smt_ctx);
         let _ = unfolder.visit_expr(expr); // ignore potential errors

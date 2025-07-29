@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// This is the central symbol table for the language. It keeps track of all
-/// definitions,
+/// definitions.
 #[derive(Debug)]
 pub struct TyCtx {
     /// A map of identifiers to the associated declaration.
@@ -32,7 +32,7 @@ pub struct TyCtx {
     /// in assert/assume/compare statements and in requires/ensures attributes.
     ///
     /// Classical deductive verifiers use booleans, and for probabilistic
-    /// verification we use EUReal.
+    /// verification we use [TyKind::EUReal].
     spec_ty: TyKind,
     /// Counter for a suffix for each identifier to create a fresh variable.
     fresh: RefCell<HashMap<Ident, usize>>,

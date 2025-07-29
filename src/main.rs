@@ -16,6 +16,7 @@ use std::{
 
 use crate::{
     ast::TyKind,
+    depgraph::DepGraph,
     front::{resolve::Resolve, tycheck::Tycheck},
     smt::{
         funcs::{
@@ -24,7 +25,7 @@ use crate::{
             FunctionEncoder, RecFunFunctionEncoder,
         },
         translate_exprs::TranslateExprs,
-        SmtCtx,
+        DepConfig, SmtCtx,
     },
     timing::TimingLayer,
     tyctx::TyCtx,
@@ -36,7 +37,7 @@ use driver::{Item, SourceUnit, VerifyUnit};
 use intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists};
 use mc::run_storm::{run_storm, storm_result_to_diagnostic};
 use proof_rules::calculus::{find_recursive_procs, CalculusVisitor};
-use proof_rules::{init_encodings, EncodingVisitor};
+use proof_rules::init_encodings;
 use regex::Regex;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef, MemorySize};
 use servers::{run_lsp_server, CliServer, LspServer, Server, ServerError};
@@ -50,6 +51,7 @@ use z3::{Config, Context};
 use z3rro::{prover::ProveResult, quantifiers::QuantifierMeta, util::ReasonUnknown};
 
 pub mod ast;
+pub mod depgraph;
 mod driver;
 pub mod front;
 pub mod intrinsic;
@@ -790,21 +792,12 @@ pub fn apply_encodings(
     server: &mut dyn Server,
 ) -> Result<Vec<Item<SourceUnit>>, VerifyError> {
     let mut new_source_units = vec![];
-
-    let mut encoding_visitor = EncodingVisitor::new(tcx, &mut new_source_units);
-
     for source_unit in &mut source_units {
-        match source_unit.enter().deref_mut() {
-            SourceUnit::Decl(decl) => encoding_visitor.visit_decl(decl),
-            SourceUnit::Raw(block) => encoding_visitor.visit_block(block),
-        }
-        .map_err(|ann_err| ann_err.diagnostic())?;
+        new_source_units.extend(source_unit.enter().apply_encodings(tcx)?);
     }
-
     for source_unit in &mut new_source_units {
         server.register_source_unit(source_unit)?;
     }
-
     source_units.extend(new_source_units);
     Ok(source_units)
 }
@@ -949,9 +942,15 @@ fn verify_files_main(
         return Ok(true);
     }
 
+    // populate dependency graph
+    let mut depgraph = DepGraph::new();
+    for source_unit in &mut source_units {
+        source_unit.enter().populate_depgraph(&mut depgraph)?;
+    }
+
     let mut verify_units: Vec<Item<VerifyUnit>> = source_units
         .into_iter()
-        .flat_map(|item| item.flat_map(SourceUnit::into_verify_unit))
+        .flat_map(|item| item.flat_map(|unit| SourceUnit::into_verify_unit(unit, &mut depgraph)))
         .collect();
 
     if options.debug_options.z3_trace && verify_units.len() > 1 {
@@ -1031,7 +1030,8 @@ fn verify_files_main(
         // 11. Translate to Z3
         let ctx = Context::new(&Config::default());
         let function_encoder = mk_function_encoder(options);
-        let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoder);
+        let dep_config = DepConfig::Set(vc_is_valid.get_dependencies());
+        let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoder, dep_config);
         let mut translate = TranslateExprs::new(&smt_ctx);
         let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
 

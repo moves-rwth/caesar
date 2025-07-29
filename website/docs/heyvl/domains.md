@@ -25,6 +25,12 @@ Read the documentation section on [SMT Theories and Incompleteness](../caesar/de
 
 :::
 
+Caesar does some limited dependency tracking to determine which functions, axioms, and domains to translate into the final SMT formula.
+In essence, a declaration will be translated only if there is a sequence of declarations starting from the translated procedure that leads to it.[^dependency-tracking]
+
+[^dependency-tracking]: An axiom like `axiom unsound false` would never be translated by Caesar, because it does not mention any other declarations.
+Therefore, Caesar will throw an error on such axioms.
+
 ## Definitional Functions
 
 The preferred way to declare `func`s is to give a definition of the body with them.
@@ -126,14 +132,15 @@ Because axiom declarations behave like `assume` statements, they can introduce u
 
     ```heyvl
     domain Unsound {
-        axiom unsound false
+        func f(): Bool
+        axiom unsound false && f()
     }
 
     proc wrong() -> ()
         pre ?(true)
         post ?(true)
     {
-        assert ?(false)
+        assert ?(false && f())
     }
     ```
     The axiom `unsound` always evaluates to `false`.

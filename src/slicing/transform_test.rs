@@ -20,7 +20,7 @@ use crate::{
     smt::{
         funcs::{axiomatic::AxiomaticFunctionEncoder, FunctionEncoder},
         translate_exprs::TranslateExprs,
-        SmtCtx,
+        DepConfig, SmtCtx,
     },
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
@@ -125,7 +125,12 @@ fn prove_equiv(
         stmt2_vc.clone(),
     );
     let ctx = z3::Context::new(&z3::Config::new());
-    let smt_ctx = SmtCtx::new(&ctx, tcx, AxiomaticFunctionEncoder::default().into_boxed());
+    let smt_ctx = SmtCtx::new(
+        &ctx,
+        tcx,
+        AxiomaticFunctionEncoder::default().into_boxed(),
+        DepConfig::All,
+    );
     let mut translate = TranslateExprs::new(&smt_ctx);
     let eq_expr_z3 = translate.t_bool(&eq_expr);
     let mut prover = Prover::new(&ctx, IncrementalMode::Native);

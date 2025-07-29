@@ -1,9 +1,10 @@
 //! Encodings of declarations, definitions, and expressions into SMT.
 
 use self::{translate_exprs::TranslateExprs, uninterpreted::Uninterpreteds};
+use crate::depgraph::Dependencies;
 use crate::smt::funcs::FunctionEncoder;
 use crate::{
-    ast::{DeclRef, DomainDecl, DomainSpec, Ident, TyKind},
+    ast::{DomainSpec, Ident, TyKind},
     tyctx::TyCtx,
 };
 use itertools::Itertools;
@@ -23,6 +24,17 @@ mod symbols;
 pub mod translate_exprs;
 mod uninterpreted;
 
+/// Which dependencies to include in the SMT context.
+#[derive(Debug)]
+pub enum DepConfig<'a> {
+    /// Include those specified in the set.
+    Set(&'a Dependencies),
+    /// Include everything that was declared by the user.
+    All,
+    /// Include all declarations by the user, but omit definitions.
+    SpecsOnly,
+}
+
 /// An extension of the Z3 context with additional components to create
 /// values of Caesar-specific SMT types.
 pub struct SmtCtx<'ctx> {
@@ -38,10 +50,11 @@ pub struct SmtCtx<'ctx> {
 }
 
 impl<'ctx> SmtCtx<'ctx> {
-    pub fn new(
+    pub fn new<'a>(
         ctx: &'ctx Context,
         tcx: &'ctx TyCtx,
         function_encoder: Box<dyn FunctionEncoder<'ctx>>,
+        dep_config: DepConfig<'a>,
     ) -> Self {
         let domains: Vec<_> = tcx.domains_owned();
         // do not enable lit-wrapping if there are no limited functions that can
@@ -63,22 +76,34 @@ impl<'ctx> SmtCtx<'ctx> {
             function_encoder,
             lit_wrap,
         };
-        res.declare_domains(domains.as_slice());
+        res.init_dependencies(dep_config);
         res
     }
 
-    fn declare_domains(&mut self, domains: &[DeclRef<DomainDecl>]) {
+    /// Initializes the dependencies: domain sorts, functions, and axioms.
+    fn init_dependencies(&mut self, dep_config: DepConfig<'_>) {
+        let domains = self.tcx.domains_owned();
+
         // Step 1. declare sorts
-        for decl_ref in domains {
-            self.uninterpreteds.add_sort(decl_ref.borrow().name);
+        for decl_ref in &domains {
+            let decl = decl_ref.borrow();
+            match dep_config {
+                DepConfig::Set(deps) if !deps.contains(&decl.name) => continue,
+                _ => {}
+            }
+            self.uninterpreteds.add_sort(decl.name);
         }
 
         // Step 2. declare functions
-        for decl_ref in domains {
+        for decl_ref in &domains {
             let decl = decl_ref.borrow();
             for spec in &decl.body {
                 if let DomainSpec::Function(func_ref) = &spec {
                     let func = func_ref.borrow();
+                    match dep_config {
+                        DepConfig::Set(deps) if !deps.contains(&func.name) => continue,
+                        _ => {}
+                    }
                     for (name, domain, range) in
                         self.function_encoder.translate_signature(self, &func)
                     {
@@ -90,14 +115,19 @@ impl<'ctx> SmtCtx<'ctx> {
         }
 
         // Step 3. translate & add axioms and function definitions
-        let mut translate = TranslateExprs::new(self);
         let mut axioms: Vec<(Ident, Bool<'ctx>)> = Vec::new();
-        for decl_ref in domains {
+        let mut translate = TranslateExprs::new(self);
+        for decl_ref in &domains {
             let decl = decl_ref.borrow();
             for spec in &decl.body {
                 match &spec {
                     DomainSpec::Function(func_ref) => {
                         let func = func_ref.borrow();
+                        match dep_config {
+                            DepConfig::Set(deps) if !deps.contains(&func.name) => continue,
+                            DepConfig::SpecsOnly => continue,
+                            _ => {}
+                        }
                         let name = func.name;
                         axioms.extend(
                             self.function_encoder
@@ -109,12 +139,17 @@ impl<'ctx> SmtCtx<'ctx> {
                     DomainSpec::Axiom(axiom_ref) => {
                         // TODO: translate axiom name as qid?
                         let axiom = axiom_ref.borrow();
+                        match dep_config {
+                            DepConfig::Set(deps) if !deps.contains(&axiom.name) => continue,
+                            DepConfig::SpecsOnly => continue,
+                            _ => {}
+                        }
                         axioms.push((axiom.name, translate.t_bool(&axiom.axiom)));
                     }
                 }
             }
         }
-        drop(translate); // drop shared reference on self
+        drop(translate); // drops shared reference on self so we can modify
         for (name, axiom) in axioms {
             self.uninterpreteds.add_axiom(name, axiom);
         }
@@ -165,11 +200,6 @@ impl<'ctx> SmtCtx<'ctx> {
     #[must_use]
     pub fn uninterpreteds(&self) -> &Uninterpreteds<'ctx> {
         &self.uninterpreteds
-    }
-
-    #[must_use]
-    pub fn uninterpreteds_mut(&mut self) -> &mut Uninterpreteds<'ctx> {
-        &mut self.uninterpreteds
     }
 
     pub fn add_lit_axioms_to_prover(&self, prover: &mut Prover<'ctx>) {

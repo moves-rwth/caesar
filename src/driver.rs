@@ -15,6 +15,7 @@ use crate::{
         Diagnostic, Direction, Expr, ExprBuilder, Label, SourceFilePath, Span, StoredFile, TyKind,
         UnOpKind, VarKind,
     },
+    depgraph::{DepGraph, Dependencies},
     front::{
         parser::{self, ParseError},
         resolve::Resolve,
@@ -28,9 +29,10 @@ use crate::{
     pretty::{Doc, SimplePretty},
     procs::{
         monotonicity::MonotonicityVisitor,
-        proc_verify::{to_direction_lower_bounds, verify_proc},
+        proc_verify::{encode_proc_verify, to_direction_lower_bounds},
         SpecCall,
     },
+    proof_rules::EncodingVisitor,
     resource_limits::{LimitError, LimitsRef},
     servers::Server,
     slicing::{
@@ -45,7 +47,7 @@ use crate::{
             pretty_model, pretty_slice, pretty_unaccessed, pretty_var_value, pretty_vc_value,
         },
         translate_exprs::TranslateExprs,
-        SmtCtx,
+        DepConfig, SmtCtx,
     },
     tyctx::TyCtx,
     vc::{
@@ -385,20 +387,64 @@ impl SourceUnit {
         }
     }
 
+    /// Apply encodings given by annotations. This might generate new source
+    /// units for side conditions.
+    pub fn apply_encodings(
+        &mut self,
+        tcx: &mut TyCtx,
+    ) -> Result<Vec<Item<SourceUnit>>, VerifyError> {
+        let mut encoding_visitor = EncodingVisitor::new(tcx);
+        match self {
+            SourceUnit::Decl(decl) => encoding_visitor.visit_decl(decl),
+            SourceUnit::Raw(block) => encoding_visitor.visit_block(block),
+        }
+        .map_err(|ann_err| ann_err.diagnostic())?;
+        Ok(encoding_visitor.finish())
+    }
+
+    /// If this is a declaration, add the dependencies to the [DepGraph].
+    pub fn populate_depgraph(&mut self, depgraph: &mut DepGraph) -> Result<(), VerifyError> {
+        assert!(depgraph.current_deps.is_empty());
+        match self {
+            SourceUnit::Decl(decl) => depgraph
+                .visit_decl(decl)
+                .map_err(|e| VerifyError::Diagnostic(e.diagnostic())),
+            SourceUnit::Raw(_block) => Ok(()),
+        }
+    }
+
     /// Convert this source unit into a [`VerifyUnit`].
     /// Some declarations, such as domains or functions, do not generate any verify units.
     /// In these cases, `None` is returned.
-    pub fn into_verify_unit(self) -> Option<VerifyUnit> {
+    pub fn into_verify_unit(mut self, depgraph: &mut DepGraph) -> Option<VerifyUnit> {
+        let deps = match &mut self {
+            SourceUnit::Decl(decl) => depgraph.get_reachable([decl.name()]),
+            SourceUnit::Raw(block) => {
+                assert!(depgraph.current_deps.is_empty());
+                depgraph.visit_block(block).unwrap();
+                let current_deps = std::mem::take(&mut depgraph.current_deps);
+                depgraph.get_reachable(current_deps)
+            }
+        };
+
         match self {
             SourceUnit::Decl(decl) => {
                 match decl {
-                    DeclKind::ProcDecl(proc_decl) => verify_proc(&proc_decl.borrow()),
+                    DeclKind::ProcDecl(proc_decl) => {
+                        let (direction, block) = encode_proc_verify(&proc_decl.borrow())?;
+                        Some(VerifyUnit {
+                            deps,
+                            direction,
+                            block,
+                        })
+                    }
                     DeclKind::DomainDecl(_domain_decl) => None, // TODO: check that the axioms are not contradictions
                     DeclKind::FuncDecl(_func_decl) => None,
                     _ => unreachable!(), // axioms and variable declarations are not allowed on the top level
                 }
             }
             SourceUnit::Raw(block) => Some(VerifyUnit {
+                deps,
                 direction: Direction::Down,
                 block,
             }),
@@ -424,6 +470,7 @@ impl fmt::Display for SourceUnit {
 /// A block of HeyVL statements to be verified with a certain [`Direction`].
 #[derive(Debug, Clone)]
 pub struct VerifyUnit {
+    pub deps: Dependencies,
     pub direction: Direction,
     pub block: Block,
 }
@@ -472,6 +519,7 @@ impl VerifyUnit {
     pub fn vcgen(&self, vcgen: &mut Vcgen) -> Result<QuantVcUnit, VerifyError> {
         let terminal = top_lit_in_lattice(self.direction, &TyKind::EUReal);
         Ok(QuantVcUnit {
+            deps: self.deps.clone(),
             direction: self.direction,
             expr: vcgen.vcgen_block(&self.block, terminal)?,
         })
@@ -508,7 +556,9 @@ impl fmt::Display for VerifyUnit {
 }
 
 /// Quantitative verification conditions that are to be checked.
+#[derive(Debug)]
 pub struct QuantVcUnit {
+    deps: Dependencies,
     pub direction: Direction,
     pub expr: Expr,
 }
@@ -526,7 +576,13 @@ impl QuantVcUnit {
         let _entered = span.enter();
         if !options.opt_options.strict {
             let ctx = Context::new(&Config::default());
-            let smt_ctx = SmtCtx::new(&ctx, tcx, Box::new(AxiomaticFunctionEncoder::default()));
+            let dep_config = DepConfig::SpecsOnly;
+            let smt_ctx = SmtCtx::new(
+                &ctx,
+                tcx,
+                Box::new(AxiomaticFunctionEncoder::default()),
+                dep_config,
+            );
             let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
             unfolder.visit_expr(&mut self.expr)
         } else {
@@ -587,6 +643,7 @@ impl QuantVcUnit {
 
 /// The next step is a Boolean verification condition - it represents that the
 /// quantative verification conditions are true/false depending on the direction.
+#[derive(Debug)]
 pub struct BoolVcUnit {
     quant_vc: QuantVcUnit,
     vc: Expr,
@@ -621,6 +678,11 @@ impl BoolVcUnit {
     /// Print the theorem to prove.
     pub fn print_theorem(&self, name: &SourceUnitName) {
         println!("{}: Theorem to prove:\n{}\n", name, &self.vc);
+    }
+
+    /// Get the dependencies of this verification condition.
+    pub fn get_dependencies(&self) -> &Dependencies {
+        &self.quant_vc.deps
     }
 
     /// Translate to SMT.

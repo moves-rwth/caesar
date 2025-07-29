@@ -284,7 +284,7 @@ mod test {
         resource_limits::LimitsRef,
         smt::{
             funcs::{axiomatic::AxiomaticFunctionEncoder, FunctionEncoder},
-            SmtCtx,
+            DepConfig, SmtCtx,
         },
     };
 
@@ -297,6 +297,7 @@ mod test {
                 &z3_ctx,
                 &tcx,
                 AxiomaticFunctionEncoder::default().into_boxed(),
+                DepConfig::All,
             );
             let limits_ref = LimitsRef::new(None, None);
             let mut unfolder = Unfolder::new(limits_ref, &smt_ctx);
