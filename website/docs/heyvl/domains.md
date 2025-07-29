@@ -152,6 +152,18 @@ Because axiom declarations behave like `assume` statements, they can introduce u
 
 :::
 
+### Axioms and Limited Functions
+
+When using [limited functions](../caesar/debugging.md#function-encodings-and-limited-functions), calls inside axioms have to be defined with respect to a certain *fuel* value, i.e. how many unfoldings of the function are allowed.
+
+At the moment, Caesar will *only* define the axiom with one specific fuel value, which is the maximum defined by the `--max-fuel` command-line option (default: 2).
+For example, the axiom from above would be translated to:
+```heyvl
+axiom exp_05_one forall exponent: UInt. exp_05($S($S($Z)), exponent) >= 1
+```
+where `$S($S($Z))` represents the fuel value of 2.
+This behavior has implications with respect to [triggers](./expressions.md#triggers): the quantifier will only be instantiated by e-matching for the specific fuel value of 2.
+
 ## Defining Types with Domains
 
 A `domain` declaration always creates a new uninterpreted type that can also be axiomatized.
