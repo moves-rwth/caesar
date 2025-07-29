@@ -157,8 +157,8 @@ impl TyCtx {
         }
     }
 
-    pub fn get_distributions(&self) -> HashMap<Ident, Rc<DistributionProc>> {
-        HashMap::from_iter(self.declarations.borrow().iter().flat_map(|(ident, decl)| {
+    pub fn get_distributions(&self) -> IndexMap<Ident, Rc<DistributionProc>> {
+        IndexMap::from_iter(self.declarations.borrow().iter().flat_map(|(ident, decl)| {
             if let DeclKind::ProcIntrin(intrin) = decl.deref() {
                 if let Ok(distribution) = intrin.clone().as_any_rc().downcast::<DistributionProc>()
                 {
@@ -169,13 +169,14 @@ impl TyCtx {
         }))
     }
 
-    pub fn get_function_decls(&self) -> HashMap<Ident, DeclRef<FuncDecl>> {
+    /// Get all function declarations in the context.
+    pub fn get_function_decls(&self) -> Vec<DeclRef<FuncDecl>> {
         self.declarations
             .borrow()
-            .iter()
-            .filter_map(|(ident, decl)| {
+            .values()
+            .filter_map(|decl| {
                 if let DeclKind::FuncDecl(func) = decl.deref() {
-                    Some((*ident, func.clone()))
+                    Some(func.clone())
                 } else {
                     None
                 }

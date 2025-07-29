@@ -212,7 +212,7 @@ impl<'ctx> SmtCtx<'ctx> {
     pub fn computable_functions(&self) -> Vec<Ident> {
         self.tcx
             .get_function_decls()
-            .values()
+            .iter()
             .filter(|func_decl| {
                 let decl = func_decl.borrow();
                 decl.computable || decl.body.borrow().is_some()
