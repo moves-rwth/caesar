@@ -5,7 +5,10 @@
 //! everywhere. However, the [`datatype`] representation can be enabled with the
 //! `datatype-eureal` feature.
 
-use z3::Context;
+use z3::{
+    ast::{Ast, Bool, Dynamic, Real},
+    Context,
+};
 
 use crate::{Factory, SmtBranch};
 
@@ -78,11 +81,75 @@ pub fn pair_to_datatype<'ctx>(
     factory: &Factory<'ctx, datatype::EUReal<'ctx>>,
     pair: &pair::EUReal<'ctx>,
 ) -> datatype::EUReal<'ctx> {
+    if let Some(value) = extract_datatype_to_pair(factory, pair) {
+        return value;
+    }
+
     SmtBranch::branch(
         pair.is_infinity(),
         &datatype::EUReal::infinity(factory),
         &datatype::EUReal::from_ureal(factory, pair.get_ureal()),
     )
+}
+
+/// If the given `pair` is created by a conversion from a datatype, extract the
+/// underlying datatype expression.
+///
+/// This is used to eliminate unnecessary round-trip conversions in the SMT
+/// expressions. For the most part, this is a performance optimization, but this
+/// also allows more quantifier patterns: when we translate a call to a function
+/// that returns an `EUReal`, the translation will indirectly generate such a
+/// datatype-to-pair conversion; but when we put that into a pattern, illegal
+/// `ite` expressions show up. This simplification removes them by recognizing
+/// that we had a datatype expression in the first place.
+fn extract_datatype_to_pair<'ctx>(
+    factory: &Factory<'ctx, datatype::EUReal<'ctx>>,
+    pair: &pair::EUReal<'ctx>,
+) -> Option<datatype::EUReal<'ctx>> {
+    fn safe_decl_kind(ast: &dyn Ast<'_>) -> Option<z3::DeclKind> {
+        ast.safe_decl().ok().map(|decl| decl.kind())
+    }
+
+    let ctx = &pair.get_ureal().as_real().get_ctx();
+    let is_infty = pair.is_infinity();
+    let value = pair.get_ureal();
+    if is_infty.safe_decl().is_ok() && value.as_real().safe_decl().is_ok() {
+        // whether the is_infinity expression is a conversion from a datatype
+        // which looks like `ite(is_infty(inner_expr), true, false)`
+        let is_infty_datatype = safe_decl_kind(is_infty) == Some(z3::DeclKind::ITE)
+            && safe_decl_kind(&is_infty.nth_child(0).unwrap()) == Some(z3::DeclKind::DT_IS)
+            && is_infty.nth_child(0).unwrap().decl().name() == factory.rplus_is_inf.name()
+            && is_infty.nth_child(1).unwrap() == Dynamic::from_ast(&Bool::from_bool(ctx, true))
+            && is_infty.nth_child(2).unwrap() == Dynamic::from_ast(&Bool::from_bool(ctx, false));
+        if is_infty_datatype {
+            // extract the inner datatype expression
+            let inner_datatype_expr = is_infty.nth_child(0).unwrap().nth_child(0).unwrap();
+            assert!(inner_datatype_expr.get_sort() == factory.sort);
+
+            // whether the value expression is a conversion from a datatype which
+            // looks like `ite(is_infty(inner_expr), rplus_mk_inf(),
+            // rplus_get_real(inner_expr))`
+            let is_value_datatype = safe_decl_kind(value.as_real()) == Some(z3::DeclKind::ITE)
+                && value.as_real().nth_child(0).unwrap().decl().name()
+                    == factory.rplus_is_inf.name()
+                && value.as_real().nth_child(1).unwrap()
+                    == Dynamic::from_ast(&Real::from_real(ctx, 1, 1))
+                && safe_decl_kind(&value.as_real().nth_child(2).unwrap())
+                    == Some(z3::DeclKind::DT_ACCESSOR)
+                && value.as_real().nth_child(2).unwrap().decl().name()
+                    == factory.rplus_get_real.name()
+                && value.as_real().nth_child(2).unwrap().nth_child(0).unwrap()
+                    == inner_datatype_expr;
+            // if pattern matching was successful, we can short-circuit
+            if is_value_datatype {
+                return Some(datatype::EUReal::from_dynamic(
+                    factory,
+                    &inner_datatype_expr,
+                ));
+            }
+        }
+    };
+    None
 }
 
 /// Go from the [`datatype`] representation to the [`pair`] representation.

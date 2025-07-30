@@ -30,12 +30,12 @@ use crate::{
 #[derive(Debug)]
 pub struct EURealFactory<'ctx> {
     ctx: &'ctx Context,
-    sort: Sort<'ctx>,
+    pub(super) sort: Sort<'ctx>,
     rplus_mk_inf: FuncDecl<'ctx>,
-    rplus_is_inf: FuncDecl<'ctx>,
-    rplus_mk_real: FuncDecl<'ctx>,
+    pub(super) rplus_is_inf: FuncDecl<'ctx>,
+    pub(super) rplus_mk_real: FuncDecl<'ctx>,
     rplus_is_real: FuncDecl<'ctx>,
-    rplus_get_real: FuncDecl<'ctx>,
+    pub(super) rplus_get_real: FuncDecl<'ctx>,
     late: unsync::OnceCell<EURealLateDefs<'ctx>>,
 }
 
