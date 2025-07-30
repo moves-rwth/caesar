@@ -307,7 +307,7 @@ impl SelectionBuilder {
         self.filter.slice_ticks
     }
 
-    /// Whether we want to slice tick statements.
+    /// Whether we want to slice probabilistic sampling statements.
     pub fn should_slice_sampling(&self) -> bool {
         self.filter.slice_sampling
     }
