@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use z3::{
     ast::{Ast, Bool, Dynamic},
-    Pattern, Sort,
+    DeclKind, Pattern, Sort,
 };
 use z3rro::{
     quantifiers::{QuantifierMeta, Weight},
@@ -41,12 +41,37 @@ pub trait InputsEncoder<'ctx> {
 /// as the only element. If the direction is bidirectional, it returns an
 /// empty pattern list.
 fn generate_patterns<'ctx>(
+    name: &str,
     instantiation: AxiomInstantiation,
     head: &Dynamic<'ctx>,
 ) -> Vec<Pattern<'ctx>> {
+    if contains_ite(head) {
+        tracing::warn!(
+            "Axiom {} pattern contains an `ite` expression, which is not supported. Will not emit pattern {}.",
+            name,
+            head
+        );
+        return vec![];
+    }
+
     match instantiation {
         AxiomInstantiation::Decreasing => vec![Pattern::new(head.get_ctx(), &[head])],
         AxiomInstantiation::Bidirectional => vec![],
+    }
+}
+
+fn contains_ite(ast: &Dynamic<'_>) -> bool {
+    match ast.kind() {
+        z3::AstKind::Numeral | z3::AstKind::Var => false,
+        z3::AstKind::App => {
+            let decl = ast.decl();
+            if decl.kind() == DeclKind::ITE {
+                true
+            } else {
+                ast.children().iter().any(contains_ite)
+            }
+        }
+        _ => unreachable!(),
     }
 }
 
@@ -62,7 +87,7 @@ pub fn translate_equational_axiom<'ctx>(
 ) -> Bool<'ctx> {
     let mut meta = QuantifierMeta::new(name);
     meta.weight = weight;
-    meta.set_patterns(generate_patterns(instantiation, head));
+    meta.set_patterns(generate_patterns(name, instantiation, head));
     scope.forall(&meta, &head.smt_eq(body))
 }
 
@@ -84,7 +109,7 @@ pub fn translate_return_invariant<'ctx, 'smt>(
         let mut meta = QuantifierMeta::new(name);
         meta.weight = Weight::DEFAULT;
         let app_z3 = app_translated.clone().into_dynamic(translate.ctx);
-        meta.set_patterns(generate_patterns(instantiation, &app_z3));
+        meta.set_patterns(generate_patterns(name, instantiation, &app_z3));
         scope.forall(&meta, &invariant)
     })
 }
