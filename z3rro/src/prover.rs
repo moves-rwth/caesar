@@ -2,9 +2,16 @@
 use itertools::Itertools;
 use thiserror::Error;
 
-use std::{collections::VecDeque, fmt::Display, io::Write, process::Command, time::Duration};
+use std::{
+    collections::VecDeque,
+    fmt::Display,
+    io::{Seek, SeekFrom, Write},
+    path::Path,
+    process::{Command, Output},
+    time::Duration,
+};
 
-use tempfile::{Builder, NamedTempFile};
+use tempfile::NamedTempFile;
 
 use z3::{
     ast::{forall_const, Ast, Bool, Dynamic},
@@ -70,142 +77,251 @@ impl SolverResult {
 }
 
 /// Execute an SMT solver (other than z3)
-fn execute_solver(
+fn run_solver(
     prover: &mut Prover<'_>,
     assumptions: &[Bool<'_>],
 ) -> Result<SolverResult, ProverCommandError> {
+    let mut smt_file: NamedTempFile = NamedTempFile::new().unwrap();
+    smt_file
+        .write_all(generate_smtlib(prover, assumptions).as_bytes())
+        .unwrap();
+
+    let mut output = call_solver(
+        smt_file.path(),
+        prover.get_smt_solver(),
+        prover.timeout,
+        None,
+    )
+    .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
+
+    if !output.status.success() {
+        return Err(ProverCommandError::ProcessError(
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let first_line = stdout.lines().next().unwrap_or("").trim().to_lowercase();
+
+    let sat_result = match first_line.as_str() {
+        "sat" => {
+            smt_file
+                .as_file_mut()
+                .seek(SeekFrom::End(0))
+                .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
+            smt_file
+                .write_all(b"(get-model)\n")
+                .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
+
+            SatResult::Sat
+        }
+        "unsat" => SatResult::Unsat,
+        "unknown" => {
+            if prover.get_smt_solver() != SolverType::YICES {
+                smt_file
+                    .as_file_mut()
+                    .seek(SeekFrom::End(0))
+                    .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
+                smt_file
+                    .write_all(b"(get-info :reason-unknown)\n")
+                    .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
+            }
+            SatResult::Unknown
+        }
+        _ => {
+            return Err(ProverCommandError::UnexpectedResultError(
+                stdout.into_owned(),
+            ))
+        }
+    };
+
+    if sat_result == SatResult::Sat || sat_result == SatResult::Unknown {
+        output = call_solver(
+            smt_file.path(),
+            prover.get_smt_solver(),
+            prover.timeout,
+            Some(sat_result),
+        )
+        .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut lines_buffer: VecDeque<&str> = stdout.lines().collect();
+    lines_buffer
+        .pop_front()
+        .ok_or(ProverCommandError::ParseError)?;
+    match sat_result {
+        SatResult::Unsat => Ok(SolverResult::Unsat),
+        SatResult::Unknown => Ok(SolverResult::Unknown(Some(ReasonUnknown::Other(
+            lines_buffer.iter().join("\n"),
+        )))),
+        SatResult::Sat => {
+            let cex = lines_buffer.iter().join("");
+            Ok(SolverResult::Sat(Some(cex)))
+        }
+    }
+}
+
+fn generate_smtlib(prover: &mut Prover<'_>, assumptions: &[Bool<'_>]) -> String {
     let mut smtlib = prover.get_smtlib();
+
     if assumptions.is_empty() {
         smtlib.add_check_sat();
     } else {
         smtlib.add_check_sat_assuming(assumptions.iter().map(|a| a.to_string()).collect());
     };
+
     let smtlib = smtlib.into_string();
 
-    let output = match &prover.smt_solver {
+    transform_input_lines(&smtlib, prover.get_smt_solver(), prover.timeout)
+}
+
+fn call_solver(
+    file_path: &Path,
+    solver: SolverType,
+    timeout: Option<Duration>,
+    sat_result: Option<SatResult>,
+) -> Result<Output, std::io::Error> {
+    let (solver, args) = match solver {
         SolverType::InternalZ3 => {
-            unreachable!("The function 'execute_solver' should never be called for z3");
+            unreachable!("The function 'call_solver' should never be called for z3");
         }
         SolverType::ExternalZ3 => {
-            let mut smt_file = NamedTempFile::new().unwrap();
-            smt_file.write_all(&smtlib.as_bytes()).unwrap();
+            let mut args: Vec<String> = match sat_result {
+                Some(SatResult::Unsat) => unreachable!(
+                    "The function 'call_solver' should not be called again after an 'unsat' result"
+                ),
+                Some(SatResult::Sat) => vec!["-model".to_string()],
+                Some(SatResult::Unknown) | None => vec![],
+            };
 
-            let file_path = smt_file.path();
+            if let Some(t) = timeout {
+                args.push(format!("-t:{}", t.as_millis()));
+            }
 
-            Command::new("z3").arg(file_path).output()
+            ("z3", args)
         }
         SolverType::SWINE => {
-            let mut smt_file = NamedTempFile::new().unwrap();
-            smt_file
-                .write_all(transform_input_lines(&smtlib, SolverType::SWINE).as_bytes())
-                .unwrap();
+            let args: Vec<String> = match sat_result {
+                Some(SatResult::Unsat) => unreachable!(
+                    "The function 'call_solver' should not be called again after an 'unsat' result"
+                ),
+                _ => vec!["--no-version".to_string()],
+            };
 
-            let file_path = smt_file.path();
-
-            Command::new("swine")
-                .arg("--no-version")
-                .arg(file_path)
-                .output()
+            ("swine", args)
         }
         SolverType::CVC5 => {
-            let mut smt_file = Builder::new().suffix(".smt2").tempfile().unwrap();
-            smt_file
-                .write_all(transform_input_lines(&smtlib, SolverType::CVC5).as_bytes())
-                .unwrap();
-            let file_path = smt_file.path();
-            Command::new("cvc5")
-                .arg("--produce-models")
-                .arg(file_path)
-                .output()
+            let mut args: Vec<String> = match sat_result {
+                Some(SatResult::Unsat) => unreachable!(
+                    "The function 'call_solver' should not be called again after an 'unsat' result"
+                ),
+                Some(SatResult::Sat) => vec!["--produce-models".to_string()],
+                _ => vec![],
+            };
+
+            if let Some(t) = timeout {
+                args.push(format!("--tlimit={}", t.as_millis()));
+            }
+
+            ("cvc5", args)
         }
         SolverType::YICES => {
-            let mut smt_file = Builder::new().suffix(".smt2").tempfile().unwrap();
-            smt_file
-                .write_all(transform_input_lines(&smtlib, SolverType::YICES).as_bytes())
-                .unwrap();
-            let file_path = smt_file.path();
-            Command::new("yices-smt2")
-                .arg(file_path)
-                .arg("--smt2-model-format")
-                .output()
+            let mut args: Vec<String> = match sat_result {
+                Some(SatResult::Unsat) => unreachable!(
+                    "The function 'call_solver' should not be called again after an 'unsat' result"
+                ),
+                Some(SatResult::Sat) => vec!["--smt2-model-format".to_string()],
+                _ => vec![],
+            };
+
+            if let Some(t) = timeout {
+                let secs = t.as_secs();
+
+                if secs > 0 {
+                    args.push(format!("--timeout={}", secs));
+                } else {
+                    panic!("Timeout must be at least one second. Yices does not support timeouts shorter than 1 second.")
+                }
+            }
+
+            ("yices-smt2", args)
         }
     };
 
-    match output {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let mut lines_buffer: VecDeque<&str> = stdout.lines().collect();
-            let first_line = lines_buffer
-                .pop_front()
-                .ok_or(ProverCommandError::ParseError)?;
-            if first_line.trim().to_lowercase() == "unsat" {
-                Ok(SolverResult::Unsat)
-            } else if first_line.trim().to_lowercase() == "sat" {
-                let cex = lines_buffer.iter().join("");
-                Ok(SolverResult::Sat(Some(cex)))
-            } else if first_line.trim().to_lowercase() == "unknown" {
-                Ok(SolverResult::Unknown(Some(ReasonUnknown::Other(
-                    lines_buffer.iter().join("\n"),
-                ))))
-            } else {
-                lines_buffer.push_front(first_line);
-                Err(ProverCommandError::UnexpectedResultError(
-                    lines_buffer.iter().join("\n"),
-                ))
-            }
-        }
-        Err(e) => Err(ProverCommandError::ProcessError(e.to_string())),
-    }
+    Command::new(solver).args(&args).arg(file_path).output()
 }
 
 /// To execute the SMT solver correctly, specific modifications to the input are required:
 /// 1) For SwInE, remove lines that contain a `forall` quantifier or the declaration of the exponential function (`exp``).
 /// 2) For other solvers, add a line to set logic, and remove incorrect assertions such as `(assert add)`.
 /// 3) For solvers that do not support at-most, convert those assertions into equivalent logic.
-fn transform_input_lines(input: &str, solver: SolverType) -> String {
+fn transform_input_lines(input: &str, solver: SolverType, timeout: Option<Duration>) -> String {
+    let timeout_option = if let Some(t) = timeout {
+        match solver {
+            SolverType::InternalZ3 => {
+                unreachable!(
+                    "The function 'transform_input_lines' should never be called for internal z3"
+                );
+            }
+            SolverType::SWINE => format!("(set-option :timeout {})\n", t.as_millis()),
+            _ => "".to_string(),
+        }
+    } else {
+        "".to_string()
+    };
+
     let mut output = match solver {
         SolverType::CVC5 | SolverType::YICES => {
             let mut output = String::new();
             let logic = if input.contains("*") || input.contains("/") {
-                "(set-logic QF_NIRA)"
+                "(set-logic QF_NIRA)\n"
             } else {
-                "(set-logic QF_LIRA)"
+                "(set-logic QF_LIRA)\n"
             };
             output.push_str(logic);
             output
         }
         _ => String::new(),
     };
-    let mut tmp_buffer: VecDeque<char> = VecDeque::new();
-    let mut input_buffer: VecDeque<char> = input.chars().collect();
-    let mut cnt = 0;
 
-    let condition = |tmp: &str| match solver {
-        SolverType::SWINE => !tmp.contains("declare-fun exp") && !tmp.contains("forall"),
-        _ => !tmp.contains("(assert and)"),
-    };
+    output.push_str(&timeout_option);
 
-    // Collect characters until all opened parentheses are closed, and
-    // keep this block if it does not contain 'declare-fun exp' or 'forall'.
-    while let Some(c) = input_buffer.pop_front() {
-        tmp_buffer.push_back(c);
-        match c {
-            '(' => {
-                cnt += 1;
-            }
-            ')' => {
-                cnt -= 1;
-                if cnt == 0 {
-                    let tmp: String = tmp_buffer.iter().collect();
-                    if condition(&tmp) {
-                        output.push_str(&tmp);
-                    }
-                    tmp_buffer.clear();
+    if solver == SolverType::ExternalZ3 {
+        output.push_str(input);
+    } else {
+        let mut tmp_buffer: VecDeque<char> = VecDeque::new();
+        let mut input_buffer: VecDeque<char> = input.chars().collect();
+        let mut cnt = 0;
+
+        let condition = |tmp: &str| match solver {
+            SolverType::SWINE => !tmp.contains("declare-fun exp") && !tmp.contains("forall"),
+            _ => !tmp.contains("(assert and)"),
+        };
+
+        // Collect characters until all opened parentheses are closed, and
+        // keep this block if it does not contain 'declare-fun exp' or 'forall'.
+        while let Some(c) = input_buffer.pop_front() {
+            tmp_buffer.push_back(c);
+            match c {
+                '(' => {
+                    cnt += 1;
                 }
+                ')' => {
+                    cnt -= 1;
+                    if cnt == 0 {
+                        let tmp: String = tmp_buffer.iter().collect();
+                        if condition(&tmp) {
+                            output.push_str(&tmp);
+                        }
+                        tmp_buffer.clear();
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         }
     }
+
     output
 }
 
@@ -397,7 +513,7 @@ impl<'ctx> Prover<'ctx> {
                         cached_result.last_result.clone()
                     }
                     _ => {
-                        let solver_result = execute_solver(self, assumptions)?;
+                        let solver_result = run_solver(self, assumptions)?;
 
                         if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
                             let solver = self.get_solver();
@@ -450,7 +566,7 @@ impl<'ctx> Prover<'ctx> {
                 sat_result
             }
             _ => {
-                let solver_result = execute_solver(self, &[])?;
+                let solver_result = run_solver(self, &[])?;
 
                 if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
                     let solver = self.get_solver();
