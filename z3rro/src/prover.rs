@@ -60,13 +60,13 @@ pub enum ProveResult {
 /// 1) transport the result from SwInE, or
 /// 2) store SAT result along with a reason for Unknown.
 #[derive(Debug, Clone)]
-pub enum SolverResult {
+pub enum SolverResult<'ctx> {
     Unsat,
-    Sat(Option<String>),
+    Sat(Option<Solver<'ctx>>),
     Unknown(Option<ReasonUnknown>),
 }
 
-impl SolverResult {
+impl SolverResult<'_> {
     fn to_sat_result(&self) -> SatResult {
         match self {
             SolverResult::Unsat => SatResult::Unsat,
@@ -74,106 +74,6 @@ impl SolverResult {
             SolverResult::Unknown(_) => SatResult::Unknown,
         }
     }
-}
-
-/// Execute an SMT solver (other than z3)
-fn run_solver(
-    prover: &mut Prover<'_>,
-    assumptions: &[Bool<'_>],
-) -> Result<SolverResult, ProverCommandError> {
-    let mut smt_file: NamedTempFile = NamedTempFile::new().unwrap();
-    smt_file
-        .write_all(generate_smtlib(prover, assumptions).as_bytes())
-        .unwrap();
-
-    let mut output = call_solver(
-        smt_file.path(),
-        prover.get_smt_solver(),
-        prover.timeout,
-        None,
-    )
-    .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
-
-    if !output.status.success() {
-        return Err(ProverCommandError::ProcessError(
-            String::from_utf8_lossy(&output.stderr).to_string(),
-        ));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let first_line = stdout.lines().next().unwrap_or("").trim().to_lowercase();
-
-    let sat_result = match first_line.as_str() {
-        "sat" => {
-            smt_file
-                .as_file_mut()
-                .seek(SeekFrom::End(0))
-                .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
-            smt_file
-                .write_all(b"(get-model)\n")
-                .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
-
-            SatResult::Sat
-        }
-        "unsat" => SatResult::Unsat,
-        "unknown" => {
-            if prover.get_smt_solver() != SolverType::YICES {
-                smt_file
-                    .as_file_mut()
-                    .seek(SeekFrom::End(0))
-                    .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
-                smt_file
-                    .write_all(b"(get-info :reason-unknown)\n")
-                    .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
-            }
-            SatResult::Unknown
-        }
-        _ => {
-            return Err(ProverCommandError::UnexpectedResultError(
-                stdout.into_owned(),
-            ))
-        }
-    };
-
-    if sat_result == SatResult::Sat || sat_result == SatResult::Unknown {
-        output = call_solver(
-            smt_file.path(),
-            prover.get_smt_solver(),
-            prover.timeout,
-            Some(sat_result),
-        )
-        .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut lines_buffer: VecDeque<&str> = stdout.lines().collect();
-    lines_buffer
-        .pop_front()
-        .ok_or(ProverCommandError::ParseError)?;
-    match sat_result {
-        SatResult::Unsat => Ok(SolverResult::Unsat),
-        SatResult::Unknown => Ok(SolverResult::Unknown(Some(ReasonUnknown::Other(
-            lines_buffer.iter().join("\n"),
-        )))),
-        SatResult::Sat => {
-            let cex = lines_buffer.iter().join("");
-            Ok(SolverResult::Sat(Some(cex)))
-        }
-    }
-}
-
-fn generate_smtlib(prover: &mut Prover<'_>, assumptions: &[Bool<'_>]) -> String {
-    let mut smtlib = prover.get_smtlib();
-
-    if assumptions.is_empty() {
-        smtlib.add_check_sat();
-    } else {
-        smtlib.add_check_sat_assuming(assumptions.iter().map(|a| a.to_string()).collect());
-    };
-
-    let smtlib = smtlib.into_string();
-
-    transform_input_lines(&smtlib, prover.get_smt_solver(), prover.timeout)
 }
 
 fn call_solver(
@@ -354,7 +254,7 @@ enum StackSolver<'ctx> {
 }
 
 #[derive(Debug)]
-struct LastSatSolverResult {
+struct LastSatSolverResult<'ctx> {
     /// Whether the current model is consistent with the assertions. If the SMT
     /// solver returned [`SatResult::Unknown`], it is
     /// [`ModelConsistency::Unknown`].
@@ -363,7 +263,7 @@ struct LastSatSolverResult {
     /// It is reset any time the assertions on the solver are modified.
     /// Sometimes Z3 caches on its own, but it is not reliable. Therefore, we do
     /// it here as well to be sure.
-    last_result: SolverResult,
+    last_result: SolverResult<'ctx>,
 }
 
 /// A prover wraps a SAT solver, but it's used to prove validity of formulas.
@@ -390,7 +290,7 @@ pub struct Prover<'ctx> {
     /// SMT solver type
     smt_solver: SolverType,
     /// Cached information about the last SAT/proof check call.
-    last_result: Option<LastSatSolverResult>,
+    last_result: Option<LastSatSolverResult<'ctx>>,
 }
 
 impl<'ctx> Prover<'ctx> {
@@ -510,23 +410,17 @@ impl<'ctx> Prover<'ctx> {
             _ => {
                 let res = match &self.last_result {
                     Some(cached_result) if assumptions.is_empty() => {
-                        cached_result.last_result.clone()
+                        Ok(cached_result.last_result.clone())
                     }
                     _ => {
-                        let solver_result = run_solver(self, assumptions)?;
-
-                        if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
-                            let solver = self.get_solver();
-                            solver.from_string(cex);
-                            solver.check();
-                        };
-
-                        self.cache_result(solver_result.clone());
-                        solver_result
+                        let solver_result = self.run_solver(assumptions)?;
+                        Ok(solver_result)
                     }
                 };
 
-                match res {
+                let sat_result = res?;
+
+                match sat_result {
                     SolverResult::Unsat => Ok(ProveResult::Proof),
                     SolverResult::Unknown(r) => {
                         let reason = r.unwrap_or(ReasonUnknown::Other("".to_string()));
@@ -566,15 +460,7 @@ impl<'ctx> Prover<'ctx> {
                 sat_result
             }
             _ => {
-                let solver_result = run_solver(self, &[])?;
-
-                if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
-                    let solver = self.get_solver();
-                    solver.from_string(cex);
-                    solver.check();
-                };
-                self.cache_result(solver_result.clone());
-
+                let solver_result = self.run_solver(&[])?;
                 solver_result.to_sat_result()
             }
         };
@@ -583,7 +469,7 @@ impl<'ctx> Prover<'ctx> {
     }
 
     /// Save the result of the last SAT/proof check.
-    fn cache_result(&mut self, solver_result: SolverResult) {
+    fn cache_result(&mut self, solver_result: SolverResult<'ctx>) {
         let model_consistency = match solver_result {
             SolverResult::Sat(_) => Some(ModelConsistency::Consistent),
             SolverResult::Unknown(_) => Some(ModelConsistency::Unknown),
@@ -603,7 +489,22 @@ impl<'ctx> Prover<'ctx> {
     /// [`ModelConsistency::Inconsistent`].
     pub fn get_model(&self) -> Option<InstrumentedModel<'ctx>> {
         let consistency = self.last_result.as_ref()?.model_consistency?;
-        let model = self.get_solver().get_model()?;
+        let model = match self.smt_solver {
+            SolverType::InternalZ3 => self.get_solver().get_model()?,
+            _ => {
+                let solver = if let Some(cached_result) = &self.last_result {
+                    if let SolverResult::Sat(Some(solver)) = &cached_result.last_result {
+                        solver
+                    } else {
+                        &Solver::new(self.ctx)
+                    }
+                } else {
+                    &Solver::new(self.ctx)
+                };
+
+                solver.get_model()?
+            }
+        };
         Some(InstrumentedModel::new(consistency, model))
     }
 
@@ -614,9 +515,23 @@ impl<'ctx> Prover<'ctx> {
 
     /// See [`Solver::get_reason_unknown`].
     pub fn get_reason_unknown(&self) -> Option<ReasonUnknown> {
-        self.get_solver()
-            .get_reason_unknown()
-            .map(|reason| reason.parse().unwrap())
+        match self.smt_solver {
+            SolverType::InternalZ3 => self
+                .get_solver()
+                .get_reason_unknown()
+                .map(|reason| reason.parse().unwrap()),
+            _ => {
+                if let Some(cached_result) = &self.last_result {
+                    if let SolverResult::Unknown(reason_unknown) = &cached_result.last_result {
+                        reason_unknown.clone()
+                    } else {
+                        Some(ReasonUnknown::Other("".to_string()))
+                    }
+                } else {
+                    Some(ReasonUnknown::Other("".to_string()))
+                }
+            }
+        }
     }
 
     /// See [`Solver::push`].
@@ -712,6 +627,104 @@ impl<'ctx> Prover<'ctx> {
 
     pub fn get_smt_solver(&self) -> SolverType {
         self.smt_solver.clone()
+    }
+
+    /// Execute an SMT solver (other than z3)
+    fn run_solver(&mut self, assumptions: &[Bool<'_>]) -> Result<SolverResult, ProverCommandError> {
+        let mut smt_file: NamedTempFile = NamedTempFile::new().unwrap();
+        smt_file
+            .write_all(self.generate_smtlib(assumptions).as_bytes())
+            .unwrap();
+
+        let mut output = call_solver(smt_file.path(), self.get_smt_solver(), self.timeout, None)
+            .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
+
+        if !output.status.success() {
+            return Err(ProverCommandError::ProcessError(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let first_line = stdout.lines().next().unwrap_or("").trim().to_lowercase();
+
+        let sat_result = match first_line.as_str() {
+            "sat" => {
+                smt_file
+                    .as_file_mut()
+                    .seek(SeekFrom::End(0))
+                    .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
+                smt_file
+                    .write_all(b"(get-model)\n")
+                    .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
+
+                SatResult::Sat
+            }
+            "unsat" => SatResult::Unsat,
+            "unknown" => {
+                if self.smt_solver != SolverType::YICES {
+                    smt_file
+                        .as_file_mut()
+                        .seek(SeekFrom::End(0))
+                        .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
+                    smt_file
+                        .write_all(b"(get-info :reason-unknown)\n")
+                        .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
+                }
+                SatResult::Unknown
+            }
+            _ => {
+                return Err(ProverCommandError::UnexpectedResultError(
+                    stdout.into_owned(),
+                ))
+            }
+        };
+
+        if sat_result == SatResult::Sat || sat_result == SatResult::Unknown {
+            output = call_solver(
+                smt_file.path(),
+                self.get_smt_solver(),
+                self.timeout,
+                Some(sat_result),
+            )
+            .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut lines_buffer: VecDeque<&str> = stdout.lines().collect();
+        lines_buffer
+            .pop_front()
+            .ok_or(ProverCommandError::ParseError)?;
+        let solver_result = match sat_result {
+            SatResult::Unsat => SolverResult::Unsat,
+            SatResult::Unknown => {
+                SolverResult::Unknown(Some(ReasonUnknown::Other(lines_buffer.iter().join("\n"))))
+            }
+            SatResult::Sat => {
+                let cex = lines_buffer.iter().join("");
+                let solver = Solver::new(self.ctx);
+                solver.from_string(cex);
+                solver.check();
+                SolverResult::Sat(Some(solver))
+            }
+        };
+
+        self.cache_result(solver_result.clone());
+        Ok(solver_result)
+    }
+
+    fn generate_smtlib(&self, assumptions: &[Bool<'_>]) -> String {
+        let mut smtlib = self.get_smtlib();
+
+        if assumptions.is_empty() {
+            smtlib.add_check_sat();
+        } else {
+            smtlib.add_check_sat_assuming(assumptions.iter().map(|a| a.to_string()).collect());
+        };
+
+        let smtlib = smtlib.into_string();
+
+        transform_input_lines(&smtlib, self.get_smt_solver(), self.timeout)
     }
 }
 
