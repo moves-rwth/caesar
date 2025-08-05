@@ -143,23 +143,29 @@ pub struct ProcContext {
 }
 /// Walks the AST and transforms encoding annotations into their desugared form.
 /// Correct and sound usage of the encoding annotations are also checked during this process.
-pub struct EncodingVisitor<'tcx, 'sunit> {
+pub struct EncodingVisitor<'tcx> {
     tcx: &'tcx mut TyCtx,
-    source_units_buf: &'sunit mut Vec<Item<SourceUnit>>,
+    new_source_units: Vec<Item<SourceUnit>>,
     terminator_annotation: Option<Ident>, // The name of the terminator annotation if there is one
     nesting_level: usize,
     proc_context: Option<ProcContext>, // The relevant context of the current procedure being visited for soundness
 }
 
-impl<'tcx, 'sunit> EncodingVisitor<'tcx, 'sunit> {
-    pub fn new(tcx: &'tcx mut TyCtx, source_units_buf: &'sunit mut Vec<Item<SourceUnit>>) -> Self {
+impl<'tcx> EncodingVisitor<'tcx> {
+    pub fn new(tcx: &'tcx mut TyCtx) -> Self {
         EncodingVisitor {
             tcx,
-            source_units_buf,
+            new_source_units: vec![],
             terminator_annotation: None,
             nesting_level: 0,
             proc_context: None,
         }
+    }
+
+    /// Finish this visitor, returning the list of new source units that were
+    /// generated for side-conditions.
+    pub fn finish(self) -> Vec<Item<SourceUnit>> {
+        self.new_source_units
     }
 }
 
@@ -181,7 +187,7 @@ impl EncodingVisitorError {
     }
 }
 
-impl<'tcx, 'sunit> VisitorMut for EncodingVisitor<'tcx, 'sunit> {
+impl<'tcx> VisitorMut for EncodingVisitor<'tcx> {
     type Err = EncodingVisitorError;
 
     fn visit_proc(&mut self, proc_ref: &mut DeclRef<ProcDecl>) -> Result<(), Self::Err> {
@@ -318,7 +324,7 @@ impl<'tcx, 'sunit> VisitorMut for EncodingVisitor<'tcx, 'sunit> {
                             })
                             .collect();
 
-                        self.source_units_buf.extend(items)
+                        self.new_source_units.extend(items)
                     }
 
                     // Check if the annotation is a terminator annotation and set the flag

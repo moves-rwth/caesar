@@ -179,7 +179,7 @@ impl Display for PrettyRational<'_> {
         }
         let abs = self.0.abs();
         let (div, mut rem) = abs.numer().div_rem(abs.denom());
-        write!(f, "{}", div)?;
+        write!(f, "{div}")?;
 
         let mut frac = String::new();
         let mut map = HashMap::new();
@@ -195,7 +195,7 @@ impl Display for PrettyRational<'_> {
             }
             map.insert(rem.clone(), frac.len());
             let (div, new_rem) = (rem * ten).div_rem(abs.denom());
-            write!(&mut frac, "{}", div)?;
+            write!(&mut frac, "{div}")?;
             rem = new_rem;
         }
 
@@ -205,7 +205,7 @@ impl Display for PrettyRational<'_> {
 
         if rem.is_zero() || approx {
             // print a finite rational
-            write!(f, ".{}", frac)?;
+            write!(f, ".{frac}")?;
             if approx {
                 write!(f, "...")?;
             }
@@ -214,7 +214,7 @@ impl Display for PrettyRational<'_> {
             write!(f, ".{}", &frac[..map[&rem]])?;
             for ch in frac[map[&rem]..].chars() {
                 // combine with COMBINING OVERLINE unicode
-                write!(f, "{}\u{0305}", ch)?;
+                write!(f, "{ch}\u{0305}")?;
             }
         }
 
@@ -245,7 +245,7 @@ mod test {
             ReasonUnknown::Other("x".to_owned()),
         ];
         for value in &values {
-            let parsed_fmt = format!("{}", value).parse::<ReasonUnknown>().unwrap();
+            let parsed_fmt = format!("{value}").parse::<ReasonUnknown>().unwrap();
             assert_eq!(value, &parsed_fmt);
         }
     }

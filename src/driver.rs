@@ -15,6 +15,7 @@ use crate::{
         Diagnostic, Direction, Expr, ExprBuilder, Label, SourceFilePath, Span, StoredFile, TyKind,
         UnOpKind, VarKind,
     },
+    depgraph::{DepGraph, Dependencies},
     front::{
         parser::{self, ParseError},
         resolve::Resolve,
@@ -28,9 +29,10 @@ use crate::{
     pretty::{Doc, SimplePretty},
     procs::{
         monotonicity::MonotonicityVisitor,
-        proc_verify::{to_direction_lower_bounds, verify_proc},
+        proc_verify::{encode_proc_verify, to_direction_lower_bounds},
         SpecCall,
     },
+    proof_rules::EncodingVisitor,
     resource_limits::{LimitError, LimitsRef},
     servers::Server,
     slicing::{
@@ -40,11 +42,12 @@ use crate::{
         transform::{SliceStmts, StmtSliceVisitor},
     },
     smt::{
+        funcs::{axiomatic::AxiomaticFunctionEncoder, fuel::literals::LiteralExprCollector},
         pretty_model::{
             pretty_model, pretty_slice, pretty_unaccessed, pretty_var_value, pretty_vc_value,
         },
         translate_exprs::TranslateExprs,
-        SmtCtx,
+        DepConfig, SmtCtx,
     },
     tyctx::TyCtx,
     vc::{
@@ -384,20 +387,64 @@ impl SourceUnit {
         }
     }
 
+    /// Apply encodings given by annotations. This might generate new source
+    /// units for side conditions.
+    pub fn apply_encodings(
+        &mut self,
+        tcx: &mut TyCtx,
+    ) -> Result<Vec<Item<SourceUnit>>, VerifyError> {
+        let mut encoding_visitor = EncodingVisitor::new(tcx);
+        match self {
+            SourceUnit::Decl(decl) => encoding_visitor.visit_decl(decl),
+            SourceUnit::Raw(block) => encoding_visitor.visit_block(block),
+        }
+        .map_err(|ann_err| ann_err.diagnostic())?;
+        Ok(encoding_visitor.finish())
+    }
+
+    /// If this is a declaration, add the dependencies to the [DepGraph].
+    pub fn populate_depgraph(&mut self, depgraph: &mut DepGraph) -> Result<(), VerifyError> {
+        assert!(depgraph.current_deps.is_empty());
+        match self {
+            SourceUnit::Decl(decl) => depgraph
+                .visit_decl(decl)
+                .map_err(|e| VerifyError::Diagnostic(e.diagnostic())),
+            SourceUnit::Raw(_block) => Ok(()),
+        }
+    }
+
     /// Convert this source unit into a [`VerifyUnit`].
     /// Some declarations, such as domains or functions, do not generate any verify units.
     /// In these cases, `None` is returned.
-    pub fn into_verify_unit(self) -> Option<VerifyUnit> {
+    pub fn into_verify_unit(mut self, depgraph: &mut DepGraph) -> Option<VerifyUnit> {
+        let deps = match &mut self {
+            SourceUnit::Decl(decl) => depgraph.get_reachable([decl.name()]),
+            SourceUnit::Raw(block) => {
+                assert!(depgraph.current_deps.is_empty());
+                depgraph.visit_block(block).unwrap();
+                let current_deps = std::mem::take(&mut depgraph.current_deps);
+                depgraph.get_reachable(current_deps)
+            }
+        };
+
         match self {
             SourceUnit::Decl(decl) => {
                 match decl {
-                    DeclKind::ProcDecl(proc_decl) => verify_proc(&proc_decl.borrow()),
+                    DeclKind::ProcDecl(proc_decl) => {
+                        let (direction, block) = encode_proc_verify(&proc_decl.borrow())?;
+                        Some(VerifyUnit {
+                            deps,
+                            direction,
+                            block,
+                        })
+                    }
                     DeclKind::DomainDecl(_domain_decl) => None, // TODO: check that the axioms are not contradictions
                     DeclKind::FuncDecl(_func_decl) => None,
                     _ => unreachable!(), // axioms and variable declarations are not allowed on the top level
                 }
             }
             SourceUnit::Raw(block) => Some(VerifyUnit {
+                deps,
                 direction: Direction::Down,
                 block,
             }),
@@ -423,13 +470,14 @@ impl fmt::Display for SourceUnit {
 /// A block of HeyVL statements to be verified with a certain [`Direction`].
 #[derive(Debug, Clone)]
 pub struct VerifyUnit {
+    pub deps: Dependencies,
     pub direction: Direction,
     pub block: Block,
 }
 
 impl VerifyUnit {
     /// Desugar assignments with procedure calls.
-    #[instrument(skip(self, tcx))]
+    #[instrument(skip_all)]
     pub fn desugar_spec_calls(&mut self, tcx: &mut TyCtx, name: String) -> Result<(), VerifyError> {
         // Pass the context direction to the SpecCall so that it can check direction compatibility with called procedures
         let mut spec_call = SpecCall::new(tcx, self.direction, name);
@@ -471,6 +519,7 @@ impl VerifyUnit {
     pub fn vcgen(&self, vcgen: &mut Vcgen) -> Result<QuantVcUnit, VerifyError> {
         let terminal = top_lit_in_lattice(self.direction, &TyKind::EUReal);
         Ok(QuantVcUnit {
+            deps: self.deps.clone(),
             direction: self.direction,
             expr: vcgen.vcgen_block(&self.block, terminal)?,
         })
@@ -507,7 +556,9 @@ impl fmt::Display for VerifyUnit {
 }
 
 /// Quantitative verification conditions that are to be checked.
+#[derive(Debug)]
 pub struct QuantVcUnit {
+    deps: Dependencies,
     pub direction: Direction,
     pub expr: Expr,
 }
@@ -525,7 +576,13 @@ impl QuantVcUnit {
         let _entered = span.enter();
         if !options.opt_options.strict {
             let ctx = Context::new(&Config::default());
-            let smt_ctx = SmtCtx::new(&ctx, tcx);
+            let dep_config = DepConfig::SpecsOnly;
+            let smt_ctx = SmtCtx::new(
+                &ctx,
+                tcx,
+                Box::new(AxiomaticFunctionEncoder::default()),
+                dep_config,
+            );
             let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
             unfolder.visit_expr(&mut self.expr)
         } else {
@@ -586,6 +643,7 @@ impl QuantVcUnit {
 
 /// The next step is a Boolean verification condition - it represents that the
 /// quantative verification conditions are true/false depending on the direction.
+#[derive(Debug)]
 pub struct BoolVcUnit {
     quant_vc: QuantVcUnit,
     vc: Expr,
@@ -622,16 +680,34 @@ impl BoolVcUnit {
         println!("{}: Theorem to prove:\n{}\n", name, &self.vc);
     }
 
+    /// Get the dependencies of this verification condition.
+    pub fn get_dependencies(&self) -> &Dependencies {
+        &self.quant_vc.deps
+    }
+
     /// Translate to SMT.
     pub fn into_smt_vc<'smt, 'ctx>(
-        self,
+        mut self,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> SmtVcUnit<'ctx> {
         let span = info_span!("translation to Z3");
         let _entered = span.enter();
+
+        if translate.ctx.lit_wrap {
+            let literal_exprs =
+                LiteralExprCollector::new(translate.ctx).collect_literals(&mut self.vc);
+            translate.set_literal_exprs(literal_exprs);
+        }
+
+        let bool_vc = translate.t_bool(&self.vc);
+
+        if translate.ctx.lit_wrap {
+            translate.set_literal_exprs(Default::default());
+        }
+
         SmtVcUnit {
             quant_vc: self.quant_vc,
-            vc: translate.t_bool(&self.vc),
+            vc: bool_vc,
         }
     }
 }
@@ -665,7 +741,7 @@ impl<'ctx> SmtVcUnit<'ctx> {
 
         let prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc);
 
-        if options.debug_options.probe {
+        if options.debug_options.z3_probe {
             let goal = Goal::new(ctx, false, false, false);
             for assertion in prover.get_assertions() {
                 goal.assert(&assertion);
@@ -752,9 +828,9 @@ impl<'ctx> SmtVcUnit<'ctx> {
             }
         }
 
-        if options.debug_options.print_z3_stats {
+        if options.debug_options.z3_stats {
             let stats = slice_solver.get_statistics();
-            eprintln!("Z3 statistics for {}: {:?}", name, stats);
+            eprintln!("Z3 statistics for {name}: {stats:?}");
         }
 
         if let Some(smtlib) = &smtlib {
@@ -776,15 +852,6 @@ impl<'ctx> SmtVcUnit<'ctx> {
     }
 }
 
-pub fn mk_z3_ctx(options: &VerifyCommand) -> Context {
-    let mut config = Config::default();
-    if options.debug_options.z3_trace {
-        config.set_bool_param_value("trace", true);
-        config.set_bool_param_value("proof", true);
-    }
-    Context::new(&config)
-}
-
 fn mk_valid_query_prover<'smt, 'ctx>(
     limits_ref: &LimitsRef,
     ctx: &'ctx Context,
@@ -797,6 +864,8 @@ fn mk_valid_query_prover<'smt, 'ctx>(
         prover.set_timeout(remaining);
     }
 
+    // add the definition of all used Lit marker functions
+    smt_translate.ctx.add_lit_axioms_to_prover(&mut prover);
     // add assumptions (from axioms and locals) to the prover
     smt_translate
         .ctx
@@ -840,7 +909,7 @@ fn write_smtlib(
         }
         let smtlib = smtlib.into_string();
         if options.print_smt {
-            println!("\n; --- Solver SMT-LIB ---\n{}\n", smtlib);
+            println!("\n; --- Solver SMT-LIB ---\n{smtlib}\n");
         }
         if let Some(smt_dir) = &options.smt_dir {
             let file_path = smt_dir.join(name.to_file_name("smt2"));
@@ -848,7 +917,7 @@ fn write_smtlib(
             let mut file = File::create(&file_path)?;
             let mut comment_writer = PrefixWriter::new("; ".as_bytes(), &mut file);
             write_detailed_command_info(&mut comment_writer)?;
-            writeln!(comment_writer, "Source unit: {}", name)?;
+            writeln!(comment_writer, "Source unit: {name}")?;
             if let Some(prove_result) = prove_result {
                 writeln!(comment_writer, "Prove result: {}", &prove_result)?;
             }
@@ -878,7 +947,7 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
         let files = server.get_files_internal().lock().unwrap();
         match &mut self.prove_result {
             ProveResult::Proof => {
-                println!("{}: Verified.", name);
+                println!("{name}: Verified.");
                 if let Some(slice_model) = &self.slice_model {
                     let mut w = Vec::new();
                     let doc = pretty_slice(&files, slice_model);
@@ -891,7 +960,7 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
             }
             ProveResult::Counterexample => {
                 let model = self.model.as_ref().unwrap();
-                println!("{}: Counter-example to verification found!", name);
+                println!("{name}: Counter-example to verification found!");
                 let mut w = Vec::new();
                 let doc = pretty_model(
                     &files,
@@ -904,7 +973,7 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
                 println!("    {}", String::from_utf8(w).unwrap());
             }
             ProveResult::Unknown(reason) => {
-                println!("{}: Unknown result! (reason: {})", name, reason);
+                println!("{name}: Unknown result! (reason: {reason})");
                 if let Some(slice_model) = &self.slice_model {
                     let doc = pretty_slice(&files, slice_model);
                     if let Some(doc) = doc {
@@ -990,7 +1059,7 @@ impl<'ctx> SmtVcCheckResult<'ctx> {
             ProveResult::Unknown(reason) => {
                 server.add_diagnostic(
                     Diagnostic::new(ReportKind::Error, span)
-                        .with_message(format!("Unknown result: SMT solver returned {}", reason))
+                        .with_message(format!("Unknown result: SMT solver returned {reason}"))
                         .with_note(
                             "For many queries, the query to the SMT solver is inherently undecidable. \
                              There are various tricks to help the SMT solver, which can be found in the Caesar documentation:

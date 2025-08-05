@@ -26,7 +26,7 @@ const CAESAR_PATH: &str = env!("CARGO_BIN_EXE_caesar");
 fn main() {
     let args = Arguments::from_args();
 
-    let tests = glob(&format!("{}/tests/**/*.heyvl", CRATE_PATH))
+    let tests = glob(&format!("{CRATE_PATH}/tests/**/*.heyvl"))
         .unwrap()
         .map(|res| res.unwrap())
         .map(|path| {

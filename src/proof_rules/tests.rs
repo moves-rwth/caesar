@@ -483,7 +483,7 @@ fn test_double_annotation() {
     }
         "#;
 
-    let res = verify_test(&source).0.unwrap();
+    let res = verify_test(source).0.unwrap();
     assert_eq!(res, true)
 }
 #[test]
@@ -561,7 +561,7 @@ fn test_past_not_on_while() {
     }
 "#;
 
-    let err = verify_test(&source).0.unwrap_err();
+    let err = verify_test(source).0.unwrap_err();
     assert_eq!(
         err.to_string(),
         "Error: The proof rule `past` must be used on a while loop."
@@ -576,7 +576,7 @@ fn test_invariant_not_on_while() {
             x = x + 1
         }
         "#;
-    let err = verify_test(&source).0.unwrap_err();
+    let err = verify_test(source).0.unwrap_err();
     assert_eq!(
         err.to_string(),
         "Error: The proof rule `invariant` must be used on a while loop."

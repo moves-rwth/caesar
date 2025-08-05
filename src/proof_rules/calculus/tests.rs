@@ -31,7 +31,7 @@ fn test_wp_with_kind_ok() {
     }
     "#;
     let res = verify_test(source).0.unwrap();
-    assert_eq!(res, false)
+    assert!(!res)
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn test_wlp_with_kind_ok() {
     }
     "#;
     let res = verify_test(source).0.unwrap();
-    assert_eq!(res, false)
+    assert!(!res)
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn test_calculus_encoding_mismatch() {
     let err = res.unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Error: In procs, the 'wp' calculus does not support the 'invariant' encoding."
+        "Error: In procs, the `wp` calculus does not support the `invariant` proof rule."
     );
 }
 
@@ -107,7 +107,7 @@ fn test_calculus_mismatch() {
     let err = res.unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Error: Cannot call 'wp' proc from 'wlp' proc."
+        "Error: Cannot call `wp` proc from `wlp` proc."
     );
 }
 
@@ -155,7 +155,7 @@ fn test_recursion_with_wp_proc() {
     let err = res.unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Error: Potentially recursive calls are not allowed in a proc with the 'wp' calculus."
+        "Error: Potentially recursive calls are not allowed in a proc with the `wp` calculus."
     );
 }
 
@@ -179,7 +179,7 @@ fn test_indirect_recursion_with_wlp_coproc() {
     let err = res.unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Error: Potentially recursive calls are not allowed in a coproc with the 'wlp' calculus."
+        "Error: Potentially recursive calls are not allowed in a coproc with the `wlp` calculus."
     );
 }
 
@@ -255,6 +255,6 @@ fn test_recursion_with_wlp_coproc() {
     let err = res.unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Error: Potentially recursive calls are not allowed in a coproc with the 'wlp' calculus."
+        "Error: Potentially recursive calls are not allowed in a coproc with the `wlp` calculus."
     );
 }

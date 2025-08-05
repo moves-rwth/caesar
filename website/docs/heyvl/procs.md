@@ -220,13 +220,17 @@ The quantitative setting behaves the same, we have $\inf \emptyset = \infty$ and
 ### Procedures Without a Body {#procs-without-body}
 
 Procedures and coprocedures can be written without a corresponding body.
-This allows us to _[program from specifications](https://www.cs.ox.ac.uk/publications/books/PfS/)_, i.e. write and verify programs incrementally.
-We can start with a specification and step-by-step fill in executable code (or just don't if we don't feel like it).
+Since [verification of procedure calls only needs the callee specification](#calling-procedures), we can just write a procedure specification and call it in other procedures based solely on that specification.
 
-Since [procedure calls only need the callee specification](#calling-procedures), we can just write a procedure specification and use it in other places.
-There does not need to be procedure body of the callee at all.
+This allows us to follow a programming methodology called *programming from specifications*, i.e. writing and verifying programs incrementally&nbsp;[^programming-from-specifications].
+We can start with just a specification and step-by-step fill in executable code.
+A procedure call to a procedure without a body then corresponds to what is known in the literature as the *specification statement*, which is the basis for the *programming from specifications* methodology.
 
-This can be used to introduce unsoundness even without using [`assume` statements](./statements.md#assert-and-assume).
+[^programming-from-specifications]: The book *Programming from Specifications* by Carroll Morgan details the methodology in a very approachable way (for non-probabilistic programs). It is available online at https://www.cs.ox.ac.uk/publications/books/PfS/ in PostScript format (you can convert to PDF using `ps2pdf` command). ISBN: 978-0-13-123274-7.
+
+:::warning Infeasible Procedures
+
+Procedures with a body can be used to introduce unsoundness even without using [`assume` statements](./statements.md#assert-and-assume) explicitly.
 Calling the following procedure is essentially the same as writing `assume ?(false)`.
 ```heyvl
 proc unsound() -> ()
@@ -234,6 +238,9 @@ proc unsound() -> ()
     post ?(false)
 ```
 
+Such procedures are called *infeasible* or *miraculous* in the literature.
+
+:::
 
 ## Calling Procedures
 
@@ -284,10 +291,10 @@ For example, we simply write `spare()` as a statement to call it without assignm
 
 ### Assert-Assume Understanding of Procedure Calls
 
-Internally, procedure calls are translated to HeyVL verification statements (see [statements documentation](./statements.md)).
+Internally, procedure calls are translated to HeyVL verification statements (see [statements documentation](./statements.md)), consisting of `assert`, `havoc`, `validate`, and `assume` statements.
 We can understand how procedure calls work by understanding this encoding.
 
-During the verification of `runPrimaryOrSpare`, we replace the call to `spare` by a sequence of `assert`, `havoc,` `validate`, and `assume` statements.
+During the verification of `runPrimaryOrSpare`, Caesar replaces the call to `spare` by this encoding:
 ```heyvl
 proc runPrimaryOrSpare() -> (working: Bool)
     pre 0.99
@@ -327,9 +334,79 @@ This generalizes the Boolean setting:
  3. (The `validate` does not have any effect in the Boolean setting.)
  4. Assume that the `post` holds after the call.
 
+<details>
+    <summary>Example: Why <code>validate</code> is needed for soundness.</summary>
+
+    The `validate` statement has no effect in the Boolean setting, but it is crucial for soundness in the quantitative setting.
+    The formal proof of soundness can be found in the [OOPSLA '23 paper](../publications.md#oopsla-23).
+    Here, we show an example where omitting the `validate` statement leads to unsoundness.
+
+    Consider the following procedure `P` that has a pre of `1` and a post of `2`.
+    ```heyvl
+    proc P() -> ()
+        pre 1
+        post 2
+    {
+        // body of P
+        var b: Bool = flip(0.5)
+        assert ?(b)
+        // end of body of P
+    }
+    ```
+    The body loses half of the probability mass because the `assert ?(b)` statement succeeds only with probability $0.5$.
+    It verifies with the pre `1` and post `2`, because the expected value of the post `2` is $0.5 \cdot 2 = 1$.
+
+    We now consider three different ways to call `P` from another procedure `S`.
+    Procedure `S` consists solely of the call to `P` and has a pre of `1` and a post of `1`.
+    Therefore, it should not verify, because the expected value of the post `1` is $0.5 \cdot 1 = 0.5 < 1$.
+
+    1. **Inlining the body of `P`**: We can inline the body of `P` into `S`, which means we replace the call to `P` with the body of `P`. This does not verify, as expected.
+        ```heyvl
+        proc S_inlined_call() -> ()
+            pre 1
+            post 1
+        {
+            // --- this is the body:
+            var b: Bool = flip(0.5)
+            assert ?(b)
+            // --- end of the body
+        }
+        ```
+    2. **Calling `P` without `validate`**: We can call `P` without the `validate` statement. This verifies, which is incorrect and unsound.
+        ```heyvl
+        proc S_incorrect_call() -> ()
+            pre 1
+            post 1
+        {
+            // call P incorrectly without validate
+            assert 1
+            assume 2
+        }
+        ```
+    3. **Calling `P` with `validate`**: The correct way to encode the call to `P` is by using the `validate` statement. Then, `S` does not verify, which is correct.
+        ```heyvl
+         proc S_correct_call() -> ()
+            pre 1
+            post 1
+        {
+            // call P correctly with validate
+            assert 1
+            validate
+            assume 2
+        }
+        ```
+
+    Thus, the `validate` statement is crucial for soundness of procedure calls, in the case where the callee's post does not entail the caller's post.
+    In particular, it can be required when calling procedures where the following holds for the procedure body $P$, post-expectation $f$, and modified variables $x,y,z$:
+    $$
+        (\inf x,y,z.~ f) > \mathrm{vp}\llbracket{P}\rrbracket(f)~.
+    $$
+    That is, the call encoding's semantics can evaluate to the infimum of the post-expectation $f$ over the modified variables $x,y,z$ when the `validate` statement is not present.
+    If it was present, the call semantics would evaluate to $0$ instead --- always a sound lower bound to $\mathrm{vp}\llbracket{P}\rrbracket(f)$.
+</details>
+
+The encoding of [Park induction](../proof-rules/induction.md#internal-details) for the verification of while loops makes use of the same statements as the procedure call encoding plus some additional statements.
 A more formal treatment of the encoding and semantics of procedure calls can be found in our [OOPSLA '23 paper](../publications.md#oopsla-23).
-
-
 
 [^spec-combination]: The combination of specifications is a logical consequence of their encodings in HeyVL. When *verifying* a procedure, `pre` annotations will be translated to `assume` and `post` annotations will be translated to `assert` statements.
 One can prove that the HeyVL statements `assume A1; assume A2` are equivalent to `assume (A1 ⊓ A2)`, and also that the sequence `assert A1; assert A2` is equivalent to `assert (A1 ⊓ A2)`.

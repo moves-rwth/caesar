@@ -1,5 +1,6 @@
 //! Main data structure in the compiler that keeps definitions and so on.
 
+use indexmap::IndexMap;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -8,15 +9,14 @@ use std::{
     rc::Rc,
 };
 
-use indexmap::IndexMap;
-
+use crate::ast::FuncDecl;
 use crate::{
     ast::{DeclKind, DeclRef, DomainDecl, Ident, LitKind, Span, Symbol, TyKind, VarKind},
     intrinsic::distributions::DistributionProc,
 };
 
 /// This is the central symbol table for the language. It keeps track of all
-/// definitions,
+/// definitions.
 #[derive(Debug)]
 pub struct TyCtx {
     /// A map of identifiers to the associated declaration.
@@ -32,7 +32,7 @@ pub struct TyCtx {
     /// in assert/assume/compare statements and in requires/ensures attributes.
     ///
     /// Classical deductive verifiers use booleans, and for probabilistic
-    /// verification we use EUReal.
+    /// verification we use [TyKind::EUReal].
     spec_ty: TyKind,
     /// Counter for a suffix for each identifier to create a fresh variable.
     fresh: RefCell<HashMap<Ident, usize>>,
@@ -53,11 +53,7 @@ impl TyCtx {
         let ident = decl.name();
         tracing::trace!(ident=?ident, "declare");
         let prev = self.declarations.borrow_mut().insert(ident, Rc::new(decl));
-        assert!(
-            prev.is_none(),
-            "{} already has a previous declaration",
-            ident
-        );
+        assert!(prev.is_none(), "{ident} already has a previous declaration");
     }
 
     /// Removes an existing declaration.
@@ -161,8 +157,8 @@ impl TyCtx {
         }
     }
 
-    pub fn get_distributions(&self) -> HashMap<Ident, Rc<DistributionProc>> {
-        HashMap::from_iter(self.declarations.borrow().iter().flat_map(|(ident, decl)| {
+    pub fn get_distributions(&self) -> IndexMap<Ident, Rc<DistributionProc>> {
+        IndexMap::from_iter(self.declarations.borrow().iter().flat_map(|(ident, decl)| {
             if let DeclKind::ProcIntrin(intrin) = decl.deref() {
                 if let Ok(distribution) = intrin.clone().as_any_rc().downcast::<DistributionProc>()
                 {
@@ -171,5 +167,20 @@ impl TyCtx {
             };
             None
         }))
+    }
+
+    /// Get all function declarations in the context.
+    pub fn get_function_decls(&self) -> Vec<DeclRef<FuncDecl>> {
+        self.declarations
+            .borrow()
+            .values()
+            .filter_map(|decl| {
+                if let DeclKind::FuncDecl(func) = decl.deref() {
+                    Some(func.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }

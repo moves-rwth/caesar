@@ -1,0 +1,24 @@
+// RUN: @caesar @file
+
+domain Fib {
+    func fib(n: UInt): UInt = ite(n <= 1, n, fib(n - 1) + fib(n - 2))
+}
+
+proc iter_fib(n: UInt) -> (res: UInt)
+    pre ?(true)
+    post ?(res == fib(n))
+{
+    res = 0
+    var i: UInt = 0
+    var next: UInt = 1
+
+    @invariant(?(i <= n && next == fib(i+1) && res == fib(i)))
+    while i < n {
+        var t: UInt = res
+        res = next
+        next = t + next
+        i = i + 1
+        assert ?(i <= n && next == fib(i+1) && res == fib(i))
+        assume ?(false)
+    }
+}

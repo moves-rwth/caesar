@@ -9,7 +9,7 @@ use std::{
 use once_cell::unsync;
 use z3::{
     ast::{Ast, Bool, Datatype, Dynamic},
-    Context, DatatypeAccessor, DatatypeBuilder, FuncDecl, Model, RecFuncDecl, Sort,
+    Context, DatatypeAccessor, DatatypeBuilder, FuncDecl, Sort,
 };
 
 use crate::{
@@ -22,7 +22,7 @@ use crate::{
     },
     scope::{SmtAlloc, SmtFresh},
     uint::UInt,
-    Factory, SmtBranch, SmtEq, SmtFactory, SmtInvariant, UReal,
+    Factory, LitFactory, LitWrap, SmtBranch, SmtEq, SmtFactory, SmtInvariant, UReal,
 };
 
 /// This structure saves the necessary Z3 objects to construct and work with
@@ -30,12 +30,12 @@ use crate::{
 #[derive(Debug)]
 pub struct EURealFactory<'ctx> {
     ctx: &'ctx Context,
-    sort: Sort<'ctx>,
+    pub(super) sort: Sort<'ctx>,
     rplus_mk_inf: FuncDecl<'ctx>,
-    rplus_is_inf: FuncDecl<'ctx>,
-    rplus_mk_real: FuncDecl<'ctx>,
+    pub(super) rplus_is_inf: FuncDecl<'ctx>,
+    pub(super) rplus_mk_real: FuncDecl<'ctx>,
     rplus_is_real: FuncDecl<'ctx>,
-    rplus_get_real: FuncDecl<'ctx>,
+    pub(super) rplus_get_real: FuncDecl<'ctx>,
     late: unsync::OnceCell<EURealLateDefs<'ctx>>,
 }
 
@@ -213,6 +213,15 @@ impl<'ctx> SmtBranch<'ctx> for EUReal<'ctx> {
         EUReal {
             factory: a.factory.clone(),
             value: Bool::ite(cond, &a.value, &b.value),
+        }
+    }
+}
+
+impl<'ctx> LitWrap<'ctx> for EUReal<'ctx> {
+    fn lit_wrap(&self, factory: &impl LitFactory<'ctx>) -> Self {
+        Self {
+            factory: self.factory.clone(),
+            value: self.value.lit_wrap(factory),
         }
     }
 }
@@ -439,7 +448,7 @@ mod test {
 
     use crate::{generate_smt_branch_tests, generate_smt_partial_ord_tests};
 
-    generate_smt_branch_tests!(|ctx| EURealFactory::new(ctx), EUReal);
+    generate_smt_branch_tests!(EURealFactory::new, EUReal);
 
-    generate_smt_partial_ord_tests!(|ctx| EURealFactory::new(ctx), EUReal);
+    generate_smt_partial_ord_tests!(EURealFactory::new, EUReal);
 }

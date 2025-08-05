@@ -2,7 +2,7 @@
 
 use std::{fmt, str::FromStr};
 
-use num::{BigRational, Zero};
+use num::{BigRational, One, Zero};
 
 use crate::{
     pretty::{parens_group, pretty_list, Doc, SimplePretty},
@@ -64,6 +64,22 @@ pub enum ExprKind {
     Subst(Ident, Expr, Expr),
     /// A value literal.
     Lit(Lit),
+}
+
+impl Expr {
+    /// Return a list of references to all _direct_ children of this expression.
+    pub fn children(&self) -> Vec<&Expr> {
+        match &self.kind {
+            ExprKind::Var(_) | ExprKind::Lit(_) => vec![],
+            ExprKind::Call(_, args) => args.iter().collect(),
+            ExprKind::Ite(cond, branch1, branch2) => vec![cond, branch1, branch2],
+            ExprKind::Binary(_, lhs, rhs) => vec![lhs, rhs],
+            ExprKind::Unary(_, operand) => vec![operand],
+            ExprKind::Cast(operand) => vec![operand],
+            ExprKind::Quant(_, _, _, expr) => vec![expr],
+            ExprKind::Subst(_, subst, expr) => vec![subst, expr],
+        }
+    }
 }
 
 impl SimplePretty for Expr {
@@ -391,7 +407,7 @@ impl FromStr for LitKind {
 impl fmt::Display for LitKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LitKind::Str(symbol) => f.write_fmt(format_args!("\"{}\"", symbol)),
+            LitKind::Str(symbol) => f.write_fmt(format_args!("\"{symbol}\"")),
             LitKind::UInt(num) => num.fmt(f),
             LitKind::Frac(frac) => frac.fmt(f),
             LitKind::Infinity => f.write_str("∞"),
@@ -550,7 +566,7 @@ impl ExprBuilder {
         match ty {
             TyKind::Bool => self.bool_lit(true),
             TyKind::EUReal => self.infinity_lit(),
-            _ => panic!("type {} has no top element", ty),
+            _ => panic!("type {ty} has no top element"),
         }
     }
 
@@ -569,7 +585,37 @@ impl ExprBuilder {
                 ty: Some(TyKind::EUReal),
                 span: self.span,
             }),
-            _ => panic!("type {} has no bottom element", ty),
+            _ => panic!("type {ty} has no bottom element"),
+        }
+    }
+
+    /// Return the zero element for this type. Panics if there is none.
+    pub fn zero_lit(&self, ty: &TyKind) -> Expr {
+        match ty {
+            TyKind::Bool | TyKind::UInt | TyKind::UReal | TyKind::EUReal => self.bot_lit(ty),
+            TyKind::Int => self.cast(TyKind::Int, self.uint(0)),
+            TyKind::Real => self.cast(TyKind::Real, self.frac_lit(Zero::zero())),
+            _ => panic!("type {ty} has no zero element"),
+        }
+    }
+
+    /// Return the multiplicative identity for this type. Panics if there is none.
+    pub fn one_lit(&self, ty: &TyKind) -> Expr {
+        match ty {
+            TyKind::Bool => self.bool_lit(true),
+            TyKind::UInt => self.uint(1),
+            TyKind::UReal => self.cast(TyKind::UReal, self.uint(1)),
+            TyKind::EUReal => self.cast(TyKind::EUReal, self.uint(1)),
+            TyKind::Int => self.cast(TyKind::Int, self.uint(1)),
+            TyKind::Real => self.cast(
+                TyKind::Real,
+                Shared::new(ExprData {
+                    kind: ExprKind::Lit(Spanned::new(self.span, LitKind::Frac(BigRational::one()))),
+                    ty: Some(TyKind::Real),
+                    span: self.span,
+                }),
+            ),
+            _ => panic!("type {ty} has no `one` element"),
         }
     }
 

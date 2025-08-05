@@ -19,7 +19,7 @@ use crate::{
         tycheck::{Tycheck, TycheckError},
     },
     intrinsic::annotations::{
-        check_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+        tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
     },
     tyctx::TyCtx,
 };
@@ -97,7 +97,7 @@ impl Encoding for OmegaInvAnnotation {
         call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), TycheckError> {
-        check_annotation_call(tycheck, call_span, &self.0, args)?;
+        tycheck_annotation_call(tycheck, call_span, &self.0, args)?;
         Ok(())
     }
 

@@ -245,7 +245,7 @@ Nondeterministic choices and assertions are also supported, as well as Boolean `
     * Inputs and output declarations,
     * `pre` declarations that are only Boolean conditions of the form `?(b)`.
     * `post` declarations (arbitrary operands).
- * [pure `func`s](./heyvl/domains.md#pure-functions) (*not* uninterpreted functions)
+ * [definitional `func`s](./heyvl/domains.md#definitional-functions) (*not* uninterpreted functions)
 
 ### Supported Statements
 

@@ -34,3 +34,12 @@ The loop decrements a variable `x` in each iteration, and we want to show that t
 **Inputs:**
 - `n`: A variable name for the count that shows up in the invariant.
 - `invariant`: An invariant in the program variables and `n` that lower bounds the fixpoint iteration in every step.
+
+:::warning
+
+The HeyVL encoding of the ω-invariant rule will generate a quantitative quantifier (infimum or supremum) that can not be eliminated by Caesar's quantifier elimination.
+It will be naively passed to the SMT solver, which often struggles with it.
+Learn more in the [*Debugging* section](../caesar/debugging.md).
+Therefore, we generally recommend to avoid the use of ω-invariants in practice.
+
+:::

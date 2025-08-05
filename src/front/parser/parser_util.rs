@@ -22,7 +22,7 @@ pub fn parse_decimal(num: &str) -> Result<BigRational, DecimalParseError> {
         let comma = &comma[1..]; // remove the dot
         let comma_len = u32::try_from(comma.len()).map_err(|_| DecimalParseError)?;
         let numer: BigInt =
-            BigInt::from_str(&format!("{}{}", integer, comma)).map_err(|_| DecimalParseError)?;
+            BigInt::from_str(&format!("{integer}{comma}")).map_err(|_| DecimalParseError)?;
         let denom: BigInt = BigInt::from(10).pow(comma_len);
         Ok(Ratio::new_raw(numer, denom))
     } else {

@@ -25,9 +25,9 @@ pub fn caesar_detailed_version() -> String {
         } else {
             ""
         };
-        format!("{} ({}{})", cargo_version, git_commit, dirty_suffix)
+        format!("{cargo_version} ({git_commit}{dirty_suffix})")
     } else {
-        format!("{} (no git info)", cargo_version)
+        format!("{cargo_version} (no git info)")
     }
 }
 
@@ -41,7 +41,7 @@ where
         let args_strs = args_strings.iter().map(|s| s.as_str());
         shlex::try_join(args_strs).unwrap()
     };
-    writeln!(w, "Command: {}", command)?;
+    writeln!(w, "Command: {command}")?;
     writeln!(w, "Caesar version: {}", caesar_detailed_version())?;
     writeln!(w, "Features: {}", built_info::FEATURES_LOWERCASE_STR)?;
     writeln!(w)?;
@@ -51,7 +51,7 @@ where
     writeln!(w, "Build date: {}", built_info::BUILT_TIME_UTC)?;
     write!(w, "Build host: {}", built_info::HOST)?;
     if let Some(ci_platform) = built_info::CI_PLATFORM {
-        write!(w, " ({})", ci_platform)?;
+        write!(w, " ({ci_platform})")?;
     }
     writeln!(w)?;
     writeln!(w)?;

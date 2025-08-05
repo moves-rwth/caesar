@@ -9,6 +9,7 @@ use z3::{
 
 use crate::{
     orders::SmtPartialOrd,
+    quantifiers::QuantifierMeta,
     scope::{SmtAlloc, SmtFresh, SmtScope},
     Factory, SmtBranch, SmtEq, SmtFactory, SmtInvariant, UInt,
 };
@@ -173,9 +174,10 @@ impl<'ctx> SmtEq<'ctx> for List<'ctx> {
         let mut scope = SmtScope::new();
         let index = UInt::fresh(&self.len().factory(), &mut scope, "i");
         scope.add_constraint(&self.is_valid_index(&index));
+        let meta = QuantifierMeta::new("list_eq");
         z3_and!(
             self.len().smt_eq(&other.len()),
-            scope.forall(&[], &self.get(&index).smt_eq(&other.get(&index)))
+            scope.forall(&meta, &self.get(&index).smt_eq(&other.get(&index)))
         )
     }
 }

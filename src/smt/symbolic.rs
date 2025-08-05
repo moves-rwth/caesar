@@ -1,7 +1,7 @@
 //! Enums to represent all of our supported SMT types.
 
+use std::convert::TryFrom;
 use std::{borrow::Cow, fmt::Display};
-
 use z3::{
     ast::{Bool, Dynamic, Int, Real},
     Sort,
@@ -11,7 +11,7 @@ use z3rro::{
     model::{InstrumentedModel, SmtEval, SmtEvalError},
     scope::{SmtFresh, SmtScope},
     util::PrettyRational,
-    EUReal, List, SmtInvariant, UInt, UReal,
+    EUReal, Fuel, List, SmtInvariant, UInt, UReal,
 };
 
 use crate::ast::{Ident, TyKind};
@@ -34,6 +34,7 @@ pub enum Symbolic<'ctx> {
     UReal(UReal<'ctx>),
     EUReal(EUReal<'ctx>),
     List(List<'ctx>),
+    Fuel(Fuel<'ctx>),
     Uninterpreted(Dynamic<'ctx>),
 }
 
@@ -116,6 +117,13 @@ impl<'ctx> Symbolic<'ctx> {
         }
     }
 
+    pub fn into_fuel(self) -> Option<Fuel<'ctx>> {
+        match self {
+            Symbolic::Fuel(v) => Some(v),
+            _ => None,
+        }
+    }
+
     pub fn into_uninterpreted(self) -> Option<Dynamic<'ctx>> {
         match self {
             Symbolic::Uninterpreted(v) => Some(v),
@@ -134,6 +142,7 @@ impl<'ctx> Symbolic<'ctx> {
             Symbolic::UReal(v) => Dynamic::from(v.into_real()),
             Symbolic::EUReal(v) => ctx.super_eureal().to_datatype(&v).as_dynamic(),
             Symbolic::List(v) => v.as_dynamic(),
+            Symbolic::Fuel(v) => v.as_dynamic(),
             Symbolic::Uninterpreted(v) => v,
         }
     }
@@ -151,6 +160,7 @@ impl<'ctx> Symbolic<'ctx> {
                 .map(|v| Box::new(PrettyRational(Cow::Owned(v))) as Box<dyn Display>),
             Symbolic::EUReal(v) => v.eval(model).map(|v| Box::new(v) as Box<dyn Display>),
             Symbolic::List(_) => Err(SmtEvalError::ParseError), // TODO
+            Symbolic::Fuel(_) => Err(SmtEvalError::ParseError), // TODO
             Symbolic::Uninterpreted(_) => Err(SmtEvalError::ParseError), // TODO
         }
     }
@@ -166,10 +176,44 @@ impl<'ctx> SmtInvariant<'ctx> for Symbolic<'ctx> {
             Symbolic::UReal(v) => v.smt_invariant(),
             Symbolic::EUReal(v) => v.smt_invariant(),
             Symbolic::List(v) => v.smt_invariant(),
+            Symbolic::Fuel(v) => v.smt_invariant(),
             Symbolic::Uninterpreted(v) => v.smt_invariant(),
         }
     }
 }
+
+macro_rules! impl_into_try_from_symbolic {
+    ($ast:ident, $symbolic:ident, $into_ast:ident) => {
+        impl<'ctx> From<$ast<'ctx>> for Symbolic<'ctx> {
+            fn from(value: $ast<'ctx>) -> Self {
+                Symbolic::$symbolic(value)
+            }
+        }
+
+        impl<'ctx> TryFrom<Symbolic<'ctx>> for $ast<'ctx> {
+            type Error = std::string::String;
+
+            fn try_from(value: Symbolic<'ctx>) -> Result<Self, Self::Error> {
+                value.$into_ast().ok_or_else(|| {
+                    format!(
+                        "Symbolic is not of requested type: {:?}",
+                        stringify!($symbolic)
+                    )
+                })
+            }
+        }
+    };
+}
+
+impl_into_try_from_symbolic!(Bool, Bool, into_bool);
+impl_into_try_from_symbolic!(Int, Int, into_int);
+impl_into_try_from_symbolic!(UInt, UInt, into_uint);
+impl_into_try_from_symbolic!(Real, Real, into_real);
+impl_into_try_from_symbolic!(UReal, UReal, into_ureal);
+impl_into_try_from_symbolic!(EUReal, EUReal, into_eureal);
+impl_into_try_from_symbolic!(List, List, into_list);
+impl_into_try_from_symbolic!(Dynamic, Uninterpreted, into_uninterpreted);
+impl_into_try_from_symbolic!(Fuel, Fuel, into_fuel);
 
 #[derive(Debug)]
 pub enum SymbolicPair<'ctx> {
@@ -261,6 +305,13 @@ impl<'ctx> ScopeSymbolic<'ctx> {
         let mut scope = SmtScope::new();
         let value = List::fresh(&factory, &mut scope, &ident.name.to_owned());
         ScopeSymbolic::new(Symbolic::List(value), scope)
+    }
+
+    pub fn fresh_fuel(ctx: &SmtCtx<'ctx>) -> Self {
+        let factory = ctx.fuel_factory();
+        let mut scope = SmtScope::new();
+        let value = Fuel::fresh(factory, &mut scope, "$f");
+        ScopeSymbolic::new(Symbolic::Fuel(value), scope)
     }
 
     pub fn fresh_uninterpreted(ctx: &SmtCtx<'ctx>, ident: Ident, sort: &Sort<'ctx>) -> Self {

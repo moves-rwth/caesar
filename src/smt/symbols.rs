@@ -32,7 +32,7 @@ impl Symbolizer {
             let prev = self.symbols.entry(ident);
             if let Entry::Vacant(entry) = prev {
                 if counter > 0 {
-                    name = format!("{}_{}", name, counter);
+                    name = format!("{name}_{counter}");
                 }
                 let symbol = z3::Symbol::String(name);
                 entry.insert(symbol.clone());

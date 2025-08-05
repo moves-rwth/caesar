@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     future::Future,
+    ops::Deref,
     pin::Pin,
     sync::{Arc, Mutex},
 };
@@ -18,8 +19,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::{
-    ast::{Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
-    driver::{SmtVcCheckResult, SourceUnitName},
+    ast::{DeclKind, Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
+    driver::{Item, SmtVcCheckResult, SourceUnit, SourceUnitName},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
     version::caesar_semver_version,
@@ -348,10 +349,20 @@ impl Server for LspServer {
         Ok(())
     }
 
-    fn register_source_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError> {
-        self.statuses.update_status(name, VerifyStatus::Todo);
-        self.publish_verify_statuses()
-            .map_err(VerifyError::ServerError)?;
+    fn register_source_unit(
+        &mut self,
+        source_unit: &mut Item<SourceUnit>,
+    ) -> Result<(), VerifyError> {
+        let name = source_unit.name().clone();
+        // only register source units that are procedures
+        if let SourceUnit::Decl(DeclKind::ProcDecl(decl)) = source_unit.enter().deref() {
+            // ... and they must have a body, otherwise they trivially verify
+            if decl.borrow().body.borrow().is_some() {
+                self.statuses.update_status(&name, VerifyStatus::Todo);
+                self.publish_verify_statuses()
+                    .map_err(VerifyError::ServerError)?;
+            }
+        }
         Ok(())
     }
 
@@ -492,7 +503,7 @@ async fn handle_verify_request(
                     .map_err(VerifyError::ServerError)?;
                 Response::new_ok(id.clone(), Value::Null)
             }
-            _ => Response::new_err(id, 0, format!("{}", err)),
+            _ => Response::new_err(id, 0, format!("{err}")),
         },
     };
 

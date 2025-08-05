@@ -8,27 +8,26 @@ use std::mem;
 use itertools::Itertools;
 use z3::{Config, Context};
 
+use super::{
+    subst::apply_subst,
+    vcgen::{unsupported_stmt_diagnostic, Vcgen},
+};
 use crate::{
     ast::{
         util::remove_casts, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Direction,
         Expr, ExprBuilder, Files, Ident, ProcDecl, Span, Spanned, Stmt, StmtKind, Symbol, TyKind,
     },
     intrinsic::annotations::AnnotationKind,
-    opt::unfolder::Unfolder,
+    opt::{constfold::ConstFold, unfolder::Unfolder},
     pretty::SimplePretty,
     proof_rules::{
         self, encode_unroll, hey_const, negations::DirectionTracker, EncodingEnvironment,
         InvariantAnnotation, UnrollAnnotation,
     },
     resource_limits::LimitsRef,
-    smt::SmtCtx,
+    smt::{funcs::axiomatic::AxiomaticFunctionEncoder, DepConfig, SmtCtx},
     tyctx::TyCtx,
     VerifyError,
-};
-
-use super::{
-    subst::apply_subst,
-    vcgen::{unsupported_stmt_diagnostic, Vcgen},
 };
 
 /// Maintains a list of [`Expr`]s for successive simplification steps.
@@ -160,11 +159,22 @@ pub(super) fn explain_subst(
         apply_subst(vcgen.tcx, expr, &vcgen.limits_ref)?;
         explanation.add_expr(span, expr.clone(), false);
 
-        // finally, run the unfolder for more detailed simplifications
+        // almost done!
+        // - run the unfolder for SMT-based simplifications
         let ctx = Context::new(&Config::default());
-        let smt_ctx = SmtCtx::new(&ctx, vcgen.tcx);
+        let smt_ctx = SmtCtx::new(
+            &ctx,
+            vcgen.tcx,
+            Box::new(AxiomaticFunctionEncoder::default()),
+            DepConfig::SpecsOnly,
+        );
         let mut unfolder = Unfolder::new(vcgen.limits_ref.clone(), &smt_ctx);
-        let _ = unfolder.visit_expr(expr);
+        let _ = unfolder.visit_expr(expr); // ignore potential errors
+
+        // - run our const folder for further simplifications
+        let mut constfold = ConstFold;
+        let _ = constfold.visit_expr(expr); // ignore potential errors
+
         // the last value will be added to the explanations automatically in vcgen_stmt
     }
     Ok(())
@@ -173,7 +183,7 @@ pub(super) fn explain_subst(
 pub(super) fn explain_annotated_while(
     vcgen: &mut Vcgen,
     stmt: &Stmt,
-    _post: &Expr,
+    post: &Expr,
 ) -> Result<Expr, VerifyError> {
     if let StmtKind::Annotation(anno_span, ident, args, inner_stmt) = &stmt.node {
         if let StmtKind::While(_, body) = &inner_stmt.node {
@@ -193,7 +203,7 @@ pub(super) fn explain_annotated_while(
                     .downcast_ref::<UnrollAnnotation>()
                     .is_some()
                 {
-                    return explain_unroll(vcgen, inner_stmt, args, stmt.span, *anno_span);
+                    return explain_unroll(vcgen, inner_stmt, args, stmt.span, *anno_span, post);
                 }
             }
         }
@@ -249,23 +259,11 @@ fn explain_unroll(
     args: &[Expr],
     stmt_span: Span,
     call_span: Span,
+    post: &Expr,
 ) -> Result<Expr, VerifyError> {
     let k = proof_rules::lit_u128(&args[0]);
     let terminator = &args[1];
     let direction = *vcgen.explanation.as_ref().unwrap().direction;
-
-    // 1. generate the explanations for the loop body in the initial iteration
-    if let StmtKind::While(_d, body) = &loop_stmt.node {
-        // we do not use the pre-vc of the initial iteration, but the generated
-        // explanations are stored in `vcgen`.
-        let _inner_pre = vcgen.vcgen_block(body, terminator.clone());
-    } else {
-        unreachable!();
-    }
-
-    // 2. compute the pre-vc of of unrolling
-
-    // unroll the loop
     let enc_env = EncodingEnvironment {
         // this name is not used during unrolling, so we use a dummy
         base_proc_ident: Ident::with_dummy_span(Symbol::intern("unroll_env")),
@@ -273,23 +271,54 @@ fn explain_unroll(
         call_span,
         direction,
     };
-    let unrolled_stmts = encode_unroll(
-        &enc_env,
-        loop_stmt,
-        k,
-        hey_const(&enc_env, terminator, direction, vcgen.tcx),
-    );
-    let unrolled_block = Spanned::new(enc_env.stmt_span, unrolled_stmts);
 
-    // generate pre-vc of unrolled loop with temporary vcgen
-    let mut temp_vcgen = Vcgen::new(vcgen.tcx, &vcgen.limits_ref, None);
-    let mut return_expr = temp_vcgen.vcgen_block(&unrolled_block, terminator.clone())?;
+    // 1. generate the explanations for the loop body in k-1 iterations
+    if k > 0 {
+        let prev_iter_expr = vcgen_unroll(vcgen, loop_stmt, &enc_env, post, k - 1, terminator)?;
+
+        if let StmtKind::While(_d, body) = &loop_stmt.node {
+            // we do not use the pre-vc of the initial iteration, but the generated
+            // explanations are stored in `vcgen`.
+            let _inner_pre = vcgen.vcgen_block(body, prev_iter_expr);
+        } else {
+            unreachable!();
+        }
+    }
+
+    // 2. compute the pre-vc of of unrolling
+
+    // unroll the loop
+    let temp_vcgen = Vcgen::new(vcgen.tcx, &vcgen.limits_ref, None);
+    let mut return_expr = vcgen_unroll(&temp_vcgen, loop_stmt, &enc_env, post, k, terminator)?;
 
     // apply substitutions and simplify the pre-vc of the unrolled loop, add it
     // to our explanations in `vcgen`.
     explain_subst(vcgen, stmt_span, &mut return_expr)?;
 
     Ok(return_expr)
+}
+
+/// Generate the verification conditions for unrolling of depth `k`.
+///
+/// This is used for the explanations inside the loop body (with `k-1`) and for
+/// the pre of the unrolled loop (with `k`).
+fn vcgen_unroll(
+    vcgen: &Vcgen<'_>,
+    loop_stmt: &Stmt,
+    enc_env: &EncodingEnvironment,
+    post: &Expr,
+    k: u128,
+    terminator: &Expr,
+) -> Result<Expr, VerifyError> {
+    let mut temp_vcgen = Vcgen::new(vcgen.tcx, &vcgen.limits_ref, None);
+    let unrolled_stmts = encode_unroll(
+        enc_env,
+        loop_stmt,
+        k,
+        hey_const(enc_env, terminator, enc_env.direction, vcgen.tcx),
+    );
+    let unrolled_block = Spanned::new(enc_env.stmt_span, unrolled_stmts);
+    temp_vcgen.vcgen_block(&unrolled_block, post.clone())
 }
 
 /// To explain a proc call, we just return the pre with the parameters

@@ -186,7 +186,7 @@ impl Display for ProbeSummary {
         } else {
             &true_theories.join(", ")
         };
-        writeln!(f, "Detected theories: {}", detected)?;
+        writeln!(f, "Detected theories: {detected}")?;
         if self.has_quantifiers {
             writeln!(
                 f,
