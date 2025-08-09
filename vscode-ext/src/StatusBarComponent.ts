@@ -1,26 +1,35 @@
 import { StatusBarItem, Range } from "vscode";
 import * as vscode from 'vscode';
 import { StatusBarViewConfig } from "./Config";
-import { ServerStatus, VerifyResult } from "./CaesarClient";
+import { DocumentStatus, DocumentStatusNotification, DocumentStatusType, ServerStatus, VerifyResult } from "./CaesarClient";
 import { DocumentMap, Verifier } from "./Verifier";
 import { ConfigurationConstants } from "./constants";
 import { TextDocumentIdentifier } from "vscode-languageclient";
+import { Verify } from "crypto";
+import { Server } from "http";
 
 
-const runningTooltipMenu =
-    new vscode.MarkdownString(
-        "[Stop Caesar](command:caesar.stopServer)\n\n" +
-        "[Restart Caesar](command:caesar.restartServer)"
-        , true);
+enum TooltipMenuType {
+    running = "running",
+    stopped = "stopped",
+}
 
-const stoppedTooltipMenu =
-    new vscode.MarkdownString(
-        "[Start Caesar](command:caesar.startServer)", true);
+enum Command {
+    StartServer = "caesar.startServer",
+    StopServer = "caesar.stopServer",
+    RestartServer = "caesar.restartServer",
+    ShowOutput = "caesar.showOutput",
+}
+
+
+type StatusBarModel = { tooltip_menu_type: TooltipMenuType, tooltip_status_text: vscode.MarkdownString, bar_text: string, command: Command };
 
 export class StatusBarComponent {
 
     private enabled: boolean;
-    private verifyStatus = new DocumentMap<[Range, VerifyResult][]>();
+    private documentStatuses = new DocumentMap<DocumentStatus>();
+
+    private latestActiveHeyvlEditor: vscode.TextEditor | undefined = vscode.window.activeTextEditor?.document.languageId === "heyvl" ? vscode.window.activeTextEditor : undefined;
 
     private serverStatus: ServerStatus = ServerStatus.NotStarted;
     private view: StatusBarItem;
@@ -51,172 +60,229 @@ export class StatusBarComponent {
             this.render();
         });
 
-        verifier.client.onVerifyResult((document, results) => {
-            this.verifyStatus.insert(document, results);
+        verifier.client.onDocumentVerifyStatus((update) => {
+            this.documentStatuses.insert(update.document, update);
             this.render();
         });
 
         verifier.context.subscriptions.push(vscode.workspace.onDidCloseTextDocument((document) => {
             const documentIdentifier: TextDocumentIdentifier = { uri: document.uri.toString() };
-            this.verifyStatus.remove(documentIdentifier);
+            this.documentStatuses.remove(documentIdentifier);
             this.render();
         }));
 
         verifier.context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(() => {
+            if (vscode.window.visibleTextEditors.length === 0 || vscode.window.visibleTextEditors.every(editor => editor.document.languageId !== "heyvl")) {
+                this.latestActiveHeyvlEditor = undefined;
+            }
             this.render();
         }));
 
         verifier.context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(() => {
             this.render();
         }));
+
+        verifier.context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => {
+            // If the new active editor is a heyvl file
+            if (vscode.window.activeTextEditor?.document.languageId === "heyvl") {
+                this.latestActiveHeyvlEditor = vscode.window.activeTextEditor;
+            }
+            this.render();
+        }));
     }
 
     render() {
-        let viewText = "";
-        let command = "";
-        let tooltipMenuText = new vscode.MarkdownString();
-        let tooltipStatusText = new vscode.MarkdownString();
+        let document_status = this.documentStatuses.get({ uri: this.latestActiveHeyvlEditor?.document.uri.toString() ?? "" });
+        let model = this.mapStatusToModel(this.serverStatus, document_status);
+
         if (this.enabled) {
-
-            switch (this.serverStatus) {
-                case ServerStatus.NotStarted:
-                    viewText = "$(debug-start) Caesar Inactive";
-                    command = "caesar.startServer";
-                    tooltipMenuText = stoppedTooltipMenu;
-                    break;
-                case ServerStatus.Stopped:
-                    viewText = "$(debug-start) Et tu, Brute?";
-                    command = "caesar.startServer";
-                    tooltipMenuText = stoppedTooltipMenu;
-                    break;
-                case ServerStatus.FailedToStart:
-                    viewText = "$(warning) Failed to start Caesar";
-                    command = "caesar.startServer";
-                    tooltipMenuText = stoppedTooltipMenu;
-                    break;
-                case ServerStatus.Starting:
-                    viewText = "$(loading~spin) Starting Caesar...";
-                    command = "caesar.showOutput";
-                    break;
-                case ServerStatus.Ready:
-                    [viewText, tooltipStatusText] = this.getReadyStatusView();
-                    command = "caesar.showOutput";
-                    tooltipMenuText = runningTooltipMenu;
-                    break;
-                case ServerStatus.ReadyWithError:
-                    viewText = "$(warning) Verification Errors";
-                    tooltipStatusText = new vscode.MarkdownString("Some files have verification errors.", true);
-                    command = "caesar.showOutput";
-                    tooltipMenuText = runningTooltipMenu;
-                    break;
-                case ServerStatus.Verifying:
-                    viewText = "$(sync~spin) Verifying...";
-                    command = "caesar.showOutput";
-                    break;
-            }
-
-            this.view.text = viewText;
-            this.view.command = command;
-            this.renderTooltip(tooltipMenuText, tooltipStatusText);
+            this.view.text = model.bar_text;
+            this.view.command = model.command;
+            this.renderAndSetTooltip(model);
             this.view.show();
         } else {
             this.view.hide();
         }
     }
 
-    /// Renders the tooltip by combining the given menu and status text.
-    private renderTooltip(tooltipMenuText: vscode.MarkdownString, tooltipStatusText: vscode.MarkdownString) {
-        if (tooltipStatusText.value === "") {
-            this.view.tooltip = tooltipMenuText;
+    /// Render the tooltip by combining the given menu and status text and then sets it to the view.
+    private renderAndSetTooltip(model: StatusBarModel) {
+
+        const tooltipMenuType = model.tooltip_menu_type;
+        const tooltipStatusText = model.tooltip_status_text;
+
+        const renderedMenu = this.renderTooltipMenu(tooltipMenuType);
+        const list = this.renderTooltipResultsList();
+
+        if (list == new vscode.MarkdownString("") && tooltipStatusText.value === "") {
+            this.view.tooltip = renderedMenu;
             this.view.tooltip.isTrusted = true;
             return;
         }
-        this.view.tooltip = new vscode.MarkdownString(tooltipMenuText.value + "\n\n --- \n" + tooltipStatusText.value, true);
+        this.view.tooltip = new vscode.MarkdownString(renderedMenu.value + "\n\n --- \n" + list.appendMarkdown(tooltipStatusText.value).value, true);
         this.view.tooltip.isTrusted = true;
     }
 
-
-    /// Returns the status view text and tooltip for the ready status by aggregating the verification results for each visible editor.
-    private getReadyStatusView(): [string, vscode.MarkdownString] {
-        let viewText = "";
+    /// Render the results list (per verified heyvl file) based on the current document statuses.
+    private renderTooltipResultsList(): vscode.MarkdownString {
         let tooltipString = new vscode.MarkdownString("", true);
-
-        let someError = false;
-        let someVerified = false;
-
         const editorsWithResults = vscode.window.visibleTextEditors.filter((editor) => {
-            return (this.verifyStatus.get({ uri: editor.document.uri.toString() }) ?? []).length !== 0; // And only files with results
+            return ((this.documentStatuses.get({ uri: editor.document.uri.toString() }))?.verify_statuses ?? []).length !== 0; // And only files with results
         });
 
-        if (editorsWithResults.length === 0) {
-            return ["$(thumbsup-filled) Caesar Ready", new vscode.MarkdownString("Verify some HeyVL files!", true)];
-        }
 
         for (const editor of editorsWithResults) {
             const document_id: TextDocumentIdentifier = { uri: editor.document.uri.toString() };
 
-            const results = this.verifyStatus.get(document_id);
+            const document_status = this.documentStatuses.get(document_id);
 
-            if (results === undefined) { throw new Error("No verify results found for document: " + document_id.uri); }
+            const status_counts = new Map<VerifyResult, number>(document_status?.status_counts ?? [])
+            let _verified = status_counts.get(VerifyResult.Verified) ?? 0;
+            let failed = status_counts.get(VerifyResult.Failed) ?? 0;
+            let unknown = status_counts.get(VerifyResult.Unknown) ?? 0 + (status_counts.get(VerifyResult.Timeout) ?? 0);
 
-            let verified = 0;
-            let failed = 0;
-            let unknown = 0;
-
-            for (const [_, result] of results) {
-                switch (result) {
-                    case VerifyResult.Todo:
-                        // Only count as an unknown if the verification process is ended but this is still a Todo.
-                        if (this.serverStatus === ServerStatus.Ready) {
-                            unknown++;
-                        }
-                        break;
-                    case VerifyResult.Verified:
-                        verified++;
-                        break;
-                    case VerifyResult.Failed:
-                        failed++;
-                        break;
-                    case VerifyResult.Unknown:
-                        unknown++;
-                        break;
-                    case VerifyResult.Timeout:
-                        // For now we treat timeouts as unknowns in the status bar.
-                        unknown++;
-                        break;
-                }
-            }
-            if (failed > 0 || unknown > 0) {
-                someError = true;
-            }
-            if (verified > 0) {
-                someVerified = true;
-            }
-
-            tooltipString.appendMarkdown(`${vscode.Uri.parse(document_id.uri).path}: $(error) ${failed} $(question) ${unknown}` + "\n\n --- \n");
+            tooltipString.appendMarkdown(`${vscode.workspace.asRelativePath(vscode.Uri.parse(document_id.uri).path)}: $(error) ${failed} $(question) ${unknown}` + "\n\n --- \n");
         }
-
         // Remove the last newline and separator
         tooltipString.value.trimEnd();
 
-        if (!someError && someVerified) {
-            // No error and at least one verified implies everything is verified.
-            viewText = "$(pass) Verified!";
-            tooltipString = new vscode.MarkdownString("No errors found", true);
-        } else if (someError) {
-            // At least one verified, but some errors
-            viewText = "$(warning) Verification Errors";
-        } else if (!someError && !someVerified) {
-            // No error and no verified implies the file is either empty or there are syntax errors.
-            viewText = "$(thumbsup-filled) Caesar Ready";
-            tooltipString = new vscode.MarkdownString("Verify some HeyVL files!", true);
-        }
-
-        return [viewText, tooltipString];
-
+        return tooltipString;
     }
 
+    /// Render the tooltip menu based on the given menu type.
+    private renderTooltipMenu(menu: TooltipMenuType): vscode.MarkdownString {
+        switch (menu) {
+            case TooltipMenuType.running:
+                return new vscode.MarkdownString(
+                    "[Stop Caesar](command:caesar.stopServer)\n\n" +
+                    "[Restart Caesar](command:caesar.restartServer)"
+                    , true);
+            case TooltipMenuType.stopped:
+                return new vscode.MarkdownString(
+                    "[Start Caesar](command:caesar.startServer)", true);
+            default:
+                throw new Error("Unknown tooltip menu type " + menu);
+        }
+    }
+
+    /// Map the server status and document status to a model for the status bar that can be rendered.
+    private mapStatusToModel(server_status: ServerStatus, document_status: DocumentStatus | undefined): StatusBarModel {
+        let model = {
+            tooltip_menu_type: TooltipMenuType.stopped,
+            tooltip_status_text: new vscode.MarkdownString("Caesar server is not running.", true),
+            bar_text: "$(debug-start) Caesar Not Started",
+            command: Command.StartServer
+        } as StatusBarModel;
+
+        switch (server_status) {
+            case ServerStatus.NotStarted:
+                model = {
+                    tooltip_menu_type: TooltipMenuType.stopped,
+                    tooltip_status_text: new vscode.MarkdownString("Caesar server is not running.", true),
+                    bar_text: "$(debug-start) Caesar Not Started",
+                    command: Command.StartServer
+                }
+                break;
+            case ServerStatus.Stopped:
+                model = {
+                    tooltip_menu_type: TooltipMenuType.stopped,
+                    tooltip_status_text: new vscode.MarkdownString("Caesar server is stopped.", true),
+                    bar_text: "$(debug-start) Et tu, Brute?",
+                    command: Command.StartServer
+                }
+                break;
+            case ServerStatus.FailedToStart:
+                model = {
+                    tooltip_status_text: new vscode.MarkdownString("Caesar server failed to start. Check the output for more details.", true),
+                    tooltip_menu_type: TooltipMenuType.stopped,
+                    bar_text: "$(debug-start) Caesar Failed To Start",
+                    command: Command.StartServer
+                }
+                break;
+            case ServerStatus.Starting:
+                model = {
+                    tooltip_status_text: new vscode.MarkdownString("Caesar server is starting...", true),
+                    tooltip_menu_type: TooltipMenuType.running,
+                    bar_text: "$(loading~spin) Starting Caesar...",
+                    command: Command.ShowOutput
+                }
+                break;
+            case ServerStatus.Ready:
+                switch (document_status?.status_type) {
+                    case DocumentStatusType.Invalid:
+                        model = {
+                            bar_text: "$(error) Invalid File",
+                            tooltip_menu_type: TooltipMenuType.running,
+                            tooltip_status_text: new vscode.MarkdownString("File can not be verified.", true),
+                            command: Command.ShowOutput
+                        };
+                        break;
+                    case DocumentStatusType.Timeout:
+                        model = {
+                            bar_text: "$(error) Timeout",
+                            tooltip_menu_type: TooltipMenuType.running,
+                            tooltip_status_text: new vscode.MarkdownString("File verification timed out.", true),
+                            command: Command.ShowOutput
+                        };
+                        break;
+                    case DocumentStatusType.Todo:
+                    case DocumentStatusType.Done:
+                        const someError = document_status?.status_counts.some(([result, _count]) => result === VerifyResult.Failed || result === VerifyResult.Timeout || result === VerifyResult.Unknown) ?? false;
+                        const someVerified = document_status?.status_counts.some(([result, _count]) => result === VerifyResult.Verified) ?? false;
+
+                        if (!someError && someVerified) {
+                            // No error and at least one verified implies everything is verified.
+                            model = {
+                                tooltip_menu_type: TooltipMenuType.running,
+                                tooltip_status_text: new vscode.MarkdownString("All procedures verified successfully.", true),
+                                bar_text: "$(pass) Verified!",
+                                command: Command.ShowOutput
+                            }
+                        } else if (someError) {
+                            // At least one verified, but some errors
+                            model = {
+                                bar_text: "$(warning) Verification Errors",
+                                tooltip_menu_type: TooltipMenuType.running,
+                                tooltip_status_text: new vscode.MarkdownString("Some procedures failed verification. Check the output for details.", true),
+                                command: Command.ShowOutput
+                            }
+                        } else if (!someError && !someVerified) {
+                            // No error and no verified implies the file does not contain procedures yet.
+                            model = this.cleanReadyModel();
+                        }
+                        break;
+                    case undefined:
+                        // No document status means the file is not verified yet or there are no valid file open.
+                        model = this.cleanReadyModel();
+                        break;
+                }
+                break;
+            case ServerStatus.Verifying:
+                model.tooltip_menu_type = TooltipMenuType.running;
+                model.bar_text = "$(sync~spin) Verifying...";
+                model.command = Command.ShowOutput;
+                break;
+            case ServerStatus.Error:
+                model.tooltip_menu_type = TooltipMenuType.running;
+                model.bar_text = "$(warning) Error";
+                model.command = Command.ShowOutput;
+                break;
+        }
+        return model;
+    }
+
+    /// Return the clean ready model for the status bar when there are no procedures verified yet.
+    private cleanReadyModel(): StatusBarModel {
+        return {
+            tooltip_menu_type: TooltipMenuType.running,
+            tooltip_status_text: new vscode.MarkdownString("Verify some HeyVL files!", true),
+            bar_text: "$(thumbsup-filled) Caesar Ready",
+            command: Command.ShowOutput
+        };
+    }
 }
+
+
 
 
 

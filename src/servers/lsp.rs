@@ -9,6 +9,7 @@ use std::{
 use ariadne::ReportKind;
 use crossbeam_channel::Sender;
 
+use itertools::Itertools;
 use lsp_server::{Connection, IoThreads, Message, Request, Response};
 use lsp_types::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
@@ -19,15 +20,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::{
-    ast::{DeclKind, Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
+    ast::{DeclKind, Diagnostic, FileId, Files, SourceFilePath, StoredFile},
     driver::{Item, SmtVcCheckResult, SourceUnit, SourceUnitName},
+    servers::{FileStatus, FileStatusType},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
     version::caesar_semver_version,
     VerifyCommand, VerifyError,
 };
 
-use super::{unless_fatal_error, Server, ServerError, VerifyStatus, VerifyStatusList};
+use super::{unless_fatal_error, Server, ServerError, VerifyStatus};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct VerifyRequest {
@@ -35,9 +37,11 @@ struct VerifyRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct VerifyStatusUpdate {
+struct DocumentVerifyStatusUpdate {
     document: VersionedTextDocumentIdentifier,
-    statuses: Vec<(lsp_types::Range, VerifyStatus)>,
+    status_type: FileStatusType,
+    verify_statuses: Vec<(lsp_types::Range, VerifyStatus)>,
+    status_counts: Vec<(VerifyStatus, usize)>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -53,10 +57,8 @@ pub struct LspServer {
     project_root: Option<VersionedTextDocumentIdentifier>,
     files: Arc<Mutex<Files>>,
     connection: Connection,
-    diagnostics: HashMap<FileId, Vec<Diagnostic>>,
     #[allow(clippy::type_complexity)]
-    vc_explanations: HashMap<FileId, Vec<(Span, bool, Vec<(String, String)>)>>,
-    statuses: VerifyStatusList,
+    file_statuses: HashMap<FileId, FileStatus>,
 }
 
 impl LspServer {
@@ -70,9 +72,7 @@ impl LspServer {
             project_root: None,
             files: Default::default(),
             connection,
-            diagnostics: Default::default(),
-            vc_explanations: Default::default(),
-            statuses: Default::default(),
+            file_statuses: Default::default(),
         };
         (connection, io_threads)
     }
@@ -174,7 +174,8 @@ impl LspServer {
 
     fn publish_diagnostics(&mut self) -> Result<(), ServerError> {
         let files = self.files.lock().unwrap();
-        let diags_by_document = self.diagnostics.iter().flat_map(|(file_id, diags)| {
+        let diags_by_document = self.file_statuses.iter().flat_map(|(file_id, status)| {
+            let diags = &status.diagnostics;
             let document_id = files.get(*file_id).unwrap().path.to_lsp_identifier()?;
             Some((document_id, diags))
         });
@@ -201,13 +202,11 @@ impl LspServer {
 
     fn publish_explanations(&mut self) -> Result<(), ServerError> {
         let files = self.files.lock().unwrap();
-        let by_document = self
-            .vc_explanations
-            .iter()
-            .flat_map(|(file_id, explanations)| {
-                let document_id = files.get(*file_id).unwrap().path.to_lsp_identifier()?;
-                Some((document_id, explanations))
-            });
+        let by_document = self.file_statuses.iter().flat_map(|(file_id, status)| {
+            let explanations = &status.vc_explanations;
+            let document_id = files.get(*file_id).unwrap().path.to_lsp_identifier()?;
+            Some((document_id, explanations))
+        });
         for (document_id, explanations) in by_document {
             let explanations = explanations
                 .iter()
@@ -228,22 +227,45 @@ impl LspServer {
         Ok(())
     }
 
-    fn publish_verify_statuses(&self) -> Result<(), ServerError> {
+    fn publish_document_statuses(&self) -> Result<(), ServerError> {
         let files = self.files.lock().unwrap();
-        let statuses_by_document = by_lsp_document(
-            &files,
-            self.statuses.iter_spans().flat_map(|(span, status)| {
-                let (_, range) = span.to_lsp(&files)?;
-                Some((span.file, (range, status)))
-            }),
-        );
-        for (document_id, statuses) in statuses_by_document {
-            let params = VerifyStatusUpdate {
+
+        let statuses_by_document = self
+            .file_statuses
+            .iter()
+            .flat_map(|(file_id, file_status)| {
+                let document_id = files.get(*file_id).unwrap().path.to_lsp_identifier()?;
+                Some((
+                    document_id,
+                    file_status.status_type,
+                    file_status
+                        .verify_statuses
+                        .iter_spans()
+                        .flat_map(|(span, status)| {
+                            let (_, range) = span.to_lsp(&files)?;
+                            Some((range, status))
+                        })
+                        .collect_vec(),
+                ))
+            });
+
+        for (document_id, file_status_type, verify_statuses) in statuses_by_document {
+            let status_counts = verify_statuses
+                .iter()
+                .counts_by(|(_, status)| *status)
+                .iter()
+                .map(|(status, count)| (*status, *count))
+                .collect_vec();
+
+            let params = DocumentVerifyStatusUpdate {
                 document: document_id,
-                statuses,
+                status_type: file_status_type,
+
+                verify_statuses,
+                status_counts,
             };
             let notification =
-                lsp_server::Notification::new("custom/verifyStatus".to_string(), params);
+                lsp_server::Notification::new("custom/documentStatus".to_string(), params);
             self.connection
                 .sender
                 .send(lsp_server::Message::Notification(notification))?;
@@ -256,7 +278,11 @@ impl LspServer {
         let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
         // Transform results and collect diagnostics for timed out procedures
-        for (name, status) in self.statuses.timeout_all() {
+        for (name, status) in self
+            .file_statuses
+            .iter_mut()
+            .flat_map(|(_, status)| status.verify_statuses.timeout_all())
+        {
             match status {
                 VerifyStatus::Ongoing => {
                     diagnostics.push(
@@ -279,20 +305,17 @@ impl LspServer {
             self.add_diagnostic(diagnostic)?;
         }
 
-        self.publish_verify_statuses()?;
+        self.publish_document_statuses()?;
         Ok(())
     }
 
     fn clear_file_information(&mut self, file_id: &FileId) -> Result<(), ServerError> {
-        if let Some(diag) = self.diagnostics.get_mut(file_id) {
-            diag.clear();
-        }
-        if let Some(explanations) = self.vc_explanations.get_mut(file_id) {
-            explanations.clear();
-        }
-        self.statuses.remove_file(*file_id);
+        self.file_statuses
+            .entry(*file_id)
+            .and_modify(|status| status.clear());
+
         self.publish_diagnostics()?;
-        self.publish_verify_statuses()?;
+        self.publish_document_statuses()?;
         Ok(())
     }
 }
@@ -316,10 +339,12 @@ impl Server for LspServer {
     }
 
     fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
-        self.diagnostics
+        self.file_statuses
             .entry(diagnostic.span().file)
             .or_default()
+            .diagnostics
             .push(diagnostic);
+
         self.publish_diagnostics()
             .map_err(VerifyError::ServerError)?;
         Ok(())
@@ -334,9 +359,11 @@ impl Server for LspServer {
         let files = self.files.lock().unwrap();
         for mut explanation in explanation.into_iter() {
             explanation.shrink_to_block(&files);
-            self.vc_explanations
+
+            self.file_statuses
                 .entry(explanation.span.file)
                 .or_default()
+                .vc_explanations
                 .push((
                     explanation.span,
                     explanation.is_block_itself,
@@ -354,12 +381,18 @@ impl Server for LspServer {
         source_unit: &mut Item<SourceUnit>,
     ) -> Result<(), VerifyError> {
         let name = source_unit.name().clone();
+        let statuses = &mut self
+            .file_statuses
+            .entry(name.span().file)
+            .or_default()
+            .verify_statuses;
+
         // only register source units that are procedures
         if let SourceUnit::Decl(DeclKind::ProcDecl(decl)) = source_unit.enter().deref() {
             // ... and they must have a body, otherwise they trivially verify
             if decl.borrow().body.borrow().is_some() {
-                self.statuses.update_status(&name, VerifyStatus::Todo);
-                self.publish_verify_statuses()
+                statuses.update_status(&name, VerifyStatus::Todo);
+                self.publish_document_statuses()
                     .map_err(VerifyError::ServerError)?;
             }
         }
@@ -367,8 +400,28 @@ impl Server for LspServer {
     }
 
     fn set_ongoing_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError> {
-        self.statuses.update_status(name, VerifyStatus::Ongoing);
-        self.publish_verify_statuses()
+        let statuses = &mut self
+            .file_statuses
+            .entry(name.span().file)
+            .or_default()
+            .verify_statuses;
+
+        statuses.update_status(name, VerifyStatus::Ongoing);
+        self.set_file_status_type(&name.span().file, FileStatusType::Ongoing)?;
+
+        self.publish_document_statuses()
+            .map_err(VerifyError::ServerError)?;
+        Ok(())
+    }
+
+    fn set_file_status_type(
+        &mut self,
+        file_id: &FileId,
+        status_type: FileStatusType,
+    ) -> Result<(), VerifyError> {
+        let doc_status = self.file_statuses.entry(*file_id).or_default();
+        doc_status.status_type = status_type;
+        self.publish_document_statuses()
             .map_err(VerifyError::ServerError)?;
         Ok(())
     }
@@ -380,9 +433,26 @@ impl Server for LspServer {
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError> {
         result.emit_diagnostics(name.span(), self, translate)?;
-        self.statuses
-            .update_status(name, VerifyStatus::from_prove_result(&result.prove_result));
-        self.publish_verify_statuses()?;
+        let statuses = &mut self
+            .file_statuses
+            .entry(name.span().file)
+            .or_default()
+            .verify_statuses;
+
+        statuses.update_status(name, VerifyStatus::from_prove_result(&result.prove_result));
+
+        // If every procedure in the file has been verified, we can set the file status type to Done.
+        if statuses
+            .results
+            .iter()
+            .all(|(_, status)| !matches!(status, VerifyStatus::Todo | VerifyStatus::Ongoing))
+        {
+            if let Some(status) = self.file_statuses.get_mut(&name.span().file) {
+                status.status_type = FileStatusType::Done;
+            }
+        }
+
+        self.publish_document_statuses()?;
         Ok(())
     }
 }
@@ -433,20 +503,6 @@ pub async fn run_lsp_server(
     Ok(())
 }
 
-fn by_lsp_document<'a, T: 'a>(
-    files: &'a Files,
-    iter: impl IntoIterator<Item = (FileId, T)>,
-) -> impl Iterator<Item = (VersionedTextDocumentIdentifier, Vec<T>)> + 'a {
-    let mut by_file: HashMap<FileId, Vec<T>> = HashMap::new();
-    for (file_id, val) in iter.into_iter() {
-        by_file.entry(file_id).or_default().push(val);
-    }
-    by_file.into_iter().flat_map(move |(file_id, vals)| {
-        let document_id = files.get(file_id).unwrap().path.to_lsp_identifier()?;
-        Some((document_id, vals))
-    })
-}
-
 /// Handles the verify request from the client by calling the given verify method and sends the result back.
 ///
 /// The lock on the server must be carefully managed to avoid deadlocks, because the verify function also needs to lock the server.
@@ -488,19 +544,22 @@ async fn handle_verify_request(
         Ok(()) => Response::new_ok(id.clone(), Value::Null),
         Err(err) => match err {
             VerifyError::Diagnostic(diagnostic) => {
-                server.lock().unwrap().add_diagnostic(diagnostic)?;
-                Response::new_err(
-                    id.clone(),
-                    0,
-                    "Verification failed: see diagnostics for details".to_string(),
-                )
+                let mut server_lock = server.lock().unwrap();
+                server_lock.add_diagnostic(diagnostic)?;
+                // If the verification failed with a diagnostic, we can assume that the file can not be (soundly) verified due to syntax/type/soundness errors.
+                server_lock.set_file_status_type(&file_id, FileStatusType::Invalid)?;
+                drop(server_lock);
+                Response::new_ok(id.clone(), Value::Null)
             }
             VerifyError::Interrupted | VerifyError::LimitError(_) => {
-                server
-                    .lock()
-                    .unwrap()
+                let mut server_lock = server.lock().unwrap();
+
+                server_lock
                     .handle_timeout_for_results()
                     .map_err(VerifyError::ServerError)?;
+
+                server_lock.set_file_status_type(&file_id, FileStatusType::Timeout)?;
+                drop(server_lock);
                 Response::new_ok(id.clone(), Value::Null)
             }
             _ => Response::new_err(id, 0, format!("{err}")),

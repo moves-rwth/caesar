@@ -18,6 +18,7 @@ use crate::{
     ast::TyKind,
     depgraph::DepGraph,
     front::{resolve::Resolve, tycheck::Tycheck},
+    servers::FileStatusType,
     smt::{
         funcs::{
             axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder},
@@ -1087,6 +1088,12 @@ fn verify_files_main(
             ""
         };
         println!("{num_proven} verified, {num_failures} failed.{ending}");
+    }
+
+    // If this point is reached, all files have been processed.
+    // Set the file status to `Done`, if not already set.
+    for file_id in user_files {
+        server.set_file_status_type(file_id, FileStatusType::Done)?;
     }
 
     Ok(num_failures == 0)
