@@ -11,14 +11,24 @@ import * as semver from 'semver';
 import { getExtensionVersion, isPatchCompatible } from "./version";
 import { WalkthroughComponent } from "./WalkthroughComponent";
 import Logger from "./Logger";
+import { stat } from "fs";
 
 export enum ServerStatus {
     NotStarted,
     Stopped,
     Starting,
     Ready,
+    Error,
     FailedToStart,
     Verifying,
+}
+
+export enum DocumentStatusType {
+    Todo = "todo",
+    Ongoing = "ongoing",
+    Invalid = "invalid",
+    Timeout = "timeout",
+    Done = "done",
 }
 
 export enum VerifyResult {
@@ -27,13 +37,18 @@ export enum VerifyResult {
     Verified = "verified",
     Failed = "failed",
     Unknown = "unknown",
-    Timeout = "timeout"
+    Timeout = "timeout",
 }
 
-export interface VerifyStatusNotification {
+export interface DocumentStatusNotification {
+    update: Map<VerifyResult, number>;
     document: VersionedTextDocumentIdentifier;
-    statuses: [vscode.Range, VerifyResult][];
+    status_type: DocumentStatusType;
+    verify_statuses: [vscode.Range, VerifyResult][];
+    status_counts: [VerifyResult, number][];
 }
+
+export type DocumentStatus = DocumentStatusNotification;
 
 export interface ComputedPreNotification {
     document: VersionedTextDocumentIdentifier;
@@ -48,7 +63,7 @@ export class CaesarClient {
     private client: LanguageClient | null = null;
     private context: ExtensionContext;
     private statusListeners = new Array<(status: ServerStatus) => void>();
-    private updateListeners = new Array<(document: TextDocumentIdentifier, results: [Range, VerifyResult][]) => void>();
+    private updateListeners = new Array<(update: DocumentStatusNotification) => void>();
     private computedPreListeners = new Array<(update: ComputedPreNotification) => void>();
     private needsRestart = false;
 
@@ -165,9 +180,9 @@ export class CaesarClient {
 
 
         // set up listeners for our custom events
-        context.subscriptions.push(client.onNotification("custom/verifyStatus", (params: VerifyStatusNotification) => {
+        context.subscriptions.push(client.onNotification("custom/documentStatus", (params: DocumentStatusNotification) => {
             for (const listener of this.updateListeners) {
-                listener(params.document, params.statuses);
+                listener(params);
             }
         }));
 
@@ -409,8 +424,7 @@ export class CaesarClient {
         } catch (error) {
             this.logger.error("Client: verification had an error:", document.uri, error);
             if (!(error instanceof ResponseError)) { throw error; }
-            void vscode.window.showErrorMessage(`Verification had an error: ${error.message}`);
-            this.notifyStatusUpdate(ServerStatus.Ready);
+            this.notifyStatusUpdate(ServerStatus.Error);
         }
     }
 
@@ -447,7 +461,7 @@ export class CaesarClient {
         }
     }
 
-    public onVerifyResult(callback: (document: TextDocumentIdentifier, results: [Range, VerifyResult][]) => void) {
+    public onDocumentVerifyStatus(callback: (update: DocumentStatusNotification) => void) {
         this.updateListeners.push(callback);
     }
 

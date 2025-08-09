@@ -29,7 +29,37 @@ use z3rro::prover::ProveResult;
 
 pub type ServerError = Box<dyn Error + Send + Sync>;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+type Explanation = (Span, bool, Vec<(String, String)>);
+
+#[derive(Debug, Default)]
+pub struct FileStatus {
+    status_type: FileStatusType,
+    verify_statuses: VerifyStatusList,
+    diagnostics: Vec<Diagnostic>,
+    vc_explanations: Vec<Explanation>,
+}
+
+impl FileStatus {
+    pub fn clear(&mut self) {
+        self.status_type = FileStatusType::default();
+        self.verify_statuses = VerifyStatusList::default();
+        self.diagnostics.clear();
+        self.vc_explanations.clear();
+    }
+}
+
+#[derive(Default, Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum FileStatusType {
+    #[default]
+    Todo,
+    Ongoing,
+    Invalid,
+    Timeout,
+    Done,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum VerifyStatus {
     /// The verification task is scheduled, but not started.
@@ -116,10 +146,6 @@ impl VerifyStatusList {
         }
         by_span.into_iter()
     }
-
-    pub fn remove_file(&mut self, file_id: FileId) {
-        self.results.retain(|name, _| name.span().file != file_id);
-    }
 }
 
 /// A server that serves information to a client, such as the CLI or an LSP
@@ -150,6 +176,13 @@ pub trait Server: Send {
 
     /// Register a verify unit span as the current verifying with the server.
     fn set_ongoing_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError>;
+
+    /// Register the given type for the file.
+    fn set_file_status_type(
+        &mut self,
+        file_id: &FileId,
+        status_type: FileStatusType,
+    ) -> Result<(), VerifyError>;
 
     /// Send a verification status message to the client (a custom notification).
     fn handle_vc_check_result<'smt, 'ctx>(

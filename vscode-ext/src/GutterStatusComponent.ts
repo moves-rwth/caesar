@@ -1,7 +1,7 @@
 import { Range } from "vscode";
 import * as vscode from 'vscode';
 import { GutterInformationViewConfig } from "./Config";
-import { ServerStatus, VerifyResult } from "./CaesarClient";
+import { DocumentStatus, ServerStatus, VerifyResult } from "./CaesarClient";
 import { DocumentMap, Verifier } from "./Verifier";
 import { ConfigurationConstants } from "./constants";
 import { TextDocumentIdentifier } from "vscode-languageclient";
@@ -18,7 +18,7 @@ export class GutterStatusComponent {
 
     private enabled: boolean;
     private animEnabled: boolean;
-    private status: DocumentMap<[Range, VerifyResult][]>;
+    private status: DocumentMap<DocumentStatus>;
     private serverStatus: ServerStatus = ServerStatus.NotStarted;
     private gutterAnimator: GutterAnimator;
 
@@ -105,15 +105,15 @@ export class GutterStatusComponent {
         verifier.client.onStatusUpdate((status) => {
             this.serverStatus = status;
             if (status === ServerStatus.Verifying) {
-                for (const [_document, results] of this.status.entries()) {
-                    results.length = 0;
+                for (const [_document, status] of this.status.entries()) {
+                    status.verify_statuses.length = 0;
                 }
             }
             this.render();
         });
 
-        verifier.client.onVerifyResult((document, results) => {
-            this.status.insert(document, results);
+        verifier.client.onDocumentVerifyStatus((update) => {
+            this.status.insert(update.document, update);
             this.render();
         });
 
@@ -123,7 +123,9 @@ export class GutterStatusComponent {
         let loadingEditorRangeMap: Map<vscode.TextEditor, vscode.Range[]> = new Map();
 
         for (const editor of vscode.window.visibleTextEditors) {
-            for (const [document_id, results] of this.status.entries()) {
+            for (const [document_id, status] of this.status.entries()) {
+
+                let results = status.verify_statuses;
 
                 if (editor.document.uri.toString() !== document_id.uri) {
                     continue;
@@ -142,21 +144,13 @@ export class GutterStatusComponent {
 
                         switch (result) {
                             case VerifyResult.Todo:
-                                if (this.serverStatus === ServerStatus.Ready) {
-                                    // If the server stopped verfying, but this is still todo, mark as unknown
-                                    // This should not happen since the server converts todos to timeouts when it stops verifying
-                                    unknownProcs.push({ range: gutterRange });
-                                }
-
-                                // Add to the todo list to be animated
-                                todoProcs.push(range);
-                                break;
                             case VerifyResult.Ongoing:
                                 if (this.serverStatus === ServerStatus.Ready) {
                                     // If the server stopped verfying, but this is still todo, mark as unknown
                                     // This should not happen since the server converts todos to timeouts when it stops verifying
                                     unknownProcs.push({ range: gutterRange });
                                 }
+
                                 // Add to the todo list to be animated
                                 todoProcs.push(range);
                                 break;
