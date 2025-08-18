@@ -622,13 +622,12 @@ pub fn slice_unsat_search<'ctx>(
         match check_proof_seed(&all_variables, prover, limits_ref, &seed) {
             Ok(ProveResult::Proof) => {
                 // now start the shrinking, then block up
-                let res_seed = match check_proof_seed(&all_variables, prover, limits_ref, &seed) {
-                    Ok(ProveResult::Proof) => Some(unsat_core_to_seed(prover, &all_variables)),
-                    Ok(ProveResult::Counterexample) | Ok(ProveResult::Unknown(_)) => None,
-                    Err(err) => return Err(VerifyError::ProverError(err)),
-                };
-
-                let res = exploration.shrink_block_unsat(seed, |_| res_seed.clone());
+                let res = exploration.shrink_block_unsat(seed, |seed|{
+                    match check_proof_seed(&all_variables, prover, limits_ref, seed) {
+                        Ok(ProveResult::Proof) => Some(unsat_core_to_seed(prover, &all_variables)),
+                        _ => None,
+                    }
+                });
 
                 let res_vec: Vec<_> = res.iter().cloned().collect();
                 slice_searcher.found_active(res_vec);
@@ -641,13 +640,12 @@ pub fn slice_unsat_search<'ctx>(
             }
             Ok(ProveResult::Counterexample) => {
                 // grow the counterexample and then block down
-                let res_seed = match check_proof_seed(&all_variables, prover, limits_ref, &seed) {
-                    Ok(ProveResult::Counterexample) => true,
-                    Ok(ProveResult::Proof) | Ok(ProveResult::Unknown(_)) => false,
-                    Err(err) => return Err(VerifyError::ProverError(err)),
-                };
-
-                exploration.grow_block_sat(seed, |_| res_seed);
+                exploration.grow_block_sat(seed, |seed| {
+                    match check_proof_seed(&all_variables, prover, limits_ref, seed) {
+                        Ok(ProveResult::Counterexample) => true,
+                        _ => false,
+                    }
+                });
             }
             Ok(ProveResult::Unknown(_)) => {
                 exploration.block_this(&seed);
