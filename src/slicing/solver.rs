@@ -473,7 +473,7 @@ fn slice_sat_binary_search<'ctx>(
 
         let ctx = prover.get_context();
         if !active_slice_vars.is_empty() {
-            let at_most_n_true = at_most_k(ctx, at_most_n, active_slice_vars, prover.get_smt_solver());
+            let at_most_n_true = at_most_k(ctx, at_most_n, active_slice_vars, prover.get_solver_type());
             prover.add_assumption(&at_most_n_true);
         }
     };

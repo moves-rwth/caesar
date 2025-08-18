@@ -625,7 +625,7 @@ impl<'ctx> Prover<'ctx> {
         Smtlib::from_solver(self.get_solver())
     }
 
-    pub fn get_smt_solver(&self) -> SolverType {
+    pub fn get_solver_type(&self) -> SolverType {
         self.smt_solver.clone()
     }
 
@@ -636,7 +636,7 @@ impl<'ctx> Prover<'ctx> {
             .write_all(self.generate_smtlib(assumptions).as_bytes())
             .unwrap();
 
-        let mut output = call_solver(smt_file.path(), self.get_smt_solver(), self.timeout, None)
+        let mut output = call_solver(smt_file.path(), self.get_solver_type(), self.timeout, None)
             .map_err(|e| ProverCommandError::ProcessError(e.to_string()))?;
 
         if !output.status.success() {
@@ -683,7 +683,7 @@ impl<'ctx> Prover<'ctx> {
         if sat_result == SatResult::Sat || sat_result == SatResult::Unknown {
             output = call_solver(
                 smt_file.path(),
-                self.get_smt_solver(),
+                self.get_solver_type(),
                 self.timeout,
                 Some(sat_result),
             )
@@ -724,7 +724,7 @@ impl<'ctx> Prover<'ctx> {
 
         let smtlib = smtlib.into_string();
 
-        transform_input_lines(&smtlib, self.get_smt_solver(), self.timeout)
+        transform_input_lines(&smtlib, self.get_solver_type(), self.timeout)
     }
 }
 
