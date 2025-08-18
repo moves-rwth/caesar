@@ -9,7 +9,7 @@ use z3::{
 };
 use z3rro::{
     model::{InstrumentedModel, ModelConsistency},
-    prover::{ProveResult, Prover, ProverCommandError, SolverType},
+    prover::{ProveResult, Prover, ProverCommandError},
     util::ReasonUnknown,
 };
 
@@ -467,21 +467,13 @@ fn slice_sat_binary_search<'ctx>(
 ) -> Result<(), VerifyError> {
     assert_eq!(prover.level(), 2);
 
-    let slice_vars: Vec<(&Bool<'ctx>, i32)> =
-        active_slice_vars.iter().map(|value| (value, 1)).collect();
-
     let set_at_most_true = |prover: &mut Prover<'ctx>, at_most_n: usize| {
         prover.pop();
         prover.push();
 
         let ctx = prover.get_context();
-        if !slice_vars.is_empty() {
-            let at_most_n_true = match prover.get_smt_solver() {
-                SolverType::CVC5 | SolverType::YICES => {
-                    at_most_k(ctx, at_most_n as i64, active_slice_vars)
-                }
-                _ => Bool::pb_le(ctx, &slice_vars, at_most_n as i32),
-            };
+        if !active_slice_vars.is_empty() {
+            let at_most_n_true = at_most_k(ctx, at_most_n, active_slice_vars, prover.get_smt_solver());
             prover.add_assumption(&at_most_n_true);
         }
     };
@@ -498,7 +490,7 @@ fn slice_sat_binary_search<'ctx>(
     // the fix would be to track explicitly whether we can make that assumption
     // that min_least_bound is 1.
     let min_least_bound = 0;
-    let mut minimize = PartialMinimizer::new(min_least_bound..=slice_vars.len());
+    let mut minimize = PartialMinimizer::new(min_least_bound..=active_slice_vars.len());
 
     let mut cur_solver_n = None;
     let mut slice_searcher = SliceModelSearch::new(active_slice_vars.to_vec());

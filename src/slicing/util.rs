@@ -10,6 +10,7 @@ use z3::{
     ast::{Bool, Int},
     Context, SatResult, Solver,
 };
+use z3rro::prover::SolverType;
 
 /// A result of a test during the partial minimization. Either we accept all
 /// values from this value upwards, we reject all values from this value
@@ -416,14 +417,23 @@ impl<'ctx> SubsetExploration<'ctx> {
 }
 
 /// Create an SMT expression that is true if at most k of the given boolean variables evaluate to true
-pub fn at_most_k<'ctx>(ctx: &'ctx Context, k: i64, values: &[Bool<'ctx>]) -> Bool<'ctx> {
-    let int_values: Vec<Int<'ctx>> = values
-        .iter()
-        .map(|b| b.ite(&Int::from_i64(ctx, 1), &Int::from_i64(ctx, 0)))
-        .collect();
+pub fn at_most_k<'ctx>(ctx: &'ctx Context, k: usize, values: &[Bool<'ctx>], solver_type: SolverType) -> Bool<'ctx> {
+    match solver_type {
+        SolverType::CVC5 | SolverType::YICES => {
+            let int_values: Vec<Int<'ctx>> = values
+                .iter()
+                .map(|b| b.ite(&Int::from_i64(ctx, 1), &Int::from_i64(ctx, 0)))
+                .collect();
 
-    let sum = Int::add(ctx, &int_values);
+            let sum = Int::add(ctx, &int_values);
 
-    let k_int = Int::from_i64(ctx, k);
-    sum.le(&k_int)
+            let k_int = Int::from_i64(ctx, k as i64);
+            sum.le(&k_int)
+        }
+        _ => {
+            let slice_vars: Vec<(&Bool<'ctx>, i32)> =
+                values.iter().map(|value| (value, 1)).collect();
+            Bool::pb_le(ctx, &slice_vars, k as i32)
+        }
+    }
 }
