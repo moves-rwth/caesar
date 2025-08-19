@@ -480,7 +480,9 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
     }
 
     fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
-        self.allow_impure_calls = true;
+        // first, walk recursive statements/expressions, and allow impure calls
+        // (e.g. procs) when in variable declarations or assignments.
+        self.allow_impure_calls = matches!(s.node, StmtKind::Var(_) | StmtKind::Assign(_, _));
         walk_stmt(self, s)?;
         self.allow_impure_calls = false;
 
