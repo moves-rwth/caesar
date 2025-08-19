@@ -489,7 +489,7 @@ impl Diagnostic {
         self
     }
 
-    pub fn kind(&self) -> ReportKind {
+    pub fn kind(&self) -> ReportKind<'static>{
         self.0.kind
     }
 
@@ -498,7 +498,7 @@ impl Diagnostic {
     }
 
     /// Generate the [`ariadne::ReportBuilder`].
-    pub fn into_ariadne(self, files: &Files) -> ReportBuilder<CharSpan> {
+    pub fn into_ariadne(self, files: &Files) -> ReportBuilder<'static, CharSpan> {
         // note that ariadne's report doesn't use the span end
         let span = files.char_span(self.0.location);
         let mut builder = Report::build(self.0.kind, span);

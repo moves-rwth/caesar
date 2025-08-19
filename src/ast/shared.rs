@@ -122,7 +122,7 @@ impl<T> Ord for RefEqShared<T> {
 
 impl<T> PartialOrd for RefEqShared<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(Shared::as_ptr(&self.0).cmp(&Shared::as_ptr(&other.0)))
+        Some(self.cmp(other))
     }
 }
 

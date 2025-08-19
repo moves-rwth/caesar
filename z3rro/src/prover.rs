@@ -291,7 +291,7 @@ impl<'ctx> Prover<'ctx> {
     }
 
     /// Return the solver's statistics.
-    pub fn get_statistics(&self) -> Statistics {
+    pub fn get_statistics(&self) -> Statistics<'ctx> {
         self.get_solver().get_statistics()
     }
 

@@ -119,8 +119,7 @@ impl SourceUnitName {
         };
         let buf = PathBuf::from(file_name);
         // remove `..` parts from the path to avoid path traversal
-        buf
-            .components()
+        buf.components()
             .filter(|comp| !matches!(comp, std::path::Component::ParentDir))
             .collect::<PathBuf>()
     }

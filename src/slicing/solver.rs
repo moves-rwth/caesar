@@ -367,7 +367,7 @@ impl<'ctx> SliceSolver<'ctx> {
     }
 
     /// Retrieve the underlying prover's statistics.
-    pub fn get_statistics(&self) -> Statistics {
+    pub fn get_statistics(&self) -> Statistics<'ctx> {
         self.prover.get_statistics()
     }
 }
