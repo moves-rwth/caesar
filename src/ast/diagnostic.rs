@@ -489,7 +489,7 @@ impl Diagnostic {
         self
     }
 
-    pub fn kind(&self) -> ReportKind<'static>{
+    pub fn kind(&self) -> ReportKind<'static> {
         self.0.kind
     }
 
