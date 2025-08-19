@@ -538,7 +538,18 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
                     });
                 };
             }
-            StmtKind::Havoc(_, _) => {} // TODO: make input vars readable here or throw an error?
+            StmtKind::Havoc(_, idents) => {
+                for ident in idents {
+                    let decl_ref = self.get_var_decl(s.span, *ident)?;
+                    let is_mutable = decl_ref.borrow().kind.is_mutable();
+                    if !is_mutable {
+                        return Err(TycheckError::CannotAssign {
+                            span: s.span,
+                            lhs_decl: decl_ref.clone(),
+                        });
+                    }
+                }
+            }
             StmtKind::Assert(_, ref mut expr) => self.try_cast(s.span, self.tcx.spec_ty(), expr)?,
             StmtKind::Assume(_, ref mut expr) => self.try_cast(s.span, self.tcx.spec_ty(), expr)?,
             StmtKind::Compare(_, ref mut expr) => {
