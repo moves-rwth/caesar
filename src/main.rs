@@ -578,15 +578,15 @@ async fn main() -> ExitCode {
     }
 
     match options.command {
-        Command::Verify(options) => run_cli(options).await,
-        Command::Mc(options) => run_model_checking_main(options),
-        Command::Lsp(options) => run_server(options).await,
-        Command::ShellCompletions(options) => run_generate_completions(options),
+        Command::Verify(options) => run_verify_command(options).await,
+        Command::Mc(options) => run_model_checking_command(options),
+        Command::Lsp(options) => run_lsp_command(options).await,
+        Command::ShellCompletions(options) => run_shell_completions_command(options),
         Command::Other(_) => unreachable!(),
     }
 }
 
-async fn run_cli(options: VerifyCommand) -> ExitCode {
+async fn run_verify_command(options: VerifyCommand) -> ExitCode {
     let (user_files, server) = match mk_cli_server(&options.input_options) {
         Ok(value) => value,
         Err(value) => return value,
@@ -665,7 +665,7 @@ fn mk_cli_server(input_options: &InputOptions) -> Result<(Vec<FileId>, SharedSer
     Ok((user_files, server))
 }
 
-async fn run_server(mut options: VerifyCommand) -> ExitCode {
+async fn run_lsp_command(mut options: VerifyCommand) -> ExitCode {
     let (mut server, _io_threads) = LspServer::connect_stdio(&options);
     server.initialize().unwrap();
     let server = Arc::new(Mutex::new(server));
@@ -1121,7 +1121,7 @@ fn verify_files_main(
     Ok(num_failures == 0)
 }
 
-fn run_model_checking_main(options: ToJaniCommand) -> ExitCode {
+fn run_model_checking_command(options: ToJaniCommand) -> ExitCode {
     let (user_files, server) = match mk_cli_server(&options.input_options) {
         Ok(value) => value,
         Err(value) => return value,
@@ -1375,7 +1375,7 @@ fn mk_function_encoder<'ctx>(
     Ok(function_encoding)
 }
 
-fn run_generate_completions(options: ShellCompletionsCommand) -> ExitCode {
+fn run_shell_completions_command(options: ShellCompletionsCommand) -> ExitCode {
     let binary_name = std::env::args().next().unwrap();
     clap_complete::aot::generate(
         options.shell.unwrap(),
