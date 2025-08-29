@@ -20,7 +20,7 @@ use crate::{
     front::{resolve::Resolve, tycheck::Tycheck},
     smt::{
         funcs::{
-            axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder},
+            axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder, PartialEncoding},
             fuel::{FuelEncodingOptions, FuelMonoFunctionEncoder, FuelParamFunctionEncoder},
             FunctionEncoder, RecFunFunctionEncoder,
         },
@@ -317,6 +317,16 @@ pub enum FunctionEncodingOption {
     DefineFunRec,
 }
 
+impl FunctionEncodingOption {
+    fn axiom_instantiation(&self) -> AxiomInstantiation {
+        if *self == FunctionEncodingOption::Axiomatic {
+            AxiomInstantiation::Bidirectional
+        } else {
+            AxiomInstantiation::Decreasing
+        }
+    }
+}
+
 #[derive(Debug, Default, Args)]
 #[command(next_help_heading = "Optimization Options")]
 pub struct OptimizationOptions {
@@ -353,6 +363,21 @@ pub struct OptimizationOptions {
     /// guaranteed termination.
     #[arg(long, alias = "fe", default_value = "fuel-param")]
     pub function_encoding: FunctionEncodingOption,
+
+    /// Whether to disable strengthing of partial function definitions to total
+    /// definitions. Essentially, we omit the parameter constraint in the SMT
+    /// definition of functions to make macro finding easier for the SMT solver.
+    /// This forces a specific definition for invalid inputs, potentially
+    /// masking unsound usages of those functions (this should only happen when
+    /// Caesar has a bug though).
+    ///
+    /// This flag disables strengthening, making definitions "obviously correct"
+    /// at the expense of impossible macro finding for partial functions.
+    ///
+    /// The `define-fun-rec` encoding always strengthens definitions, and this
+    /// option will result in an error.
+    #[arg(long)]
+    pub no_partial_strengthening: bool,
 
     /// The number of times a function declaration can be recursively instantiated/unfolded when
     /// using one of the fuel encodings.
@@ -949,7 +974,7 @@ fn verify_files_main(
     }
 
     // populate dependency graph
-    let mut depgraph = DepGraph::new();
+    let mut depgraph = DepGraph::new(options.opt_options.function_encoding.axiom_instantiation());
     for source_unit in &mut source_units {
         source_unit.enter().populate_depgraph(&mut depgraph)?;
     }
@@ -999,7 +1024,7 @@ fn verify_files_main(
             server.add_vc_explanation(explanation)?;
         }
 
-        // 7. Unfolding
+        // 7. Unfolding (applies substitutions)
         vc_expr.unfold(options, &limits_ref, &tcx)?;
 
         // 8. Quantifier elimination
@@ -1035,7 +1060,7 @@ fn verify_files_main(
 
         // 11. Translate to Z3
         let ctx = Context::new(&Config::default());
-        let function_encoder = mk_function_encoder(options);
+        let function_encoder = mk_function_encoder(&tcx, &depgraph, options)?;
         let dep_config = DepConfig::Set(vc_is_valid.get_dependencies());
         let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoder, dep_config);
         let mut translate = TranslateExprs::new(&smt_ctx);
@@ -1268,20 +1293,43 @@ fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
     }
 }
 
-fn mk_function_encoder(options: &VerifyCommand) -> Box<dyn FunctionEncoder<'_> + '_> {
+fn mk_function_encoder<'ctx>(
+    tcx: &TyCtx,
+    depgraph: &DepGraph,
+    options: &VerifyCommand,
+) -> Result<Box<dyn FunctionEncoder<'ctx> + 'ctx>, VerifyError> {
     let fe_opt = options.opt_options.function_encoding;
+    let partial_encoding = if options.opt_options.no_partial_strengthening {
+        PartialEncoding::Partial
+    } else {
+        PartialEncoding::StrengthenToTotal
+    };
     let function_encoding = match fe_opt {
         FunctionEncodingOption::Axiomatic => {
-            AxiomaticFunctionEncoder::new(AxiomInstantiation::Bidirectional).into_boxed()
+            AxiomaticFunctionEncoder::new(AxiomInstantiation::Bidirectional, partial_encoding)
+                .into_boxed()
         }
         FunctionEncodingOption::Decreasing => {
-            AxiomaticFunctionEncoder::new(AxiomInstantiation::Decreasing).into_boxed()
+            AxiomaticFunctionEncoder::new(AxiomInstantiation::Decreasing, partial_encoding)
+                .into_boxed()
         }
         FunctionEncodingOption::FuelMono
         | FunctionEncodingOption::FuelParam
         | FunctionEncodingOption::FuelMonoComputation
         | FunctionEncodingOption::FuelParamComputation => {
+            let fuel_functions = tcx
+                .get_function_decls()
+                .into_iter()
+                .filter(|f| {
+                    let f = f.borrow();
+                    f.body.borrow().is_some() && depgraph.is_potentially_recursive(f.name)
+                })
+                .map(|f| f.borrow().name)
+                .collect();
+            tracing::debug!("Using fuel encoding for functions: {:?}", fuel_functions);
             let fuel_options = FuelEncodingOptions {
+                fuel_functions,
+                partial_encoding,
                 max_fuel: options.opt_options.max_fuel,
                 computation: matches!(
                     fe_opt,
@@ -1301,7 +1349,14 @@ fn mk_function_encoder(options: &VerifyCommand) -> Box<dyn FunctionEncoder<'_> +
                 _ => unreachable!(),
             }
         }
-        FunctionEncodingOption::DefineFunRec => RecFunFunctionEncoder::new().into_boxed(),
+        FunctionEncodingOption::DefineFunRec => {
+            if partial_encoding == PartialEncoding::StrengthenToTotal {
+                return Err(VerifyError::UserError(
+                    "--function-encoding define-fun-rec does not support disabling function strengthening.".into(),
+                ));
+            }
+            RecFunFunctionEncoder::new().into_boxed()
+        }
     };
     // Warn if using fuel encoding with non-ematching quantifier
     // instantiation. The exception is the [`FuelEncodingOption::FuelMono`]
@@ -1317,7 +1372,7 @@ fn mk_function_encoder(options: &VerifyCommand) -> Box<dyn FunctionEncoder<'_> +
             "Using fuel function encoding with MBQI still enabled does not guarantee termination. Set the `--quantifier-instantiation e-matching` option to use the fuel encoding without MBQI.",
         );
     }
-    function_encoding
+    Ok(function_encoding)
 }
 
 fn run_generate_completions(options: ShellCompletionsCommand) -> ExitCode {

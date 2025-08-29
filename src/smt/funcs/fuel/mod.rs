@@ -2,6 +2,8 @@ mod fuel_mono;
 mod fuel_param;
 pub mod literals;
 
+use std::collections::HashSet;
+
 pub use fuel_mono::FuelMonoFunctionEncoder;
 pub use fuel_param::FuelParamFunctionEncoder;
 
@@ -10,10 +12,10 @@ use z3::ast::Bool;
 use z3rro::quantifiers::Weight;
 
 use crate::{
-    ast::FuncDecl,
+    ast::{FuncDecl, Ident},
     smt::{
         funcs::{
-            axiomatic::AxiomInstantiation,
+            axiomatic::{AxiomInstantiation, PartialEncoding},
             fuel::literals::LiteralExprCollector,
             util::{
                 mk_call_expr, translate_equational_axiom, translate_return_invariant, InputsEncoder,
@@ -26,6 +28,8 @@ use crate::{
 
 #[derive(Debug)]
 pub struct FuelEncodingOptions {
+    /// How to encode partial function's definitions.
+    pub partial_encoding: PartialEncoding,
     /// The maximum fuel value to use in the encoding.
     pub max_fuel: usize,
     /// Whether to add computation axioms.
@@ -34,6 +38,9 @@ pub struct FuelEncodingOptions {
     /// If `false`, the synonym axiom is not added, which may lead to spurious
     /// counter-examples.
     pub synonym_axiom: bool,
+    /// Fuel functions to encode. All other encountered functions will be
+    /// encoded using the default (axiomatic) encoding.
+    pub fuel_functions: HashSet<Ident>,
 }
 
 trait FuelType: Clone + Sized {
@@ -79,6 +86,7 @@ trait FuelEncoder<'ctx>: InputsEncoder<'ctx> + Sized {
 /// variable [`fuel_mono`] or a parameter [`fuel_param`].
 fn fuel_definitional_axiom<'ctx, 'smt, E: FuelEncoder<'ctx>>(
     encoder: &E,
+    partial_encoding: PartialEncoding,
     fuel: &E::Fuel,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     func: &FuncDecl,
@@ -96,7 +104,10 @@ fn fuel_definitional_axiom<'ctx, 'smt, E: FuelEncoder<'ctx>>(
     let body = body_ref.as_ref().unwrap();
     let symbolic_body = translate.t_symbolic(body).into_dynamic(translate.ctx);
 
-    let scope = encoder.inputs_scope(translate, func);
+    let mut scope = encoder.inputs_scope(translate, func);
+    if partial_encoding == PartialEncoding::StrengthenToTotal {
+        scope.clear_constraints();
+    }
     let axiom = translate_equational_axiom(
         AxiomInstantiation::Decreasing,
         &scope,

@@ -1,0 +1,31 @@
+// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+
+// This file should not verify and we should get a counter-example. However,
+// the SMT solver seemed to choke when we used the fuel encoding for `max` -
+// after adjustments, we now translate funcs that are guaranteed not to be
+// recursive in the obvious way, making this easy for the SMT solver.
+
+domain Max {
+    func max(x: UReal, y: UReal): UReal = ite(x >= y, x, y)
+}
+
+coproc producer_consumer(chunks: UInt) -> (di: UInt, ai: UInt)
+  pre chunks * 6 + 4
+  post di
+  pre  chunks * 6
+  post ai
+{
+    di = 0  // Absolute arrival time of current chunk (ms)
+    ai = 0
+    var chunks_sent: UInt = 0
+
+    @invariant(max(
+      di + ite(chunks_sent < chunks, (chunks - chunks_sent) * 6 + 4, 0),
+      ai + ite(chunks_sent < chunks, (chunks - chunks_sent) * 6, 0)
+    ))
+    while chunks_sent < chunks {
+        ai = ai + 6
+        di = ai + 4
+        chunks_sent = chunks_sent + 1
+    }
+}

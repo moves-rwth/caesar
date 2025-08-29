@@ -58,8 +58,3 @@ pub trait FunctionEncoder<'ctx>: 'ctx {
     /// have bodies.
     fn func_uses_lit_wrap(&self, func: &DeclRef<FuncDecl>) -> bool;
 }
-
-/// Returns true if the [FuncDecl] can be transformed into a limited function.
-fn is_eligible_for_limited_function(func: &FuncDecl) -> bool {
-    func.body.borrow().is_some()
-}

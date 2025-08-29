@@ -10,8 +10,7 @@ use crate::{
     ast::{DeclRef, ExprBuilder, FuncDecl, Ident, SpanVariant},
     smt::{
         funcs::{
-            axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder},
-            is_eligible_for_limited_function,
+            axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder, PartialEncoding},
             util::{translate_func_domain, translate_return_invariant, InputsEncoder},
             FunctionEncoder, FunctionSignature,
         },
@@ -32,7 +31,10 @@ impl<'ctx> RecFunFunctionEncoder<'ctx> {
     pub fn new() -> Self {
         RecFunFunctionEncoder {
             decls: RefCell::new(HashMap::new()),
-            default_encoding: AxiomaticFunctionEncoder::new(AxiomInstantiation::Decreasing),
+            default_encoding: AxiomaticFunctionEncoder::new(
+                AxiomInstantiation::Decreasing,
+                PartialEncoding::Partial,
+            ),
         }
     }
 
@@ -96,7 +98,7 @@ impl<'ctx> FunctionEncoder<'ctx> for RecFunFunctionEncoder<'ctx> {
         ctx: &SmtCtx<'ctx>,
         func: &FuncDecl,
     ) -> Vec<FunctionSignature<'ctx>> {
-        if !is_eligible_for_limited_function(func) {
+        if func.body.borrow().is_none() {
             return self.default_encoding.translate_signature(ctx, func);
         }
 
@@ -118,7 +120,7 @@ impl<'ctx> FunctionEncoder<'ctx> for RecFunFunctionEncoder<'ctx> {
         translate: &mut TranslateExprs<'smt, 'ctx>,
         func: &FuncDecl,
     ) -> Vec<Bool<'ctx>> {
-        if !is_eligible_for_limited_function(func) {
+        if func.body.borrow().is_none() {
             return self.default_encoding.translate_axioms(translate, func);
         }
 
@@ -144,7 +146,7 @@ impl<'ctx> FunctionEncoder<'ctx> for RecFunFunctionEncoder<'ctx> {
         func: &FuncDecl,
         args: Vec<Symbolic<'ctx>>,
     ) -> Symbolic<'ctx> {
-        if !is_eligible_for_limited_function(func) {
+        if func.body.borrow().is_none() {
             return self.default_encoding.translate_call(ctx, func, args);
         }
 

@@ -2,10 +2,13 @@ use std::collections::{HashMap, HashSet};
 
 use ariadne::ReportKind;
 
-use crate::ast::{
-    visit::{walk_expr, walk_func, walk_proc, walk_ty, VisitorMut},
-    AxiomDecl, DeclRef, Diagnostic, DomainDecl, DomainSpec, Expr, ExprKind, FuncDecl, Ident, Label,
-    ProcDecl, Span, TyKind,
+use crate::{
+    ast::{
+        visit::{walk_expr, walk_func, walk_proc, walk_ty, VisitorMut},
+        AxiomDecl, DeclRef, Diagnostic, DomainDecl, DomainSpec, Expr, ExprKind, FuncDecl, Ident,
+        Label, ProcDecl, Span, TyKind,
+    },
+    smt::funcs::axiomatic::AxiomInstantiation,
 };
 
 /// A collection of dependencies for some declaration.
@@ -17,12 +20,17 @@ impl Dependencies {
     pub fn contains(&self, ident: &Ident) -> bool {
         self.0.contains(ident)
     }
+
+    pub fn union(self, other: Self) -> Self {
+        Dependencies(self.0.union(&other.0).cloned().collect())
+    }
 }
 
 /// A dependency graph for procedures, domains, functions, and axioms.
 /// Implements [VisitorMut] to collect dependencies as it walks the AST.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DepGraph {
+    axiom_instantiation: AxiomInstantiation,
     /// Directed edges from identifiers to their dependencies. These come from
     /// procs, domains and definitional functions.
     directed_edges: HashMap<Ident, HashSet<Ident>>,
@@ -33,8 +41,13 @@ pub struct DepGraph {
 }
 
 impl DepGraph {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(axiom_instantiation: AxiomInstantiation) -> Self {
+        Self {
+            axiom_instantiation,
+            directed_edges: HashMap::new(),
+            strongly_connected: Vec::new(),
+            current_deps: HashSet::new(),
+        }
     }
 
     /// Add the `current_deps` to the directed edges of the given `from` Ident.
@@ -44,10 +57,33 @@ impl DepGraph {
     }
 
     /// Collect the `current_deps` as an undirected dependency.
-    fn collect_undirected_deps(&mut self, from: Ident) {
+    fn collect_mutual_deps(&mut self, from: Ident) {
         let mut deps = std::mem::take(&mut self.current_deps);
         deps.insert(from);
         self.strongly_connected.push(deps);
+    }
+
+    /// Returns an iterator over successors of this Ident. May contain
+    /// duplicates.
+    fn get_successors(&self, ident: Ident) -> impl Iterator<Item = Ident> + '_ {
+        let directed_succs = self
+            .directed_edges
+            .get(&ident)
+            .into_iter()
+            .flatten()
+            .cloned();
+        let scc_succs = self
+            .strongly_connected
+            .iter()
+            .flat_map(move |scc| {
+                if scc.contains(&ident) {
+                    Some(scc.iter().cloned())
+                } else {
+                    None
+                }
+            })
+            .flatten();
+        directed_succs.chain(scc_succs)
     }
 
     /// Do a transitive closure on the dependency graph starting from the given
@@ -60,18 +96,19 @@ impl DepGraph {
             if !newly_inserted {
                 continue;
             }
-            if let Some(deps) = self.directed_edges.get(&ident) {
-                worklist.extend(deps.difference(&reachable).cloned());
-            }
-            // TODO: for large SCCs, we'll probably iterate them over and over
-            // here. ideally, we'd process an SCC only once.
-            for scc in &self.strongly_connected {
-                if scc.contains(&ident) {
-                    worklist.extend(scc.difference(&reachable).cloned());
-                }
-            }
+            let succs = self.get_successors(ident);
+            worklist.extend(succs.filter(|s| !reachable.contains(s)));
         }
         Dependencies(reachable)
+    }
+
+    /// Whether the associated declaration is potentially recursive, i.e. an
+    /// instantiation might lead to another instantiation of itself.
+    ///
+    /// Currently, this is vastly over-approximating AND pretty slow.
+    pub fn is_potentially_recursive(&self, ident: Ident) -> bool {
+        let succs = self.get_successors(ident);
+        self.get_reachable(succs).contains(&ident)
     }
 }
 
@@ -106,8 +143,10 @@ impl VisitorMut for DepGraph {
     fn visit_func(&mut self, func_ref: &mut DeclRef<FuncDecl>) -> Result<(), Self::Err> {
         assert!(self.current_deps.is_empty());
         walk_func(self, func_ref)?;
-        // TODO: make undirected if function encoding is undirected
-        self.collect_directed_deps(func_ref.borrow().name);
+        match self.axiom_instantiation {
+            AxiomInstantiation::Decreasing => self.collect_directed_deps(func_ref.borrow().name),
+            AxiomInstantiation::Bidirectional => self.collect_mutual_deps(func_ref.borrow().name),
+        }
         Ok(())
     }
 
@@ -121,7 +160,7 @@ impl VisitorMut for DepGraph {
             return Err(DepGraphError::AxiomNoDeps(decl.name, decl.axiom.span));
         }
 
-        self.collect_undirected_deps(decl.name);
+        self.collect_mutual_deps(decl.name);
         Ok(())
     }
 

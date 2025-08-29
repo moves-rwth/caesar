@@ -2,6 +2,8 @@
 //! quantifiers. Types that implement [`SmtFresh::fresh`] support the creation
 //! of fresh instances in a surrounding scope.
 
+use std::borrow::Cow;
+
 use z3::{
     ast::{Ast, Bool, Datatype, Dynamic, Int, Real},
     Context,
@@ -71,7 +73,11 @@ impl<'ctx> SmtScope<'ctx> {
     /// bound expressions in this solver.
     pub fn exists(&self, meta: &QuantifierMeta<'ctx>, body: &Bool<'ctx>) -> Bool<'ctx> {
         let ctx = body.get_ctx();
-        let body = Bool::and(ctx, &[&self.all_constraints(ctx), body]);
+        let body = if self.constraints.is_empty() {
+            Cow::Borrowed(body)
+        } else {
+            Cow::Owned(Bool::and(ctx, &[&self.all_constraints(ctx), body]))
+        };
         mk_quantifier(meta, QuantifierType::Exists, &self.bounds_dyn(), &body)
     }
 
@@ -79,12 +85,21 @@ impl<'ctx> SmtScope<'ctx> {
     /// bound expressions in this solver.
     pub fn forall(&self, meta: &QuantifierMeta<'ctx>, body: &Bool<'ctx>) -> Bool<'ctx> {
         let ctx = body.get_ctx();
-        let body = self.all_constraints(ctx).implies(body);
+        let body = if self.constraints.is_empty() {
+            Cow::Borrowed(body)
+        } else {
+            Cow::Owned(self.all_constraints(ctx).implies(body))
+        };
         mk_quantifier(meta, QuantifierType::Forall, &self.bounds_dyn(), &body)
     }
 
     pub fn get_bounds(&self) -> impl Iterator<Item = &Dynamic<'ctx>> {
         self.bounds.iter()
+    }
+
+    /// Remove all constraints from this scope. You'll have to know what you are doing!
+    pub fn clear_constraints(&mut self) {
+        self.constraints.clear();
     }
 
     /// The Z3 Rust API needs the bounds as a vector of `&dyn Ast<'ctx>` and

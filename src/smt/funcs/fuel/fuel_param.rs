@@ -15,7 +15,6 @@ use crate::{
                 fuel_computation_axiom, fuel_definitional_axiom, fuel_return_invariant,
                 fuel_synonym_axiom, FuelEncoder, FuelEncodingOptions, FuelType,
             },
-            is_eligible_for_limited_function,
             util::{translate_func_domain, translate_plain_call, InputsEncoder},
             FunctionEncoder, FunctionSignature,
         },
@@ -65,9 +64,13 @@ pub struct FuelParamFunctionEncoder<'ctx> {
 
 impl<'ctx> FuelParamFunctionEncoder<'ctx> {
     pub fn new(options: FuelEncodingOptions) -> Self {
+        let partial_encoding = options.partial_encoding;
         FuelParamFunctionEncoder {
             options,
-            default_encoding: AxiomaticFunctionEncoder::new(AxiomInstantiation::Decreasing),
+            default_encoding: AxiomaticFunctionEncoder::new(
+                AxiomInstantiation::Decreasing,
+                partial_encoding,
+            ),
             current_fuel: RefCell::new(None),
         }
     }
@@ -131,7 +134,7 @@ impl<'ctx> FunctionEncoder<'ctx> for FuelParamFunctionEncoder<'ctx> {
         ctx: &SmtCtx<'ctx>,
         func: &FuncDecl,
     ) -> Vec<FunctionSignature<'ctx>> {
-        if !is_eligible_for_limited_function(func) {
+        if !self.options.fuel_functions.contains(&func.name) {
             return self.default_encoding.translate_signature(ctx, func);
         }
 
@@ -145,14 +148,20 @@ impl<'ctx> FunctionEncoder<'ctx> for FuelParamFunctionEncoder<'ctx> {
         translate: &mut TranslateExprs<'smt, 'ctx>,
         func: &FuncDecl,
     ) -> Vec<Bool<'ctx>> {
-        if !is_eligible_for_limited_function(func) {
+        if !self.options.fuel_functions.contains(&func.name) {
             return self.default_encoding.translate_axioms(translate, func);
         }
 
         let mut scope = SmtScope::new();
         let fuel = Fuel::fresh(translate.ctx.fuel_factory(), &mut scope, "$f");
 
-        let mut axioms = vec![fuel_definitional_axiom(self, &fuel, translate, func)];
+        let mut axioms = vec![fuel_definitional_axiom(
+            self,
+            self.options.partial_encoding,
+            &fuel,
+            translate,
+            func,
+        )];
         if self.options.synonym_axiom {
             axioms.push(fuel_synonym_axiom(self, &fuel, translate, func));
         }
@@ -169,7 +178,7 @@ impl<'ctx> FunctionEncoder<'ctx> for FuelParamFunctionEncoder<'ctx> {
         func: &FuncDecl,
         mut args: Vec<Symbolic<'ctx>>,
     ) -> Symbolic<'ctx> {
-        if !is_eligible_for_limited_function(func) {
+        if !self.options.fuel_functions.contains(&func.name) {
             return self.default_encoding.translate_call(ctx, func, args);
         }
         args.insert(0, Symbolic::Fuel(self.get_fuel(ctx)));
@@ -177,6 +186,6 @@ impl<'ctx> FunctionEncoder<'ctx> for FuelParamFunctionEncoder<'ctx> {
     }
 
     fn func_uses_lit_wrap(&self, func: &DeclRef<FuncDecl>) -> bool {
-        self.options.computation && is_eligible_for_limited_function(&func.borrow())
+        self.options.computation && self.options.fuel_functions.contains(&func.borrow().name)
     }
 }

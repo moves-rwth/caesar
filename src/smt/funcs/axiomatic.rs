@@ -32,6 +32,37 @@ pub enum AxiomInstantiation {
     Decreasing,
 }
 
+/// Whether to define partial functions - those with parameters that have an
+/// [`SmtInvariant`] - only the inputs that satisfy the invariant or all inputs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PartialEncoding {
+    /// This is the "obviously correct" default encoding. A function `f` with an
+    /// input `x` of type `UInt` will be encoded like this:
+    /// ```smt2
+    /// forall (x Int) (=> (x >= 0) (= (f x) body))
+    /// ```
+    /// This only constrains the definition of `f` on non-negative `x`, and
+    /// leaves all other valuations undefined.
+    Partial,
+    /// This *strengthens* the definition of `f` to be total by constraining it
+    /// on all inputs:
+    /// ```smt2
+    /// (forall (x Int) (= (f x) body))
+    /// ```
+    ///
+    /// The advantage of this encoding is that Z3 can recognize the definition
+    /// easily as a macro, which often speeds up solving by a lot.
+    ///
+    /// However, we now have to be *extremely* careful not to introduce
+    /// contradictions accidentally. Before, any ill-typed use of `f` could be
+    /// assigned an arbitrary interpretation by Z3. Now, it must adhere to the
+    /// definition which might not at all make sense in that context. This could
+    /// generate a contradiction, causing us to miss counter-examples -
+    /// unsoundness! Therefore, invocations must be done respecting the
+    /// constraints on the inputs.
+    StrengthenToTotal,
+}
+
 /// This encoder uses uninterpreted functions and a bunch of axioms to encode
 /// func declarations. This is the default encoding for functions.
 ///
@@ -40,20 +71,25 @@ pub enum AxiomInstantiation {
 /// restrictions (i.e. uses [`AxiomInstantiation::Bidirectional`]).
 #[derive(Debug)]
 pub struct AxiomaticFunctionEncoder {
-    instantiation: AxiomInstantiation,
+    pub axiom_instantiation: AxiomInstantiation,
+    pub partial_encoding: PartialEncoding,
 }
 
 impl AxiomaticFunctionEncoder {
     /// Create a new axiomatic function encoder with the given direction.
-    pub fn new(instantiation: AxiomInstantiation) -> Self {
-        AxiomaticFunctionEncoder { instantiation }
+    pub fn new(axiom_instantiation: AxiomInstantiation, partial_encoding: PartialEncoding) -> Self {
+        AxiomaticFunctionEncoder {
+            axiom_instantiation,
+            partial_encoding,
+        }
     }
 }
 
 impl Default for AxiomaticFunctionEncoder {
     fn default() -> Self {
         AxiomaticFunctionEncoder {
-            instantiation: AxiomInstantiation::Bidirectional,
+            axiom_instantiation: AxiomInstantiation::Bidirectional,
+            partial_encoding: PartialEncoding::Partial,
         }
     }
 }
@@ -87,7 +123,7 @@ impl<'ctx> FunctionEncoder<'ctx> for AxiomaticFunctionEncoder {
 
         let scope = self.inputs_scope(translate, func);
         axioms.extend(translate_return_invariant(
-            self.instantiation,
+            self.axiom_instantiation,
             &scope,
             translate,
             func,
@@ -122,9 +158,12 @@ impl AxiomaticFunctionEncoder {
         let app_translated = translate.t_symbolic(&app).into_dynamic(translate.ctx);
         let body_translated = translate.t_symbolic(body).into_dynamic(translate.ctx);
 
-        let scope = self.inputs_scope(translate, func);
+        let mut scope = self.inputs_scope(translate, func);
+        if self.partial_encoding == PartialEncoding::StrengthenToTotal {
+            scope.clear_constraints();
+        }
         translate_equational_axiom(
-            self.instantiation,
+            self.axiom_instantiation,
             &scope,
             &app_translated,
             &body_translated,
