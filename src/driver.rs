@@ -199,6 +199,19 @@ where
     }
 }
 
+/// An item implements [`Deref`] to enable filtering or reading the item.
+///
+/// Importantly, it does *not* implement [`DerefMut`] - use [`Item::enter`] to
+/// obtain a mutable reference to the item. In contrast to this [`Deref`] impl,
+/// [`Item::enter`] will also enter the span of the item.
+impl<T> Deref for Item<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.item
+    }
+}
+
 pub struct ItemEntered<'a, T> {
     item: &'a mut T,
     _entered: tracing::span::Entered<'a>,
@@ -254,6 +267,14 @@ impl SourceUnit {
         match self {
             SourceUnit::Decl(decl) => decl.name().span,
             SourceUnit::Raw(block) => block.span,
+        }
+    }
+
+    /// Retrieve the [`DeclKindName`] of this source unit, if it's a declaration.
+    pub fn decl_kind_name(&self) -> Option<DeclKindName> {
+        match self {
+            SourceUnit::Decl(decl) => Some(decl.kind_name()),
+            SourceUnit::Raw(_) => None,
         }
     }
 
@@ -619,6 +640,27 @@ impl QuantVcUnit {
             tracing::warn!(
                 num_quants=stats.num_quants, "Quantifiers are present in the generated verification conditions. It is possible that quantifier elimination failed. If Z3 can't decide the problem, this may be the reason."
             );
+        }
+    }
+
+    /// Create a verification condition describing that one entails the other.
+    ///
+    /// This assumes `Self` has [Direction::Up] and the other has
+    /// [Direction::Down].
+    pub fn entails(self, other: Self) -> Self {
+        assert_eq!(self.direction, Direction::Up);
+        assert_eq!(other.direction, Direction::Down);
+        let builder = ExprBuilder::new(Span::dummy_span());
+        let expr = builder.binary(
+            BinOpKind::Impl,
+            Some(self.expr.ty.clone().unwrap()),
+            self.expr,
+            other.expr,
+        );
+        QuantVcUnit {
+            deps: self.deps.union(other.deps),
+            direction: Direction::Down,
+            expr,
         }
     }
 

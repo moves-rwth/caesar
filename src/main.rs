@@ -38,6 +38,7 @@ use intrinsic::{annotations::init_calculi, distributions::init_distributions, li
 use mc::run_storm::{run_storm, storm_result_to_diagnostic};
 use proof_rules::calculus::{find_recursive_procs, CalculusVisitor};
 use proof_rules::init_encodings;
+use refinement::run_verify_entailment_command;
 use regex::Regex;
 use resource_limits::{await_with_resource_limits, LimitError, LimitsRef, MemorySize};
 use servers::{run_lsp_server, CliServer, LspServer, Server, ServerError};
@@ -62,6 +63,7 @@ pub mod opt;
 pub mod pretty;
 mod procs;
 mod proof_rules;
+mod refinement;
 mod resource_limits;
 mod scope_map;
 mod servers;
@@ -103,6 +105,7 @@ impl Cli {
     fn debug_options(&self) -> Option<&DebugOptions> {
         match &self.command {
             Command::Verify(verify_options) => Some(&verify_options.debug_options),
+            Command::Entailment(verify_options) => Some(&verify_options.debug_options),
             Command::Lsp(verify_options) => Some(&verify_options.debug_options),
             Command::Mc(mc_options) => Some(&mc_options.debug_options),
             Command::ShellCompletions(_) => None,
@@ -115,6 +118,8 @@ impl Cli {
 pub enum Command {
     /// Verify HeyVL files with Caesar.
     Verify(VerifyCommand),
+    /// Check an entailment with Caesar.
+    Entailment(VerifyCommand),
     /// Model checking via JANI, can run Storm directly.
     #[clap(visible_alias = "to-jani")]
     Mc(ToJaniCommand),
@@ -581,6 +586,7 @@ async fn main() -> ExitCode {
 
     match options.command {
         Command::Verify(options) => run_verify_command(options).await,
+        Command::Entailment(options) => run_verify_entailment_command(options).await,
         Command::Mc(options) => run_model_checking_command(options),
         Command::Lsp(options) => run_lsp_command(options).await,
         Command::ShellCompletions(options) => run_shell_completions_command(options),
