@@ -2,7 +2,7 @@ use std::{borrow::Cow, fmt::Write, rc::Rc};
 
 use z3::{
     ast::{quantifier_const, Ast, Bool, Dynamic},
-    Pattern, Symbol,
+    Pattern,
 };
 
 /// Weights for quantifiers.
@@ -27,7 +27,7 @@ impl Default for Weight {
 #[derive(Debug, Clone)]
 pub struct QuantifierMeta<'ctx> {
     /// A user-given name for the quantifier.
-    pub user_name: Symbol,
+    pub user_name: String,
     /// Whether to use the MBQI prefix (to enable MBQI with Z3's `smt.mbqi.id`
     /// option).
     pub mbqi: bool,
@@ -48,7 +48,7 @@ impl<'ctx> QuantifierMeta<'ctx> {
     pub const MBQI_PREFIX: &'static str = "mbqi_";
 
     /// Create a new quantifier metadata with the given user name.
-    pub fn new(user_name: impl Into<Symbol>) -> Self {
+    pub fn new(user_name: impl Into<String>) -> Self {
         Self {
             user_name: user_name.into(),
             mbqi: false,
@@ -65,10 +65,7 @@ impl<'ctx> QuantifierMeta<'ctx> {
         if self.mbqi {
             qid.push_str(Self::MBQI_PREFIX);
         }
-        match &self.user_name {
-            Symbol::Int(i) => writeln!(&mut qid, "{i}").unwrap(),
-            Symbol::String(s) => qid.push_str(s),
-        }
+        qid.push_str(&self.user_name);
         if let Some(ref variant) = self.variant {
             writeln!(&mut qid, "_{variant}").unwrap();
         }

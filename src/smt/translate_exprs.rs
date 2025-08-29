@@ -206,7 +206,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Quant(quant_op, quant_vars, ann, operand) => {
                 let operand = self.t_bool(operand);
                 let scope = self.mk_scope(quant_vars);
-                let qid = format!("{:?}", quant_op.span);
+                let qid = format!("span{:?}", quant_op.span);
                 let mut meta = QuantifierMeta::new(qid);
                 meta.set_patterns(self.t_triggers(&ann.triggers));
                 let quant = match quant_op.node {
@@ -551,7 +551,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 let operand = self.t_eureal(operand);
                 let scope = self.mk_scope(quant_vars);
                 let patterns: Vec<_> = self.t_triggers(&ann.triggers);
-                let qid = format!("{:?}", quant_op.span);
+                let qid = format!("span{:?}", quant_op.span);
 
                 let mut meta = QuantifierMeta::new(qid);
                 meta.set_patterns(patterns);
