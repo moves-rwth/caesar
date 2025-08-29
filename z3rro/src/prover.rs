@@ -9,6 +9,7 @@ use z3::{
 
 use crate::{
     model::{InstrumentedModel, ModelConsistency},
+    params::SmtParams,
     smtlib::Smtlib,
     util::{set_solver_timeout, ReasonUnknown},
 };
@@ -326,7 +327,8 @@ impl<'ctx> Prover<'ctx> {
 
     /// Return the SMT-LIB that represents the solver state.
     pub fn get_smtlib(&self) -> Smtlib {
-        Smtlib::from_solver(self.get_solver())
+        let global_params = SmtParams::global().lock().unwrap().clone();
+        Smtlib::from_solver(Some(global_params), self.get_solver())
     }
 }
 

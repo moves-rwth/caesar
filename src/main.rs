@@ -48,7 +48,9 @@ use tokio::task::JoinError;
 use tracing::{error, info, warn};
 use vc::explain::VcExplanation;
 use z3::{Config, Context};
-use z3rro::{prover::ProveResult, quantifiers::QuantifierMeta, util::ReasonUnknown};
+use z3rro::{
+    params::SmtParams, prover::ProveResult, quantifiers::QuantifierMeta, util::ReasonUnknown,
+};
 
 pub mod ast;
 pub mod depgraph;
@@ -989,7 +991,7 @@ fn verify_files_main(
     }
 
     // set requested global z3 options
-    set_global_z3_options(options, &limits_ref);
+    set_global_z3_params(options, &limits_ref);
 
     let mut num_proven: usize = 0;
     let mut num_failures: usize = 0;
@@ -1225,7 +1227,9 @@ fn print_timings() {
     eprintln!("Timings: {timings:?}");
 }
 
-fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
+fn set_global_z3_params(command: &VerifyCommand, limits_ref: &LimitsRef) {
+    let mut global_params = SmtParams::global().lock().unwrap();
+
     // see also dafny's options:
     // https://github.com/dafny-lang/dafny/blob/220fdecb25920d2f72ceb4c57af6cb032fdd337d/Source/DafnyCore/DafnyOptions.cs#L1273-L1309
 
@@ -1235,23 +1239,23 @@ fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
     // see also this commit in 4.15.2:
     // https://github.com/Z3Prover/z3/commit/bba10c7a8892f1067ee68751fd9989037a3386de.
     // maybe this will solve the problem?
-    z3::set_global_param("smt.arith.nl.order", "false");
+    global_params.set_param("smt.arith.nl.order", "false");
 
     // enable tracing if requested
     if command.debug_options.z3_trace {
-        z3::set_global_param("trace", "true");
-        z3::set_global_param("proof", "true");
-        z3::set_global_param("trace_file_name", "z3.log");
+        global_params.set_param("trace", "true");
+        global_params.set_param("proof", "true");
+        global_params.set_param("trace_file_name", "z3.log");
     }
 
     // set random seed
     if let Some(seed) = command.debug_options.z3_seed {
-        z3::set_global_param("smt.random_seed", &seed.to_string());
+        global_params.set_param("smt.random_seed", &seed.to_string());
     }
 
     // set quantifier instantiation options
-    z3::set_global_param("smt.qi.eager_threshold", "100");
-    z3::set_global_param("smt.qi.lazy_threshold", "1000");
+    global_params.set_param("smt.qi.eager_threshold", "100");
+    global_params.set_param("smt.qi.lazy_threshold", "1000");
     match command.opt_options.quantifier_instantiation {
         QuantifierInstantiation::EMatching => {
             // we *could* fully disable MBQI (and thus also auto-config) like so:
@@ -1264,32 +1268,32 @@ fn set_global_z3_options(command: &VerifyCommand, limits_ref: &LimitsRef) {
             //
             // therefore, we set a specific prefix for quantifiers, so that MBQI
             // only acts on quantifiers whose id starts with that prefix.
-            z3::set_global_param("smt.mbqi.id", QuantifierMeta::MBQI_PREFIX);
+            global_params.set_param("smt.mbqi.id", QuantifierMeta::MBQI_PREFIX);
         }
         QuantifierInstantiation::MBQI => {
-            z3::set_global_param("smt.ematching", "false");
+            global_params.set_param("smt.ematching", "false");
         }
         QuantifierInstantiation::All => {}
     }
 
     // enable the quantifier instantiation profile if requested
     if command.debug_options.z3_qi_profile {
-        z3::set_global_param("smt.qi.profile", "true");
-        z3::set_global_param("smt.qi.profile_freq", "1000");
+        global_params.set_param("smt.qi.profile", "true");
+        global_params.set_param("smt.qi.profile_freq", "1000");
     }
 
     // enable MBQI tracing if requested
     if command.debug_options.z3_mbqi_trace {
-        z3::set_global_param("smt.mbqi.trace", "true");
+        global_params.set_param("smt.mbqi.trace", "true");
     }
 
     // set verbosity level
     if let Some(verbosity) = command.debug_options.z3_verbose {
-        z3::set_global_param("verbose", &verbosity.to_string());
+        global_params.set_param("verbose", &verbosity.to_string());
     }
 
     if let Some(timeout) = limits_ref.time_left() {
-        z3::set_global_param("timeout", &timeout.as_millis().to_string())
+        global_params.set_param("timeout", &timeout.as_millis().to_string());
     }
 }
 
