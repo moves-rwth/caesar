@@ -10,7 +10,7 @@ use crate::{
         decl::{DeclKind, DeclKindName},
         ExprBuilder, Files, Ident, Span, VarKind,
     },
-    driver::QuantVcUnit,
+    driver::quant_proof::QuantVcProveTask,
     pretty::Doc,
     resource_limits::LimitsRef,
     slicing::model::{SliceModel, SliceResult},
@@ -22,7 +22,7 @@ use crate::{
 pub fn pretty_model<'smt, 'ctx>(
     files: &Files,
     slice_model: &SliceModel,
-    vc_expr: &QuantVcUnit,
+    vc_expr: &QuantVcProveTask,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     model: &InstrumentedModel<'ctx>,
 ) -> Doc {
@@ -48,7 +48,7 @@ pub fn pretty_model<'smt, 'ctx>(
 }
 
 pub fn pretty_vc_value<'smt, 'ctx>(
-    vc_expr: &QuantVcUnit,
+    vc_expr: &QuantVcProveTask,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     model: &InstrumentedModel<'ctx>,
     slice_model: &SliceModel,

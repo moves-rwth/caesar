@@ -1,10 +1,10 @@
 use std::{collections::HashMap, ops::DerefMut};
 
-use petgraph::visit::EdgeRef;
+use petgraph::{graph::NodeIndex, visit::EdgeRef};
 
 use crate::{
     ast::{visit::VisitorMut, DeclKind, DeclRef, Expr, ExprKind, Ident, ProcDecl, Span},
-    driver::{Item, SourceUnit},
+    driver::front::{Module, SourceUnit},
     tyctx::TyCtx,
 };
 
@@ -41,6 +41,13 @@ impl<'tcx> CallGraphVisitor<'tcx> {
             node_indices: std::collections::HashMap::new(),
         }
     }
+
+    fn get_node(&mut self, ident: Ident) -> NodeIndex {
+        *self
+            .node_indices
+            .entry(ident)
+            .or_insert_with(|| self.graph.add_node(ident))
+    }
 }
 
 impl VisitorMut for CallGraphVisitor<'_> {
@@ -69,23 +76,14 @@ impl VisitorMut for CallGraphVisitor<'_> {
     fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
         if let ExprKind::Call(ref ident, _) = e.deref_mut().kind {
             if let DeclKind::ProcDecl(proc_ref) = self.tcx.get(*ident).unwrap().as_ref() {
-                let proc_ref = proc_ref.clone(); // lose the reference to &mut self
-                let proc = proc_ref.borrow();
+                let proc_name = proc_ref.borrow().name;
 
                 let Some(current_proc_ident) = self.current_proc else {
                     return Ok(());
                 };
 
-                let to_index = *self
-                    .node_indices
-                    .entry(current_proc_ident)
-                    .or_insert_with(|| self.graph.add_node(current_proc_ident));
-
-                let from_index = *self
-                    .node_indices
-                    .entry(proc.name)
-                    .or_insert_with(|| self.graph.add_node(proc.name));
-
+                let from_index = self.get_node(proc_name);
+                let to_index = self.get_node(current_proc_ident);
                 // Note that the direction of the edge is from the callee to the caller!
                 self.graph.add_edge(from_index, to_index, e.span);
             }
@@ -97,12 +95,12 @@ impl VisitorMut for CallGraphVisitor<'_> {
 /// Generate the call graph of the procedures in the program with the ['CallGraphVisitor'].
 fn generate_call_graph(
     tcx: &mut TyCtx,
-    source_units: &mut Vec<Item<SourceUnit>>,
+    module: &mut Module,
 ) -> petgraph::graph::DiGraph<Ident, Span> {
     let mut visitor = CallGraphVisitor::new(tcx);
     // Generate the call graph
-    for source_unit in source_units {
-        let mut source_unit = source_unit.enter();
+    for source_unit in &mut module.items {
+        let mut source_unit = source_unit.enter_mut();
         match *source_unit {
             SourceUnit::Decl(ref mut decl) => {
                 // only register procs since we do not check any other decls
@@ -121,9 +119,9 @@ fn generate_call_graph(
 /// The function returns a map of the recursive procedures and the information about which call and (co)proc to blame for the recursion.
 pub fn find_recursive_procs(
     tcx: &mut TyCtx,
-    source_units: &mut Vec<Item<SourceUnit>>,
+    module: &mut Module,
 ) -> HashMap<Ident, RecursiveProcBlame> {
-    let call_graph = generate_call_graph(tcx, source_units);
+    let call_graph = generate_call_graph(tcx, module);
 
     // Find SCCs in the call graph
     let sccs = petgraph::algo::tarjan_scc(&call_graph);

@@ -27,7 +27,7 @@ use crate::{
     resource_limits::LimitsRef,
     smt::{funcs::axiomatic::AxiomaticFunctionEncoder, DepConfig, SmtCtx},
     tyctx::TyCtx,
-    VerifyError,
+    CaesarError,
 };
 
 /// Maintains a list of [`Expr`]s for successive simplification steps.
@@ -150,7 +150,7 @@ pub(super) fn explain_subst(
     vcgen: &mut Vcgen,
     span: Span,
     expr: &mut Expr,
-) -> Result<(), VerifyError> {
+) -> Result<(), CaesarError> {
     if let Some(explanation) = &mut vcgen.explanation {
         // first add the original expression with substitutions
         explanation.add_expr(span, expr.clone(), false);
@@ -184,7 +184,7 @@ pub(super) fn explain_annotated_while(
     vcgen: &mut Vcgen,
     stmt: &Stmt,
     post: &Expr,
-) -> Result<Expr, VerifyError> {
+) -> Result<Expr, CaesarError> {
     if let StmtKind::Annotation(anno_span, ident, args, inner_stmt) = &stmt.node {
         if let StmtKind::While(_, body) = &inner_stmt.node {
             if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
@@ -218,7 +218,7 @@ pub fn explain_decl_vc(
     tcx: &TyCtx,
     decl_kind: &DeclKind,
     limits_ref: &LimitsRef,
-) -> Result<Option<VcExplanation>, VerifyError> {
+) -> Result<Option<VcExplanation>, CaesarError> {
     if let DeclKind::ProcDecl(decl_ref) = decl_kind {
         let proc = decl_ref.borrow();
         let body = proc.body.borrow();
@@ -238,7 +238,7 @@ pub fn explain_raw_vc(
     post: Expr,
     direction: Direction,
     limits_ref: &LimitsRef,
-) -> Result<VcExplanation, VerifyError> {
+) -> Result<VcExplanation, CaesarError> {
     let mut vcgen = Vcgen::new(tcx, limits_ref, Some(VcExplanation::new(direction)));
     vcgen.vcgen_block(block, post)?;
     Ok(vcgen.explanation.unwrap())
@@ -248,7 +248,7 @@ fn explain_park_induction(
     vcgen: &mut Vcgen,
     invariant: &Expr,
     body: &Block,
-) -> Result<Expr, VerifyError> {
+) -> Result<Expr, CaesarError> {
     let _inner_pre = vcgen.vcgen_block(body, invariant.clone());
     Ok(invariant.clone())
 }
@@ -260,7 +260,7 @@ fn explain_unroll(
     stmt_span: Span,
     call_span: Span,
     post: &Expr,
-) -> Result<Expr, VerifyError> {
+) -> Result<Expr, CaesarError> {
     let k = proof_rules::lit_u128(&args[0]);
     let terminator = &args[1];
     let direction = *vcgen.explanation.as_ref().unwrap().direction;
@@ -309,7 +309,7 @@ fn vcgen_unroll(
     post: &Expr,
     k: u128,
     terminator: &Expr,
-) -> Result<Expr, VerifyError> {
+) -> Result<Expr, CaesarError> {
     let mut temp_vcgen = Vcgen::new(vcgen.tcx, &vcgen.limits_ref, None);
     let unrolled_stmts = encode_unroll(
         enc_env,

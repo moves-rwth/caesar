@@ -5,10 +5,14 @@ use std::{
 
 use crate::{
     ast::{DeclKind, Diagnostic, FileId, Files, StoredFile},
-    driver::{Item, SmtVcCheckResult, SourceUnit, SourceUnitName},
+    driver::{
+        front::SourceUnit,
+        item::{Item, SourceUnitName},
+        smt_proof::SmtVcCheckResult,
+    },
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
-    VerifyCommand, VerifyError,
+    CaesarError, VerifyCommand,
 };
 
 use super::{unless_fatal_error, Server, ServerError, VerifyStatus, VerifyStatusList};
@@ -44,32 +48,32 @@ impl Server for TestServer {
         &self.files
     }
 
-    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), CaesarError> {
         self.diagnostics.push(diagnostic);
         Ok(())
     }
 
-    fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+    fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), CaesarError> {
         let diagnostic = unless_fatal_error(self.werr, diagnostic)?;
         self.add_diagnostic(diagnostic)
     }
 
-    fn add_vc_explanation(&mut self, _explanation: VcExplanation) -> Result<(), VerifyError> {
+    fn add_vc_explanation(&mut self, _explanation: VcExplanation) -> Result<(), CaesarError> {
         Ok(())
     }
 
     fn register_source_unit(
         &mut self,
         source_unit: &mut Item<SourceUnit>,
-    ) -> Result<(), VerifyError> {
+    ) -> Result<(), CaesarError> {
         let name = source_unit.name().clone();
-        if let SourceUnit::Decl(DeclKind::ProcDecl(_)) = source_unit.enter().deref() {
+        if let SourceUnit::Decl(DeclKind::ProcDecl(_)) = source_unit.enter_mut().deref() {
             self.statuses.update_status(&name, VerifyStatus::Todo);
         }
         Ok(())
     }
 
-    fn set_ongoing_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError> {
+    fn set_ongoing_unit(&mut self, name: &SourceUnitName) -> Result<(), CaesarError> {
         self.statuses.update_status(name, VerifyStatus::Ongoing);
         Ok(())
     }

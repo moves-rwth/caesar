@@ -1,5 +1,5 @@
 use crate::verify_test;
-use crate::VerifyError;
+use crate::CaesarError;
 
 #[test]
 fn test_wp_with_kind_fail() {
@@ -13,7 +13,7 @@ fn test_wp_with_kind_fail() {
         }
     }
     "#;
-    let res = matches!(verify_test(source).0, Err(VerifyError::Diagnostic(_)));
+    let res = matches!(verify_test(source).0, Err(CaesarError::Diagnostic(_)));
 
     assert!(res);
 }

@@ -9,10 +9,14 @@ use ariadne::ReportKind;
 
 use crate::{
     ast::{Diagnostic, FileId, Files, SourceFilePath, StoredFile},
-    driver::{Item, SmtVcCheckResult, SourceUnit, SourceUnitName},
+    driver::{
+        front::SourceUnit,
+        item::{Item, SourceUnitName},
+        smt_proof::SmtVcCheckResult,
+    },
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
-    InputOptions, VerifyError,
+    CaesarError, InputOptions,
 };
 
 use super::{unless_fatal_error, Server, ServerError};
@@ -66,7 +70,7 @@ impl Server for CliServer {
         &self.files
     }
 
-    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), CaesarError> {
         self.has_emitted_errors =
             self.has_emitted_errors || self.werr || diagnostic.kind() == ReportKind::Error;
         let files = self.files.lock().unwrap();
@@ -74,12 +78,12 @@ impl Server for CliServer {
         Ok(())
     }
 
-    fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+    fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), CaesarError> {
         let diagnostic = unless_fatal_error(self.werr, diagnostic)?;
         self.add_diagnostic(diagnostic)
     }
 
-    fn add_vc_explanation(&mut self, _explanation: VcExplanation) -> Result<(), VerifyError> {
+    fn add_vc_explanation(&mut self, _explanation: VcExplanation) -> Result<(), CaesarError> {
         // TODO
         Ok(())
     }
@@ -87,12 +91,12 @@ impl Server for CliServer {
     fn register_source_unit(
         &mut self,
         _source_unit: &mut Item<SourceUnit>,
-    ) -> Result<(), VerifyError> {
+    ) -> Result<(), CaesarError> {
         // Not relevant for CLI
         Ok(())
     }
 
-    fn set_ongoing_unit(&mut self, _name: &SourceUnitName) -> Result<(), VerifyError> {
+    fn set_ongoing_unit(&mut self, _name: &SourceUnitName) -> Result<(), CaesarError> {
         // Not relevant for CLI
         Ok(())
     }

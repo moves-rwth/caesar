@@ -29,7 +29,7 @@ use crate::{
         Block, DeclKind, DeclRef, Diagnostic, Direction, Expr, Files, Ident, Param, ProcDecl,
         ProcSpec, Span, Stmt, StmtKind,
     },
-    driver::{Item, SourceUnit},
+    driver::{front::SourceUnit, item::Item},
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},

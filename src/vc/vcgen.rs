@@ -13,7 +13,7 @@ use crate::{
     intrinsic::annotations::AnnotationKind,
     resource_limits::LimitsRef,
     tyctx::TyCtx,
-    VerifyError,
+    CaesarError,
 };
 
 use super::explain::{explain_annotated_while, explain_proc_call, explain_subst, VcExplanation};
@@ -39,7 +39,7 @@ impl<'tcx> Vcgen<'tcx> {
         }
     }
 
-    pub fn vcgen_block(&mut self, block: &Block, post: Expr) -> Result<Expr, VerifyError> {
+    pub fn vcgen_block(&mut self, block: &Block, post: Expr) -> Result<Expr, CaesarError> {
         let prev_block_span = if let Some(ref mut explanation) = self.explanation {
             let prev_block_span = explanation.set_block_span(Some(block.span));
             let mut end_span = block.span;
@@ -56,14 +56,14 @@ impl<'tcx> Vcgen<'tcx> {
         res
     }
 
-    pub fn vcgen_stmts(&mut self, stmts: &[Stmt], post: Expr) -> Result<Expr, VerifyError> {
+    pub fn vcgen_stmts(&mut self, stmts: &[Stmt], post: Expr) -> Result<Expr, CaesarError> {
         stmts
             .iter()
             .rev()
             .try_fold(post, |acc, x| self.vcgen_stmt(x, acc))
     }
 
-    fn vcgen_stmt(&mut self, stmt: &Stmt, post: Expr) -> Result<Expr, VerifyError> {
+    fn vcgen_stmt(&mut self, stmt: &Stmt, post: Expr) -> Result<Expr, CaesarError> {
         self.limits_ref.check_limits()?;
 
         let builder = ExprBuilder::new(stmt.span.variant(SpanVariant::VC));
@@ -209,7 +209,7 @@ impl<'tcx> Vcgen<'tcx> {
         builder: ExprBuilder,
         lhses: &[Ident],
         post: Expr,
-    ) -> Result<Expr, VerifyError> {
+    ) -> Result<Expr, CaesarError> {
         if let ExprKind::Call(ident, args) = &rhs.kind {
             match self.tcx.get(*ident).as_deref() {
                 Some(DeclKind::ProcIntrin(proc_intrin)) => {

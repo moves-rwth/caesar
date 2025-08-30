@@ -12,16 +12,13 @@ use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
 use crate::{
     ast::{DeclKind, Diagnostic, Direction, ExprBuilder, FileId, Label, Span},
-    depgraph::DepGraph,
-    driver::{Item, SourceUnit},
+    driver::{core_verify::CoreVerifyTask, front::SourceUnit, item::Item},
     finalize_verify_result, mk_cli_server, mk_function_encoder, parse_and_tycheck, print_timings,
     resource_limits::{LimitError, LimitsRef},
     slicing::transform::SliceStmts,
-    smt::{
-        funcs::axiomatic::AxiomInstantiation, translate_exprs::TranslateExprs, DepConfig, SmtCtx,
-    },
+    smt::{translate_exprs::TranslateExprs, DepConfig, SmtCtx},
     vc::{explain::VcExplanation, vcgen::Vcgen},
-    SharedServer, VerifyCommand, VerifyError,
+    CaesarError, SharedServer, VerifyCommand,
 };
 
 pub async fn run_verify_entailment_command(options: VerifyCommand) -> ExitCode {
@@ -43,12 +40,12 @@ async fn verify_entailment(
     options: &VerifyCommand,
     server: &SharedServer,
     user_files: Vec<FileId>,
-) -> Result<bool, VerifyError> {
+) -> Result<bool, CaesarError> {
     // TOOD: run verify_files to start the thread with timeouts and stack size
     let mut server = server.lock().unwrap();
     let server = server.deref_mut();
 
-    let (mut source_units, mut tcx) = parse_and_tycheck(
+    let (mut module, mut tcx) = parse_and_tycheck(
         &options.input_options,
         &options.debug_options,
         server,
@@ -56,19 +53,13 @@ async fn verify_entailment(
     )?;
 
     // Register all relevant source units with the server
-    for source_unit in &mut source_units {
-        server.register_source_unit(source_unit)?;
-    }
+    module.register_with_server(server)?;
 
     // Desugar encodings from source units. They might generate new source
     // units (for side conditions).
-    let mut new_source_units: Vec<Item<SourceUnit>> = vec![];
-    for source_unit in &mut source_units {
-        let encodings = source_unit.enter().apply_encodings(&mut tcx)?;
-        new_source_units.extend(encodings);
-    }
+    let new_source_units = module.apply_encodings(&mut tcx, server)?;
     if !new_source_units.is_empty() {
-        let first_generated_span = new_source_units[0].enter().diagnostic_span();
+        let first_generated_span = new_source_units[0].enter_mut().diagnostic_span();
         server.add_diagnostic(
             Diagnostic::new(ariadne::ReportKind::Error, first_generated_span).with_label(
                 Label::new(first_generated_span).with_message(
@@ -78,16 +69,13 @@ async fn verify_entailment(
         )?;
     }
 
-    // populate dependency graph
-    let mut depgraph = DepGraph::new(AxiomInstantiation::Decreasing);
-    for source_unit in &mut source_units {
-        source_unit.enter().populate_depgraph(&mut depgraph)?;
-    }
+    // generate dependency graph
+    let mut depgraph = module.generate_depgraph(&options.opt_options.function_encoding)?;
 
     let mut proc_source_units: Vec<Item<SourceUnit>> = vec![];
     let mut other_source_units: Vec<Item<SourceUnit>> = vec![];
-    for mut source_unit in source_units {
-        let is_entailment_proc = match source_unit.enter().deref() {
+    for mut source_unit in module.items {
+        let is_entailment_proc = match source_unit.enter_mut().deref() {
             SourceUnit::Decl(DeclKind::ProcDecl(decl_ref)) => {
                 decl_ref.borrow().body.borrow().is_some()
             }
@@ -158,10 +146,10 @@ async fn verify_entailment(
         };
 
         let mut first_verify_unit = first
-            .flat_map(|u| SourceUnit::into_verify_unit(u, &mut depgraph))
+            .flat_map(|u| CoreVerifyTask::from_source_unit(u, &mut depgraph))
             .unwrap();
         let mut second_verify_unit = second
-            .flat_map(|u| SourceUnit::into_verify_unit(u, &mut depgraph))
+            .flat_map(|u| CoreVerifyTask::from_source_unit(u, &mut depgraph))
             .unwrap();
 
         let mut vcs = vec![];
@@ -263,7 +251,7 @@ async fn verify_entailment(
 
         server
             .handle_vc_check_result(&first_name, &mut result, &mut translate)
-            .map_err(VerifyError::ServerError)?;
+            .map_err(CaesarError::ServerError)?;
 
         if options.debug_options.z3_trace {
             info!("Z3 tracing output will be written to `z3.log`.");
@@ -272,7 +260,7 @@ async fn verify_entailment(
         // Handle reasons to stop the verifier.
         match result.prove_result {
             ProveResult::Unknown(ReasonUnknown::Interrupted) => {
-                return Err(VerifyError::Interrupted)
+                return Err(CaesarError::Interrupted)
             }
 
             ProveResult::Unknown(ReasonUnknown::Timeout) => return Err(LimitError::Timeout.into()),

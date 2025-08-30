@@ -20,11 +20,15 @@ use serde_json::{json, Value};
 
 use crate::{
     ast::{DeclKind, Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
-    driver::{Item, SmtVcCheckResult, SourceUnit, SourceUnitName},
+    driver::{
+        front::SourceUnit,
+        item::{Item, SourceUnitName},
+        smt_proof::SmtVcCheckResult,
+    },
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
     version::caesar_semver_version,
-    VerifyCommand, VerifyError,
+    CaesarError, VerifyCommand,
 };
 
 use super::{unless_fatal_error, Server, ServerError, VerifyStatus, VerifyStatusList};
@@ -315,22 +319,22 @@ impl Server for LspServer {
         &self.files
     }
 
-    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), CaesarError> {
         self.diagnostics
             .entry(diagnostic.span().file)
             .or_default()
             .push(diagnostic);
         self.publish_diagnostics()
-            .map_err(VerifyError::ServerError)?;
+            .map_err(CaesarError::ServerError)?;
         Ok(())
     }
 
-    fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError> {
+    fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), CaesarError> {
         let diagnostic = unless_fatal_error(self.werr, diagnostic)?;
         self.add_diagnostic(diagnostic)
     }
 
-    fn add_vc_explanation(&mut self, explanation: VcExplanation) -> Result<(), VerifyError> {
+    fn add_vc_explanation(&mut self, explanation: VcExplanation) -> Result<(), CaesarError> {
         let files = self.files.lock().unwrap();
         for mut explanation in explanation.into_iter() {
             explanation.shrink_to_block(&files);
@@ -345,31 +349,31 @@ impl Server for LspServer {
         }
         drop(files);
         self.publish_explanations()
-            .map_err(VerifyError::ServerError)?;
+            .map_err(CaesarError::ServerError)?;
         Ok(())
     }
 
     fn register_source_unit(
         &mut self,
         source_unit: &mut Item<SourceUnit>,
-    ) -> Result<(), VerifyError> {
+    ) -> Result<(), CaesarError> {
         let name = source_unit.name().clone();
         // only register source units that are procedures
-        if let SourceUnit::Decl(DeclKind::ProcDecl(decl)) = source_unit.enter().deref() {
+        if let SourceUnit::Decl(DeclKind::ProcDecl(decl)) = source_unit.enter_mut().deref() {
             // ... and they must have a body, otherwise they trivially verify
             if decl.borrow().body.borrow().is_some() {
                 self.statuses.update_status(&name, VerifyStatus::Todo);
                 self.publish_verify_statuses()
-                    .map_err(VerifyError::ServerError)?;
+                    .map_err(CaesarError::ServerError)?;
             }
         }
         Ok(())
     }
 
-    fn set_ongoing_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError> {
+    fn set_ongoing_unit(&mut self, name: &SourceUnitName) -> Result<(), CaesarError> {
         self.statuses.update_status(name, VerifyStatus::Ongoing);
         self.publish_verify_statuses()
-            .map_err(VerifyError::ServerError)?;
+            .map_err(CaesarError::ServerError)?;
         Ok(())
     }
 
@@ -391,13 +395,13 @@ impl Server for LspServer {
 ///
 /// Since async closures are currently unstable in Rust, this type simulates them by using
 /// a pinned boxed future that captures the closure and its lifetime.
-type VerifyFuture<'a> = Pin<Box<dyn Future<Output = Result<(), VerifyError>> + 'a>>;
+type VerifyFuture<'a> = Pin<Box<dyn Future<Output = Result<(), CaesarError>> + 'a>>;
 
 /// Run the LSP server with the given verify function which is an async closure that returns a verification result modeled by a `Result<(), VerifyError>` type.
 pub async fn run_lsp_server(
     server: Arc<Mutex<LspServer>>,
     mut verify: impl FnMut(&[FileId]) -> VerifyFuture,
-) -> Result<(), VerifyError> {
+) -> Result<(), CaesarError> {
     let (sender, receiver) = {
         let server_guard = server.lock().unwrap();
         let sender = server_guard.connection.sender.clone();
@@ -416,7 +420,7 @@ pub async fn run_lsp_server(
                             req.id.clone(),
                             Value::Null,
                         )))
-                        .map_err(|e| VerifyError::ServerError(e.into()))?;
+                        .map_err(|e| CaesarError::ServerError(e.into()))?;
                 }
                 _ => {}
             },
@@ -426,7 +430,7 @@ pub async fn run_lsp_server(
                     .lock()
                     .unwrap()
                     .handle_notification(notification)
-                    .map_err(VerifyError::ServerError)?;
+                    .map_err(CaesarError::ServerError)?;
             }
         }
     }
@@ -457,10 +461,10 @@ async fn handle_verify_request(
     server: Arc<Mutex<LspServer>>,
     sender: Sender<Message>,
     verify: &mut impl FnMut(&[FileId]) -> VerifyFuture,
-) -> Result<(), VerifyError> {
+) -> Result<(), CaesarError> {
     let (id, params) = req
         .extract::<VerifyRequest>("custom/verify")
-        .map_err(|e| VerifyError::ServerError(e.into()))?;
+        .map_err(|e| CaesarError::ServerError(e.into()))?;
     let file_id = {
         let mut server_ref = server.lock().unwrap();
         server_ref.project_root = Some(params.text_document.clone());
@@ -478,7 +482,7 @@ async fn handle_verify_request(
 
         server_ref
             .clear_file_information(&file_id)
-            .map_err(VerifyError::ServerError)?;
+            .map_err(CaesarError::ServerError)?;
         file_id
     };
 
@@ -487,16 +491,16 @@ async fn handle_verify_request(
     let response = match result {
         Ok(()) => Response::new_ok(id.clone(), Value::Null),
         Err(err) => match err {
-            VerifyError::Diagnostic(diagnostic) => {
+            CaesarError::Diagnostic(diagnostic) => {
                 server.lock().unwrap().add_diagnostic(diagnostic)?;
                 Response::new_ok(id.clone(), Value::Null)
             }
-            VerifyError::Interrupted | VerifyError::LimitError(_) => {
+            CaesarError::Interrupted | CaesarError::LimitError(_) => {
                 server
                     .lock()
                     .unwrap()
                     .handle_timeout_for_results()
-                    .map_err(VerifyError::ServerError)?;
+                    .map_err(CaesarError::ServerError)?;
                 Response::new_ok(id.clone(), Value::Null)
             }
             _ => Response::new_err(id, 0, format!("{err}")),
@@ -505,7 +509,7 @@ async fn handle_verify_request(
 
     sender
         .send(Message::Response(response))
-        .map_err(|e| VerifyError::ServerError(e.into()))?;
+        .map_err(|e| CaesarError::ServerError(e.into()))?;
 
     Ok(())
 }

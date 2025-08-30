@@ -6,10 +6,14 @@ use std::{
 
 use crate::{
     ast::{Diagnostic, FileId, Files, Span, SpanVariant, StoredFile},
-    driver::{Item, SmtVcCheckResult, SourceUnit, SourceUnitName},
+    driver::{
+        front::SourceUnit,
+        item::{Item, SourceUnitName},
+        smt_proof::SmtVcCheckResult,
+    },
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
-    VerifyError,
+    CaesarError,
 };
 
 mod cli;
@@ -133,23 +137,23 @@ pub trait Server: Send {
     fn get_files_internal(&mut self) -> &Mutex<Files>;
 
     /// Add a new [`Diagnostic`].
-    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError>;
+    fn add_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), CaesarError>;
 
     /// Add a new [`Diagnostic`], but throw it as a [`VerifyError::Diagnostic`]
     /// if it is a fatal error.
-    fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), VerifyError>;
+    fn add_or_throw_diagnostic(&mut self, diagnostic: Diagnostic) -> Result<(), CaesarError>;
 
     /// Add an explanation for vc calculations.
-    fn add_vc_explanation(&mut self, explanation: VcExplanation) -> Result<(), VerifyError>;
+    fn add_vc_explanation(&mut self, explanation: VcExplanation) -> Result<(), CaesarError>;
 
     /// Register a source unit span with the server.
     fn register_source_unit(
         &mut self,
         source_unit: &mut Item<SourceUnit>,
-    ) -> Result<(), VerifyError>;
+    ) -> Result<(), CaesarError>;
 
     /// Register a verify unit span as the current verifying with the server.
-    fn set_ongoing_unit(&mut self, name: &SourceUnitName) -> Result<(), VerifyError>;
+    fn set_ongoing_unit(&mut self, name: &SourceUnitName) -> Result<(), CaesarError>;
 
     /// Send a verification status message to the client (a custom notification).
     fn handle_vc_check_result<'smt, 'ctx>(
@@ -167,9 +171,9 @@ pub trait Server: Send {
     }
 }
 
-fn unless_fatal_error(werr: bool, diagnostic: Diagnostic) -> Result<Diagnostic, VerifyError> {
+fn unless_fatal_error(werr: bool, diagnostic: Diagnostic) -> Result<Diagnostic, CaesarError> {
     if diagnostic.kind() == ReportKind::Error || werr {
-        Err(VerifyError::Diagnostic(diagnostic))
+        Err(CaesarError::Diagnostic(diagnostic))
     } else {
         Ok(diagnostic)
     }

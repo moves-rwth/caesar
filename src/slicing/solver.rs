@@ -21,7 +21,7 @@ use crate::{
         util::{PartialMinimizeResult, SubsetExploration},
     },
     smt::translate_exprs::TranslateExprs,
-    VerifyError,
+    CaesarError,
 };
 
 use super::{
@@ -196,7 +196,7 @@ impl<'ctx> SliceSolver<'ctx> {
         &mut self,
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
-    ) -> Result<Option<SliceModel>, VerifyError> {
+    ) -> Result<Option<SliceModel>, CaesarError> {
         assert_eq!(self.prover.level(), 2);
         self.prover.pop();
         self.prover.pop();
@@ -233,7 +233,7 @@ impl<'ctx> SliceSolver<'ctx> {
     pub fn slice_verifying_unsat_core(
         &mut self,
         limits_ref: &LimitsRef,
-    ) -> Result<Option<SliceModel>, VerifyError> {
+    ) -> Result<Option<SliceModel>, CaesarError> {
         assert_eq!(self.prover.level(), 2);
         self.prover.pop();
         self.prover.pop();
@@ -272,7 +272,7 @@ impl<'ctx> SliceSolver<'ctx> {
         &mut self,
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
-    ) -> Result<Option<SliceModel>, VerifyError> {
+    ) -> Result<Option<SliceModel>, CaesarError> {
         assert_eq!(self.prover.level(), 2);
         self.prover.pop();
         self.prover.pop();
@@ -333,7 +333,7 @@ impl<'ctx> SliceSolver<'ctx> {
         &mut self,
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
-    ) -> Result<(ProveResult, Option<(InstrumentedModel<'ctx>, SliceModel)>), VerifyError> {
+    ) -> Result<(ProveResult, Option<(InstrumentedModel<'ctx>, SliceModel)>), CaesarError> {
         if !self.prover.has_provables() {
             return Ok((ProveResult::Proof, None));
         }
@@ -458,7 +458,7 @@ fn slice_sat_binary_search<'ctx>(
     active_slice_vars: &[Bool<'ctx>],
     options: &SliceSolveOptions,
     limits_ref: &LimitsRef,
-) -> Result<(), VerifyError> {
+) -> Result<(), CaesarError> {
     assert_eq!(prover.level(), 2);
 
     let slice_vars: Vec<(&Bool<'ctx>, i32)> =
@@ -511,7 +511,7 @@ fn slice_sat_binary_search<'ctx>(
         entered.record("res", tracing::field::debug(res));
 
         if prover.get_reason_unknown() == Some(ReasonUnknown::Interrupted) {
-            return Err(VerifyError::Interrupted);
+            return Err(CaesarError::Interrupted);
         }
 
         let mut done = false;

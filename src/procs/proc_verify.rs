@@ -1,6 +1,6 @@
 use crate::{
     ast::{Block, Direction, ProcDecl, SpanVariant, Spanned, StmtKind},
-    driver::VerifyUnit,
+    driver::core_verify::CoreVerifyTask,
     slicing::{wrap_with_error_message, wrap_with_success_message},
 };
 
@@ -71,7 +71,7 @@ pub fn encode_proc_verify(proc: &ProcDecl) -> Option<(Direction, Block)> {
 /// This is currently not used in the code anymore as we want to track the
 /// direction explicitly to have better error messages, but exists for the sake
 /// of completeness.
-pub fn to_direction_lower_bounds(mut verify_unit: VerifyUnit) -> VerifyUnit {
+pub fn to_direction_lower_bounds(mut verify_unit: CoreVerifyTask) -> CoreVerifyTask {
     if verify_unit.direction == Direction::Up {
         verify_unit.direction = Direction::Down;
         verify_unit.block.node.insert(
