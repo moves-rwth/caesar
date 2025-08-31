@@ -21,7 +21,11 @@ use z3rro::{
 };
 
 use crate::depgraph::DepGraph;
-use crate::driver::commands::{FunctionEncodingOption, QuantifierInstantiation, SliceVerifyMethod};
+use crate::driver::commands::options::{
+    DebugOptions, FunctionEncodingOption, QuantifierInstantiation, SliceVerifyMethod,
+};
+use crate::driver::commands::verify::VerifyCommand;
+use crate::driver::error::CaesarError;
 use crate::driver::quant_proof::QuantVcProveTask;
 use crate::smt::funcs::axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder, PartialEncoding};
 use crate::smt::funcs::fuel::{
@@ -47,7 +51,6 @@ use crate::{
         translate_exprs::TranslateExprs,
     },
     version::write_detailed_command_info,
-    CaesarError, DebugOptions, VerifyCommand,
 };
 
 /// Initialize global Z3 parameters based on the command's options.

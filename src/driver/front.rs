@@ -15,11 +15,14 @@ use tracing::{info_span, instrument, trace};
 use crate::{
     ast::{
         visit::VisitorMut, Block, DeclKind, DeclKindName, Diagnostic, Direction, ExprBuilder,
-        Files, SourceFilePath, Span, StoredFile, TyKind,
+        FileId, Files, SourceFilePath, Span, StoredFile, TyKind,
     },
     depgraph::DepGraph,
     driver::{
-        commands::FunctionEncodingOption,
+        commands::options::{
+            DebugOptions, FunctionEncodingOption, InputOptions, ModelCheckingOptions,
+        },
+        error::CaesarError,
         item::{Item, SourceUnitName},
     },
     front::{
@@ -40,8 +43,52 @@ use crate::{
     slicing::init_slicing,
     tyctx::TyCtx,
     vc::explain::{explain_decl_vc, explain_raw_vc},
-    CaesarError,
 };
+
+/// The first steps of running Caesar: parsing and type checking. This will
+/// create a new [`TyCtx`] (using [`init_tcx`] with all default built-in
+/// declarations) and will populate a new module with the parsed items.
+///
+/// If provided, the `--filter` option will be applied and the module's items
+/// will be filtered based on it.
+pub fn parse_and_tycheck(
+    input_options: &InputOptions,
+    debug_options: &DebugOptions,
+    server: &mut dyn Server,
+    user_files: &[FileId],
+) -> Result<(Module, TyCtx), CaesarError> {
+    let mut module = Module::new();
+    for file_id in user_files {
+        let file = server.get_file(*file_id).unwrap();
+        let new_units = module
+            .parse(&file, input_options.raw)
+            .map_err(|parse_err| parse_err.diagnostic())?;
+
+        // Print the result of parsing if requested
+        if debug_options.print_parsed {
+            println!("{}: Parsed file:\n", file.path);
+            for unit in new_units {
+                println!("{unit}");
+            }
+        }
+    }
+
+    let mut files = server.get_files_internal().lock().unwrap();
+    let mut tcx = init_tcx(&mut files);
+    drop(files);
+
+    let mut resolve = Resolve::new(&mut tcx);
+    module.resolve(&mut resolve)?;
+    let mut tycheck = Tycheck::new(&mut tcx);
+    module.tycheck(&mut tycheck, server)?;
+
+    // filter if requested
+    if let Some(filter) = &input_options.filter {
+        module.filter(filter)?;
+    };
+
+    Ok((module, tcx))
+}
 
 /// A module is a list of [`SourceUnit`]s, usually coming from one input file.
 #[derive(Debug)]
@@ -61,7 +108,11 @@ impl Module {
     ) -> &mut [Item<SourceUnit>] {
         let old_items_len = self.items.len();
         self.items.extend(iter);
-        &mut self.items[old_items_len + 1..]
+        if self.items.len() > old_items_len {
+            &mut self.items[old_items_len + 1..]
+        } else {
+            &mut []
+        }
     }
 
     /// Parse a file and add the contents to this module.
@@ -357,7 +408,7 @@ impl SourceUnit {
     /// Encode the source unit as a JANI file if requested.
     pub fn write_to_jani_if_requested(
         &self,
-        options: &crate::ModelCheckingOptions,
+        options: &ModelCheckingOptions,
         tcx: &TyCtx,
     ) -> Result<Option<PathBuf>, CaesarError> {
         if let Some(jani_dir) = &options.jani_dir {

@@ -10,13 +10,14 @@ use ariadne::ReportKind;
 use crate::{
     ast::{Diagnostic, FileId, Files, SourceFilePath, StoredFile},
     driver::{
+        commands::options::InputOptions,
+        error::CaesarError,
         front::SourceUnit,
         item::{Item, SourceUnitName},
         smt_proof::SmtVcCheckResult,
     },
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
-    CaesarError, InputOptions,
 };
 
 use super::{unless_fatal_error, Server, ServerError};

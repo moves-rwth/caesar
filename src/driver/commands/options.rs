@@ -1,108 +1,8 @@
-//! (CLI) command and option declarations to run Caesar with.
+use std::{path::PathBuf, time::Duration};
 
-use std::{ffi::OsString, path::PathBuf, time::Duration};
+use clap::{Args, ValueEnum};
 
-use clap::{command, crate_description, Args, Parser, Subcommand, ValueEnum};
-
-use crate::{resource_limits::MemorySize, smt::funcs::axiomatic::AxiomInstantiation, version};
-
-#[derive(Debug, Parser)]
-#[command(
-    name = "caesar",
-    about = crate_description!(),
-    long_about = "Caesar is a deductive verifier for probabilistic programs. Run the caesar binary with a subcommand to use it. Usually, you'll want to use the `verify` command.",
-    version = version::clap_detailed_version_info()
-)]
-pub struct CaesarCli {
-    #[command(subcommand)]
-    pub command: CaesarCommand,
-}
-
-impl CaesarCli {
-    pub fn parse_and_normalize() -> Self {
-        let cli = Self::parse();
-        match cli.command {
-            CaesarCommand::Other(vec) => {
-                // if it's an unrecognized command, parse as "verify" command
-                Self::parse_from(
-                    std::iter::once(std::env::args().next().unwrap().into())
-                        .chain(std::iter::once("verify".into()))
-                        .chain(vec),
-                )
-            }
-            command => CaesarCli { command },
-        }
-    }
-
-    pub fn debug_options(&self) -> Option<&DebugOptions> {
-        match &self.command {
-            CaesarCommand::Verify(verify_options) => Some(&verify_options.debug_options),
-            CaesarCommand::Entailment(verify_options) => Some(&verify_options.debug_options),
-            CaesarCommand::Lsp(verify_options) => Some(&verify_options.debug_options),
-            CaesarCommand::Mc(mc_options) => Some(&mc_options.debug_options),
-            CaesarCommand::ShellCompletions(_) => None,
-            CaesarCommand::Other(_vec) => unreachable!(),
-        }
-    }
-}
-
-#[derive(Debug, Subcommand)]
-pub enum CaesarCommand {
-    /// Verify HeyVL files with Caesar.
-    Verify(VerifyCommand),
-    /// Check an entailment with Caesar.
-    Entailment(VerifyCommand),
-    /// Model checking via JANI, can run Storm directly.
-    #[clap(visible_alias = "to-jani")]
-    Mc(ToJaniCommand),
-    /// Run Caesar's LSP server.
-    Lsp(VerifyCommand),
-    /// Generate shell completions for the Caesar binary.
-    ShellCompletions(ShellCompletionsCommand),
-    /// This is to support the default `verify` command.
-    #[command(external_subcommand)]
-    #[command(hide(true))]
-    Other(Vec<OsString>),
-}
-
-#[derive(Debug, Default, Args)]
-pub struct VerifyCommand {
-    #[command(flatten)]
-    pub input_options: InputOptions,
-
-    #[command(flatten)]
-    pub rlimit_options: ResourceLimitOptions,
-
-    #[command(flatten)]
-    pub model_checking_options: ModelCheckingOptions,
-
-    #[command(flatten)]
-    pub opt_options: OptimizationOptions,
-
-    #[command(flatten)]
-    pub lsp_options: LanguageServerOptions,
-
-    #[command(flatten)]
-    pub slice_options: SliceOptions,
-
-    #[command(flatten)]
-    pub debug_options: DebugOptions,
-}
-
-#[derive(Debug, Args)]
-pub struct ToJaniCommand {
-    #[command(flatten)]
-    pub input_options: InputOptions,
-
-    #[command(flatten)]
-    pub rlimit_options: ResourceLimitOptions,
-
-    #[command(flatten)]
-    pub model_checking_options: ModelCheckingOptions,
-
-    #[command(flatten)]
-    pub debug_options: DebugOptions,
-}
+use crate::{resource_limits::MemorySize, smt::funcs::axiomatic::AxiomInstantiation};
 
 #[derive(Debug, Default, Args)]
 #[command(next_help_heading = "Input Options")]
@@ -494,11 +394,4 @@ pub enum SliceVerifyMethod {
     /// good.
     #[value(name = "exists-forall")]
     ExistsForall,
-}
-
-#[derive(Debug, Default, Args)]
-pub struct ShellCompletionsCommand {
-    /// The shell for which to generate completions.
-    #[arg(required(true), value_enum)]
-    pub shell: Option<clap_complete::Shell>,
 }

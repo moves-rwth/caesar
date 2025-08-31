@@ -10,7 +10,10 @@ use crate::{
         TyKind, UnOpKind,
     },
     depgraph::Dependencies,
-    driver::{item::SourceUnitName, smt_proof::SmtVcProofTask},
+    driver::{
+        commands::verify::VerifyCommand, error::CaesarError, item::SourceUnitName,
+        smt_proof::SmtVcProofTask,
+    },
     opt::{
         boolify::Boolify, egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder,
         RemoveParens,
@@ -23,7 +26,6 @@ use crate::{
     },
     tyctx::TyCtx,
     vc::subst::apply_subst,
-    CaesarError, VerifyCommand,
 };
 
 /// Quantitative verification conditions that are to be checked.
@@ -91,7 +93,7 @@ impl QuantVcProveTask {
 
     /// Create a verification condition describing that one entails the other.
     ///
-    /// This assumes `Self` has [Direction::Up] and the other has
+    /// Panics unless `Self` has [Direction::Up] and the other has
     /// [Direction::Down].
     pub fn entails(self, other: Self) -> Self {
         assert_eq!(self.direction, Direction::Up);

@@ -1,5 +1,7 @@
 use pretty_assertions::assert_eq;
 
+use crate::driver::commands::verify::{single_desugar_test, verify_test};
+
 /// Remove trailing whitespace from each line of the string, remove newlines
 /// before and after the string, and remove the common indentation from each line.
 fn remove_whitespace(s: &mut String) {
@@ -46,9 +48,6 @@ fn remove_whitespace(s: &mut String) {
 
     *s = new_string;
 }
-
-use crate::single_desugar_test;
-use crate::verify_test;
 
 #[test]
 fn test_k_induction_transform() {
@@ -186,10 +185,10 @@ fn test_ost_transform() {
                 var k: UInt
                 b = init_b
                 a = init_a
-                { 
+                {
                     prob_choice, a, b, k = optional_stopping_lower_bound_0(
                         prob_choice, a, b, k
-                    ) 
+                    )
                 }
             }
             proc optional_stopping_lt_infinity_0(a: Bool) -> () {

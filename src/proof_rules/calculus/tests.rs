@@ -1,5 +1,4 @@
-use crate::verify_test;
-use crate::CaesarError;
+use crate::driver::{commands::verify::verify_test, error::CaesarError};
 
 #[test]
 fn test_wp_with_kind_fail() {

@@ -17,6 +17,7 @@ use crate::{
         util::remove_casts, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Direction,
         Expr, ExprBuilder, Files, Ident, ProcDecl, Span, Spanned, Stmt, StmtKind, Symbol, TyKind,
     },
+    driver::error::CaesarError,
     intrinsic::annotations::AnnotationKind,
     opt::{constfold::ConstFold, unfolder::Unfolder},
     pretty::SimplePretty,
@@ -27,7 +28,6 @@ use crate::{
     resource_limits::LimitsRef,
     smt::{funcs::axiomatic::AxiomaticFunctionEncoder, DepConfig, SmtCtx},
     tyctx::TyCtx,
-    CaesarError,
 };
 
 /// Maintains a list of [`Expr`]s for successive simplification steps.

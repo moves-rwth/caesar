@@ -17,9 +17,8 @@ use z3rro::util::PrettyRational;
 
 use crate::{
     ast::{Diagnostic, Label, Span},
-    driver::commands::RunWhichStorm,
+    driver::commands::options::{ModelCheckingOptions, RunWhichStorm},
     resource_limits::LimitsRef,
-    ModelCheckingOptions,
 };
 
 pub type StormResult = Result<StormOutput, StormError>;

@@ -21,6 +21,8 @@ use serde_json::{json, Value};
 use crate::{
     ast::{DeclKind, Diagnostic, FileId, Files, SourceFilePath, Span, StoredFile},
     driver::{
+        commands::verify::VerifyCommand,
+        error::CaesarError,
         front::SourceUnit,
         item::{Item, SourceUnitName},
         smt_proof::SmtVcCheckResult,
@@ -28,7 +30,6 @@ use crate::{
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
     version::caesar_semver_version,
-    CaesarError, VerifyCommand,
 };
 
 use super::{unless_fatal_error, Server, ServerError, VerifyStatus, VerifyStatusList};

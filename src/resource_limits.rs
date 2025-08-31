@@ -30,10 +30,6 @@ impl MemorySize {
         MemorySize(mb * 1024 * 1024)
     }
 
-    pub fn as_bytes(&self) -> usize {
-        self.0
-    }
-
     pub fn as_megabytes(&self) -> usize {
         self.0 / 1024 / 1024
     }

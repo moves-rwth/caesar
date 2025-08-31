@@ -281,7 +281,7 @@ fn subst<'a>(expr: Expr, iter: impl IntoIterator<Item = (&'a Param, Expr)>) -> E
 #[cfg(test)]
 mod test {
 
-    use crate::verify_test;
+    use crate::driver::commands::verify::verify_test;
 
     /// Test the classic bug when encoding procedure calls. When a variable
     /// occurs on both the left-hand side and the right-hand side of a procedure
@@ -308,9 +308,9 @@ mod test {
     fn test_proc_direction_mismatch() {
         // this should produce an error
         let source = r#"
-            
+
             coproc test1() -> () {}
-            
+
             proc test2() -> () {
                 test1() // a coproc is being called from a proc
             }

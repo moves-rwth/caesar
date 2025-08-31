@@ -175,7 +175,7 @@ impl FuncIntrin for LenIntrin {
 
 #[cfg(test)]
 mod test {
-    use crate::verify_test;
+    use crate::driver::commands::verify::verify_test;
 
     #[test]
     fn test_store() {

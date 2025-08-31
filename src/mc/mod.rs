@@ -27,10 +27,10 @@ use crate::{
         BinOpKind, DeclKind, DeclRef, Diagnostic, Expr, ExprBuilder, ExprData, ExprKind, Ident,
         Label, LitKind, ProcDecl, Shared, Span, Spanned, Stmt, TyKind, UnOpKind, VarDecl,
     },
+    driver::commands::options::ModelCheckingOptions,
     procs::proc_verify::encode_proc_verify,
     tyctx::TyCtx,
     version::caesar_detailed_version,
-    ModelCheckingOptions,
 };
 
 use self::{

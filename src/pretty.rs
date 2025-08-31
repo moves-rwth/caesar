@@ -47,6 +47,7 @@ where
 }
 
 /// Render a document to a String.
+#[allow(unused)]
 pub fn pretty_string<T: SimplePretty>(value: &T) -> String {
     let mut buf = String::new();
     value.pretty().render_fmt(80, &mut buf).unwrap();

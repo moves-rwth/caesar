@@ -6,13 +6,14 @@ use std::{
 use crate::{
     ast::{DeclKind, Diagnostic, FileId, Files, StoredFile},
     driver::{
+        commands::verify::VerifyCommand,
+        error::CaesarError,
         front::SourceUnit,
         item::{Item, SourceUnitName},
         smt_proof::SmtVcCheckResult,
     },
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
-    CaesarError, VerifyCommand,
 };
 
 use super::{unless_fatal_error, Server, ServerError, VerifyStatus, VerifyStatusList};

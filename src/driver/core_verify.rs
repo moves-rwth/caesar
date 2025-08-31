@@ -9,7 +9,10 @@ use crate::{
         visit::VisitorMut, Block, DeclKind, Direction, Expr, ExprBuilder, Span, TyKind, UnOpKind,
     },
     depgraph::{DepGraph, Dependencies},
-    driver::{commands::SliceOptions, front::SourceUnit, quant_proof::QuantVcProveTask},
+    driver::{
+        commands::options::SliceOptions, error::CaesarError, front::SourceUnit,
+        quant_proof::QuantVcProveTask,
+    },
     pretty::{Doc, SimplePretty},
     procs::{
         proc_verify::{encode_proc_verify, to_direction_lower_bounds},
@@ -22,7 +25,6 @@ use crate::{
     },
     tyctx::TyCtx,
     vc::vcgen::Vcgen,
-    CaesarError,
 };
 
 use tracing::instrument;

@@ -12,13 +12,19 @@ use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
 use crate::{
     ast::{DeclKind, Diagnostic, Direction, ExprBuilder, FileId, Label, Span},
-    driver::{core_verify::CoreVerifyTask, front::SourceUnit, item::Item},
-    finalize_verify_result, mk_cli_server, mk_function_encoder, parse_and_tycheck, print_timings,
+    driver::{
+        commands::{mk_cli_server, print_timings, verify::VerifyCommand},
+        core_verify::CoreVerifyTask,
+        error::{finalize_caesar_result, CaesarError},
+        front::{parse_and_tycheck, SourceUnit},
+        item::Item,
+        smt_proof::mk_function_encoder,
+    },
     resource_limits::{LimitError, LimitsRef},
+    servers::SharedServer,
     slicing::transform::SliceStmts,
     smt::{translate_exprs::TranslateExprs, DepConfig, SmtCtx},
     vc::{explain::VcExplanation, vcgen::Vcgen},
-    CaesarError, SharedServer, VerifyCommand,
 };
 
 pub async fn run_verify_entailment_command(options: VerifyCommand) -> ExitCode {
@@ -33,7 +39,7 @@ pub async fn run_verify_entailment_command(options: VerifyCommand) -> ExitCode {
         print_timings();
     }
 
-    finalize_verify_result(server, &options.rlimit_options, verify_result)
+    finalize_caesar_result(server, &options.rlimit_options, verify_result)
 }
 
 async fn verify_entailment(

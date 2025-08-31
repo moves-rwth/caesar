@@ -2,6 +2,7 @@
 
 pub mod commands;
 pub mod core_verify;
+pub mod error;
 pub mod front;
 pub mod item;
 pub mod quant_proof;

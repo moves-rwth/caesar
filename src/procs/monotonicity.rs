@@ -92,7 +92,7 @@ impl VisitorMut for MonotonicityVisitor {
 
 #[cfg(test)]
 mod test {
-    use crate::verify_test;
+    use crate::driver::commands::verify::verify_test;
 
     #[test]
     fn test_monotonicity_check() {

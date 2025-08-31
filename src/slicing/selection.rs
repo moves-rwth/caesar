@@ -198,6 +198,7 @@ impl SliceSelection {
 
     /// Slice everything. This is only used in our tests, as it is generally
     /// unsound in every other use case.
+    #[cfg(test)]
     pub const EVERYTHING: Self = SliceSelection {
         concordant: true,
         discordant: true,

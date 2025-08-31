@@ -15,13 +15,13 @@ use z3rro::{
 
 use crate::{
     ast::{ExprBuilder, Span},
+    driver::error::CaesarError,
     resource_limits::{LimitError, LimitsRef},
     slicing::{
         model::{SliceMode, SliceModel},
         util::{PartialMinimizeResult, SubsetExploration},
     },
     smt::translate_exprs::TranslateExprs,
-    CaesarError,
 };
 
 use super::{

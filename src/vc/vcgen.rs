@@ -10,10 +10,10 @@ use crate::{
         BinOpKind, Block, DeclKind, Diagnostic, Direction, Expr, ExprBuilder, ExprKind, Ident,
         Label, QuantOpKind, Span, SpanVariant, Stmt, StmtKind, UnOpKind,
     },
+    driver::error::CaesarError,
     intrinsic::annotations::AnnotationKind,
     resource_limits::LimitsRef,
     tyctx::TyCtx,
-    CaesarError,
 };
 
 use super::explain::{explain_annotated_while, explain_proc_call, explain_subst, VcExplanation};

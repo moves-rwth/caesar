@@ -7,13 +7,13 @@ use std::{
 use crate::{
     ast::{Diagnostic, FileId, Files, Span, SpanVariant, StoredFile},
     driver::{
+        error::CaesarError,
         front::SourceUnit,
         item::{Item, SourceUnitName},
         smt_proof::SmtVcCheckResult,
     },
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
-    CaesarError,
 };
 
 mod cli;
@@ -170,6 +170,9 @@ pub trait Server: Send {
         ExitCode::SUCCESS
     }
 }
+
+/// A shared server instance, protected by a mutex.
+pub type SharedServer = Arc<Mutex<dyn Server>>;
 
 fn unless_fatal_error(werr: bool, diagnostic: Diagnostic) -> Result<Diagnostic, CaesarError> {
     if diagnostic.kind() == ReportKind::Error || werr {
