@@ -8,7 +8,7 @@ use ariadne::ReportKind;
 use tracing::instrument;
 
 use crate::ast::{
-    Block, DeclKind, Diagnostic, Expr, FileId, Label, LitKind, Span, SpanVariant, StoredFile,
+    Block, DeclKind, Diagnostic, FileId, Label, LitKind, Span, SpanVariant, StoredFile,
 };
 
 lalrpop_util::lalrpop_mod!(
@@ -108,7 +108,8 @@ pub fn parse_raw(file_id: FileId, source: &str) -> Result<Block, ParseError> {
 }
 
 /// Parse an expression. This function DOES NOT handle comments!
-pub fn parse_expr(file_id: FileId, source: &str) -> Result<Expr, ParseError> {
+#[cfg(test)]
+pub fn parse_expr(file_id: FileId, source: &str) -> Result<crate::ast::Expr, ParseError> {
     let parser = grammar::ExprParser::new();
     parser
         .parse(file_id, source)

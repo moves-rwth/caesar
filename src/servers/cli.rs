@@ -59,10 +59,6 @@ impl CliServer {
 }
 
 impl Server for CliServer {
-    fn send_server_ready(&self) -> Result<(), ServerError> {
-        Ok(())
-    }
-
     fn get_file(&self, file_id: FileId) -> Option<Arc<StoredFile>> {
         self.files.lock().unwrap().get(file_id).cloned()
     }

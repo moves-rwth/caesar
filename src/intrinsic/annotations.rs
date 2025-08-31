@@ -22,6 +22,7 @@ use crate::{
 pub struct AnnotationDecl {
     pub name: Ident,
     pub inputs: Spanned<Vec<Param>>,
+    #[allow(unused)]
     pub span: Span,
 }
 
@@ -191,8 +192,6 @@ impl CalculusType {
         )
     }
 }
-
-pub struct CalculusAnnotationError;
 
 #[derive(Debug, Clone)]
 pub enum AnnotationKind {

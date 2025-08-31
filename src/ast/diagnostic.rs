@@ -521,7 +521,7 @@ impl Diagnostic {
         builder
     }
 
-    pub fn into_lsp_diagnostic(
+    pub fn as_lsp_diagnostic(
         &self,
         files: &Files,
     ) -> Option<(VersionedTextDocumentIdentifier, lsp_types::Diagnostic)> {

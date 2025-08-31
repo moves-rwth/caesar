@@ -129,9 +129,6 @@ impl VerifyStatusList {
 /// A server that serves information to a client, such as the CLI or an LSP
 /// client.
 pub trait Server: Send {
-    /// Send our custom `serverReady` notification to the client.
-    fn send_server_ready(&self) -> Result<(), ServerError>;
-
     fn get_file(&self, file_id: FileId) -> Option<Arc<StoredFile>>;
 
     fn get_files_internal(&mut self) -> &Mutex<Files>;

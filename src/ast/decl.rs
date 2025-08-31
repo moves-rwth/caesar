@@ -294,7 +294,7 @@ impl VarKind {
         matches!(self, VarKind::Mut | VarKind::Output)
     }
 
-    pub fn to_str(&self) -> &'static str {
+    pub fn to_str(self) -> &'static str {
         match self {
             VarKind::Input => "input",
             VarKind::Output => "output",

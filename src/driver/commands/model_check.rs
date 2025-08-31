@@ -1,6 +1,7 @@
 use std::{ops::DerefMut, process::ExitCode, sync::Mutex, time::Instant};
 
 use clap::Args;
+use tracing::trace;
 
 use crate::{
     ast::FileId,
@@ -107,6 +108,7 @@ pub fn run_model_checking(
                 tracing::debug!(file=?path.display(), "wrote JANI file");
                 if options.run_storm.is_some() {
                     let res = run_storm(&options, &path, vec!["reward".to_owned()], limits_ref);
+                    trace!("Result from storm: {:?}", res);
                     server.add_diagnostic(storm_result_to_diagnostic(
                         &res,
                         source_unit.diagnostic_span(),

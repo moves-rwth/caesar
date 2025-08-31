@@ -14,8 +14,8 @@ use tracing::{info_span, instrument, trace};
 
 use crate::{
     ast::{
-        visit::VisitorMut, Block, DeclKind, DeclKindName, Diagnostic, Direction, ExprBuilder,
-        FileId, Files, SourceFilePath, Span, StoredFile, TyKind,
+        visit::VisitorMut, Block, DeclKind, Diagnostic, Direction, ExprBuilder, FileId, Files,
+        SourceFilePath, Span, StoredFile, TyKind,
     },
     depgraph::DepGraph,
     driver::{
@@ -318,14 +318,6 @@ impl SourceUnit {
         match self {
             SourceUnit::Decl(decl) => decl.name().span,
             SourceUnit::Raw(block) => block.span,
-        }
-    }
-
-    /// Retrieve the [`DeclKindName`] of this source unit, if it's a declaration.
-    pub fn decl_kind_name(&self) -> Option<DeclKindName> {
-        match self {
-            SourceUnit::Decl(decl) => Some(decl.kind_name()),
-            SourceUnit::Raw(_) => None,
         }
     }
 

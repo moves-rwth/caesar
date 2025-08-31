@@ -48,6 +48,7 @@ pub fn storm_result_to_diagnostic(result: &StormResult, span: Span) -> Diagnosti
 
 #[derive(Debug)]
 pub struct StormOutput {
+    #[allow(unused)] // used in logging
     pub version: String,
     pub results: IndexMap<String, StormValue>,
 }

@@ -186,7 +186,7 @@ impl LspServer {
         for (document_id, diagnostics) in diags_by_document {
             let diagnostics = diagnostics
                 .iter()
-                .map(|diag| diag.into_lsp_diagnostic(&files).unwrap().1)
+                .map(|diag| diag.as_lsp_diagnostic(&files).unwrap().1)
                 .collect();
             let params = lsp_types::PublishDiagnosticsParams {
                 uri: document_id.uri,
@@ -303,15 +303,6 @@ impl LspServer {
 }
 
 impl Server for LspServer {
-    fn send_server_ready(&self) -> Result<(), ServerError> {
-        let start_notification =
-            lsp_server::Notification::new("custom/serverReady".to_string(), ());
-        self.connection
-            .sender
-            .send(Message::Notification(start_notification))?;
-        Ok(())
-    }
-
     fn get_file(&self, file_id: FileId) -> Option<Arc<StoredFile>> {
         self.files.lock().unwrap().get(file_id).cloned()
     }

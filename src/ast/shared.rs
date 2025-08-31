@@ -91,10 +91,6 @@ impl<T> RefEqShared<T> {
         Self(shared)
     }
 
-    pub fn into_shared(self) -> Shared<T> {
-        self.0
-    }
-
     pub fn as_shared(&self) -> &Shared<T> {
         &self.0
     }
