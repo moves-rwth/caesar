@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     ops::Deref,
     sync::{Arc, Mutex},
 };
@@ -12,17 +13,18 @@ use crate::{
         item::{Item, SourceUnitName},
         smt_proof::SmtVcCheckResult,
     },
+    servers::FileStatus,
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
 };
 
-use super::{unless_fatal_error, Server, ServerError, VerifyStatus, VerifyStatusList};
+use super::{unless_fatal_error, Server, ServerError, VerifyStatus};
 
 pub struct TestServer {
     pub files: Arc<Mutex<Files>>,
     werr: bool,
     pub diagnostics: Vec<Diagnostic>,
-    pub statuses: VerifyStatusList,
+    pub file_statuses: HashMap<FileId, FileStatus>,
 }
 
 impl TestServer {
@@ -31,7 +33,7 @@ impl TestServer {
             files: Default::default(),
             werr: options.input_options.werr,
             diagnostics: Default::default(),
-            statuses: Default::default(),
+            file_statuses: Default::default(),
         }
     }
 }
@@ -64,14 +66,37 @@ impl Server for TestServer {
         source_unit: &mut Item<SourceUnit>,
     ) -> Result<(), CaesarError> {
         let name = source_unit.name().clone();
+
+        let statuses = &mut self
+            .file_statuses
+            .entry(name.span().file)
+            .or_default()
+            .verify_statuses;
+
         if let SourceUnit::Decl(DeclKind::ProcDecl(_)) = source_unit.enter_mut().deref() {
-            self.statuses.update_status(&name, VerifyStatus::Todo);
+            statuses.update_status(&name, VerifyStatus::Todo);
         }
         Ok(())
     }
 
     fn set_ongoing_unit(&mut self, name: &SourceUnitName) -> Result<(), CaesarError> {
-        self.statuses.update_status(name, VerifyStatus::Ongoing);
+        let statuses = &mut self
+            .file_statuses
+            .entry(name.span().file)
+            .or_default()
+            .verify_statuses;
+
+        statuses.update_status(name, VerifyStatus::Ongoing);
+        Ok(())
+    }
+
+    fn set_file_status_type(
+        &mut self,
+        file_id: &FileId,
+        status_type: super::FileStatusType,
+    ) -> Result<(), CaesarError> {
+        let doc_status = self.file_statuses.entry(*file_id).or_default();
+        doc_status.status_type = status_type;
         Ok(())
     }
 
@@ -81,8 +106,13 @@ impl Server for TestServer {
         result: &mut SmtVcCheckResult<'ctx>,
         _translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError> {
-        self.statuses
-            .update_status(name, VerifyStatus::from_prove_result(&result.prove_result));
+        let statuses = &mut self
+            .file_statuses
+            .entry(name.span().file)
+            .or_default()
+            .verify_statuses;
+
+        statuses.update_status(name, VerifyStatus::from_prove_result(&result.prove_result));
         Ok(())
     }
 }

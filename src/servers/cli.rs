@@ -98,6 +98,15 @@ impl Server for CliServer {
         Ok(())
     }
 
+    fn set_file_status_type(
+        &mut self,
+        _file_id: &FileId,
+        _status_type: super::FileStatusType,
+    ) -> Result<(), CaesarError> {
+        // Not relevant for CLI
+        Ok(())
+    }
+
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
         name: &SourceUnitName,
