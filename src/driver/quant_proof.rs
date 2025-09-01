@@ -10,23 +10,66 @@ use crate::{
         TyKind, UnOpKind,
     },
     depgraph::Dependencies,
-    driver::{
-        commands::verify::VerifyCommand, error::CaesarError, item::SourceUnitName,
-        smt_proof::SmtVcProofTask,
-    },
+    driver::{commands::verify::VerifyCommand, error::CaesarError, item::SourceUnitName},
     opt::{
         boolify::Boolify, egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder,
         RemoveParens,
     },
     resource_limits::{LimitError, LimitsRef},
-    smt::{
-        funcs::{axiomatic::AxiomaticFunctionEncoder, fuel::literals::LiteralExprCollector},
-        translate_exprs::TranslateExprs,
-        DepConfig, SmtCtx,
-    },
+    smt::{funcs::axiomatic::AxiomaticFunctionEncoder, DepConfig, SmtCtx},
     tyctx::TyCtx,
     vc::subst::apply_subst,
 };
+
+/// Runs the whole pipeline to lower a [`QuantVcProveTask`] to a
+/// [`BoolVcProveTask`]. This includes unfolding, quantifier elimination, and
+/// various optimizations (depending on options).
+pub fn lower_quant_prove_task(
+    options: &VerifyCommand,
+    limits_ref: &LimitsRef,
+    tcx: &mut TyCtx,
+    name: &SourceUnitName,
+    mut quant_task: QuantVcProveTask,
+) -> Result<BoolVcProveTask, CaesarError> {
+    // 1. Unfolding (applies substitutions)
+    quant_task.unfold(options, limits_ref, tcx)?;
+
+    // 2. Quantifier elimination
+    if !options.opt_options.no_qelim {
+        quant_task.qelim(tcx, limits_ref)?;
+    }
+
+    // In-between, gather some stats about the vc expression
+    quant_task.trace_expr_stats();
+
+    // 3. Now turn this quantitative formula into a Boolean one
+    let mut bool_task = quant_task.into_bool_vc();
+
+    if options.opt_options.egraph {
+        bool_task.egraph_simplify();
+    }
+
+    // 4. Optimizations
+    // 4.1. Remove parentheses if needed
+    if !options.opt_options.no_boolify || options.opt_options.opt_rel {
+        bool_task.remove_parens();
+    }
+    // 4.2 Boolify (enabled by default)
+    if !options.opt_options.no_boolify {
+        bool_task.opt_boolify();
+    }
+    // 4.3. Relational optimization (disabled by default)
+    if options.opt_options.opt_rel {
+        bool_task.opt_relational();
+    }
+
+    // print theorem to prove if requested
+    if options.debug_options.print_theorem {
+        bool_task.print_theorem(name);
+    }
+
+    Ok(bool_task)
+}
 
 /// Quantitative verification conditions that are to be checked.
 #[derive(Debug)]
@@ -139,8 +182,8 @@ impl QuantVcProveTask {
 /// quantative verification conditions are true/false depending on the direction.
 #[derive(Debug)]
 pub struct BoolVcProveTask {
-    quant_vc: QuantVcProveTask,
-    vc: Expr,
+    pub quant_vc: QuantVcProveTask,
+    pub vc: Expr,
 }
 
 impl BoolVcProveTask {
@@ -177,31 +220,5 @@ impl BoolVcProveTask {
     /// Get the dependencies of this verification condition.
     pub fn get_dependencies(&self) -> &Dependencies {
         &self.quant_vc.deps
-    }
-
-    /// Translate to SMT.
-    pub fn into_smt_vc<'smt, 'ctx>(
-        mut self,
-        translate: &mut TranslateExprs<'smt, 'ctx>,
-    ) -> SmtVcProofTask<'ctx> {
-        let span = info_span!("translation to Z3");
-        let _entered = span.enter();
-
-        if translate.ctx.lit_wrap {
-            let literal_exprs =
-                LiteralExprCollector::new(translate.ctx).collect_literals(&mut self.vc);
-            translate.set_literal_exprs(literal_exprs);
-        }
-
-        let bool_vc = translate.t_bool(&self.vc);
-
-        if translate.ctx.lit_wrap {
-            translate.set_literal_exprs(Default::default());
-        }
-
-        SmtVcProofTask {
-            quant_vc: self.quant_vc,
-            vc: bool_vc,
-        }
     }
 }

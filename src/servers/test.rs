@@ -11,7 +11,7 @@ use crate::{
         error::CaesarError,
         front::SourceUnit,
         item::{Item, SourceUnitName},
-        smt_proof::SmtVcCheckResult,
+        smt_proof::SmtVcProveResult,
     },
     servers::FileStatus,
     smt::translate_exprs::TranslateExprs,
@@ -103,7 +103,7 @@ impl Server for TestServer {
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
         name: &SourceUnitName,
-        result: &mut SmtVcCheckResult<'ctx>,
+        result: &mut SmtVcProveResult<'ctx>,
         _translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError> {
         let statuses = &mut self

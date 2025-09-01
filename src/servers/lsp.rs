@@ -26,7 +26,7 @@ use crate::{
         error::CaesarError,
         front::SourceUnit,
         item::{Item, SourceUnitName},
-        smt_proof::SmtVcCheckResult,
+        smt_proof::SmtVcProveResult,
     },
     servers::{FileStatus, FileStatusType},
     smt::translate_exprs::TranslateExprs,
@@ -425,7 +425,7 @@ impl Server for LspServer {
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
         name: &SourceUnitName,
-        result: &mut SmtVcCheckResult<'ctx>,
+        result: &mut SmtVcProveResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError> {
         result.emit_diagnostics(name.span(), self, translate)?;

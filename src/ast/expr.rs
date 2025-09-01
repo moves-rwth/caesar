@@ -11,6 +11,8 @@ use crate::{
 
 use super::{shared::Shared, DeclKind, DeclRef, Ident, Span, Spanned, Symbol, TyKind, VarDecl};
 
+/// A [`Shared`] reference to [`ExprData`]. Automatically clones when a mutable
+/// reference is taken.
 pub type Expr = Shared<ExprData>;
 
 impl Expr {

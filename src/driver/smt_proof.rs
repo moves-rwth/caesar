@@ -26,23 +26,25 @@ use crate::driver::commands::options::{
 };
 use crate::driver::commands::verify::VerifyCommand;
 use crate::driver::error::CaesarError;
-use crate::driver::quant_proof::QuantVcProveTask;
+use crate::driver::item::SourceUnitName;
+use crate::driver::quant_proof::{BoolVcProveTask, QuantVcProveTask};
+use crate::slicing::transform::SliceStmts;
 use crate::smt::funcs::axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder, PartialEncoding};
+use crate::smt::funcs::fuel::literals::LiteralExprCollector;
 use crate::smt::funcs::fuel::{
     FuelEncodingOptions, FuelMonoFunctionEncoder, FuelParamFunctionEncoder,
 };
 use crate::smt::funcs::{FunctionEncoder, RecFunFunctionEncoder};
+use crate::smt::{DepConfig, SmtCtx};
 use crate::tyctx::TyCtx;
 use crate::{
     ast::{DeclKind, DeclKindName, Diagnostic, Label, Span, VarKind},
-    driver::item::SourceUnitName,
     pretty::Doc,
     resource_limits::LimitsRef,
     servers::Server,
     slicing::{
         model::SliceModel,
         solver::{SliceMinimality, SliceSolveOptions, SliceSolver, UnknownHandling},
-        transform::SliceStmts,
     },
     smt::{
         pretty_model::{
@@ -127,7 +129,45 @@ pub fn set_global_z3_params(command: &VerifyCommand, limits_ref: &LimitsRef) {
     }
 }
 
-/// Create the functio encoder based on the given command's options.
+/// Run the SMT prove task: translate to Z3, run the solver, notify the server,
+/// and return the result.
+#[allow(clippy::too_many_arguments)]
+pub fn run_smt_prove_task(
+    options: &VerifyCommand,
+    limits_ref: &LimitsRef,
+    tcx: &TyCtx,
+    depgraph: &DepGraph,
+    name: &SourceUnitName,
+    server: &mut dyn Server,
+    slice_vars: SliceStmts,
+    vc_is_valid: BoolVcProveTask,
+) -> Result<ProveResult, CaesarError> {
+    let ctx = Context::new(&z3::Config::default());
+    let function_encoder = mk_function_encoder(tcx, depgraph, options)?;
+    let dep_config = DepConfig::Set(vc_is_valid.get_dependencies());
+    let smt_ctx = SmtCtx::new(&ctx, tcx, function_encoder, dep_config);
+    let mut translate = TranslateExprs::new(&smt_ctx);
+    let mut vc_is_valid = SmtVcProveTask::translate(vc_is_valid, &mut translate);
+
+    if !options.opt_options.no_simplify {
+        vc_is_valid.simplify();
+    }
+
+    if options.debug_options.z3_trace {
+        tracing::info!("Z3 tracing output will be written to `z3.log`.");
+    }
+
+    let mut result =
+        vc_is_valid.run_solver(options, limits_ref, name, &ctx, &mut translate, &slice_vars)?;
+
+    server
+        .handle_vc_check_result(name, &mut result, &mut translate)
+        .map_err(CaesarError::ServerError)?;
+
+    Ok(result.prove_result)
+}
+
+/// Create the function encoder based on the given command's options.
 pub fn mk_function_encoder<'ctx>(
     tcx: &TyCtx,
     depgraph: &DepGraph,
@@ -211,12 +251,38 @@ pub fn mk_function_encoder<'ctx>(
 }
 
 /// The verification condition validitiy formula as a Z3 formula.
-pub struct SmtVcProofTask<'ctx> {
+pub struct SmtVcProveTask<'ctx> {
     pub quant_vc: QuantVcProveTask,
     pub vc: Bool<'ctx>,
 }
 
-impl<'ctx> SmtVcProofTask<'ctx> {
+impl<'ctx> SmtVcProveTask<'ctx> {
+    /// Create a new SMT verification condition proof task.
+    pub fn translate<'smt>(
+        mut task: BoolVcProveTask,
+        translate: &mut TranslateExprs<'smt, 'ctx>,
+    ) -> SmtVcProveTask<'ctx> {
+        let span = info_span!("translation to Z3");
+        let _entered = span.enter();
+
+        if translate.ctx.lit_wrap {
+            let literal_exprs =
+                LiteralExprCollector::new(translate.ctx).collect_literals(&mut task.vc);
+            translate.set_literal_exprs(literal_exprs);
+        }
+
+        let bool_vc = translate.t_bool(&task.vc);
+
+        if translate.ctx.lit_wrap {
+            translate.set_literal_exprs(Default::default());
+        }
+
+        SmtVcProveTask {
+            quant_vc: task.quant_vc,
+            vc: bool_vc,
+        }
+    }
+
     /// Simplify the SMT formula using Z3's simplifier.
     pub fn simplify(&mut self) {
         let span = info_span!("simplify query");
@@ -233,7 +299,7 @@ impl<'ctx> SmtVcProofTask<'ctx> {
         ctx: &'ctx Context,
         translate: &mut TranslateExprs<'smt, 'ctx>,
         slice_vars: &SliceStmts,
-    ) -> Result<SmtVcCheckResult<'ctx>, CaesarError> {
+    ) -> Result<SmtVcProveResult<'ctx>, CaesarError> {
         let span = info_span!("SAT check");
         let _entered = span.enter();
 
@@ -257,7 +323,7 @@ impl<'ctx> SmtVcProofTask<'ctx> {
         }
 
         if options.debug_options.no_verify {
-            return Ok(SmtVcCheckResult {
+            return Ok(SmtVcProveResult {
                 prove_result: ProveResult::Unknown(ReasonUnknown::Other(
                     "verification skipped".to_owned(),
                 )),
@@ -341,7 +407,7 @@ impl<'ctx> SmtVcProofTask<'ctx> {
             write_smtlib(&options, name, smtlib, Some(&result))?;
         }
 
-        Ok(SmtVcCheckResult {
+        Ok(SmtVcProveResult {
             prove_result: result,
             model,
             slice_model,
@@ -426,15 +492,15 @@ fn write_smtlib(
     Ok(())
 }
 
-/// The result of an SMT solver call for a [`SmtVcUnit`].
-pub struct SmtVcCheckResult<'ctx> {
+/// The result of an SMT solver call for a [`SmtVcProveTask`].
+pub struct SmtVcProveResult<'ctx> {
     pub prove_result: ProveResult,
     model: Option<InstrumentedModel<'ctx>>,
     slice_model: Option<SliceModel>,
     quant_vc: QuantVcProveTask,
 }
 
-impl<'ctx> SmtVcCheckResult<'ctx> {
+impl<'ctx> SmtVcProveResult<'ctx> {
     /// Print the result of the query to stdout.
     pub fn print_prove_result<'smt>(
         &mut self,

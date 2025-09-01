@@ -10,7 +10,7 @@ use crate::{
         error::CaesarError,
         front::SourceUnit,
         item::{Item, SourceUnitName},
-        smt_proof::SmtVcCheckResult,
+        smt_proof::SmtVcProveResult,
     },
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
@@ -189,7 +189,7 @@ pub trait Server: Send {
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
         name: &SourceUnitName,
-        result: &mut SmtVcCheckResult<'ctx>,
+        result: &mut SmtVcProveResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError>;
 

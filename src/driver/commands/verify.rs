@@ -1,7 +1,6 @@
 use std::{ops::DerefMut, process::ExitCode, sync::Arc};
 
 use clap::Args;
-use z3::{Config, Context};
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
 use crate::{
@@ -20,11 +19,11 @@ use crate::{
         error::{finalize_caesar_result, CaesarError},
         front::parse_and_tycheck,
         item::Item,
-        smt_proof::{mk_function_encoder, set_global_z3_params},
+        quant_proof::lower_quant_prove_task,
+        smt_proof::{run_smt_prove_task, set_global_z3_params},
     },
     resource_limits::{await_with_resource_limits, LimitError, LimitsRef},
     servers::{Server, SharedServer},
-    smt::{translate_exprs::TranslateExprs, DepConfig, SmtCtx},
     vc::{explain::VcExplanation, vcgen::Vcgen},
 };
 
@@ -232,17 +231,17 @@ fn verify_files_main(
     let mut num_failures: usize = 0;
 
     for verify_unit in &mut verify_units {
-        let (name, mut verify_unit) = verify_unit.enter_with_name();
-
         limits_ref.check_limits()?;
+
+        let (name, mut verify_unit) = verify_unit.enter_with_name();
 
         // Set the current unit as ongoing
         server.set_ongoing_unit(name)?;
 
-        // 4. Desugaring: transforming spec calls to procs
+        // Desugaring: transforming spec calls to procs
         verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
 
-        // 5. Prepare slicing
+        // Prepare slicing
         let slice_vars = verify_unit.prepare_slicing(&options.slice_options, &mut tcx, server)?;
 
         // print HeyVL core after desugaring if requested
@@ -250,99 +249,48 @@ fn verify_files_main(
             println!("{}: HeyVL core query:\n{}\n", name, *verify_unit);
         }
 
-        // 6. Generating verification conditions.
+        // Generating verification conditions.
         let explanations = options
             .lsp_options
             .explain_core_vc
             .then(|| VcExplanation::new(verify_unit.direction));
         let mut vcgen = Vcgen::new(&tcx, &limits_ref, explanations);
-        let mut vc_expr = verify_unit.vcgen(&mut vcgen)?;
+        let vc_expr = verify_unit.vcgen(&mut vcgen)?;
         if let Some(explanation) = vcgen.explanation {
             server.add_vc_explanation(explanation)?;
         }
 
-        // 7. Unfolding (applies substitutions)
-        vc_expr.unfold(options, &limits_ref, &tcx)?;
+        // Lowering the quantitative task to a Boolean one. This contains (lazy)
+        // unfolding, quantifier elimination, and various optimizations
+        // (depending on options).
+        let vc_is_valid = lower_quant_prove_task(options, &limits_ref, &mut tcx, name, vc_expr)?;
 
-        // 8. Quantifier elimination
-        if !options.opt_options.no_qelim {
-            vc_expr.qelim(&mut tcx, &limits_ref)?;
-        }
-
-        // In-between, gather some stats about the vc expression
-        vc_expr.trace_expr_stats();
-
-        // 9. Create the "vc[S] is valid" expression
-        let mut vc_is_valid = vc_expr.into_bool_vc();
-
-        if options.opt_options.egraph {
-            vc_is_valid.egraph_simplify();
-        }
-
-        // 10. Optimizations
-        if !options.opt_options.no_boolify || options.opt_options.opt_rel {
-            vc_is_valid.remove_parens();
-        }
-        if !options.opt_options.no_boolify {
-            vc_is_valid.opt_boolify();
-        }
-        if options.opt_options.opt_rel {
-            vc_is_valid.opt_relational();
-        }
-
-        // print theorem to prove if requested
-        if options.debug_options.print_theorem {
-            vc_is_valid.print_theorem(name);
-        }
-
-        // 11. Translate to Z3
-        let ctx = Context::new(&Config::default());
-        let function_encoder = mk_function_encoder(&tcx, &depgraph, options)?;
-        let dep_config = DepConfig::Set(vc_is_valid.get_dependencies());
-        let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoder, dep_config);
-        let mut translate = TranslateExprs::new(&smt_ctx);
-        let mut vc_is_valid = vc_is_valid.into_smt_vc(&mut translate);
-
-        // 12. Simplify
-        if !options.opt_options.no_simplify {
-            vc_is_valid.simplify();
-        }
-
-        // 13. Create Z3 solver with axioms, solve
-        let mut result = vc_is_valid.run_solver(
+        // Running the SMT prove task: translating to Z3, running the solver.
+        let result = run_smt_prove_task(
             options,
             &limits_ref,
+            &tcx,
+            &depgraph,
             name,
-            &ctx,
-            &mut translate,
-            &slice_vars,
+            server,
+            slice_vars,
+            vc_is_valid,
         )?;
 
-        if options.debug_options.z3_trace {
-            tracing::info!("Z3 tracing output will be written to `z3.log`.");
-        }
-
         // Handle reasons to stop the verifier.
-        match result.prove_result {
+        match result {
             ProveResult::Unknown(ReasonUnknown::Interrupted) => {
                 return Err(CaesarError::Interrupted)
             }
-
             ProveResult::Unknown(ReasonUnknown::Timeout) => return Err(LimitError::Timeout.into()),
             _ => {}
         }
 
-        // Increment counters
-        match result.prove_result {
+        // Increment counters.
+        match result {
             ProveResult::Proof => num_proven += 1,
             ProveResult::Counterexample | ProveResult::Unknown(_) => num_failures += 1,
         }
-
-        limits_ref.check_limits()?;
-
-        server
-            .handle_vc_check_result(name, &mut result, &mut translate)
-            .map_err(CaesarError::ServerError)?;
     }
 
     if !options.lsp_options.language_server {

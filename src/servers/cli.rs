@@ -14,7 +14,7 @@ use crate::{
         error::CaesarError,
         front::SourceUnit,
         item::{Item, SourceUnitName},
-        smt_proof::SmtVcCheckResult,
+        smt_proof::SmtVcProveResult,
     },
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
@@ -110,7 +110,7 @@ impl Server for CliServer {
     fn handle_vc_check_result<'smt, 'ctx>(
         &mut self,
         name: &SourceUnitName,
-        result: &mut SmtVcCheckResult<'ctx>,
+        result: &mut SmtVcProveResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError> {
         result.print_prove_result(self, translate, name);
