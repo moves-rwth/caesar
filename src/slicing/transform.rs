@@ -41,6 +41,14 @@ pub struct SliceStmts {
     pub constraints: Vec<Expr>,
 }
 
+impl SliceStmts {
+    pub fn extend(mut self, other: Self) -> Self {
+        self.stmts.extend(other.stmts);
+        self.constraints.extend(other.constraints);
+        self
+    }
+}
+
 /// A slice variable created to enable or disable a statement. We maintain the
 /// identifier, the selection, and the span of the statement in this struct.
 #[derive(Debug, Clone)]

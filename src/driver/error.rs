@@ -12,7 +12,7 @@ use crate::{
 /// Errors that can occur in the verifier.
 ///
 /// Note that some unit not verifying (solver yielding unknown or a
-/// counter-example) is not actually considered a [`VerifyError`].
+/// counter-example) will not generate a [`CaesarError`].
 #[derive(Debug, thiserror::Error)]
 pub enum CaesarError {
     /// A diagnostic to be emitted.

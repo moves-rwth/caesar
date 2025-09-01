@@ -15,7 +15,7 @@ use crate::{
             },
             print_timings,
         },
-        core_verify::CoreVerifyTask,
+        core_verify::{lower_core_verify_task, CoreVerifyTask},
         error::{finalize_caesar_result, CaesarError},
         front::parse_and_tycheck,
         item::Item,
@@ -24,7 +24,6 @@ use crate::{
     },
     resource_limits::{await_with_resource_limits, LimitError, LimitsRef},
     servers::{Server, SharedServer},
-    vc::{explain::VcExplanation, vcgen::Vcgen},
 };
 
 #[derive(Debug, Default, Args)]
@@ -238,27 +237,17 @@ fn verify_files_main(
         // Set the current unit as ongoing
         server.set_ongoing_unit(name)?;
 
-        // Desugaring: transforming spec calls to procs
-        verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
-
-        // Prepare slicing
-        let slice_vars = verify_unit.prepare_slicing(&options.slice_options, &mut tcx, server)?;
-
-        // print HeyVL core after desugaring if requested
-        if options.debug_options.print_core {
-            println!("{}: HeyVL core query:\n{}\n", name, *verify_unit);
-        }
-
-        // Generating verification conditions.
-        let explanations = options
-            .lsp_options
-            .explain_core_vc
-            .then(|| VcExplanation::new(verify_unit.direction));
-        let mut vcgen = Vcgen::new(&tcx, &limits_ref, explanations);
-        let vc_expr = verify_unit.vcgen(&mut vcgen)?;
-        if let Some(explanation) = vcgen.explanation {
-            server.add_vc_explanation(explanation)?;
-        }
+        // Lowering the core verify task to a quantitative prove task: applying
+        // spec call desugaring, preparing slicing, and verification condition
+        // generation.
+        let (vc_expr, slice_vars) = lower_core_verify_task(
+            &mut tcx,
+            name,
+            options,
+            &limits_ref,
+            server,
+            &mut verify_unit,
+        )?;
 
         // Lowering the quantitative task to a Boolean one. This contains (lazy)
         // unfolding, quantifier elimination, and various optimizations

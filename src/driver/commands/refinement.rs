@@ -5,24 +5,27 @@ use std::{
     time::Instant,
 };
 
+use ariadne::ReportKind;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
 
 use crate::{
-    ast::{DeclKind, Diagnostic, Direction, ExprBuilder, FileId, Label, Span},
+    ast::{
+        BinOpKind, DeclKind, Diagnostic, Direction, ExprBuilder, FileId, Ident, Label, ProcDecl,
+        Span, TyKind,
+    },
     driver::{
         commands::{mk_cli_server, print_timings, verify::VerifyCommand},
-        core_verify::CoreVerifyTask,
+        core_verify::{lower_core_verify_task, CoreVerifyTask},
         error::{finalize_caesar_result, CaesarError},
         front::{parse_and_tycheck, SourceUnit},
         item::Item,
-        quant_proof::lower_quant_prove_task,
+        quant_proof::{lower_quant_prove_task, QuantVcProveTask},
         smt_proof::run_smt_prove_task,
     },
     resource_limits::{LimitError, LimitsRef},
     servers::SharedServer,
-    slicing::transform::SliceStmts,
-    vc::{explain::VcExplanation, vcgen::Vcgen},
 };
 
 pub async fn run_verify_entailment_command(options: VerifyCommand) -> ExitCode {
@@ -48,6 +51,10 @@ async fn verify_entailment(
     // TOOD: run verify_files to start the thread with timeouts and stack size
     let mut server = server.lock().unwrap();
     let server = server.deref_mut();
+
+    let timeout = Instant::now() + options.rlimit_options.timeout();
+    let mem_limit = options.rlimit_options.mem_limit();
+    let limits_ref = LimitsRef::new(Some(timeout), Some(mem_limit));
 
     let (mut module, mut tcx) = parse_and_tycheck(
         &options.input_options,
@@ -104,44 +111,8 @@ async fn verify_entailment(
             if let (DeclKind::ProcDecl(first_proc), DeclKind::ProcDecl(second_proc)) =
                 (first_decl, second_decl)
             {
-                let first_proc = first_proc.borrow();
-                let second_proc = second_proc.borrow();
-
-                if first_proc.direction != Direction::Up {
-                    server.add_diagnostic(
-                        Diagnostic::new(ariadne::ReportKind::Error, first_proc.name.span)
-                            .with_label(
-                                Label::new(first_proc.name.span)
-                                    .with_message("Expected coproc for entailment check"),
-                            ),
-                    )?;
-                }
-                if second_proc.direction != Direction::Down {
-                    server.add_diagnostic(
-                        Diagnostic::new(ariadne::ReportKind::Error, second_proc.name.span)
-                            .with_label(
-                                Label::new(second_proc.name.span)
-                                    .with_message("Expected proc for entailment check"),
-                            ),
-                    )?;
-                }
-
-                // importantly, we need to do substitutions for *both* inputs and outputs!
-                let first_params = first_proc
-                    .inputs
-                    .node
-                    .iter()
-                    .chain(first_proc.outputs.node.iter())
-                    .cloned()
-                    .collect_vec();
-                let second_params = second_proc
-                    .inputs
-                    .node
-                    .iter()
-                    .chain(second_proc.outputs.node.iter())
-                    .cloned()
-                    .collect_vec();
-                (first_params, second_params)
+                EntailmentParameterMapping::new(&first_proc.borrow(), &second_proc.borrow())
+                    .map_err(|e| e.diagnostic())?
             } else {
                 unreachable!();
             }
@@ -156,50 +127,24 @@ async fn verify_entailment(
             .flat_map(|u| CoreVerifyTask::from_source_unit(u, &mut depgraph))
             .unwrap();
 
-        let mut vcs = vec![];
-        for verify_unit in [&mut first_verify_unit, &mut second_verify_unit] {
-            let (name, mut verify_unit) = verify_unit.enter_with_name();
+        let (first_vc, first_slice_stmts) = lower_core_verify_task(
+            &mut tcx,
+            &first_name,
+            options,
+            &limits_ref,
+            server,
+            &mut first_verify_unit.enter_mut(),
+        )?;
+        let (second_vc, second_slice_stmts) = lower_core_verify_task(
+            &mut tcx,
+            &first_name,
+            options,
+            &limits_ref,
+            server,
+            &mut second_verify_unit.enter_mut(),
+        )?;
 
-            // 4. Desugaring: transforming spec calls to procs
-            verify_unit.desugar_spec_calls(&mut tcx, name.to_string())?;
-
-            // 5. Prepare slicing
-            // TODO: add proper support
-            let _slice_vars =
-                verify_unit.prepare_slicing(&options.slice_options, &mut tcx, server)?;
-
-            // 6. Generating verification conditions.
-            let explanations = options
-                .lsp_options
-                .explain_core_vc
-                .then(|| VcExplanation::new(verify_unit.direction));
-            let limits_ref = LimitsRef::new(None, None); // TODO
-            let mut vcgen = Vcgen::new(&tcx, &limits_ref, explanations);
-            let vc_expr = verify_unit.vcgen(&mut vcgen)?;
-            if let Some(explanation) = vcgen.explanation {
-                server.add_vc_explanation(explanation)?;
-            }
-            vcs.push(vc_expr);
-        }
-
-        let timeout = Instant::now() + options.rlimit_options.timeout();
-        let mem_limit = options.rlimit_options.mem_limit();
-        let limits_ref = LimitsRef::new(Some(timeout), Some(mem_limit));
-
-        assert_eq!(vcs.len(), 2);
-        let first_vc = vcs.remove(0);
-        let mut second_vc = vcs.remove(0);
-        let builder = ExprBuilder::new(Span::dummy_span());
-        second_vc.expr = builder.subst(
-            second_vc.expr.clone(),
-            params
-                .1
-                .iter()
-                .map(|x| x.name)
-                .zip(params.0.iter().map(|y| builder.var(y.name, &tcx))),
-        );
-
-        let vc_expr = first_vc.entails(second_vc);
+        let vc_expr = params.entails(first_vc, second_vc);
 
         // Lowering the quantitative task to a Boolean one. This contains (lazy)
         // unfolding, quantifier elimination, and various optimizations
@@ -208,7 +153,7 @@ async fn verify_entailment(
             lower_quant_prove_task(options, &limits_ref, &mut tcx, &first_name, vc_expr)?;
 
         // Running the SMT prove task: translating to Z3, running the solver.
-        let slice_vars = SliceStmts::default(); // TODO
+        let slice_vars = first_slice_stmts.extend(second_slice_stmts);
         let result = run_smt_prove_task(
             options,
             &limits_ref,
@@ -231,4 +176,117 @@ async fn verify_entailment(
     }
 
     Ok(true)
+}
+
+/// A mapping from one coproc's parameters to another proc's parameters.
+#[derive(Debug)]
+struct EntailmentParameterMapping(IndexMap<Ident, (Ident, Box<TyKind>)>);
+
+impl EntailmentParameterMapping {
+    fn new(a: &ProcDecl, b: &ProcDecl) -> Result<Self, ParameterMappingError> {
+        if a.direction != Direction::Down {
+            return Err(ParameterMappingError::UnexpectedDirection(
+                a.name,
+                a.direction,
+            ));
+        }
+        if b.direction != Direction::Up {
+            return Err(ParameterMappingError::UnexpectedDirection(
+                b.name,
+                b.direction,
+            ));
+        }
+
+        if a.params_iter().count() != b.params_iter().count() {
+            return Err(ParameterMappingError::CountMismatch(
+                a.name,
+                a.params_iter().count(),
+                b.name,
+                b.params_iter().count(),
+            ));
+        }
+
+        let mut mapping = IndexMap::new();
+        for (param_a, param_b) in a.params_iter().zip(b.params_iter()) {
+            if param_a.name != param_b.name {
+                return Err(ParameterMappingError::NameMismatch(
+                    param_a.name,
+                    param_b.name,
+                ));
+            }
+            if param_a.ty != param_b.ty {
+                return Err(ParameterMappingError::TypeMismatch(
+                    param_a.name,
+                    param_a.ty.clone(),
+                    param_b.name,
+                    param_b.ty.clone(),
+                ));
+            }
+            mapping.insert(param_a.name, (param_b.name, param_b.ty.clone()));
+        }
+
+        Ok(EntailmentParameterMapping(mapping))
+    }
+
+    pub fn entails(
+        self,
+        coproc_task: QuantVcProveTask,
+        proc_task: QuantVcProveTask,
+    ) -> QuantVcProveTask {
+        assert_eq!(coproc_task.direction, Direction::Up);
+        assert_eq!(proc_task.direction, Direction::Down);
+
+        let builder = ExprBuilder::new(Span::dummy_span());
+        let expr = builder.binary(
+            BinOpKind::Impl,
+            Some(coproc_task.expr.ty.clone().unwrap()),
+            coproc_task.expr,
+            builder.subst(
+                proc_task.expr,
+                self.0
+                    .into_iter()
+                    .map(|(x, (y, ty))| (y, builder.var_ty(x, *ty))),
+            ),
+        );
+        QuantVcProveTask {
+            deps: coproc_task.deps.union(proc_task.deps),
+            direction: Direction::Down,
+            expr,
+        }
+    }
+}
+
+/// An error during the matching of two procedure declarations for entailment
+/// checking. The first's direction must
+#[derive(Debug)]
+pub enum ParameterMappingError {
+    UnexpectedDirection(Ident, Direction),
+    CountMismatch(Ident, usize, Ident, usize),
+    NameMismatch(Ident, Ident),
+    TypeMismatch(Ident, Box<TyKind>, Ident, Box<TyKind>),
+}
+
+impl ParameterMappingError {
+    pub fn diagnostic(&self) -> Diagnostic {
+        match self {
+            ParameterMappingError::UnexpectedDirection(name, dir) => {
+                Diagnostic::new(ReportKind::Error, name.span)
+                    .with_message(format!("Expected {} for entailment check", dir.toggle().prefix("proc")))
+                    .with_label(Label::new(name.span).with_message("here"))
+            }
+            ParameterMappingError::CountMismatch(name1, count1, name2, count2) =>
+            Diagnostic::new(ReportKind::Error, name1.span)
+            .with_message(format!("Mismatched parameter count: {name1} has {count1} parameters, {name2} has {count2} parameters"))
+            .with_label(Label::new(name1.span).with_message("first procedure here"))
+            .with_label(Label::new(name2.span).with_message("second procedure here")),
+            ParameterMappingError::NameMismatch(name1, name2) => Diagnostic::new(ReportKind::Error, name1.span)
+            .with_message(format!("Mismatched parameter names: {name1} vs {name2}"))
+            .with_label(Label::new(name1.span).with_message(format!("{name1} declared here")))
+            .with_label(Label::new(name2.span).with_message(format!("{name2} declared here"))),
+            ParameterMappingError::TypeMismatch(name1, ty1, name2, ty2) => Diagnostic::new(ReportKind::Error, name1.span)
+            .with_message(format!("Mismatched parameter types: {name1} ({ty1}) vs {name2} ({ty2})"))
+            .with_label(Label::new(name1.span).with_message(format!("{name1} declared here")))
+            .with_label(Label::new(name2.span).with_message(format!("{name2} declared here"))),
+        }
+    }
 }

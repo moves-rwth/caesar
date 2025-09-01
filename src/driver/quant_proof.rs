@@ -134,27 +134,6 @@ impl QuantVcProveTask {
         }
     }
 
-    /// Create a verification condition describing that one entails the other.
-    ///
-    /// Panics unless `Self` has [Direction::Up] and the other has
-    /// [Direction::Down].
-    pub fn entails(self, other: Self) -> Self {
-        assert_eq!(self.direction, Direction::Up);
-        assert_eq!(other.direction, Direction::Down);
-        let builder = ExprBuilder::new(Span::dummy_span());
-        let expr = builder.binary(
-            BinOpKind::Impl,
-            Some(self.expr.ty.clone().unwrap()),
-            self.expr,
-            other.expr,
-        );
-        QuantVcProveTask {
-            deps: self.deps.union(other.deps),
-            direction: Direction::Down,
-            expr,
-        }
-    }
-
     /// Convert his verification condition into a Boolean query of the form `top
     /// == expr`.
     pub fn into_bool_vc(self) -> BoolVcProveTask {

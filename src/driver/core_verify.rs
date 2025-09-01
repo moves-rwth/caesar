@@ -10,7 +10,13 @@ use crate::{
     },
     depgraph::{DepGraph, Dependencies},
     driver::{
-        commands::options::SliceOptions, error::CaesarError, front::SourceUnit,
+        commands::{
+            options::{LanguageServerOptions, SliceOptions},
+            verify::VerifyCommand,
+        },
+        error::CaesarError,
+        front::SourceUnit,
+        item::SourceUnitName,
         quant_proof::QuantVcProveTask,
     },
     pretty::{Doc, SimplePretty},
@@ -18,16 +24,45 @@ use crate::{
         proc_verify::{encode_proc_verify, to_direction_lower_bounds},
         SpecCall,
     },
+    resource_limits::LimitsRef,
     servers::Server,
     slicing::{
         selection::SliceSelection,
         transform::{SliceStmts, StmtSliceVisitor},
     },
     tyctx::TyCtx,
-    vc::vcgen::Vcgen,
+    vc::{explain::VcExplanation, vcgen::Vcgen},
 };
 
 use tracing::instrument;
+
+/// Lower a core verification task into a quantitative vc prove task: apply
+/// desugaring for spec calls, preparing slicing, and verification condition
+/// generation.
+pub fn lower_core_verify_task(
+    tcx: &mut TyCtx,
+    name: &SourceUnitName,
+    options: &VerifyCommand,
+    limits_ref: &LimitsRef,
+    server: &mut dyn Server,
+    task: &mut CoreVerifyTask,
+) -> Result<(QuantVcProveTask, SliceStmts), CaesarError> {
+    // 1. Desugaring
+    task.desugar_spec_calls(tcx, name.to_string())?;
+
+    // 2. Preparing slicing
+    let slice_stmts = task.prepare_slicing(&options.slice_options, tcx, server)?;
+
+    // print HeyVL core after desugaring if requested
+    if options.debug_options.print_core {
+        println!("{}: HeyVL core query:\n{}\n", name, *task);
+    }
+
+    // 3. Verification condition generation
+    let vc = task.vcgen(limits_ref, tcx, &options.lsp_options, server)?;
+
+    Ok((vc, slice_stmts))
+}
 
 /// A block of HeyVL statements to be verified with a certain [`Direction`].
 #[derive(Debug, Clone)]
@@ -115,13 +150,33 @@ impl CoreVerifyTask {
     /// depending on the direction (down or up, respectively).
     ///
     /// The desugaring must have already taken place.
-    #[instrument(skip(self, vcgen))]
-    pub fn vcgen(&self, vcgen: &mut Vcgen) -> Result<QuantVcProveTask, CaesarError> {
+    ///
+    /// If core explanations are enabled, they will be computed and added to the server.
+    #[instrument(skip_all)]
+    pub fn vcgen(
+        &self,
+        limits_ref: &LimitsRef,
+        tcx: &TyCtx,
+        lsp_options: &LanguageServerOptions,
+        server: &mut dyn Server,
+    ) -> Result<QuantVcProveTask, CaesarError> {
+        let explanations = lsp_options
+            .explain_core_vc
+            .then(|| VcExplanation::new(self.direction));
+
+        let mut vcgen = Vcgen::new(tcx, limits_ref, explanations);
+
         let terminal = top_lit_in_lattice(self.direction, &TyKind::EUReal);
+        let expr = vcgen.vcgen_block(&self.block, terminal)?;
+
+        if let Some(explanation) = vcgen.explanation {
+            server.add_vc_explanation(explanation)?;
+        }
+
         Ok(QuantVcProveTask {
             deps: self.deps.clone(),
             direction: self.direction,
-            expr: vcgen.vcgen_block(&self.block, terminal)?,
+            expr,
         })
     }
 }

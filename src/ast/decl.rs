@@ -328,6 +328,10 @@ pub struct ProcDecl {
 }
 
 impl ProcDecl {
+    pub fn params_iter(&self) -> impl Iterator<Item = &Param> {
+        self.inputs.node.iter().chain(self.outputs.node.iter())
+    }
+
     pub fn params_iter_mut(&mut self) -> impl Iterator<Item = &mut Param> {
         self.inputs
             .node

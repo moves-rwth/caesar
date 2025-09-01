@@ -441,6 +441,10 @@ impl ExprBuilder {
             DeclKind::VarDecl(var_decl) => var_decl.borrow().ty.clone(),
             _ => panic!("expected variable declaration"),
         };
+        self.var_ty(ident, ty)
+    }
+
+    pub fn var_ty(&self, ident: Ident, ty: TyKind) -> Expr {
         Shared::new(ExprData {
             kind: ExprKind::Var(ident),
             ty: Some(ty),
