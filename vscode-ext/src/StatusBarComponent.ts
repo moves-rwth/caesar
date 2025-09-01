@@ -1,12 +1,10 @@
-import { StatusBarItem, Range } from "vscode";
+import { StatusBarItem } from "vscode";
 import * as vscode from 'vscode';
 import { StatusBarViewConfig } from "./Config";
-import { DocumentStatus, DocumentStatusNotification, DocumentStatusType, ServerStatus, VerifyResult } from "./CaesarClient";
+import { DocumentStatus, DocumentStatusType, ServerStatus, VerifyResult } from "./CaesarClient";
 import { DocumentMap, Verifier } from "./Verifier";
 import { ConfigurationConstants } from "./constants";
 import { TextDocumentIdentifier } from "vscode-languageclient";
-import { Verify } from "crypto";
-import { Server } from "http";
 
 
 enum TooltipMenuType {
@@ -22,7 +20,7 @@ enum Command {
 }
 
 
-type StatusBarModel = { tooltip_menu_type: TooltipMenuType, tooltip_status_text: vscode.MarkdownString, bar_text: string, command: Command };
+interface StatusBarModel { tooltip_menu_type: TooltipMenuType, tooltip_status_text: vscode.MarkdownString, bar_text: string, command: Command }
 
 export class StatusBarComponent {
 
@@ -92,8 +90,8 @@ export class StatusBarComponent {
     }
 
     render() {
-        let document_status = this.documentStatuses.get({ uri: this.latestActiveHeyvlEditor?.document.uri.toString() ?? "" });
-        let model = this.mapStatusToModel(this.serverStatus, document_status);
+        const document_status = this.documentStatuses.get({ uri: this.latestActiveHeyvlEditor?.document.uri.toString() ?? "" });
+        const model = this.mapStatusToModel(this.serverStatus, document_status);
 
         if (this.enabled) {
             this.view.text = model.bar_text;
@@ -114,7 +112,7 @@ export class StatusBarComponent {
         const renderedMenu = this.renderTooltipMenu(tooltipMenuType);
         const list = this.renderTooltipResultsList();
 
-        if (list == new vscode.MarkdownString("") && tooltipStatusText.value === "") {
+        if (list.value.length === 0 && tooltipStatusText.value === "") {
             this.view.tooltip = renderedMenu;
             this.view.tooltip.isTrusted = true;
             return;
@@ -125,7 +123,7 @@ export class StatusBarComponent {
 
     /// Render the results list (per verified heyvl file) based on the current document statuses.
     private renderTooltipResultsList(): vscode.MarkdownString {
-        let tooltipString = new vscode.MarkdownString("", true);
+        const tooltipString = new vscode.MarkdownString("", true);
         const editorsWithResults = vscode.window.visibleTextEditors.filter((editor) => {
             return ((this.documentStatuses.get({ uri: editor.document.uri.toString() }))?.verify_statuses ?? []).length !== 0; // And only files with results
         });
@@ -136,10 +134,10 @@ export class StatusBarComponent {
 
             const document_status = this.documentStatuses.get(document_id);
 
-            const status_counts = new Map<VerifyResult, number>(document_status?.status_counts ?? [])
-            let _verified = status_counts.get(VerifyResult.Verified) ?? 0;
-            let failed = status_counts.get(VerifyResult.Failed) ?? 0;
-            let unknown = status_counts.get(VerifyResult.Unknown) ?? 0 + (status_counts.get(VerifyResult.Timeout) ?? 0);
+            const status_counts = new Map<VerifyResult, number>(document_status?.status_counts ?? []);
+            // const _verified = status_counts.get(VerifyResult.Verified) ?? 0;
+            const failed = status_counts.get(VerifyResult.Failed) ?? 0;
+            const unknown = status_counts.get(VerifyResult.Unknown) ?? 0 + (status_counts.get(VerifyResult.Timeout) ?? 0);
 
             tooltipString.appendMarkdown(`${vscode.workspace.asRelativePath(vscode.Uri.parse(document_id.uri).path)}: $(error) ${failed} $(question) ${unknown}` + "\n\n --- \n");
         }
@@ -160,8 +158,6 @@ export class StatusBarComponent {
             case TooltipMenuType.stopped:
                 return new vscode.MarkdownString(
                     "[Start Caesar](command:caesar.startServer)", true);
-            default:
-                throw new Error("Unknown tooltip menu type " + menu);
         }
     }
 
@@ -181,7 +177,7 @@ export class StatusBarComponent {
                     tooltip_status_text: new vscode.MarkdownString("Caesar server is not running.", true),
                     bar_text: "$(debug-start) Caesar Not Started",
                     command: Command.StartServer
-                }
+                };
                 break;
             case ServerStatus.Stopped:
                 model = {
@@ -189,7 +185,7 @@ export class StatusBarComponent {
                     tooltip_status_text: new vscode.MarkdownString("Caesar server is stopped.", true),
                     bar_text: "$(debug-start) Et tu, Brute?",
                     command: Command.StartServer
-                }
+                };
                 break;
             case ServerStatus.FailedToStart:
                 model = {
@@ -197,7 +193,7 @@ export class StatusBarComponent {
                     tooltip_menu_type: TooltipMenuType.stopped,
                     bar_text: "$(debug-start) Caesar Failed To Start",
                     command: Command.StartServer
-                }
+                };
                 break;
             case ServerStatus.Starting:
                 model = {
@@ -205,7 +201,7 @@ export class StatusBarComponent {
                     tooltip_menu_type: TooltipMenuType.running,
                     bar_text: "$(loading~spin) Starting Caesar...",
                     command: Command.ShowOutput
-                }
+                };
                 break;
             case ServerStatus.Ready:
                 switch (document_status?.status_type) {
@@ -226,7 +222,7 @@ export class StatusBarComponent {
                         };
                         break;
                     case DocumentStatusType.Todo:
-                    case DocumentStatusType.Done:
+                    case DocumentStatusType.Done: {
                         const someError = document_status?.status_counts.some(([result, _count]) => result === VerifyResult.Failed || result === VerifyResult.Timeout || result === VerifyResult.Unknown) ?? false;
                         const someVerified = document_status?.status_counts.some(([result, _count]) => result === VerifyResult.Verified) ?? false;
 
@@ -237,7 +233,7 @@ export class StatusBarComponent {
                                 tooltip_status_text: new vscode.MarkdownString("All procedures verified successfully.", true),
                                 bar_text: "$(pass) Verified!",
                                 command: Command.ShowOutput
-                            }
+                            };
                         } else if (someError) {
                             // At least one verified, but some errors
                             model = {
@@ -245,12 +241,13 @@ export class StatusBarComponent {
                                 tooltip_menu_type: TooltipMenuType.running,
                                 tooltip_status_text: new vscode.MarkdownString("Some procedures failed verification. Check the output for details.", true),
                                 command: Command.ShowOutput
-                            }
+                            };
                         } else if (!someError && !someVerified) {
                             // No error and no verified implies the file does not contain procedures yet.
                             model = this.cleanReadyModel();
                         }
                         break;
+                    }
                     case undefined:
                         // No document status means the file is not verified yet or there are no valid file open.
                         model = this.cleanReadyModel();

@@ -1,6 +1,6 @@
-import { LanguageClientOptions, ResponseError, TextDocumentIdentifier, VersionedTextDocumentIdentifier } from "vscode-languageclient";
+import { LanguageClientOptions, ResponseError, VersionedTextDocumentIdentifier } from "vscode-languageclient";
 import { Executable, LanguageClient, ServerOptions } from "vscode-languageclient/node";
-import { ExtensionContext, Range, TextDocument } from "vscode";
+import { ExtensionContext, TextDocument } from "vscode";
 import * as vscode from "vscode";
 import { ConfigurationConstants } from "./constants";
 import { CaesarConfig, ServerConfig } from "./Config";
@@ -11,7 +11,6 @@ import * as semver from 'semver';
 import { getExtensionVersion, isPatchCompatible } from "./version";
 import { WalkthroughComponent } from "./WalkthroughComponent";
 import Logger from "./Logger";
-import { stat } from "fs";
 
 export enum ServerStatus {
     NotStarted,

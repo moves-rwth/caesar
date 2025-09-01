@@ -120,12 +120,12 @@ export class GutterStatusComponent {
     }
 
     render() {
-        let loadingEditorRangeMap: Map<vscode.TextEditor, vscode.Range[]> = new Map();
+        const loadingEditorRangeMap = new Map<vscode.TextEditor, vscode.Range[]>();
 
         for (const editor of vscode.window.visibleTextEditors) {
             for (const [document_id, status] of this.status.entries()) {
 
-                let results = status.verify_statuses;
+                const results = status.verify_statuses;
 
                 if (editor.document.uri.toString() !== document_id.uri) {
                     continue;
@@ -181,14 +181,14 @@ export class GutterStatusComponent {
 }
 
 class GutterAnimator {
-    private enabled: boolean = false;
+    private enabled = false;
     private frame = 0;
     private interval: NodeJS.Timeout | undefined;
     private intervalSpeed: number;
 
-    private editorRangeMap: Map<vscode.TextEditor, vscode.Range[]> = new Map();
-    private animationTypes: Map<string, vscode.TextEditorDecorationType[]> = new Map();
-    private currentAnimationName: string = "";
+    private editorRangeMap = new Map<vscode.TextEditor, vscode.Range[]>();
+    private animationTypes = new Map<string, vscode.TextEditorDecorationType[]>();
+    private currentAnimationName = "";
 
 
     constructor(intervalSpeed: number = FRAME_INTERVAL) {
@@ -241,13 +241,13 @@ class GutterAnimator {
 
     setEditorRangemap(editorRangeMap: Map<vscode.TextEditor, vscode.Range[]>) {
         this.editorRangeMap = editorRangeMap;
-        if (Array.from(editorRangeMap.values()).every(ranges => ranges.length == 0)) {
+        if (Array.from(editorRangeMap.values()).every(ranges => ranges.length === 0)) {
             // Animation is not needed if there are no ranges to animate
             this.stopAnimation();
             // Render to clear the decorations
             this.render();
         } else {
-            // If the animation is still running, it won't be restarted internally 
+            // If the animation is still running, it won't be restarted internally
             // so it is safe to call startAnimation multiple times
             this.startAnimation();
         }
@@ -270,9 +270,9 @@ class GutterAnimator {
 
 function createFrameDecorations(path: string, file_ext: string, frameCount: number, verifier: Verifier): vscode.TextEditorDecorationType[] {
     // Create the decoration types for the animation frames
-    let frameDecorationList: vscode.TextEditorDecorationType[] = [];
+    const frameDecorationList: vscode.TextEditorDecorationType[] = [];
     for (let i = 0; i < frameCount; i++) {
-        let decType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath(`${path}${i}.${file_ext}`) });
+        const decType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath(`${path}${i}.${file_ext}`) });
         frameDecorationList.push(decType);
     }
     return frameDecorationList;
