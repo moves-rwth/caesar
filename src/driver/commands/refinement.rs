@@ -184,13 +184,13 @@ struct EntailmentParameterMapping(IndexMap<Ident, (Ident, Box<TyKind>)>);
 
 impl EntailmentParameterMapping {
     fn new(a: &ProcDecl, b: &ProcDecl) -> Result<Self, ParameterMappingError> {
-        if a.direction != Direction::Down {
+        if a.direction != Direction::Up {
             return Err(ParameterMappingError::UnexpectedDirection(
                 a.name,
                 a.direction,
             ));
         }
-        if b.direction != Direction::Up {
+        if b.direction != Direction::Down {
             return Err(ParameterMappingError::UnexpectedDirection(
                 b.name,
                 b.direction,
@@ -208,7 +208,8 @@ impl EntailmentParameterMapping {
 
         let mut mapping = IndexMap::new();
         for (param_a, param_b) in a.params_iter().zip(b.params_iter()) {
-            if param_a.name != param_b.name {
+            // important: we only compare the names as strings, not the spans
+            if param_a.name.name != param_b.name.name {
                 return Err(ParameterMappingError::NameMismatch(
                     param_a.name,
                     param_b.name,
