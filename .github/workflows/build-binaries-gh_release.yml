@@ -80,7 +80,7 @@ jobs:
       shell: bash
       run: |
         brew update
-        brew install cmake
+        brew list cmake || brew install cmake # see https://github.com/actions/runner-images/issues/12912#issuecomment-3240845829
 
     - name: Install packages (Windows)
       if: contains(matrix.os, 'windows')
