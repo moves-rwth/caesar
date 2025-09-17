@@ -65,6 +65,16 @@ An **extended version with proofs, details on encodings, and typo fixes** is ava
 **The artifact** for our OOPSLA '23 publication is [available on Zenodo](https://zenodo.org/record/8146987).
 [It has received the *Distinguished Artifact* award](/blog/2023/10/27/oopsla23-distinguished-artifact), praising exceptionally high quality of the artifact.
 
+A video of the OOPSLA '23 presentation is available on YouTube:
+<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/2cHo4HsuYJY?si=nwJQqrsEMIVdGhSS" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+<br />
+<br />
+
+We also presented this paper at the [Dafny 2024 workshop](/blog/2024/01/14/dafny-2024-talk), see the video below:
+
+<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/riDqWQlAk84?si=Wh4bZT9OyFMzJdYs" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 ## Bachelor and Master Theses
 
 Below are some selected theses that contributed to the development of Caesar and HeyVL.
@@ -120,3 +130,13 @@ Compared to the [OOPSLA '23 paper](#oopsla-23):
 Citations:
 * DOI: https://doi.org/10.18154/RWTH-2024-11340.
 * BibTeX: https://publications.rwth-aachen.de/record/998370/export/hx?ln=en
+
+## Related Work and Further Reading
+
+For more background on the weakest pre-expectation-based approach to reasoning about probabilistic programs, we recommend the following publications:
+ * [_"Advanced weakest precondition calculi for probabilistic programs"_](https://publications.rwth-aachen.de/record/755408/). PhD thesis by Benjamin Lucien Kaminski (RWTH Aachen University, 2019). [PDF file is available online](https://publications.rwth-aachen.de/record/755408/files/755408.pdf).
+ * [_"Automated deductive verification of probabilistic programs"_](https://publications.rwth-aachen.de/record/1002329/). PhD thesis by Kevin Batz (RWTH Aachen University, 2024). [PDF file is available online](https://publications.rwth-aachen.de/record/1002329/files/1002329.pdf).
+
+Caesar uses SMT solvers as backends.
+For more information on SMT solving, we recommend:
+ * [_"Satisfiability Modulo Theories: A Beginner’s Tutorial"_](https://doi.org/10.1007/978-3-031-71177-0_31) by Barrett et al. (2024).
