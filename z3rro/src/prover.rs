@@ -60,13 +60,13 @@ pub enum ProveResult {
 /// 1) transport the result from SwInE, or
 /// 2) store SAT result along with a reason for Unknown.
 #[derive(Debug, Clone)]
-pub enum SolverResult<'ctx> {
+pub enum SolverResult {
     Unsat,
-    Sat(Option<Solver<'ctx>>),
+    Sat(Option<String>),
     Unknown(Option<ReasonUnknown>),
 }
 
-impl SolverResult<'_> {
+impl SolverResult {
     fn to_sat_result(&self) -> SatResult {
         match self {
             SolverResult::Unsat => SatResult::Unsat,
@@ -254,7 +254,7 @@ enum StackSolver<'ctx> {
 }
 
 #[derive(Debug)]
-struct LastSatSolverResult<'ctx> {
+struct LastSatSolverResult {
     /// Whether the current model is consistent with the assertions. If the SMT
     /// solver returned [`SatResult::Unknown`], it is
     /// [`ModelConsistency::Unknown`].
@@ -263,7 +263,7 @@ struct LastSatSolverResult<'ctx> {
     /// It is reset any time the assertions on the solver are modified.
     /// Sometimes Z3 caches on its own, but it is not reliable. Therefore, we do
     /// it here as well to be sure.
-    last_result: SolverResult<'ctx>,
+    last_result: SolverResult,
 }
 
 /// A prover wraps a SAT solver, but it's used to prove validity of formulas.
@@ -290,7 +290,7 @@ pub struct Prover<'ctx> {
     /// SMT solver type
     smt_solver: SolverType,
     /// Cached information about the last SAT/proof check call.
-    last_result: Option<LastSatSolverResult<'ctx>>,
+    last_result: Option<LastSatSolverResult>,
 }
 
 impl<'ctx> Prover<'ctx> {
@@ -414,6 +414,7 @@ impl<'ctx> Prover<'ctx> {
                     }
                     _ => {
                         let solver_result = self.run_solver(assumptions)?;
+                        self.cache_result(solver_result.clone());
                         Ok(solver_result)
                     }
                 };
@@ -469,7 +470,7 @@ impl<'ctx> Prover<'ctx> {
     }
 
     /// Save the result of the last SAT/proof check.
-    fn cache_result(&mut self, solver_result: SolverResult<'ctx>) {
+    fn cache_result(&mut self, solver_result: SolverResult) {
         let model_consistency = match solver_result {
             SolverResult::Sat(_) => Some(ModelConsistency::Consistent),
             SolverResult::Unknown(_) => Some(ModelConsistency::Unknown),
@@ -493,13 +494,16 @@ impl<'ctx> Prover<'ctx> {
             SolverType::InternalZ3 => self.get_solver().get_model()?,
             _ => {
                 let solver = if let Some(cached_result) = &self.last_result {
-                    if let SolverResult::Sat(Some(solver)) = &cached_result.last_result {
+                    if let SolverResult::Sat(Some(cex)) = &cached_result.last_result {
+                        let solver = Solver::new(self.ctx);
+                        solver.from_string(cex.clone());
+                        solver.check();
                         solver
                     } else {
-                        &Solver::new(self.ctx)
+                        Solver::new(self.ctx)
                     }
                 } else {
-                    &Solver::new(self.ctx)
+                    Solver::new(self.ctx)
                 };
 
                 solver.get_model()?
@@ -702,10 +706,7 @@ impl<'ctx> Prover<'ctx> {
             }
             SatResult::Sat => {
                 let cex = lines_buffer.iter().join("");
-                let solver = Solver::new(self.ctx);
-                solver.from_string(cex);
-                solver.check();
-                SolverResult::Sat(Some(solver))
+                SolverResult::Sat(Some(cex))
             }
         };
 
