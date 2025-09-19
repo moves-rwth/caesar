@@ -473,7 +473,8 @@ fn slice_sat_binary_search<'ctx>(
 
         let ctx = prover.get_context();
         if !active_slice_vars.is_empty() {
-            let at_most_n_true = at_most_k(ctx, at_most_n, active_slice_vars, prover.get_solver_type());
+            let at_most_n_true =
+                at_most_k(ctx, at_most_n, active_slice_vars, prover.get_solver_type());
             prover.add_assumption(&at_most_n_true);
         }
     };
@@ -614,7 +615,7 @@ pub fn slice_unsat_search<'ctx>(
         match check_proof_seed(&all_variables, prover, limits_ref, &seed) {
             Ok(ProveResult::Proof) => {
                 // now start the shrinking, then block up
-                let res = exploration.shrink_block_unsat(seed, |seed|{
+                let res = exploration.shrink_block_unsat(seed, |seed| {
                     match check_proof_seed(&all_variables, prover, limits_ref, seed) {
                         Ok(ProveResult::Proof) => Some(unsat_core_to_seed(prover, &all_variables)),
                         _ => None,

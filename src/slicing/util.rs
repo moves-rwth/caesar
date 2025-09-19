@@ -417,7 +417,12 @@ impl<'ctx> SubsetExploration<'ctx> {
 }
 
 /// Create an SMT expression that is true if at most k of the given boolean variables evaluate to true
-pub fn at_most_k<'ctx>(ctx: &'ctx Context, k: usize, values: &[Bool<'ctx>], solver_type: SolverType) -> Bool<'ctx> {
+pub fn at_most_k<'ctx>(
+    ctx: &'ctx Context,
+    k: usize,
+    values: &[Bool<'ctx>],
+    solver_type: SolverType,
+) -> Bool<'ctx> {
     match solver_type {
         SolverType::CVC5 | SolverType::YICES => {
             let int_values: Vec<Int<'ctx>> = values
