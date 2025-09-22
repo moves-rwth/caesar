@@ -114,6 +114,10 @@ impl Encoding for PASTAnnotation {
             });
         }
 
+        // Cast eps and k from UReal to EUReal for the later operations
+        let eps = builder.cast(TyKind::EUReal, eps.clone());
+        let k = builder.cast(TyKind::EUReal, k.clone());
+
         // Collect modified variables for havoc (exclude the variables that are declared in the loop)
         let mut visitor = ModifiedVariableCollector::new();
         visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
