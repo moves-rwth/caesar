@@ -330,17 +330,19 @@ fn test_past_transform() {
                 {  }
             }
             proc main_condition_1_0(x: UInt) -> () {
-                assert ?((([! ((1 <= x))] * cast(EUReal, (x + 1))) <= 10/10))
+                assert ?((([! ((1 <= x))] * cast(EUReal, (x + 1))) <= cast(EUReal, 10/10)))
             }
             proc main_condition_2_0(x: UInt) -> () {
                 assert (
-                    ([(1 <= x)] * 10/10) <= (
+                    ([(1 <= x)] * cast(EUReal, 10/10)) <= (
                         ([(1 <= x)] * cast(EUReal, (x + 1))) + [! ((1 <= x))]
                     )
                 )
             }
             coproc main_past_0(init_x: UInt) -> (x: UInt)
-                pre ([(1 <= x)] * ((cast(EUReal, (x + 1)))[x -> init_x] - 5/10))
+                pre (
+                    [(1 <= x)] * ((cast(EUReal, (x + 1)))[x -> init_x] - cast(EUReal, 5/10))
+                )
                 post cast(EUReal, 0)
             {
                 x = init_x
