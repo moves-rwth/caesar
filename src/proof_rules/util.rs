@@ -2,7 +2,7 @@
 
 use std::cell::RefCell;
 
-use num::ToPrimitive;
+use num::{BigInt, BigRational, Zero};
 
 use crate::{
     ast::{
@@ -290,17 +290,19 @@ pub fn mut_five_args(args: &mut [Expr]) -> [&mut Expr; 5] {
     }
 }
 
-pub fn lit_f64(expr: &Expr) -> f64 {
-    if let ExprKind::Lit(lit) = &expr.kind {
-        match &lit.node {
+pub fn lit_rational(expr: &Expr) -> BigRational {
+    match &expr.kind {
+        ExprKind::Lit(lit) => match &lit.node {
             LitKind::Frac(value) => {
-                return value.to_f64().unwrap();
+                return value.clone();
             }
             LitKind::UInt(value) => {
-                return *value as f64;
+                return BigInt::from(*value).into();
             }
-            _ => return 0.0,
-        }
+            _ => return BigRational::zero(),
+        },
+        ExprKind::Cast(inner) => return lit_rational(inner),
+        _ => (),
     };
     unreachable!()
 }

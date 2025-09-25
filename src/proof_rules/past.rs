@@ -103,9 +103,8 @@ impl Encoding for PASTAnnotation {
         let [inv, eps, k] = three_args(args);
         let builder = ExprBuilder::new(annotation_span);
 
-        let eps_val = lit_f64(eps);
-        let k_val = lit_f64(k);
-
+        let eps_val = lit_rational(eps);
+        let k_val = lit_rational(k);
         if eps_val >= k_val {
             return Err(AnnotationError::WrongArgument {
                 span: annotation_span,
