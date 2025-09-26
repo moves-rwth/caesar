@@ -339,7 +339,7 @@ fn test_past_transform() {
                     )
                 )
             }
-            coproc main_past_0(init_x: UInt) -> (x: UInt)
+            proc main_past_0(init_x: UInt) -> (x: UInt)
                 pre (
                     [(1 <= x)] * ((cast(EUReal, (x + 1)))[x -> init_x] - cast(EUReal, 5/10))
                 )
@@ -348,8 +348,8 @@ fn test_past_transform() {
                 x = init_x
                 if (1 <= x) {
                     x = (x - 1)
-                    coassert cast(EUReal, (x + 1))
-                    coassume ∞
+                    assert cast(EUReal, (x + 1))
+                    assume cast(EUReal, 0)
                 } else {
 
                 }

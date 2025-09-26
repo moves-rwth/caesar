@@ -259,7 +259,7 @@ impl Encoding for PASTAnnotation {
             encode_iter(
                 &enc_env,
                 inner_stmt,
-                hey_const(&enc_env, inv, Direction::Up, tcx),
+                hey_const(&enc_env, inv, Direction::Down, tcx),
             )
             .unwrap(),
         );
@@ -280,7 +280,7 @@ impl Encoding for PASTAnnotation {
                 ProcSpec::Ensures(builder.cast(TyKind::EUReal, builder.uint(0))),
             ],
             body: Spanned::new(annotation_span, cond3_body),
-            direction: Direction::Up,
+            direction: Direction::Down,
         };
 
         let cond3_proc = generate_proc(annotation_span, cond3_proc_info, base_proc_ident, tcx);
