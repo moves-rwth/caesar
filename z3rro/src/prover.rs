@@ -291,6 +291,7 @@ pub struct Prover<'ctx> {
     smt_solver: SolverType,
     /// Cached information about the last SAT/proof check call.
     last_result: Option<LastSatSolverResult>,
+    result_solver: Option<Solver<'ctx>>,
 }
 
 impl<'ctx> Prover<'ctx> {
@@ -309,6 +310,7 @@ impl<'ctx> Prover<'ctx> {
             min_level_with_provables: None,
             smt_solver: solver_type,
             last_result: None,
+            result_solver: None,
         }
     }
 
@@ -414,7 +416,20 @@ impl<'ctx> Prover<'ctx> {
                     }
                     _ => {
                         let solver_result = self.run_solver(assumptions)?;
+
+                        if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
+                            if let Some(solver) = &self.result_solver {
+                                solver.from_string(cex.clone());
+                                solver.check();
+                            } else {
+                                let solver = Solver::new(self.ctx);
+                                solver.from_string(cex.clone());
+                                solver.check();
+                                self.result_solver = Some(solver);
+                            }
+                        }
                         self.cache_result(solver_result.clone());
+
                         Ok(solver_result)
                     }
                 };
@@ -462,6 +477,18 @@ impl<'ctx> Prover<'ctx> {
             }
             _ => {
                 let solver_result = self.run_solver(&[])?;
+                if let SolverResult::Sat(Some(cex)) = solver_result.clone() {
+                    if let Some(solver) = &self.result_solver {
+                        solver.from_string(cex.clone());
+                        solver.check();
+                    } else {
+                        let solver = Solver::new(self.ctx);
+                        solver.from_string(cex.clone());
+                        solver.check();
+                        self.result_solver = Some(solver);
+                    }
+                }
+                self.cache_result(solver_result.clone());
                 solver_result.to_sat_result()
             }
         };
@@ -493,17 +520,9 @@ impl<'ctx> Prover<'ctx> {
         let model = match self.smt_solver {
             SolverType::InternalZ3 => self.get_solver().get_model()?,
             _ => {
-                let solver = if let Some(cached_result) = &self.last_result {
-                    if let SolverResult::Sat(Some(cex)) = &cached_result.last_result {
-                        let solver = Solver::new(self.ctx);
-                        solver.from_string(cex.clone());
-                        solver.check();
-                        solver
-                    } else {
-                        Solver::new(self.ctx)
-                    }
-                } else {
-                    Solver::new(self.ctx)
+                let solver = match &self.result_solver {
+                    Some(solver) => solver,
+                    None => &Solver::new(self.ctx),
                 };
 
                 solver.get_model()?
@@ -710,7 +729,6 @@ impl<'ctx> Prover<'ctx> {
             }
         };
 
-        self.cache_result(solver_result.clone());
         Ok(solver_result)
     }
 
