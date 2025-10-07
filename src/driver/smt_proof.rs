@@ -141,6 +141,7 @@ pub fn run_smt_prove_task(
     server: &mut dyn Server,
     slice_vars: SliceStmts,
     vc_is_valid: BoolVcProveTask,
+    is_get_model_task: bool,
 ) -> Result<ProveResult, CaesarError> {
     let ctx = Context::new(&z3::Config::default());
     let function_encoder = mk_function_encoder(tcx, depgraph, options)?;
@@ -161,7 +162,7 @@ pub fn run_smt_prove_task(
         vc_is_valid.run_solver(options, limits_ref, name, &ctx, &mut translate, &slice_vars)?;
 
     server
-        .handle_vc_check_result(name, &mut result, &mut translate)
+        .handle_vc_check_result(name, &mut result, &mut translate, is_get_model_task)
         .map_err(CaesarError::ServerError)?;
 
     Ok(result.prove_result)
@@ -282,7 +283,6 @@ impl<'ctx> SmtVcProveTask<'ctx> {
             vc: bool_vc,
         }
     }
-
     /// Simplify the SMT formula using Z3's simplifier.
     pub fn simplify(&mut self) {
         let span = info_span!("simplify query");
@@ -634,5 +634,49 @@ impl<'ctx> SmtVcProveResult<'ctx> {
         }
 
         Ok(())
+    }
+}
+
+impl<'ctx> SmtVcProveResult<'ctx> {
+    /// Print the result of the query to stdout.
+    pub fn print_prove_result_get_model<'smt>(
+        &mut self,
+        server: &mut dyn Server,
+        translate: &mut TranslateExprs<'smt, 'ctx>,
+        name: &SourceUnitName,
+    ) {
+        let files = server.get_files_internal().lock().unwrap();
+        match &mut self.prove_result {
+            ProveResult::Proof => {
+                println!("{name}: The bound introduced by the preexpectations is always trivial (bottom for proc/top for coproc)");
+            }
+            ProveResult::Counterexample => {
+                let model = self.model.as_ref().unwrap();
+                println!(
+                    "{name}: A non-trivial bound is given for example by the following model:"
+                );
+                let mut w = Vec::new();
+                let doc = pretty_model(
+                    &files,
+                    self.slice_model.as_ref().unwrap(),
+                    &self.quant_vc,
+                    translate,
+                    model,
+                );
+                doc.nest(4).render(120, &mut w).unwrap();
+                println!("    {}", String::from_utf8(w).unwrap());
+            }
+            ProveResult::Unknown(reason) => {
+                println!("{name}: Unknown result! (reason: {reason})");
+                if let Some(slice_model) = &self.slice_model {
+                    let doc = pretty_slice(&files, slice_model);
+                    if let Some(doc) = doc {
+                        let mut w = Vec::new();
+                        doc.nest(4).render(120, &mut w).unwrap();
+                        println!("    {}", String::from_utf8(w).unwrap());
+                    }
+                }
+            }
+        }
     }
 }

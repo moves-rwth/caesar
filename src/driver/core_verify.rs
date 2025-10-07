@@ -21,7 +21,7 @@ use crate::{
     },
     pretty::{Doc, SimplePretty},
     procs::{
-        proc_verify::{encode_proc_verify, to_direction_lower_bounds},
+        proc_verify::{encode_pre_get_model, encode_proc_verify, to_direction_lower_bounds},
         SpecCall,
     },
     resource_limits::LimitsRef,
@@ -76,7 +76,11 @@ impl CoreVerifyTask {
     /// Convert this source unit into a [`CoreVerifyTask`]. Some declarations,
     /// such as domains or functions, do not generate any verify units. In these
     /// cases, `None` is returned.
-    pub fn from_source_unit(mut source_unit: SourceUnit, depgraph: &mut DepGraph) -> Option<Self> {
+    pub fn from_source_unit(
+        mut source_unit: SourceUnit,
+        depgraph: &mut DepGraph,
+        is_get_model_task: bool,
+    ) -> Option<Self> {
         let deps = match &mut source_unit {
             SourceUnit::Decl(decl) => depgraph.get_reachable([decl.name()]),
             SourceUnit::Raw(block) => {
@@ -91,7 +95,12 @@ impl CoreVerifyTask {
             SourceUnit::Decl(decl) => {
                 match decl {
                     DeclKind::ProcDecl(proc_decl) => {
-                        let (direction, block) = encode_proc_verify(&proc_decl.borrow())?;
+                        let (direction, block) = if is_get_model_task {
+                            encode_pre_get_model(&proc_decl.borrow())?
+                        } else {
+                            encode_proc_verify(&proc_decl.borrow())?
+                        };
+
                         Some(CoreVerifyTask {
                             deps,
                             direction,

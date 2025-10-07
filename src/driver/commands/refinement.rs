@@ -121,10 +121,10 @@ async fn verify_entailment(
         };
 
         let mut first_verify_unit = first
-            .flat_map(|u| CoreVerifyTask::from_source_unit(u, &mut depgraph))
+            .flat_map(|u| CoreVerifyTask::from_source_unit(u, &mut depgraph, false))
             .unwrap();
         let mut second_verify_unit = second
-            .flat_map(|u| CoreVerifyTask::from_source_unit(u, &mut depgraph))
+            .flat_map(|u| CoreVerifyTask::from_source_unit(u, &mut depgraph, false))
             .unwrap();
 
         let (first_vc, first_slice_stmts) = lower_core_verify_task(
@@ -163,6 +163,7 @@ async fn verify_entailment(
             server,
             slice_vars,
             vc_is_valid,
+            false,
         )?;
 
         // Handle reasons to stop the verifier.

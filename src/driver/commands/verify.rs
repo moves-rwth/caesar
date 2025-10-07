@@ -215,7 +215,7 @@ fn verify_files_main(
         .items
         .into_iter()
         .flat_map(|item| {
-            item.flat_map(|unit| CoreVerifyTask::from_source_unit(unit, &mut depgraph))
+            item.flat_map(|unit| CoreVerifyTask::from_source_unit(unit, &mut depgraph, false))
         })
         .collect();
 
@@ -264,6 +264,7 @@ fn verify_files_main(
             server,
             slice_vars,
             vc_is_valid,
+            false,
         )?;
 
         // Handle reasons to stop the verifier.

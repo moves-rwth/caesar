@@ -112,8 +112,13 @@ impl Server for CliServer {
         name: &SourceUnitName,
         result: &mut SmtVcProveResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
+        is_get_model_task: bool,
     ) -> Result<(), ServerError> {
-        result.print_prove_result(self, translate, name);
+        if is_get_model_task {
+            result.print_prove_result_get_model(self, translate, name);
+        } else {
+            result.print_prove_result(self, translate, name);
+        }
         Ok(())
     }
 
