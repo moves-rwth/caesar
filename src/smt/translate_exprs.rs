@@ -2,7 +2,7 @@
 
 use itertools::Itertools;
 use ref_cast::RefCast;
-use std::{collections::HashMap, convert::TryFrom, vec};
+use std::{collections::HashMap, vec};
 use z3::{
     ast::{Ast, Bool, Dynamic, Int, Real},
     Pattern,
@@ -329,11 +329,8 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             }
             ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
-            ExprKind::Lit(lit) => match lit.node {
-                LitKind::UInt(value) => {
-                    // TODO: actually handle u128s
-                    UInt::from_u64(self.ctx.ctx, u64::try_from(value).unwrap())
-                }
+            ExprKind::Lit(lit) => match &lit.node {
+                LitKind::UInt(value) => UInt::from_big_uint(self.ctx.ctx, value),
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
         };

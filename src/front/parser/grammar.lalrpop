@@ -2,6 +2,7 @@ use crate::ast::*;
 use crate::front::parser::parser_util::*;
 use std::str::FromStr;
 use std::cell::RefCell;
+use num::bigint::BigUint;
 
 grammar(
     file: FileId,
@@ -166,7 +167,7 @@ SymInfty: () = { "∞", "\\infty" }
 
 pub LitKind: LitKind = {
     <s:r#""[^"]*""#> => LitKind::Str(Symbol::intern(&s[1..s.len()-1])),
-    <num: r"[0-9]+"> => LitKind::UInt(u128::from_str(num).unwrap()),
+    <num: r"[0-9]+"> => LitKind::UInt(BigUint::from_str(num).unwrap()),
     <num: r"[0-9]+\.[0-9]+"> => LitKind::Frac(parse_decimal(num).unwrap()),
     SymInfty => LitKind::Infinity,
     "true" => LitKind::Bool(true),

@@ -177,7 +177,7 @@ pub fn init_distributions(files: &mut Files, tcx: &mut TyCtx) {
 fn lit_u128(expr: &Expr) -> u128 {
     if let ExprKind::Lit(lit) = &expr.kind {
         if let LitKind::UInt(value) = &lit.node {
-            return *value;
+            return value.try_into().unwrap();
         }
     };
     unreachable!()

@@ -2,7 +2,7 @@
 //! solver backend, but useful to be used the verification condition explanation
 //! UI for the user.
 
-use num::{BigRational, FromPrimitive, One, Zero};
+use num::{bigint::Sign, BigInt, BigRational, One, Zero};
 use z3rro::eureal::ConcreteEUReal;
 
 use crate::ast::{
@@ -152,7 +152,7 @@ fn deref_cast(e: &Expr) -> &Expr {
 fn is_zero_lit(e: &Expr) -> bool {
     match &deref_cast(e).kind {
         ExprKind::Lit(lit) => match &lit.node {
-            LitKind::UInt(v) => *v == 0,
+            LitKind::UInt(v) => v.is_zero(),
             LitKind::Frac(ratio) => Zero::is_zero(ratio),
             _ => false,
         },
@@ -163,7 +163,7 @@ fn is_zero_lit(e: &Expr) -> bool {
 fn is_one_lit(e: &Expr) -> bool {
     match &deref_cast(e).kind {
         ExprKind::Lit(lit) => match &lit.node {
-            LitKind::UInt(v) => *v == 1,
+            LitKind::UInt(v) => v.is_one(),
             LitKind::Frac(ratio) => One::is_one(ratio),
             _ => false,
         },
@@ -174,7 +174,9 @@ fn is_one_lit(e: &Expr) -> bool {
 fn extract_const_number(e: &Expr) -> Option<ConcreteEUReal> {
     match &deref_cast(e).kind {
         ExprKind::Lit(lit) => match &lit.node {
-            LitKind::UInt(v) => Some(ConcreteEUReal::Real(BigRational::from_u128(*v).unwrap())),
+            LitKind::UInt(v) => Some(ConcreteEUReal::Real(BigRational::from_integer(
+                BigInt::from_biguint(Sign::Plus, v.clone()),
+            ))),
             LitKind::Frac(ratio) => Some(ConcreteEUReal::Real(ratio.clone())),
             LitKind::Infinity => Some(ConcreteEUReal::Infinity),
             _ => None,

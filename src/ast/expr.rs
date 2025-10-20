@@ -2,7 +2,7 @@
 
 use std::{fmt, str::FromStr};
 
-use num::{BigRational, One, Zero};
+use num::{BigRational, BigUint, One, Zero};
 
 use crate::{
     pretty::{parens_group, pretty_list, Doc, SimplePretty},
@@ -370,7 +370,7 @@ pub enum LitKind {
     /// A string literal (`"something"`).
     Str(Symbol),
     /// An unsigned integer literal (`123`).
-    UInt(u128),
+    UInt(BigUint),
     /// A number literal represented by a fraction.
     Frac(BigRational),
     /// Infinity,
@@ -559,7 +559,7 @@ impl ExprBuilder {
     }
 
     pub fn uint(&self, value: u128) -> Expr {
-        let lit = LitKind::UInt(value);
+        let lit = LitKind::UInt(value.into());
         Shared::new(ExprData {
             kind: ExprKind::Lit(Spanned::new(self.span, lit)),
             ty: Some(TyKind::UInt),

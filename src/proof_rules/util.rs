@@ -297,7 +297,7 @@ pub fn lit_rational(expr: &Expr) -> BigRational {
                 return value.clone();
             }
             LitKind::UInt(value) => {
-                return BigInt::from(*value).into();
+                return BigInt::from(value.clone()).into();
             }
             _ => return BigRational::zero(),
         },
@@ -310,7 +310,7 @@ pub fn lit_rational(expr: &Expr) -> BigRational {
 pub fn lit_u128(expr: &Expr) -> u128 {
     if let ExprKind::Lit(lit) = &expr.kind {
         if let LitKind::UInt(value) = &lit.node {
-            return *value;
+            return TryInto::<u128>::try_into(value).unwrap();
         }
     };
     unreachable!()

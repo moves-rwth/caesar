@@ -452,7 +452,7 @@ impl<'a> ExprTranslator<'a> {
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(lit) => match &lit.node {
                 LitKind::UInt(val) => Ok(Expression::from(
-                    TryInto::<u64>::try_into(*val).map_err(|_| unsupported_expr_err())?,
+                    TryInto::<u64>::try_into(val).map_err(|_| unsupported_expr_err())?,
                 )),
                 LitKind::Bool(val) => Ok(Expression::from(*val)),
                 LitKind::Frac(frac) => Ok(Expression::from(BinaryExpression {
