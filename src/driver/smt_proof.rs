@@ -35,6 +35,7 @@ use crate::smt::funcs::fuel::{
     FuelEncodingOptions, FuelMonoFunctionEncoder, FuelParamFunctionEncoder,
 };
 use crate::smt::funcs::{FunctionEncoder, RecFunFunctionEncoder};
+use crate::smt::pretty_model::pretty_get_models_model;
 use crate::smt::{DepConfig, SmtCtx};
 use crate::tyctx::TyCtx;
 use crate::{
@@ -656,7 +657,7 @@ impl<'ctx> SmtVcProveResult<'ctx> {
                     "{name}: A non-trivial bound is given for example by the following model:"
                 );
                 let mut w = Vec::new();
-                let doc = pretty_model(
+                let doc = pretty_get_models_model(
                     &files,
                     self.slice_model.as_ref().unwrap(),
                     &self.quant_vc,
