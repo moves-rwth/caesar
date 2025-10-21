@@ -1,6 +1,6 @@
 use std::ops::{Add, Mul, Sub};
 
-use num::BigInt;
+use num::{BigInt, BigUint};
 use z3::{
     ast::{Ast, Bool, Int},
     Context,
@@ -24,6 +24,10 @@ use super::{
 pub struct UInt<'ctx>(Int<'ctx>);
 
 impl<'ctx> UInt<'ctx> {
+    pub fn from_big_uint(ctx: &'ctx Context, value: &BigUint) -> Self {
+        UInt(Int::from_big_int(ctx, &BigInt::from(value.clone())))
+    }
+
     pub fn from_u64(ctx: &'ctx Context, value: u64) -> Self {
         UInt(Int::from_u64(ctx, value))
     }
