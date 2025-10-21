@@ -8,8 +8,7 @@ use z3rro::model::{InstrumentedModel, ModelConsistency, SmtEvalError};
 use crate::{
     ast::{
         decl::{DeclKind, DeclKindName},
-        BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Files, Ident, LitKind, Shared, Span,
-        UnOpKind, VarKind,
+        ExprBuilder, Files, Ident, Span, VarKind,
     },
     driver::quant_proof::QuantVcProveTask,
     pretty::Doc,
@@ -49,9 +48,8 @@ pub fn pretty_model<'smt, 'ctx>(
 }
 
 /// Pretty-print a model for get models.
-pub fn pretty_get_models_model<'smt, 'ctx>(
+pub fn pretty_nontrivial_models_model<'smt, 'ctx>(
     files: &Files,
-    slice_model: &SliceModel,
     vc_expr: &QuantVcProveTask,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     model: &InstrumentedModel<'ctx>,
@@ -61,130 +59,30 @@ pub fn pretty_get_models_model<'smt, 'ctx>(
     // Print the values of the global variables in the model.
     pretty_globals(translate, model, files, &mut res);
 
-    let slice_lines = pretty_slice(files, slice_model);
-
     // Print the unaccessed definitions.
     if let Some(unaccessed) = pretty_unaccessed(model) {
         res.push(unaccessed);
     }
 
-    if let Some(slice_lines) = slice_lines {
-        res.push(slice_lines);
-    }
-
-    res.push(pretty_get_models_value(
-        vc_expr,
-        translate,
-        model,
-        slice_model,
-    ));
+    res.push(pretty_get_models_value(vc_expr, translate, model));
 
     Doc::intersperse(res, Doc::line_().append(Doc::line_())).append(Doc::line_())
-}
-
-fn deref_cast(e: &Expr) -> &Expr {
-    match &e.kind {
-        ExprKind::Cast(inner) => deref_cast(inner),
-        _ => e,
-    }
-}
-
-fn is_infinity_or_negated_infinity(expr: &Shared<ExprData>) -> bool {
-    match &expr.clone().kind {
-        ExprKind::Lit(lit) if matches!(lit.node, LitKind::Infinity) => true,
-        ExprKind::Unary(op, inner) if matches!(op.node, UnOpKind::Not | UnOpKind::Non) => {
-            matches!(&inner.clone().kind, ExprKind::Lit(lit) if matches!(lit.node, LitKind::Infinity))
-        }
-        _ => false,
-    }
-}
-
-fn strip_outer_negation(expr: &Shared<ExprData>) -> Shared<ExprData> {
-    match &expr.clone().kind {
-        ExprKind::Unary(op, inner) if op.node == UnOpKind::Not || op.node == UnOpKind::Non => {
-            inner.clone()
-        }
-        _ => expr.clone(),
-    }
-}
-
-fn strip_inf_or_sup_with_infinity(expr: &Expr) -> Option<Shared<ExprData>> {
-    match &deref_cast(expr).kind {
-        ExprKind::Binary(op, left, right)
-            if op.node == BinOpKind::Inf || op.node == BinOpKind::Sup =>
-        {
-            let left_expr = left.clone();
-            let right_expr = right.clone();
-
-            let is_left_infinity = is_infinity_or_negated_infinity(&left_expr);
-            let is_right_infinity = is_infinity_or_negated_infinity(&right_expr);
-
-            match (is_left_infinity, is_right_infinity) {
-                (true, false) => Some(right_expr),
-                (false, true) => Some(left_expr),
-                (true, true) => Some(expr.clone()), // both sides are (negated) ∞
-                (false, false) => Some(expr.clone()), // neither side is (negated) ∞ (should not happen)
-            }
-        }
-        _ => Some(expr.clone()), // not an Inf/Sup — return as-is
-    }
 }
 
 pub fn pretty_get_models_value<'smt, 'ctx>(
     vc_expr: &QuantVcProveTask,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     model: &InstrumentedModel<'ctx>,
-    slice_model: &SliceModel,
 ) -> Doc {
-    let original_program_vc = if slice_model.count_sliced_stmts() == 0 {
-        vc_expr.expr.clone()
-    } else {
-        // reconstruct the original program's vc by substituting the slice
-        // variables by `true`.
-        let builder = ExprBuilder::new(Span::dummy_span());
-        let expr_true = builder.bool_lit(true);
-        let subst_expr = builder.subst_by(
-            vc_expr.expr.clone(),
-            slice_model.iter_variables(),
-            |_ident| expr_true.clone(),
-        );
-        let mut res = subst_expr;
-
-        // The limit error is not handled here, therefore discard the result
-        apply_subst(translate.ctx.tcx(), &mut res, &LimitsRef::new(None, None)).unwrap();
-
-        res
-    };
-
+    let original_program_vc = vc_expr.expr.clone();
     let mut lines = vec![];
 
-    let stripped = strip_outer_negation(
-        &strip_inf_or_sup_with_infinity(&original_program_vc.clone()).unwrap(),
-    );
-    let ast = translate.t_symbolic(&stripped);
+    let ast = translate.t_symbolic(&original_program_vc);
     let value = ast.eval(model);
     let res = pretty_eval_result(value);
     lines.push(
         Doc::text("the pre-quantity evaluated to:").append(Doc::hardline().append(res).nest(4)),
     );
-
-    let num_sliced_stmts = slice_model.count_sliced_stmts();
-    if num_sliced_stmts > 0 {
-        let ast = translate.t_symbolic(&vc_expr.expr);
-        let value = ast.eval(model);
-        let slice_pre = pretty_eval_result(value)
-            .append(Doc::line_())
-            .append(Doc::text(format!(
-                "(slicing removed {}/{} assertions)",
-                num_sliced_stmts,
-                slice_model.len()
-            )));
-        lines.push(Doc::nil());
-        lines.push(
-            Doc::text("in the sliced program, the pre-quantity evaluated to:")
-                .append(Doc::hardline().append(slice_pre).nest(4)),
-        );
-    }
 
     Doc::intersperse(lines, Doc::line())
 }

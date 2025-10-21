@@ -105,7 +105,6 @@ impl Server for TestServer {
         name: &SourceUnitName,
         result: &mut SmtVcProveResult<'ctx>,
         _translate: &mut TranslateExprs<'smt, 'ctx>,
-        _is_get_model_task: bool,
     ) -> Result<(), ServerError> {
         let statuses = &mut self
             .file_statuses

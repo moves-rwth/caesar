@@ -20,7 +20,7 @@ use clap::{crate_description, Args, CommandFactory, Parser, Subcommand};
 use crate::{
     ast::FileId,
     driver::commands::{
-        get_pre_models::run_get_model_command,
+        get_pre_models::run_nontrivial_model_command,
         model_check::{run_model_checking_command, ModelCheckCommand},
         options::{DebugOptions, InputOptions},
         refinement::run_verify_entailment_command,
@@ -67,7 +67,7 @@ impl CaesarCli {
             CaesarCommand::Mc(options) => run_model_checking_command(options),
             CaesarCommand::Lsp(options) => run_lsp_command(options).await,
             CaesarCommand::ShellCompletions(options) => run_shell_completions_command(options),
-            CaesarCommand::GetPreModels(options) => run_get_model_command(options).await,
+            CaesarCommand::GetPreModels(options) => run_nontrivial_model_command(options).await,
             CaesarCommand::Other(_) => unreachable!(),
         }
     }

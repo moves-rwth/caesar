@@ -1,39 +1,45 @@
 use std::{ops::DerefMut, process::ExitCode, sync::Arc};
 
-use z3rro::{prover::ProveResult, util::ReasonUnknown};
+use z3::{Context, SatResult};
+use z3rro::prover::{IncrementalMode, Prover};
 
 use crate::{
-    ast::FileId,
+    ast::{BinOpKind, Direction, ExprBuilder, FileId, Span, TyKind},
     driver::{
         commands::{mk_cli_server, print_timings, verify::VerifyCommand},
         core_verify::{lower_core_verify_task, CoreVerifyTask},
         error::{finalize_caesar_result, CaesarError},
         front::parse_and_tycheck,
         item::Item,
-        quant_proof::lower_quant_prove_task,
-        smt_proof::set_global_z3_params,
+        quant_proof::BoolVcProveTask,
+        smt_proof::{
+            get_smtlib, mk_function_encoder, set_global_z3_params, write_smtlib, SmtVcProveTask,
+        },
     },
-    resource_limits::{await_with_resource_limits, LimitError, LimitsRef},
+    resource_limits::{await_with_resource_limits, LimitsRef},
     servers::{Server, SharedServer},
+    smt::{
+        pretty_model::pretty_nontrivial_models_model, translate_exprs::TranslateExprs, DepConfig, SmtCtx,
+    },
 };
 
-pub async fn run_get_model_command(options: VerifyCommand) -> ExitCode {
+pub async fn run_nontrivial_model_command(options: VerifyCommand) -> ExitCode {
     let (user_files, server) = match mk_cli_server(&options.input_options) {
         Ok(value) => value,
         Err(value) => return value,
     };
     let options = Arc::new(options);
-    let get_models_result = get_model_files(&options, &server, user_files).await;
+    let nontrivial_models_result = nontrivial_model_files(&options, &server, user_files).await;
 
     if options.debug_options.timing {
         print_timings();
     }
 
-    finalize_caesar_result(server, &options.rlimit_options, get_models_result)
+    finalize_caesar_result(server, &options.rlimit_options, nontrivial_models_result)
 }
 
 /// This is just like verify_files()
-pub async fn get_model_files(
+pub async fn nontrivial_model_files(
     options: &Arc<VerifyCommand>,
     server: &SharedServer,
     user_files: Vec<FileId>,
@@ -48,7 +54,7 @@ pub async fn get_model_files(
             let stack_size = 50 * 1024 * 1024;
             stacker::maybe_grow(stack_size, stack_size, move || {
                 let mut server = server.lock().unwrap();
-                get_model_files_main(&options, limits_ref, server.deref_mut(), &user_files)
+                nontrivial_model_files_main(&options, limits_ref, server.deref_mut(), &user_files)
             })
         })
     };
@@ -61,7 +67,7 @@ pub async fn get_model_files(
     .await??
 }
 
-fn get_model_files_main(
+fn nontrivial_model_files_main(
     options: &VerifyCommand,
     limits_ref: LimitsRef,
     server: &mut dyn Server,
@@ -86,7 +92,7 @@ fn get_model_files_main(
     module.apply_encodings(&mut tcx, server)?;
 
     if options.debug_options.print_core_procs {
-        println!("HeyVL get model task with generated procs:");
+        println!("HeyVL get nontrivial model task with generated procs:");
         println!("{module}");
     }
 
@@ -94,7 +100,7 @@ fn get_model_files_main(
     // the SMT translation later
     let mut depgraph = module.generate_depgraph(&options.opt_options.function_encoding)?;
 
-    // here the translation from the program to the relevant preexpectation conditions happens
+    // translate program to relevant preexpectation conditions
     let mut verify_units: Vec<Item<CoreVerifyTask>> = module
         .items
         .into_iter()
@@ -124,7 +130,7 @@ fn get_model_files_main(
         let mut new_options = VerifyCommand::default();
         new_options.slice_options.no_slice_error = true;
 
-        let (vc_expr, slice_vars) = lower_core_verify_task(
+        let (vc_expr, _slice_vars) = lower_core_verify_task(
             &mut tcx,
             name,
             &new_options,
@@ -132,37 +138,143 @@ fn get_model_files_main(
             server,
             &mut verify_unit,
         )?;
-        // Lowering the quantitative task to a Boolean one. This contains (lazy)
-        // unfolding, quantifier elimination, and various optimizations
-        // (depending on options).
-        let vc_is_valid = lower_quant_prove_task(options, &limits_ref, &mut tcx, name, vc_expr)?;
 
-        // Running the SMT prove task: translating to Z3, running the solver.
-        let result = crate::driver::smt_proof::run_smt_prove_task(
-            options,
-            &limits_ref,
-            &tcx,
-            &depgraph,
-            name,
-            server,
-            slice_vars,
-            vc_is_valid,
-            true,
-        )?;
+        // Lowering the quantitative task to a Boolean one.
+        let mut quant_task = vc_expr;
 
-        // Handle reasons to stop the verifier.
-        match result {
-            ProveResult::Unknown(ReasonUnknown::Interrupted) => {
-                return Err(CaesarError::Interrupted)
+        // 1. Unfolding (applies substitutions)
+        quant_task.unfold(options, &limits_ref, &tcx)?;
+
+        // TODO: How to deal with quantifier?
+        // 2. Quantifier elimination
+        // if !options.opt_options.no_qelim {
+        //     quant_task.qelim(&mut tcx, &limits_ref)?;
+        // }
+
+        // In-between, gather some stats about the vc expression
+        quant_task.trace_expr_stats();
+
+
+        // 3. Now turn this quantitative formula into a Boolean one
+        let builder = ExprBuilder::new(Span::dummy_span());
+        let top = builder.top_lit(quant_task.expr.ty.as_ref().unwrap());
+        let bot = builder.bot_lit(quant_task.expr.ty.as_ref().unwrap());
+        let expr = quant_task.expr.clone();
+
+        // Construct the condition based on quantifier direction
+        let res = match quant_task.direction {
+            Direction::Up => {
+                // For coprocs, check if expr < top
+                builder.binary(BinOpKind::Lt, Some(TyKind::Bool), expr, top)
             }
-            ProveResult::Unknown(ReasonUnknown::Timeout) => return Err(LimitError::Timeout.into()),
+            Direction::Down => {
+                // For procs, check if expr > bot
+                builder.binary(BinOpKind::Gt, Some(TyKind::Bool), expr, bot)
+            }
+        };
+
+        // Create a Boolean verification task with the comparison
+        let mut bool_task = BoolVcProveTask {
+            quant_vc: quant_task,
+            vc: res,
+        };
+
+
+        // 4. Optimizations
+        // 4.1. Remove parentheses if needed
+        if !options.opt_options.no_boolify || options.opt_options.opt_rel {
+            bool_task.remove_parens();
+        }
+        // 4.2 Boolify (enabled by default)
+        if !options.opt_options.no_boolify {
+            bool_task.opt_boolify();
+        }
+        // 4.3. Relational optimization (disabled by default)
+        if options.opt_options.opt_rel {
+            bool_task.opt_relational();
+        }
+
+        // print theorem to prove if requested
+        if options.debug_options.print_theorem {
+            bool_task.print_theorem(name);
+        }
+
+
+        let ctx = Context::new(&z3::Config::default());
+        let function_encoder = mk_function_encoder(&tcx, &depgraph, options)?;
+        let dep_config = DepConfig::Set(bool_task.get_dependencies());
+        let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoder, dep_config);
+        let mut translate = TranslateExprs::new(&smt_ctx);
+        let mut vc_is_valid = SmtVcProveTask::translate(bool_task, &mut translate);
+
+        if !options.opt_options.no_simplify {
+            vc_is_valid.simplify();
+        }
+
+        if options.debug_options.z3_trace {
+            tracing::info!("Z3 tracing output will be written to `z3.log`.");
+        }
+
+        let mut prover = Prover::new(&ctx, IncrementalMode::Native);
+        
+        if let Some(remaining) = limits_ref.time_left() {
+            prover.set_timeout(remaining);
+        }
+
+        // add the definition of all used Lit marker functions
+        translate.ctx.add_lit_axioms_to_prover(&mut prover);
+        // add assumptions (from axioms and locals) to the prover
+        translate
+            .ctx
+            .uninterpreteds()
+            .add_axioms_to_prover(&mut prover);
+        translate
+            .local_scope()
+            .add_assumptions_to_prover(&mut prover);
+        
+        // add the requirement for the preexpectation
+        prover.add_assumption(&vc_is_valid.vc);
+
+        let smtlib = get_smtlib(options, &prover);
+        if let Some(smtlib) = &smtlib {
+            write_smtlib(&options.debug_options, name, smtlib, None)?;
+        }
+
+        let mut sat_result = prover.check_sat();
+        let model = prover.get_model();
+
+        let files = server.get_files_internal().lock().unwrap();
+        match &mut sat_result {
+            SatResult::Sat => {
+                println!(
+                    "{name}: A non-trivial bound is given for example by the following model:"
+                );
+                let model = model.as_ref().unwrap();
+                let mut w = Vec::new();
+                let doc =
+                    pretty_nontrivial_models_model(&files, &vc_is_valid.quant_vc, &mut translate, model);
+                doc.nest(4).render(120, &mut w).unwrap();
+                println!("    {}", String::from_utf8(w).unwrap());
+            }
+            SatResult::Unsat => {
+                println!(
+                    "{name}: The bound introduced by the preexpectations is always trivial (bottom for proc/top for coproc)"
+                );
+            }
+            SatResult::Unknown => {
+                println!("{name}: Unknown result!");
+            }
+        }
+        // Handle reasons to stop the verifier.
+        match sat_result {
+            SatResult::Unknown => return Err(CaesarError::Interrupted),
             _ => {}
         }
 
         // Increment counters.
-        match result {
-            ProveResult::Counterexample => num_sat += 1,
-            ProveResult::Proof | ProveResult::Unknown(_) => num_unsat += 1,
+        match sat_result {
+            SatResult::Sat => num_sat += 1,
+            SatResult::Unsat | SatResult::Unknown => num_unsat += 1,
         }
     }
 

@@ -163,7 +163,6 @@ async fn verify_entailment(
             server,
             slice_vars,
             vc_is_valid,
-            false,
         )?;
 
         // Handle reasons to stop the verifier.

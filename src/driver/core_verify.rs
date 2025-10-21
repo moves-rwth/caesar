@@ -21,7 +21,7 @@ use crate::{
     },
     pretty::{Doc, SimplePretty},
     procs::{
-        proc_verify::{encode_pre_get_model, encode_proc_verify, to_direction_lower_bounds},
+        proc_verify::{encode_preexpectation, encode_proc_verify, to_direction_lower_bounds},
         SpecCall,
     },
     resource_limits::LimitsRef,
@@ -96,7 +96,7 @@ impl CoreVerifyTask {
                 match decl {
                     DeclKind::ProcDecl(proc_decl) => {
                         let (direction, block) = if is_get_model_task {
-                            encode_pre_get_model(&proc_decl.borrow())?
+                            encode_preexpectation(&proc_decl.borrow())?
                         } else {
                             encode_proc_verify(&proc_decl.borrow())?
                         };

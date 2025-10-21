@@ -191,7 +191,6 @@ pub trait Server: Send {
         name: &SourceUnitName,
         result: &mut SmtVcProveResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
-        is_get_model_task: bool,
     ) -> Result<(), ServerError>;
     
     /// Return an exit code for the process.

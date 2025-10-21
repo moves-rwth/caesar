@@ -427,7 +427,6 @@ impl Server for LspServer {
         name: &SourceUnitName,
         result: &mut SmtVcProveResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
-        _is_get_model_task: bool,
     ) -> Result<(), ServerError> {
         result.emit_diagnostics(name.span(), self, translate)?;
         let statuses = &mut self

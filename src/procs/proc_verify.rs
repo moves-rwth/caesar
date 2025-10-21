@@ -1,25 +1,18 @@
 use crate::{
     ast::{
         self, BinOpKind, Block, Direction, ExprData, ExprKind, ProcDecl, Shared, Span, SpanVariant,
-        Spanned, StmtKind, TyKind, UnOpKind,
+        Spanned, StmtKind, TyKind,
     },
     driver::core_verify::CoreVerifyTask,
     slicing::{wrap_with_error_message, wrap_with_success_message},
 };
 
-/// Encode the preexpectations as a formula for which counterexamples are satisfying valuations
-/// of the preexpectations.
+/// Encode the preexpectations as a formula for which a model is a nontrivial bound
 /// For proc:
 ///     goal: Find a model such that (pre1 ⊓ pre2 ⊓...) > 0
-///     (pre1 ⊓ pre2 ⊓...) = 0 iff !(pre1 ⊓ pre2 ⊓...) = top
-///     (pre1 ⊓ pre2 ⊓...) > 0 iff !(pre1 ⊓ pre2 ⊓...) = 0
-///     find cex for: !(pre1 ⊓ pre2 ⊓...)
 /// For coproc:
 ///     goal: Find a model such that (pre1 ⊔ pre2 ⊔...) < top
-///     (pre1 ⊔ pre2 ⊔...) = top iff ~(pre1 ⊔ pre2 ⊔...) = 0
-///     (pre1 ⊔ pre2 ⊔...) < top iff ~(pre1 ⊔ pre2 ⊔...) = top
-///     find cex for: ~(pre1 ⊔ pre2 ⊔...)
-pub fn encode_pre_get_model(proc: &ProcDecl) -> Option<(Direction, Block)> {
+pub fn encode_preexpectation(proc: &ProcDecl) -> Option<(Direction, Block)> {
     let direction = proc.direction;
 
     let body_ref = proc.body.borrow();
@@ -37,15 +30,7 @@ pub fn encode_pre_get_model(proc: &ProcDecl) -> Option<(Direction, Block)> {
         combination
     }
 
-    fn get_negation_type(direction: Direction) -> ast::expr::UnOpKind {
-        let negation_type = match direction {
-            Direction::Down => UnOpKind::Not,
-            Direction::Up => UnOpKind::Non,
-        };
-        negation_type
-    }
-
-    // push the assume statement for each requires
+    // connect the preexpectations through the correct operator
     let mut build_expr = proc
         .requires()
         .next()
@@ -63,14 +48,6 @@ pub fn encode_pre_get_model(proc: &ProcDecl) -> Option<(Direction, Block)> {
         });
     }
 
-    build_expr = Shared::new(ExprData {
-        kind: ExprKind::Unary(
-            Spanned::with_dummy_span(get_negation_type(direction)),
-            build_expr,
-        ),
-        ty: Some(TyKind::EUReal),
-        span: Span::dummy_span(),
-    });
     block.node.push(Spanned::new(
         Span::dummy_span(),
         StmtKind::Assert(direction, build_expr),

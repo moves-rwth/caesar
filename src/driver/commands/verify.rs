@@ -264,7 +264,6 @@ fn verify_files_main(
             server,
             slice_vars,
             vc_is_valid,
-            false,
         )?;
 
         // Handle reasons to stop the verifier.
