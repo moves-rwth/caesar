@@ -102,7 +102,6 @@ pub enum CaesarCommand {
     /// Generate shell completions for the Caesar binary.
     ShellCompletions(ShellCompletionsCommand),
     /// Get non-trivial models for preexpectation.
-    #[clap(visible_alias = "get-models")]
     GetPreModels(VerifyCommand),
     /// This is to support the default `verify` command.
     #[command(external_subcommand)]
