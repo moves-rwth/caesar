@@ -48,7 +48,7 @@ pub fn pretty_model<'smt, 'ctx>(
 }
 
 /// Pretty-print a model for get models.
-pub fn pretty_nontrivial_models_model<'smt, 'ctx>(
+pub fn pretty_nontrivial_model<'smt, 'ctx>(
     files: &Files,
     vc_expr: &QuantVcProveTask,
     translate: &mut TranslateExprs<'smt, 'ctx>,

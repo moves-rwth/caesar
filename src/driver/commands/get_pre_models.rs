@@ -1,8 +1,5 @@
 use std::{ops::DerefMut, process::ExitCode, sync::Arc};
 
-use z3::{Context, SatResult};
-use z3rro::prover::{IncrementalMode, Prover};
-
 use crate::{
     ast::{BinOpKind, Direction, ExprBuilder, FileId, Span, TyKind},
     driver::{
@@ -12,16 +9,12 @@ use crate::{
         front::parse_and_tycheck,
         item::Item,
         quant_proof::BoolVcProveTask,
-        smt_proof::{
-            get_smtlib, mk_function_encoder, set_global_z3_params, write_smtlib, SmtVcProveTask,
-        },
+        smt_proof::{run_smt_check_sat, set_global_z3_params},
     },
     resource_limits::{await_with_resource_limits, LimitsRef},
     servers::{Server, SharedServer},
-    smt::{
-        pretty_model::pretty_nontrivial_models_model, translate_exprs::TranslateExprs, DepConfig, SmtCtx,
-    },
 };
+use z3::SatResult;
 
 pub async fn run_nontrivial_model_command(options: VerifyCommand) -> ExitCode {
     let (user_files, server) = match mk_cli_server(&options.input_options) {
@@ -142,20 +135,15 @@ fn nontrivial_model_files_main(
         // Lowering the quantitative task to a Boolean one.
         let mut quant_task = vc_expr;
 
-        // 1. Unfolding (applies substitutions)
+        // Unfolding (applies substitutions)
         quant_task.unfold(options, &limits_ref, &tcx)?;
 
-        // TODO: How to deal with quantifier?
-        // 2. Quantifier elimination
-        // if !options.opt_options.no_qelim {
-        //     quant_task.qelim(&mut tcx, &limits_ref)?;
-        // }
+        // TODO: How to deal with inf/sup quantifier?
+        // Should there be a warning if they are used?
 
-        // In-between, gather some stats about the vc expression
         quant_task.trace_expr_stats();
 
-
-        // 3. Now turn this quantitative formula into a Boolean one
+        // Turn quantitative formula into a Boolean one
         let builder = ExprBuilder::new(Span::dummy_span());
         let top = builder.top_lit(quant_task.expr.ty.as_ref().unwrap());
         let bot = builder.bot_lit(quant_task.expr.ty.as_ref().unwrap());
@@ -179,92 +167,33 @@ fn nontrivial_model_files_main(
             vc: res,
         };
 
-
-        // 4. Optimizations
-        // 4.1. Remove parentheses if needed
+        // Optimizations
         if !options.opt_options.no_boolify || options.opt_options.opt_rel {
             bool_task.remove_parens();
         }
-        // 4.2 Boolify (enabled by default)
         if !options.opt_options.no_boolify {
             bool_task.opt_boolify();
         }
-        // 4.3. Relational optimization (disabled by default)
         if options.opt_options.opt_rel {
             bool_task.opt_relational();
         }
 
-        // print theorem to prove if requested
         if options.debug_options.print_theorem {
             bool_task.print_theorem(name);
         }
 
+        // Running the SMT check sat task: translating to Z3, running the solver.
+        // This also handles printing the result
+        let sat_result = run_smt_check_sat(
+            &options,
+            &limits_ref,
+            &tcx,
+            &depgraph,
+            &name,
+            bool_task,
+            server,
+        )?;
 
-        let ctx = Context::new(&z3::Config::default());
-        let function_encoder = mk_function_encoder(&tcx, &depgraph, options)?;
-        let dep_config = DepConfig::Set(bool_task.get_dependencies());
-        let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoder, dep_config);
-        let mut translate = TranslateExprs::new(&smt_ctx);
-        let mut vc_is_valid = SmtVcProveTask::translate(bool_task, &mut translate);
-
-        if !options.opt_options.no_simplify {
-            vc_is_valid.simplify();
-        }
-
-        if options.debug_options.z3_trace {
-            tracing::info!("Z3 tracing output will be written to `z3.log`.");
-        }
-
-        let mut prover = Prover::new(&ctx, IncrementalMode::Native);
-        
-        if let Some(remaining) = limits_ref.time_left() {
-            prover.set_timeout(remaining);
-        }
-
-        // add the definition of all used Lit marker functions
-        translate.ctx.add_lit_axioms_to_prover(&mut prover);
-        // add assumptions (from axioms and locals) to the prover
-        translate
-            .ctx
-            .uninterpreteds()
-            .add_axioms_to_prover(&mut prover);
-        translate
-            .local_scope()
-            .add_assumptions_to_prover(&mut prover);
-        
-        // add the requirement for the preexpectation
-        prover.add_assumption(&vc_is_valid.vc);
-
-        let smtlib = get_smtlib(options, &prover);
-        if let Some(smtlib) = &smtlib {
-            write_smtlib(&options.debug_options, name, smtlib, None)?;
-        }
-
-        let mut sat_result = prover.check_sat();
-        let model = prover.get_model();
-
-        let files = server.get_files_internal().lock().unwrap();
-        match &mut sat_result {
-            SatResult::Sat => {
-                println!(
-                    "{name}: A non-trivial bound is given for example by the following model:"
-                );
-                let model = model.as_ref().unwrap();
-                let mut w = Vec::new();
-                let doc =
-                    pretty_nontrivial_models_model(&files, &vc_is_valid.quant_vc, &mut translate, model);
-                doc.nest(4).render(120, &mut w).unwrap();
-                println!("    {}", String::from_utf8(w).unwrap());
-            }
-            SatResult::Unsat => {
-                println!(
-                    "{name}: The bound introduced by the preexpectations is always trivial (bottom for proc/top for coproc)"
-                );
-            }
-            SatResult::Unknown => {
-                println!("{name}: Unknown result!");
-            }
-        }
         // Handle reasons to stop the verifier.
         match sat_result {
             SatResult::Unknown => return Err(CaesarError::Interrupted),

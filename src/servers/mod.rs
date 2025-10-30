@@ -192,7 +192,7 @@ pub trait Server: Send {
         result: &mut SmtVcProveResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
     ) -> Result<(), ServerError>;
-    
+
     /// Return an exit code for the process.
     ///
     /// Default implementation returns `ExitCode::SUCCESS`.
