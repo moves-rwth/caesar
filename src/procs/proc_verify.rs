@@ -7,7 +7,8 @@ use crate::{
     slicing::{wrap_with_error_message, wrap_with_success_message},
 };
 
-/// Encode the preexpectations as a formula for which a model is a nontrivial bound
+/// Encode the preexpectations as a formula for which a model is a nontrivial bound.
+/// 
 /// For proc:
 ///     goal: Find a model such that (pre1 ⊓ pre2 ⊓...) > 0
 /// For coproc:

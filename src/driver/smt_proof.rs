@@ -169,6 +169,10 @@ pub fn run_smt_prove_task(
     Ok(result.prove_result)
 }
 
+/// Run the SMT satisfiability check: translate the verification condition to Z3,
+/// add axioms and assumptions, check if its sat and find a model,
+/// print the result and model and return the result.
+
 pub fn run_smt_check_sat<'tcx>(
     options: &VerifyCommand,
     limits_ref: &LimitsRef,

@@ -138,9 +138,6 @@ fn nontrivial_model_files_main(
         // Unfolding (applies substitutions)
         quant_task.unfold(options, &limits_ref, &tcx)?;
 
-        // TODO: How to deal with inf/sup quantifier?
-        // Should there be a warning if they are used?
-
         quant_task.trace_expr_stats();
 
         // Turn quantitative formula into a Boolean one

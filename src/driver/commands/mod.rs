@@ -101,7 +101,7 @@ pub enum CaesarCommand {
     Lsp(VerifyCommand),
     /// Generate shell completions for the Caesar binary.
     ShellCompletions(ShellCompletionsCommand),
-    /// Get non-trivial models for preexpectation.
+    /// Compute a non-trivial model for the preconditions of each (co)proc.
     GetPreModels(VerifyCommand),
     /// This is to support the default `verify` command.
     #[command(external_subcommand)]
