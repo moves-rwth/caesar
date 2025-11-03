@@ -142,18 +142,18 @@ fn nontrivial_model_files_main(
 
         // Turn quantitative formula into a Boolean one
         let builder = ExprBuilder::new(Span::dummy_span());
-        let top = builder.top_lit(quant_task.expr.ty.as_ref().unwrap());
-        let bot = builder.bot_lit(quant_task.expr.ty.as_ref().unwrap());
         let expr = quant_task.expr.clone();
 
         // Construct the condition based on quantifier direction
         let res = match quant_task.direction {
             Direction::Up => {
                 // For coprocs, check if expr < top
+                let top = builder.top_lit(quant_task.expr.ty.as_ref().unwrap());
                 builder.binary(BinOpKind::Lt, Some(TyKind::Bool), expr, top)
             }
             Direction::Down => {
                 // For procs, check if expr > bot
+                let bot = builder.bot_lit(quant_task.expr.ty.as_ref().unwrap());
                 builder.binary(BinOpKind::Gt, Some(TyKind::Bool), expr, bot)
             }
         };
