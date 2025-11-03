@@ -39,13 +39,13 @@ use tracing::instrument;
 /// Lower a core verification task into a quantitative vc prove task: apply
 /// desugaring for spec calls, preparing slicing, and verification condition
 /// generation.
-pub fn lower_core_verify_task(
+pub fn lower_core_heyvl_task(
     tcx: &mut TyCtx,
     name: &SourceUnitName,
     options: &VerifyCommand,
     limits_ref: &LimitsRef,
     server: &mut dyn Server,
-    task: &mut CoreVerifyTask,
+    task: &mut CoreHeyVLTask,
 ) -> Result<(QuantVcProveTask, SliceStmts), CaesarError> {
     // 1. Desugaring
     task.desugar_spec_calls(tcx, name.to_string())?;
@@ -66,42 +66,25 @@ pub fn lower_core_verify_task(
 
 /// A block of HeyVL statements to be verified with a certain [`Direction`].
 #[derive(Debug, Clone)]
-pub struct CoreVerifyTask {
+pub struct CoreHeyVLTask {
     pub deps: Dependencies,
     pub direction: Direction,
     pub block: Block,
 }
 
-impl CoreVerifyTask {
-    /// Convert this source unit into a [`CoreVerifyTask`]. Some declarations,
+impl CoreHeyVLTask {
+    /// Convert proc_verify into a [`CoreHeyVLTask`]. Some declarations,
     /// such as domains or functions, do not generate any verify units. In these
     /// cases, `None` is returned.
-    pub fn from_source_unit(
-        mut source_unit: SourceUnit,
-        depgraph: &mut DepGraph,
-        is_get_model_task: bool,
-    ) -> Option<Self> {
-        let deps = match &mut source_unit {
-            SourceUnit::Decl(decl) => depgraph.get_reachable([decl.name()]),
-            SourceUnit::Raw(block) => {
-                assert!(depgraph.current_deps.is_empty());
-                depgraph.visit_block(block).unwrap();
-                let current_deps = std::mem::take(&mut depgraph.current_deps);
-                depgraph.get_reachable(current_deps)
-            }
-        };
+    pub fn from_proc_verify(mut proc_verify: SourceUnit, depgraph: &mut DepGraph) -> Option<Self> {
+        let deps = Self::compute_deps(&mut proc_verify, depgraph);
 
-        match source_unit {
+        match proc_verify {
             SourceUnit::Decl(decl) => {
                 match decl {
                     DeclKind::ProcDecl(proc_decl) => {
-                        let (direction, block) = if is_get_model_task {
-                            encode_preexpectation(&proc_decl.borrow())?
-                        } else {
-                            encode_proc_verify(&proc_decl.borrow())?
-                        };
-
-                        Some(CoreVerifyTask {
+                        let (direction, block) = encode_proc_verify(&proc_decl.borrow())?;
+                        Some(CoreHeyVLTask {
                             deps,
                             direction,
                             block,
@@ -112,11 +95,52 @@ impl CoreVerifyTask {
                     _ => unreachable!(), // axioms and variable declarations are not allowed on the top level
                 }
             }
-            SourceUnit::Raw(block) => Some(CoreVerifyTask {
+            SourceUnit::Raw(block) => Some(CoreHeyVLTask {
                 deps,
                 direction: Direction::Down,
                 block,
             }),
+        }
+    }
+
+    /// Same as [`from_proc_verify`] but translating from proc_pre_model.
+    /// For this the preexpectations need to be translated
+    pub fn from_proc_pre_model(mut proc_pre_model: SourceUnit, depgraph: &mut DepGraph) -> Option<Self> {
+        let deps = Self::compute_deps(&mut proc_pre_model, depgraph);
+        match proc_pre_model {
+            SourceUnit::Decl(decl) => {
+                match decl {
+                    DeclKind::ProcDecl(proc_decl) => {
+                        let (direction, block) = encode_preexpectation(&proc_decl.borrow())?;
+                        Some(CoreHeyVLTask {
+                            deps,
+                            direction,
+                            block,
+                        })
+                    }
+                    DeclKind::DomainDecl(_domain_decl) => None, // TODO: check that the axioms are not contradictions
+                    DeclKind::FuncDecl(_func_decl) => None,
+                    _ => unreachable!(), // axioms and variable declarations are not allowed on the top level
+                }
+            }
+            SourceUnit::Raw(block) => Some(CoreHeyVLTask {
+                deps,
+                direction: Direction::Down,
+                block,
+            }),
+        }
+    }
+
+    /// Compute the dependency closure for a given source unit.
+    fn compute_deps(source_unit: &mut SourceUnit, depgraph: &mut DepGraph) -> Dependencies {
+        match source_unit {
+            SourceUnit::Decl(decl) => depgraph.get_reachable([decl.name()]),
+            SourceUnit::Raw(block) => {
+                assert!(depgraph.current_deps.is_empty());
+                depgraph.visit_block(block).unwrap();
+                let current_deps = std::mem::take(&mut depgraph.current_deps);
+                depgraph.get_reachable(current_deps)
+            }
         }
     }
 
@@ -205,7 +229,7 @@ fn top_lit_in_lattice(dir: Direction, ty: &TyKind) -> Expr {
     }
 }
 
-impl SimplePretty for CoreVerifyTask {
+impl SimplePretty for CoreHeyVLTask {
     fn pretty(&self) -> Doc {
         let lower_bounds = to_direction_lower_bounds(self.clone());
         assert_eq!(lower_bounds.direction, Direction::Down);
@@ -213,7 +237,7 @@ impl SimplePretty for CoreVerifyTask {
     }
 }
 
-impl fmt::Display for CoreVerifyTask {
+impl fmt::Display for CoreHeyVLTask {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.pretty().render_fmt(80, f)
     }

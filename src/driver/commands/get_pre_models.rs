@@ -4,7 +4,7 @@ use crate::{
     ast::{BinOpKind, Direction, ExprBuilder, FileId, Span, TyKind},
     driver::{
         commands::{mk_cli_server, print_timings, verify::VerifyCommand},
-        core_verify::{lower_core_verify_task, CoreVerifyTask},
+        core_heyvl::{lower_core_heyvl_task, CoreHeyVLTask},
         error::{finalize_caesar_result, CaesarError},
         front::parse_and_tycheck,
         item::Item,
@@ -94,11 +94,11 @@ fn nontrivial_model_files_main(
     let mut depgraph = module.generate_depgraph(&options.opt_options.function_encoding)?;
 
     // translate program to relevant preexpectation conditions
-    let mut verify_units: Vec<Item<CoreVerifyTask>> = module
+    let mut verify_units: Vec<Item<CoreHeyVLTask>> = module
         .items
         .into_iter()
         .flat_map(|item| {
-            item.flat_map(|unit| CoreVerifyTask::from_source_unit(unit, &mut depgraph, true))
+            item.flat_map(|unit| CoreHeyVLTask::from_proc_pre_model(unit, &mut depgraph))
         })
         .collect();
 
@@ -123,7 +123,7 @@ fn nontrivial_model_files_main(
         let mut new_options = VerifyCommand::default();
         new_options.slice_options.no_slice_error = true;
 
-        let (vc_expr, _slice_vars) = lower_core_verify_task(
+        let (vc_expr, _slice_vars) = lower_core_heyvl_task(
             &mut tcx,
             name,
             &new_options,

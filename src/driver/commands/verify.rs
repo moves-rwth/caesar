@@ -15,7 +15,7 @@ use crate::{
             },
             print_timings,
         },
-        core_verify::{lower_core_verify_task, CoreVerifyTask},
+        core_heyvl::{lower_core_heyvl_task, CoreHeyVLTask},
         error::{finalize_caesar_result, CaesarError},
         front::parse_and_tycheck,
         item::Item,
@@ -211,11 +211,11 @@ fn verify_files_main(
     // the SMT translation later
     let mut depgraph = module.generate_depgraph(&options.opt_options.function_encoding)?;
 
-    let mut verify_units: Vec<Item<CoreVerifyTask>> = module
+    let mut verify_units: Vec<Item<CoreHeyVLTask>> = module
         .items
         .into_iter()
         .flat_map(|item| {
-            item.flat_map(|unit| CoreVerifyTask::from_source_unit(unit, &mut depgraph, false))
+            item.flat_map(|unit| CoreHeyVLTask::from_proc_verify(unit, &mut depgraph))
         })
         .collect();
 
@@ -240,7 +240,7 @@ fn verify_files_main(
         // Lowering the core verify task to a quantitative prove task: applying
         // spec call desugaring, preparing slicing, and verification condition
         // generation.
-        let (vc_expr, slice_vars) = lower_core_verify_task(
+        let (vc_expr, slice_vars) = lower_core_heyvl_task(
             &mut tcx,
             name,
             options,
