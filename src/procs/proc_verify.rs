@@ -31,23 +31,22 @@ pub fn encode_preexpectation(proc: &ProcDecl) -> Option<(Direction, Block)> {
         combination
     }
 
-    // connect the preexpectations through the correct operator
-    let mut build_expr = proc
+    // Combine the preexpectations using the correct operator
+    let build_expr = proc
         .requires()
-        .next()
-        .expect("No preconditions to check")
-        .clone();
-    for expr in proc.requires().skip(1) {
-        build_expr = Shared::new(ExprData {
-            kind: ExprKind::Binary(
-                Spanned::with_dummy_span(get_combination(direction)),
-                build_expr,
-                expr.clone(),
-            ),
-            ty: Some(TyKind::EUReal),
-            span: Span::dummy_span(),
-        });
-    }
+        .cloned()
+        .reduce(|lhs, rhs| {
+            Shared::new(ExprData {
+                kind: ExprKind::Binary(
+                    Spanned::with_dummy_span(get_combination(direction)).clone(),
+                    lhs,
+                    rhs,
+                ),
+                ty: Some(TyKind::EUReal),
+                span: Span::dummy_span(),
+            })
+        })
+        .expect("No preconditions to check");
 
     block.node.push(Spanned::new(
         Span::dummy_span(),
