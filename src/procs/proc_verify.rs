@@ -1,6 +1,6 @@
 use crate::{
     ast::{
-        self, BinOpKind, Block, Direction, ExprData, ExprKind, ProcDecl, Shared, Span, SpanVariant,
+        BinOpKind, Block, Direction, ExprData, ExprKind, ProcDecl, Shared, Span, SpanVariant,
         Spanned, StmtKind, TyKind,
     },
     driver::core_heyvl::CoreHeyVLTask,
@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// Encode the preexpectations as a formula for which a model is a nontrivial bound.
-/// 
+///
 /// For proc:
 ///     goal: Find a model such that (pre1 ⊓ pre2 ⊓...) > 0
 /// For coproc:
@@ -23,7 +23,7 @@ pub fn encode_preexpectation(proc: &ProcDecl) -> Option<(Direction, Block)> {
     };
     let mut block = Spanned::new(body.span, vec![]);
 
-    fn get_combination(direction: Direction) -> ast::expr::BinOpKind {
+    fn get_combination(direction: Direction) -> BinOpKind {
         let combination = match direction {
             Direction::Down => BinOpKind::Inf,
             Direction::Up => BinOpKind::Sup,
