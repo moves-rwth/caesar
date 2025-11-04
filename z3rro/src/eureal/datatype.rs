@@ -13,16 +13,9 @@ use z3::{
 };
 
 use crate::{
-    eureal::ConcreteEUReal,
-    forward_binary_op,
-    interpreted::FuncDef,
-    model::{InstrumentedModel, SmtEval, SmtEvalError},
-    orders::{
-        smt_max, smt_min, SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering, SmtPartialOrd,
-    },
-    scope::{SmtAlloc, SmtFresh},
-    uint::UInt,
-    Factory, LitFactory, LitWrap, SmtBranch, SmtEq, SmtFactory, SmtInvariant, UReal,
+    Factory, LitFactory, LitWrap, SmtBranch, SmtEq, SmtFactory, SmtInvariant, UReal, eureal::ConcreteEUReal, filtered_model::FilteredModel, forward_binary_op, interpreted::FuncDef, model::{InstrumentedModel, SmtEval, SmtEvalError}, orders::{
+        SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering, SmtPartialOrd, smt_max, smt_min
+    }, scope::{SmtAlloc, SmtFresh}, uint::UInt
 };
 
 /// This structure saves the necessary Z3 objects to construct and work with
@@ -235,6 +228,15 @@ impl<'ctx> SmtEval<'ctx> for EUReal<'ctx> {
             Ok(ConcreteEUReal::Infinity)
         } else {
             let real = self.get_ureal().eval(model)?;
+            Ok(ConcreteEUReal::Real(real))
+        }
+    }
+    fn eval_filtered(&self, model: &FilteredModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
+        let is_infinite = self.is_infinity().eval_filtered(model)?;
+        if is_infinite {
+            Ok(ConcreteEUReal::Infinity)
+        } else {
+            let real = self.get_ureal().eval_filtered(model)?;
             Ok(ConcreteEUReal::Real(real))
         }
     }

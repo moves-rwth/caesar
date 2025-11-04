@@ -151,6 +151,18 @@ impl<'ctx> SmtEval<'ctx> for EUReal<'ctx> {
             Ok(ConcreteEUReal::Real(real))
         }
     }
+    fn eval_filtered(&self, model: &crate::filtered_model::FilteredModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
+        let is_infinite = self.is_infinite.eval_filtered(model)?;
+        // we evaluate the number even if the value is infinite. this is so the
+        // instrumented model tracks the access and we don't have a (logically
+        // falsely) unaccessed value left over in the model.
+        let real = self.number.eval_filtered(model)?;
+        if is_infinite {
+            Ok(ConcreteEUReal::Infinity)
+        } else {
+            Ok(ConcreteEUReal::Real(real))
+        }
+    }
 }
 
 impl<'a, 'ctx> Add<&'a EUReal<'ctx>> for &'a EUReal<'ctx> {

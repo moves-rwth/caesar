@@ -11,7 +11,7 @@ use super::{
     scope::SmtFresh,
     SmtBranch, SmtEq,
 };
-use crate::lit::{LitFactory, LitWrap};
+use crate::{filtered_model::FilteredModel, lit::{LitFactory, LitWrap}};
 use crate::{
     forward_binary_op,
     model::{InstrumentedModel, SmtEval, SmtEvalError},
@@ -105,6 +105,9 @@ impl<'ctx> SmtEval<'ctx> for UReal<'ctx> {
 
     fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
         self.0.eval(model)
+    }
+    fn eval_filtered(&self, model: &FilteredModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
+        self.0.eval_filtered(model)
     }
 }
 

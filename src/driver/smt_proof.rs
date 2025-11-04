@@ -495,7 +495,7 @@ fn write_smtlib(
 /// The result of an SMT solver call for a [`SmtVcProveTask`].
 pub struct SmtVcProveResult<'ctx> {
     pub prove_result: ProveResult,
-    model: Option<InstrumentedModel<'ctx>>,
+    pub model: Option<InstrumentedModel<'ctx>>,
     slice_model: Option<SliceModel>,
     quant_vc: QuantVcProveTask,
 }

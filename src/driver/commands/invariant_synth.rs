@@ -3,25 +3,38 @@ use std::{ops::DerefMut, process::ExitCode, sync::Arc};
 use clap::Args;
 use tracing::info_span;
 use z3::{Context, Goal};
-use z3rro::{probes::ProbeSummary, prover::ProveResult, util::ReasonUnknown};
+use z3rro::{
+    filtered_model::FilteredModel, probes::ProbeSummary, prover::ProveResult, util::ReasonUnknown,
+};
 
 use crate::{
-    ast::{ExprBuilder, FileId, Span, Spanned, StmtKind}, driver::{
+    ast::{ExprBuilder, FileId, Span, Spanned, StmtKind},
+    driver::{
         commands::{
-            mk_cli_server, model_check::run_model_checking, options::SliceVerifyMethod, print_timings, verify::VerifyCommand
+            mk_cli_server, model_check::run_model_checking, options::SliceVerifyMethod,
+            print_timings, verify::VerifyCommand,
         },
         core_verify::{lower_core_verify_task, CoreVerifyTask},
         error::{finalize_caesar_result, CaesarError},
         front::parse_and_tycheck,
         item::Item,
         quant_proof::lower_quant_prove_task,
-        smt_proof::{get_smtlib, mk_function_encoder, set_global_z3_params, write_smtlib, SmtVcProveResult, SmtVcProveTask},
-    }, resource_limits::{await_with_resource_limits, LimitError, LimitsRef}, servers::{Server, SharedServer}, slicing::solver::{SliceMinimality, SliceSolveOptions, SliceSolver, UnknownHandling}, smt::{translate_exprs::TranslateExprs, DepConfig, SmtCtx}
+        smt_proof::{
+            get_smtlib, mk_function_encoder, set_global_z3_params, write_smtlib, SmtVcProveResult,
+            SmtVcProveTask,
+        },
+    },
+    resource_limits::{await_with_resource_limits, LimitError, LimitsRef},
+    servers::{Server, SharedServer},
+    slicing::solver::{SliceMinimality, SliceSolveOptions, SliceSolver, UnknownHandling},
+    smt::{
+        partial_eval::instantiate_vc_with_model, translate_exprs::TranslateExprs, DepConfig, SmtCtx,
+    },
 };
 
-// ? MADITA game plan: 
+// ? MADITA game plan:
 // Init C: Set of vcs
-// 1. Run everything before the proof with the template so that I get 
+// 1. Run everything before the proof with the template so that I get
 // the inequality with the template vars uninstantiated. Call this OVC
 
 // 2. Run everything including proof with some tvars valuation (first time choose 0)
@@ -29,7 +42,6 @@ use crate::{
 // 4a. Find a model n that satisfies C (this is a model for the tvars)
 // 5a. Go to 2. with this model
 // 3b. If not cex, then tvars valuation leads to admissable invariant.
-
 
 pub async fn run_synth_inv(options: VerifyCommand) -> ExitCode {
     let (user_files, server) = match mk_cli_server(&options.input_options) {
@@ -213,7 +225,7 @@ fn verify_files_main(
     for verify_unit in &mut verify_units {
         limits_ref.check_limits()?;
 
-        println!("verify unit {verify_unit}");
+        // println!("verify unit {verify_unit}");
 
         let (name, mut verify_unit) = verify_unit.enter_with_name();
 
@@ -238,7 +250,7 @@ fn verify_files_main(
         let vc_is_valid = lower_quant_prove_task(options, &limits_ref, &mut tcx, name, vc_expr)?;
 
         let vcv = vc_is_valid.vc.clone();
-        println!("vc after lower_quant... {vcv}");
+        // println!("vc after lower_quant... {vcv}");
 
         // run_smt_prove_task
         let ctx = Context::new(&z3::Config::default());
@@ -251,33 +263,50 @@ fn verify_files_main(
         if !options.opt_options.no_simplify {
             vc_is_valid.simplify();
         }
-        let vcv = vc_is_valid.vc.clone();
-        println!("vc after translation... {vcv}");
 
-        for ident in translate.local_idents() {
-            println!("locals... {:?}", ident);
-        }
+        // for ident in translate.local_idents() {
+        //     println!("locals... {:?}", ident);
+        // }
 
         if options.debug_options.z3_trace {
             tracing::info!("Z3 tracing output will be written to `z3.log`.");
         }
 
+        let mut result = vc_is_valid.run_solver(
+            options,
+            &limits_ref,
+            name,
+            &ctx,
+            &mut translate,
+            &slice_vars,
+        )?;
 
-        let mut result =
-            vc_is_valid.run_solver(options, &limits_ref, name, &ctx, &mut translate, &slice_vars)?;
+        // result.model.map(|model_unwrapped| {
+        //     instantiate_vc_with_model(&mut translate, &vcv, &model_unwrapped)
+        // });
 
-        
         // madita: now i have the quant formula, the model, the original thing
         // I must give it a) the template b) the template variables
         // I want to: in case of cex, take that model
         // and partially instantiate the quant formula with the non-template variables
-        // Add the resulting formula to a set of clauses and get 
-            
+        // Add the resulting formula to a set of clauses and get
+        //TODO: Filter model to template / program variables
+
+        println!("before partially: {vcv}");
+
+        
+
         server
             .handle_vc_check_result(name, &mut result, &mut translate)
             .map_err(CaesarError::ServerError)?;
 
         let prove_result = result.prove_result;
+        
+        if let Some(model) = result.model {
+            let filtered = FilteredModel::new(model, |name| name.starts_with("template_var_"));
+            let partially = instantiate_vc_with_model(&filtered, &vcv, &mut translate);
+            println!("partially: {partially}");
+        }
 
         // end of run_smt_prove_task
 
