@@ -213,7 +213,9 @@ pub fn run_smt_check_sat<'tcx>(
         .local_scope()
         .add_assumptions_to_prover(&mut prover);
 
-    // Add the verification condition
+    // Add the verification condition. This should be checked for satisfiability.
+    // Therefore, add_assumption is used (which just adds it as an smtlib assert)
+    // vs. add_provable, which would negate it first.
     prover.add_assumption(&vc_is_valid.vc);
 
     // Optionally dump SMT-LIB representation
