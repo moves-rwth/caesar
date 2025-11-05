@@ -13,9 +13,17 @@ use z3::{
 };
 
 use crate::{
-    Factory, LitFactory, LitWrap, SmtBranch, SmtEq, SmtFactory, SmtInvariant, UReal, eureal::ConcreteEUReal, filtered_model::FilteredModel, forward_binary_op, interpreted::FuncDef, model::{InstrumentedModel, SmtEval, SmtEvalError}, orders::{
-        SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering, SmtPartialOrd, smt_max, smt_min
-    }, scope::{SmtAlloc, SmtFresh}, uint::UInt
+    eureal::ConcreteEUReal,
+    filtered_model::FilteredModel,
+    forward_binary_op,
+    interpreted::FuncDef,
+    model::{InstrumentedModel, SmtEval, SmtEvalError},
+    orders::{
+        smt_max, smt_min, SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering, SmtPartialOrd,
+    },
+    scope::{SmtAlloc, SmtFresh},
+    uint::UInt,
+    Factory, LitFactory, LitWrap, SmtBranch, SmtEq, SmtFactory, SmtInvariant, UReal,
 };
 
 /// This structure saves the necessary Z3 objects to construct and work with

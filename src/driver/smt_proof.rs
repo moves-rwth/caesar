@@ -1,5 +1,6 @@
 //! SMT-based proofs of formulas.
 
+use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 
@@ -10,6 +11,7 @@ use z3::{
     ast::{Ast, Bool},
     Context, Goal,
 };
+use z3rro::filtered_model::FilteredModel;
 use z3rro::params::SmtParams;
 use z3rro::quantifiers::QuantifierMeta;
 use z3rro::{
@@ -20,14 +22,15 @@ use z3rro::{
     util::{PrefixWriter, ReasonUnknown},
 };
 
-use crate::depgraph::DepGraph;
+use crate::ast::{self, Direction, Expr};
+use crate::depgraph::{DepGraph, Dependencies};
 use crate::driver::commands::options::{
     DebugOptions, FunctionEncodingOption, QuantifierInstantiation, SliceVerifyMethod,
 };
 use crate::driver::commands::verify::VerifyCommand;
 use crate::driver::error::CaesarError;
 use crate::driver::item::SourceUnitName;
-use crate::driver::quant_proof::{BoolVcProveTask, QuantVcProveTask};
+use crate::driver::quant_proof::{lower_quant_prove_task, BoolVcProveTask, QuantVcProveTask};
 use crate::slicing::transform::SliceStmts;
 use crate::smt::funcs::axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder, PartialEncoding};
 use crate::smt::funcs::fuel::literals::LiteralExprCollector;
@@ -35,6 +38,7 @@ use crate::smt::funcs::fuel::{
     FuelEncodingOptions, FuelMonoFunctionEncoder, FuelParamFunctionEncoder,
 };
 use crate::smt::funcs::{FunctionEncoder, RecFunFunctionEncoder};
+use crate::smt::partial_eval::instantiate_through_subst;
 use crate::smt::{DepConfig, SmtCtx};
 use crate::tyctx::TyCtx;
 use crate::{
@@ -167,6 +171,83 @@ pub fn run_smt_prove_task(
     Ok(result.prove_result)
 }
 
+/// Get a model for the constraints if it exists and instantiate vc_tvars_pvars with it
+pub fn update_vc_with_model<'smt, 'ctx, 'tcx: 'ctx>(
+    ctx: &'ctx z3::Context,
+    options: &VerifyCommand,
+    limits_ref: &LimitsRef,
+    tcx: &'tcx TyCtx,
+    name: &SourceUnitName,
+    constraints: BoolVcProveTask,
+    vc_tvars_pvars: &QuantVcProveTask,
+    direction: &Direction,
+    vcdeps: &Dependencies,
+    translate: &mut TranslateExprs<'smt, 'ctx>,
+) -> Result<Option<(SmtVcProveTask<'ctx>, HashMap<ast::symbol::Ident, Expr>)>, CaesarError> {
+    let mut constraints_prove_task = SmtVcProveTask::translate(constraints, translate);
+
+    if !options.opt_options.no_simplify {
+        constraints_prove_task.simplify();
+    }
+
+    // Create prover
+    let mut prover = Prover::new(&ctx, IncrementalMode::Native);
+
+    if let Some(remaining) = limits_ref.time_left() {
+        prover.set_timeout(remaining);
+    }
+
+    if let Some(smtlib) = get_smtlib(options, &prover) {
+        write_smtlib(&options.debug_options, name, &smtlib, None)?;
+    }
+
+    // Add axioms and assumptions
+    translate.ctx.add_lit_axioms_to_prover(&mut prover);
+    translate
+        .ctx
+        .uninterpreteds()
+        .add_axioms_to_prover(&mut prover);
+    translate
+        .local_scope()
+        .add_assumptions_to_prover(&mut prover);
+
+    // Add the verification condition. This should be checked for satisfiability.
+    // Therefore, add_assumption is used (which just adds it as an smtlib assert)
+    // vs. add_provable, which would negate it first.
+    prover.add_assumption(&constraints_prove_task.vc);
+
+    // Run solver & retrieve model if available
+    prover.check_sat();
+    let model = prover.get_model();
+
+    // If we find a model for the template constraints, instantiate the VC with it.
+    if let Some(template_model) = model {
+        let filtered_template =
+            FilteredModel::new(template_model, |name| name.starts_with("template_var_"));
+
+        let (instantiated_vc, tvar_mapping) =
+            instantiate_through_subst(&filtered_template, &vc_tvars_pvars.expr, translate);
+
+        // Rebuild a new Boolean task with the updated formula
+        let refined_vc = QuantVcProveTask {
+            expr: instantiated_vc.clone(),
+            direction: direction.clone(),
+            deps: vcdeps.clone(),
+        };
+
+        let refined_vc =
+            lower_quant_prove_task(options, limits_ref, tcx, name, refined_vc.clone())?;
+
+        // Translate again to SMT form
+        let vc_pvars = SmtVcProveTask::translate(refined_vc, translate);
+
+        Ok(Some((vc_pvars, tvar_mapping)))
+    } else {
+        // No template model found; stopping refinement.
+        Ok(None)
+    }
+}
+
 /// Create the function encoder based on the given command's options.
 pub fn mk_function_encoder<'ctx>(
     tcx: &TyCtx,
@@ -251,6 +332,7 @@ pub fn mk_function_encoder<'ctx>(
 }
 
 /// The verification condition validitiy formula as a Z3 formula.
+#[derive(Clone)]
 pub struct SmtVcProveTask<'ctx> {
     pub quant_vc: QuantVcProveTask,
     pub vc: Bool<'ctx>,
@@ -495,7 +577,7 @@ fn write_smtlib(
 /// The result of an SMT solver call for a [`SmtVcProveTask`].
 pub struct SmtVcProveResult<'ctx> {
     pub prove_result: ProveResult,
-    pub model: Option<InstrumentedModel<'ctx>>,
+    pub(crate) model: Option<InstrumentedModel<'ctx>>,
     slice_model: Option<SliceModel>,
     quant_vc: QuantVcProveTask,
 }

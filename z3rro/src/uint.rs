@@ -7,7 +7,11 @@ use z3::{
 };
 
 use crate::{
-    Factory, LitFactory, LitWrap, SmtFactory, SmtInvariant, filtered_model::FilteredModel, forward_binary_op, model::{InstrumentedModel, SmtEval, SmtEvalError}, scope::SmtAlloc
+    filtered_model::FilteredModel,
+    forward_binary_op,
+    model::{InstrumentedModel, SmtEval, SmtEvalError},
+    scope::SmtAlloc,
+    Factory, LitFactory, LitWrap, SmtFactory, SmtInvariant,
 };
 
 use super::{

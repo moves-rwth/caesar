@@ -27,7 +27,7 @@ use crate::{
 pub fn lower_quant_prove_task(
     options: &VerifyCommand,
     limits_ref: &LimitsRef,
-    tcx: &mut TyCtx,
+    tcx: &TyCtx,
     name: &SourceUnitName,
     mut quant_task: QuantVcProveTask,
 ) -> Result<BoolVcProveTask, CaesarError> {
@@ -72,7 +72,7 @@ pub fn lower_quant_prove_task(
 }
 
 /// Quantitative verification conditions that are to be checked.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct QuantVcProveTask {
     pub deps: Dependencies,
     pub direction: Direction,
@@ -108,7 +108,7 @@ impl QuantVcProveTask {
     }
 
     /// Apply quantitative quantifier elimination.
-    pub fn qelim(&mut self, tcx: &mut TyCtx, limits_ref: &LimitsRef) -> Result<(), CaesarError> {
+    pub fn qelim(&mut self, tcx: &TyCtx, limits_ref: &LimitsRef) -> Result<(), CaesarError> {
         let mut qelim = Qelim::new(tcx);
         qelim.qelim(self);
         // Apply/eliminate substitutions again

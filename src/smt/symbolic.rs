@@ -6,6 +6,7 @@ use z3::{
     ast::{Bool, Dynamic, Int, Real},
     Sort,
 };
+use z3rro::filtered_model::FilteredModel;
 use z3rro::{
     eureal,
     model::{InstrumentedModel, SmtEval, SmtEvalError},
@@ -159,6 +160,23 @@ impl<'ctx> Symbolic<'ctx> {
                 .eval(model)
                 .map(|v| Box::new(PrettyRational(Cow::Owned(v))) as Box<dyn Display>),
             Symbolic::EUReal(v) => v.eval(model).map(|v| Box::new(v) as Box<dyn Display>),
+            Symbolic::List(_) => Err(SmtEvalError::ParseError), // TODO
+            Symbolic::Fuel(_) => Err(SmtEvalError::ParseError), // TODO
+            Symbolic::Uninterpreted(_) => Err(SmtEvalError::ParseError), // TODO
+        }
+    }
+    pub fn eval_filtered(&self, model: &FilteredModel<'ctx>) -> Result<Box<dyn Display>, SmtEvalError> {
+        match self {
+            Symbolic::Bool(v) => v.eval_filtered(model).map(|v| Box::new(v) as Box<dyn Display>),
+            Symbolic::Int(v) => v.eval_filtered(model).map(|v| Box::new(v) as Box<dyn Display>),
+            Symbolic::UInt(v) => v.eval_filtered(model).map(|v| Box::new(v) as Box<dyn Display>),
+            Symbolic::Real(v) => v
+                .eval_filtered(model)
+                .map(|v| Box::new(PrettyRational(Cow::Owned(v))) as Box<dyn Display>),
+            Symbolic::UReal(v) => v
+                .eval_filtered(model)
+                .map(|v| Box::new(PrettyRational(Cow::Owned(v))) as Box<dyn Display>),
+            Symbolic::EUReal(v) => v.eval_filtered(model).map(|v| Box::new(v) as Box<dyn Display>),
             Symbolic::List(_) => Err(SmtEvalError::ParseError), // TODO
             Symbolic::Fuel(_) => Err(SmtEvalError::ParseError), // TODO
             Symbolic::Uninterpreted(_) => Err(SmtEvalError::ParseError), // TODO

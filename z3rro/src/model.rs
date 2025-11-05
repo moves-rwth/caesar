@@ -202,54 +202,56 @@ impl<'ctx> SmtEval<'ctx> for Int<'ctx> {
         Ok(BigInt::from(value))
     }
     fn eval_filtered(&self, model: &FilteredModel<'ctx>) -> Result<BigInt, SmtEvalError> {
-         let value = model
+        let value = model
             .eval_ast(self, true)
             .ok_or(SmtEvalError::EvalError)?
             .as_i64()
             .ok_or(SmtEvalError::ParseError)?;
         Ok(BigInt::from(value))
     }
-
 }
 
 impl<'ctx> SmtEval<'ctx> for Real<'ctx> {
     type Value = BigRational;
 
     fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
-        let res = model
-            .eval_ast(self, false) // TODO
-            .ok_or(SmtEvalError::EvalError)?;
+        let res = match model.eval_ast(self, false) {
+            Some(v) => v,
+            None => {
+                return Err(SmtEvalError::EvalError);
+            }
+        };
 
-        // The .as_real() method only returns a pair of i64 values. If the
-        // results don't fit in these types, we start some funky string parsing.
         if let Some((num, den)) = res.as_real() {
             Ok(BigRational::new(num.into(), den.into()))
         } else {
-            // we parse a string of the form "(/ num.0 denom.0)"
+            // Fall back to string-based parsing
             let division_expr = format!("{res:?}");
+
             if !division_expr.starts_with("(/ ") || !division_expr.ends_with(".0)") {
                 return Err(SmtEvalError::ParseError);
             }
 
             let mut parts = division_expr.split_ascii_whitespace();
 
-            let first_part = parts.next().ok_or(SmtEvalError::ParseError)?;
+            let first_part = parts.next().ok_or_else(|| SmtEvalError::ParseError)?;
+            println!("    first_part = {:?}", first_part);
             if first_part != "(/" {
                 return Err(SmtEvalError::ParseError);
             }
 
-            let second_part = parts.next().ok_or(SmtEvalError::ParseError)?;
+            let second_part = parts.next().ok_or_else(|| SmtEvalError::ParseError)?;
             let second_part = second_part.replace(".0", "");
             let numerator = BigInt::from_str(&second_part).map_err(|_| SmtEvalError::ParseError)?;
 
-            let third_part = parts.next().ok_or(SmtEvalError::ParseError)?;
+            let third_part = parts.next().ok_or_else(|| SmtEvalError::ParseError)?;
             let third_part = third_part.replace(".0)", "");
             let denominator =
                 BigInt::from_str(&third_part).map_err(|_| SmtEvalError::ParseError)?;
-
             Ok(BigRational::new(numerator, denominator))
         }
     }
+
     fn eval_filtered(&self, model: &FilteredModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
         let res = model
             .eval_ast(self, false) // TODO

@@ -2,9 +2,9 @@ use z3::ast::Ast;
 
 use crate::model::InstrumentedModel;
 
-
+// Adds a filter to InstrumentedModel, which works by skipping evaluations of filtered out variables
 pub struct FilteredModel<'ctx> {
-    model: InstrumentedModel<'ctx>,
+    pub model: InstrumentedModel<'ctx>,
     filter: Box<dyn Fn(&str) -> bool + 'ctx>,
 }
 
@@ -19,13 +19,15 @@ impl<'ctx> FilteredModel<'ctx> {
         }
     }
 
-    pub fn eval_ast<T: Ast<'ctx>>(&self, ast: &T, model_completion: bool) -> Option<T>{
+    pub fn eval_ast<T: Ast<'ctx>>(&self, ast: &T, model_completion: bool) -> Option<T> {
         let decl = ast.decl();
         let name = decl.name().to_string();
-        if (self.filter)(&name) {
-            self.model.model.eval(ast, model_completion)
+        let passes_filter = (self.filter)(&name);
+        if passes_filter {
+            let result = self.model.model.eval(ast, model_completion);
+            result
         } else {
-            None // pretend it's not in the model
+            None
         }
     }
 }
