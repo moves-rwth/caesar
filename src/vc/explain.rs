@@ -270,6 +270,7 @@ fn explain_unroll(
         stmt_span,
         call_span,
         direction,
+        calculus: None,
     };
 
     // 1. generate the explanations for the loop body in k-1 iterations

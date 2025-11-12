@@ -24,6 +24,7 @@ use crate::{
         quant_proof::{lower_quant_prove_task, QuantVcProveTask},
         smt_proof::run_smt_prove_task,
     },
+    proof_rules::calculus::SoundnessBlame,
     resource_limits::{LimitError, LimitsRef},
     servers::SharedServer,
 };
@@ -163,6 +164,7 @@ async fn verify_entailment(
             server,
             slice_vars,
             vc_is_valid,
+            &SoundnessBlame::default(),
         )?;
 
         // Handle reasons to stop the verifier.

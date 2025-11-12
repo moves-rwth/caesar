@@ -24,6 +24,7 @@ use crate::{
         proc_verify::{encode_proc_verify, to_direction_lower_bounds},
         SpecCall,
     },
+    proof_rules::calculus::SoundnessBlame,
     resource_limits::LimitsRef,
     servers::Server,
     slicing::{
@@ -70,6 +71,7 @@ pub struct CoreVerifyTask {
     pub deps: Dependencies,
     pub direction: Direction,
     pub block: Block,
+    pub soundness_blame: Option<SoundnessBlame>,
 }
 
 impl CoreVerifyTask {
@@ -96,6 +98,7 @@ impl CoreVerifyTask {
                             deps,
                             direction,
                             block,
+                            soundness_blame: None,
                         })
                     }
                     DeclKind::DomainDecl(_domain_decl) => None, // TODO: check that the axioms are not contradictions
@@ -107,10 +110,15 @@ impl CoreVerifyTask {
                 deps,
                 direction: Direction::Down,
                 block,
+                soundness_blame: None,
             }),
         }
     }
 
+    pub fn with_soundness_blame(mut self, soundness_blame: SoundnessBlame) -> Self {
+        self.soundness_blame = Some(soundness_blame);
+        self
+    }
     /// Desugar assignments with procedure calls.
     #[instrument(skip_all)]
     pub fn desugar_spec_calls(&mut self, tcx: &mut TyCtx, name: String) -> Result<(), CaesarError> {

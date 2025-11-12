@@ -23,6 +23,7 @@ use crate::{
     intrinsic::annotations::{
         tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
     },
+    proof_rules::{calculus::ApproximationKind, FixpointSemanticsKind},
     tyctx::TyCtx,
 };
 
@@ -94,6 +95,26 @@ impl Encoding for OSTAnnotation {
 
     fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
         matches!(calculus.calculus_type, CalculusType::Wp) && direction == Direction::Down
+    }
+
+    fn get_approximation(
+        &self,
+        fixpoint_semantics: FixpointSemanticsKind,
+        inner_approximation_kind: ApproximationKind,
+    ) -> ApproximationKind {
+        match (fixpoint_semantics, inner_approximation_kind) {
+            (FixpointSemanticsKind::LeastFixedPoint, ApproximationKind::Exact) => {
+                ApproximationKind::Exact
+            }
+            _ => ApproximationKind::Unknown,
+        }
+    }
+
+    fn sound_fixpoint_semantics_kind(&self, direction: Direction) -> FixpointSemanticsKind {
+        match direction {
+            Direction::Up => FixpointSemanticsKind::LeastFixedPoint,
+            Direction::Down => FixpointSemanticsKind::GreatestFixedPoint,
+        }
     }
 
     fn transform(

@@ -28,6 +28,7 @@ use crate::{
         item::{Item, SourceUnitName},
         smt_proof::SmtVcProveResult,
     },
+    proof_rules::calculus::SoundnessBlame,
     servers::{FileStatus, FileStatusType},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
@@ -427,8 +428,9 @@ impl Server for LspServer {
         name: &SourceUnitName,
         result: &mut SmtVcProveResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
+        soundness_blame: &SoundnessBlame,
     ) -> Result<(), ServerError> {
-        result.emit_diagnostics(name.span(), self, translate)?;
+        result.emit_diagnostics(name.span(), self, translate, soundness_blame)?;
         let statuses = &mut self
             .file_statuses
             .entry(name.span().file)

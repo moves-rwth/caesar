@@ -1,10 +1,7 @@
 use std::{collections::HashMap, ops::DerefMut};
 
 use crate::{
-    ast::{
-        visit::{walk_stmt, VisitorMut},
-        DeclKind, DeclRef, Diagnostic, Expr, ExprKind, Ident, ProcDecl, Stmt, StmtKind,
-    },
+    ast::{visit::VisitorMut, DeclKind, DeclRef, Diagnostic, Expr, ExprKind, Ident, ProcDecl},
     intrinsic::annotations::{
         AnnotationError, AnnotationKind, AnnotationUnsoundnessError, Calculus,
     },
@@ -142,51 +139,5 @@ impl<'tcx> VisitorMut for CalculusVisitor<'tcx> {
         self.proc_context = None;
 
         res
-    }
-
-    fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
-        match &mut s.node {
-            // If the statement is an annotation, transform it
-            StmtKind::Annotation(_, ident, _, inner_stmt) => {
-                // First visit the statement that is annotated and handle inner annotations
-                self.visit_stmt(inner_stmt)?;
-
-                if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
-                    self.tcx.get(*ident).unwrap().as_ref()
-                {
-                    // Try to get the current procedure context
-                    let proc_context = self
-                        .proc_context
-                        .as_ref()
-                        // If there is no procedure context, throw an error
-                        .ok_or(CalculusVisitorError::AnnotationError(
-                            AnnotationError::NotInProcedure {
-                                span: s.span,
-                                annotation_name: *ident,
-                            },
-                        ))?;
-
-                    // Unpack the current procedure context
-                    let direction = proc_context.direction;
-
-                    // Check if the calculus annotation is compatible with the encoding annotation
-                    if let Some(calculus) = proc_context.calculus {
-                        // If calculus is not allowed, return an error
-                        if !anno_ref.is_calculus_allowed(calculus, direction) {
-                            return Err(CalculusVisitorError::UnsoundnessError(
-                                AnnotationUnsoundnessError::CalculusEncodingMismatch {
-                                    direction,
-                                    span: s.span,
-                                    calculus_name: calculus.name,
-                                    enc_name: anno_ref.name(),
-                                },
-                            ));
-                        };
-                    }
-                }
-            }
-            _ => walk_stmt(self, s)?,
-        }
-        Ok(())
     }
 }
