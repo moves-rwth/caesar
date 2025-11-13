@@ -18,8 +18,16 @@ pub struct Uninterpreteds<'ctx> {
     ctx: &'ctx Context,
     symbolizer: Symbolizer,
     sorts: HashMap<Ident, Sort<'ctx>>,
-    functions: HashMap<Ident, FuncDecl<'ctx>>,
-    axioms: Vec<(Ident, Bool<'ctx>)>,
+    functions: HashMap<Ident, FuncEntry<'ctx>>,
+    axioms: Vec<(Ident, Bool<'ctx>, bool)>,
+}
+
+#[derive(Debug)]
+struct FuncEntry<'ctx> {
+    decl: FuncDecl<'ctx>,
+    domain: Vec<Sort<'ctx>>,
+    range: Sort<'ctx>,
+    syn: bool,
 }
 
 impl<'ctx> Uninterpreteds<'ctx> {
@@ -40,10 +48,24 @@ impl<'ctx> Uninterpreteds<'ctx> {
         assert!(prev.is_none());
     }
 
-    pub fn add_function(&mut self, ident: Ident, domain: &[&Sort<'ctx>], range: &Sort<'ctx>) {
+    pub fn add_function(
+        &mut self,
+        ident: Ident,
+        domain: &[&Sort<'ctx>],
+        range: &Sort<'ctx>,
+        syn: bool,
+    ) {
         let symbol = self.symbolizer.get(ident);
         let decl = FuncDecl::new(self.ctx, symbol, domain, range);
-        let prev = self.functions.insert(ident, decl);
+        let prev = self.functions.insert(
+            ident,
+            FuncEntry {
+                decl,
+                domain: domain.iter().map(|sort| (*sort).clone()).collect(),
+                range: range.clone(),
+                syn,
+            },
+        );
         assert!(prev.is_none());
     }
 
@@ -56,15 +78,15 @@ impl<'ctx> Uninterpreteds<'ctx> {
             .functions
             .get(&ident)
             .unwrap_or_else(|| panic!("function {ident} is not declared"));
-        decl.apply(args)
+        decl.decl.apply(args)
     }
 
-    pub fn add_axiom(&mut self, ident: Ident, axiom: Bool<'ctx>) {
-        self.axioms.push((ident, axiom));
+    pub fn add_axiom(&mut self, ident: Ident, axiom: Bool<'ctx>, syn: bool) {
+        self.axioms.push((ident, axiom, syn));
     }
 
     pub fn add_axioms_to_prover(&self, prover: &mut Prover<'ctx>) {
-        for (_name, axiom) in &self.axioms {
+        for (_name, axiom,_syn) in &self.axioms {
             prover.add_assumption(axiom);
         }
     }

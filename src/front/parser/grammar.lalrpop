@@ -264,12 +264,16 @@ DomainDecl: DomainDecl = {
         => DomainDecl { name, body, span: span(file, l, r) }
 }
 
+
+// Madita: do I also need syn + computable? Research this whole thing
 DomainSpec: DomainSpec = {
-    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> <comp:"@computable"?> <r: @R>
-        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(None), computable: comp.is_some(), span: span(file, l, r) })),
-    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> "=" <body: Expr> <r: @R>
-        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(Some(body)), computable: false, span: span(file, l, r) })),
-    <l: @L> "axiom" <name: Ident> <axiom: Expr> <r: @R>
+    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> <comp:"@computable"?> <r: @R> 
+        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(None), syn: false, computable: comp.is_some(), span: span(file, l, r) })),
+    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> "=" <body: Expr> <r: @R> 
+        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(Some(body)), syn: false, computable: false, span: span(file, l, r) })),
+    <l: @L> "syn" "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> <r: @R> 
+        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output: output, body: RefCell::new(None), syn: true, computable: false, span: span(file, l, r) })),
+    <l: @L> "axiom" <name: Ident> <axiom: Expr> <r: @R> 
         => DomainSpec::Axiom(DeclRef::new(AxiomDecl{ name, axiom, span: span(file, l, r) }))
 }
 
