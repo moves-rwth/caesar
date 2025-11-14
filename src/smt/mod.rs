@@ -23,7 +23,7 @@ pub mod pretty_model;
 pub mod symbolic;
 mod symbols;
 pub mod translate_exprs;
-mod uninterpreted;
+pub(crate) mod uninterpreted;
 
 /// Which dependencies to include in the SMT context.
 #[derive(Debug)]
@@ -102,7 +102,7 @@ impl<'ctx> SmtCtx<'ctx> {
                         self.function_encoder.translate_signature(self, &func)
                     {
                         let domain = domain.iter().collect_vec();
-                        self.uninterpreteds.add_function(name, &domain, &range,func.syn)
+                        self.uninterpreteds.add_function(name, &domain, &range,func.syn, func.inputs.clone())
                     }
                 }
             }

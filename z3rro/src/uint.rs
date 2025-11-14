@@ -7,7 +7,6 @@ use z3::{
 };
 
 use crate::{
-    filtered_model::FilteredModel,
     forward_binary_op,
     model::{InstrumentedModel, SmtEval, SmtEvalError},
     scope::SmtAlloc,
@@ -106,9 +105,6 @@ impl<'ctx> SmtEval<'ctx> for UInt<'ctx> {
 
     fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<BigInt, SmtEvalError> {
         self.0.eval(model)
-    }
-    fn eval_filtered(&self, model: &FilteredModel<'ctx>) -> Result<BigInt, SmtEvalError> {
-        self.0.eval_filtered(model)
     }
 }
 

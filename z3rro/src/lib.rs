@@ -25,7 +25,6 @@ pub mod orders;
 pub mod scope;
 
 pub mod model;
-pub mod filtered_model;
 pub mod params;
 pub mod probes;
 pub mod prover;

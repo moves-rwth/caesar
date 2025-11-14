@@ -13,8 +13,6 @@ use z3::{
     FuncDecl, FuncInterp, Model,
 };
 
-use crate::filtered_model::FilteredModel;
-
 /// Whether the model is guaranteed to be consistent with the constraints added
 /// to the solver or not. When the SMT solver returns `SAT`, the model is
 /// consistent (modulo bugs), but when the solver returns `UNKNOWN` we can also
@@ -41,7 +39,7 @@ pub enum ModelConsistency {
 #[derive(Debug)]
 pub struct InstrumentedModel<'ctx> {
     consistency: ModelConsistency,
-    pub(crate) model: Model<'ctx>,
+    model: Model<'ctx>,
     accessed_decls: RefCell<AccessedDecls<'ctx>>,
 }
 
@@ -167,20 +165,12 @@ pub trait SmtEval<'ctx> {
 
     // TODO: pass a model completion option?
     fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<Self::Value, SmtEvalError>;
-    fn eval_filtered(&self, model: &FilteredModel<'ctx>) -> Result<Self::Value, SmtEvalError>;
 }
 
 impl<'ctx> SmtEval<'ctx> for Bool<'ctx> {
     type Value = bool;
 
     fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<bool, SmtEvalError> {
-        Ok(model
-            .eval_ast(self, false)
-            .ok_or(SmtEvalError::EvalError)?
-            .as_bool()
-            .unwrap_or(true))
-    }
-    fn eval_filtered(&self, model: &FilteredModel<'ctx>) -> Result<bool, SmtEvalError> {
         Ok(model
             .eval_ast(self, false)
             .ok_or(SmtEvalError::EvalError)?
@@ -201,58 +191,12 @@ impl<'ctx> SmtEval<'ctx> for Int<'ctx> {
             .ok_or(SmtEvalError::ParseError)?;
         Ok(BigInt::from(value))
     }
-    fn eval_filtered(&self, model: &FilteredModel<'ctx>) -> Result<BigInt, SmtEvalError> {
-        let value = model
-            .eval_ast(self, true)
-            .ok_or(SmtEvalError::EvalError)?
-            .as_i64()
-            .ok_or(SmtEvalError::ParseError)?;
-        Ok(BigInt::from(value))
-    }
 }
 
 impl<'ctx> SmtEval<'ctx> for Real<'ctx> {
     type Value = BigRational;
 
     fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
-        let res = match model.eval_ast(self, false) {
-            Some(v) => v,
-            None => {
-                return Err(SmtEvalError::EvalError);
-            }
-        };
-
-        if let Some((num, den)) = res.as_real() {
-            Ok(BigRational::new(num.into(), den.into()))
-        } else {
-            // Fall back to string-based parsing
-            let division_expr = format!("{res:?}");
-
-            if !division_expr.starts_with("(/ ") || !division_expr.ends_with(".0)") {
-                return Err(SmtEvalError::ParseError);
-            }
-
-            let mut parts = division_expr.split_ascii_whitespace();
-
-            let first_part = parts.next().ok_or_else(|| SmtEvalError::ParseError)?;
-            println!("    first_part = {:?}", first_part);
-            if first_part != "(/" {
-                return Err(SmtEvalError::ParseError);
-            }
-
-            let second_part = parts.next().ok_or_else(|| SmtEvalError::ParseError)?;
-            let second_part = second_part.replace(".0", "");
-            let numerator = BigInt::from_str(&second_part).map_err(|_| SmtEvalError::ParseError)?;
-
-            let third_part = parts.next().ok_or_else(|| SmtEvalError::ParseError)?;
-            let third_part = third_part.replace(".0)", "");
-            let denominator =
-                BigInt::from_str(&third_part).map_err(|_| SmtEvalError::ParseError)?;
-            Ok(BigRational::new(numerator, denominator))
-        }
-    }
-
-    fn eval_filtered(&self, model: &FilteredModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
         let res = model
             .eval_ast(self, false) // TODO
             .ok_or(SmtEvalError::EvalError)?;

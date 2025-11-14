@@ -508,7 +508,12 @@ pub struct FuncDecl {
 
 impl SimplePretty for FuncDecl {
     fn pretty(&self) -> Doc {
-        let res = Doc::text("fn")
+        let mut start = "";
+        if self.syn{
+            start = "syn ";
+        }
+        let res = Doc::text(start)
+            .append("fun")
             .append(Doc::space())
             .append(Doc::as_string(self.name.name))
             .append(parens_group(Doc::intersperse(

@@ -8,7 +8,7 @@ use z3::{
 };
 use z3rro::prover::Prover;
 
-use crate::ast::Ident;
+use crate::ast::{Ident, Param, Spanned};
 
 use super::symbols::Symbolizer;
 
@@ -23,11 +23,10 @@ pub struct Uninterpreteds<'ctx> {
 }
 
 #[derive(Debug)]
-struct FuncEntry<'ctx> {
-    decl: FuncDecl<'ctx>,
-    domain: Vec<Sort<'ctx>>,
-    range: Sort<'ctx>,
-    syn: bool,
+pub(crate) struct FuncEntry<'ctx> {
+    pub(crate) decl: FuncDecl<'ctx>,
+    pub(crate) syn: bool,
+    pub inputs: Spanned<Vec<Param>>,
 }
 
 impl<'ctx> Uninterpreteds<'ctx> {
@@ -39,6 +38,9 @@ impl<'ctx> Uninterpreteds<'ctx> {
             functions: Default::default(),
             axioms: Default::default(),
         }
+    }
+    pub(crate) fn functions(&self) -> &HashMap<Ident, FuncEntry<'ctx>> {
+        &self.functions
     }
 
     pub fn add_sort(&mut self, ident: Ident) {
@@ -54,6 +56,7 @@ impl<'ctx> Uninterpreteds<'ctx> {
         domain: &[&Sort<'ctx>],
         range: &Sort<'ctx>,
         syn: bool,
+        inputs: Spanned<Vec<Param>>,
     ) {
         let symbol = self.symbolizer.get(ident);
         let decl = FuncDecl::new(self.ctx, symbol, domain, range);
@@ -61,9 +64,8 @@ impl<'ctx> Uninterpreteds<'ctx> {
             ident,
             FuncEntry {
                 decl,
-                domain: domain.iter().map(|sort| (*sort).clone()).collect(),
-                range: range.clone(),
                 syn,
+                inputs,
             },
         );
         assert!(prev.is_none());
