@@ -1,6 +1,6 @@
 //! SMT-based proofs of formulas.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 
@@ -22,19 +22,15 @@ use z3rro::{
     util::{PrefixWriter, ReasonUnknown},
 };
 
-use crate::ast::util::FreeVariableCollector;
-use crate::ast::{
-    self, BinOpKind, DeclRef, Direction, Expr, ExprBuilder, Ident, Symbol, TyKind,
-    UnOpKind, VarDecl,
-};
-use crate::depgraph::{DepGraph, Dependencies};
+use crate::ast::{self, Expr};
+use crate::depgraph::DepGraph;
 use crate::driver::commands::options::{
     DebugOptions, FunctionEncodingOption, QuantifierInstantiation, SliceVerifyMethod,
 };
 use crate::driver::commands::verify::VerifyCommand;
 use crate::driver::error::CaesarError;
 use crate::driver::item::SourceUnitName;
-use crate::driver::quant_proof::{lower_quant_prove_task, BoolVcProveTask, QuantVcProveTask};
+use crate::driver::quant_proof::{BoolVcProveTask, QuantVcProveTask};
 use crate::slicing::transform::SliceStmts;
 use crate::smt::funcs::axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder, PartialEncoding};
 use crate::smt::funcs::fuel::literals::LiteralExprCollector;
@@ -42,8 +38,7 @@ use crate::smt::funcs::fuel::{
     FuelEncodingOptions, FuelMonoFunctionEncoder, FuelParamFunctionEncoder,
 };
 use crate::smt::funcs::{FunctionEncoder, RecFunFunctionEncoder};
-use crate::smt::partial_eval::{create_subst_mapping, subst_mapping};
-use crate::smt::uninterpreted::Uninterpreteds;
+use crate::smt::inv_synth_helpers::create_subst_mapping;
 use crate::smt::{DepConfig, SmtCtx};
 use crate::tyctx::TyCtx;
 use crate::{
@@ -55,7 +50,6 @@ use crate::{
         model::SliceModel,
         solver::{SliceMinimality, SliceSolveOptions, SliceSolver, UnknownHandling},
     },
-    smt::uninterpreted,
     smt::{
         pretty_model::{
             pretty_model, pretty_slice, pretty_unaccessed, pretty_var_value, pretty_vc_value,
@@ -178,36 +172,25 @@ pub fn run_smt_prove_task(
 }
 
 /// Get a model for the constraints if it exists and instantiate vc_tvars_pvars with it
-pub fn update_vc_with_model<'smt, 'ctx, 'tcx: 'ctx>(
+pub fn get_model_for_constraints<'smt, 'ctx, 'tcx: 'ctx>(
     ctx: &'ctx z3::Context,
     options: &VerifyCommand,
     limits_ref: &LimitsRef,
-    tcx: &'tcx TyCtx,
     name: &SourceUnitName,
     constraints: BoolVcProveTask,
-    vc_tvars_pvars: &QuantVcProveTask,
-    direction: &Direction,
-    vcdeps: &Dependencies,
     translate: &mut TranslateExprs<'smt, 'ctx>,
-    template_vars: Vec<Ident>,
-) -> Result<Option<(SmtVcProveTask<'ctx>, HashMap<ast::symbol::Ident, Expr>)>, CaesarError> {
+) -> Result<Option<HashMap<ast::symbol::Ident, Expr>>, CaesarError> {
     let mut constraints_prove_task = SmtVcProveTask::translate(constraints, translate);
-
     if !options.opt_options.no_simplify {
         constraints_prove_task.simplify();
     }
-
-    // Create prover
     let mut prover = Prover::new(&ctx, IncrementalMode::Native);
-
     if let Some(remaining) = limits_ref.time_left() {
         prover.set_timeout(remaining);
     }
-
     if let Some(smtlib) = get_smtlib(options, &prover) {
         write_smtlib(&options.debug_options, name, &smtlib, None)?;
     }
-
     // Add axioms and assumptions
     translate.ctx.add_lit_axioms_to_prover(&mut prover);
     translate
@@ -227,34 +210,12 @@ pub fn update_vc_with_model<'smt, 'ctx, 'tcx: 'ctx>(
     prover.check_sat();
     let model = prover.get_model();
 
-    // If we find a model for the template constraints, instantiate the VC with it.
+    // If we find a model for the template constraints, filter it to the template variables and create a mapping from it.
     if let Some(template_model) = model {
-        let mapping = create_subst_mapping(&template_model, &vc_tvars_pvars.expr, translate);
-
-        let filtered_mapping: HashMap<Ident, Expr> = mapping
-            .iter()
-            .filter(|(key, _)| template_vars.contains(key))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-
-        let instantiated_vc = subst_mapping(filtered_mapping.clone(), &vc_tvars_pvars.expr);
-
-        // Rebuild a new Boolean task with the updated formula
-        let refined_vc = QuantVcProveTask {
-            expr: instantiated_vc.clone(),
-            direction: direction.clone(),
-            deps: vcdeps.clone(),
-        };
-
-        let refined_vc =
-            lower_quant_prove_task(options, limits_ref, tcx, name, refined_vc.clone())?;
-
-        // Translate again to SMT form
-        let vc_pvars = SmtVcProveTask::translate(refined_vc, translate);
-
-        Ok(Some((vc_pvars, filtered_mapping)))
+        let mapping = create_subst_mapping(&template_model, translate);
+        Ok(Some(mapping))
     } else {
-        // No template model found; stopping refinement.
+        // No template model found;.
         Ok(None)
     }
 }
@@ -534,183 +495,6 @@ fn mk_valid_query_prover<'smt, 'ctx>(
     // add the provable: is this Boolean true?
     prover.add_provable(valid_query);
     prover
-}
-// TODO: Find a good place for this function Madita
-// Currently this requires the variables to be named the same in both the function and the code
-pub fn build_template_expression(
-    synth: &HashMap<Ident, &uninterpreted::FuncEntry>,
-    vc_expr: &Expr,
-    builder: &ExprBuilder,
-    tcx: &TyCtx,
-) -> (Expr, Vec<Ident>) {
-    let mut allowed_vars = HashSet::new();
-    let mut template_idents = Vec::new();
-
-    for entry in synth.values() {
-        for param in &entry.inputs.node {
-            let vardecl = VarDecl::from_param(param, VarKind::Input)
-                .try_unwrap()
-                .unwrap();
-            allowed_vars.insert(vardecl.name.name);
-        }
-    }
-
-    let bool_exprs: Vec<_> = vc_expr
-        .collect_bool_conditions()
-        .into_iter()
-        .filter(|b| {
-            let mut collector = FreeVariableCollector::new();
-            let mut cloned = b.clone();
-            let vars = collector.collect_and_clear(&mut cloned);
-            vars.iter().all(|id| allowed_vars.contains(&id.name))
-        })
-        .collect();
-
-    assert!(
-        !bool_exprs.is_empty(),
-        "No boolean expressions remain after filtering."
-    );
-
-    // Helper to declare a template variable and return its Expr
-    let mut declare_template_var = |name: String| -> Expr {
-        let ident = Ident::with_dummy_span(Symbol::intern(&name));
-        let decl = VarDecl {
-            name: ident,
-            ty: TyKind::EUReal,
-            kind: VarKind::Input,
-            init: None,
-            span: Span::dummy_span(),
-            created_from: None,
-        };
-        tcx.declare(crate::ast::DeclKind::VarDecl(DeclRef::new(decl.clone())));
-        template_idents.push(decl.name);
-        builder.var(decl.name, tcx)
-    };
-
-    let mut final_expr: Option<Expr> = None;
-
-    for (bool_idx, b) in bool_exprs.iter().enumerate() {
-        let mut lin_comb_pos: Option<Expr> = None;
-        let mut lin_comb_neg: Option<Expr> = None;
-
-        // Build linear combination for each input variable
-        for entry in synth.values() {
-            for param in &entry.inputs.node {
-                let vardecl = VarDecl::from_param(param, VarKind::Input)
-                    .try_unwrap()
-                    .unwrap();
-                let mut variable = builder.var(vardecl.name, tcx);
-
-                if vardecl.ty == TyKind::Bool {
-                    //TODO: Find out if this is useful
-                    variable =
-                        builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), variable.clone());
-                    // continue
-                }
-                variable = builder.cast(TyKind::EUReal, variable.clone());
-
-                // Positive coefficient
-                let templ_pos = declare_template_var(format!(
-                    "template_var_constraint{}_{}_pos",
-                    bool_idx, vardecl.name.name
-                ));
-
-                //TODO: This is only needed because the the parsing of fractions is incorrect
-                // (a/b * c is parsed as a/(b*c))
-                let paran_pos = builder.unary(
-                    UnOpKind::Parens,
-                    Some(TyKind::EUReal),
-                    templ_pos,
-                );
-
-                let prod_pos = builder.binary(
-                    BinOpKind::Mul,
-                    Some(TyKind::EUReal),
-                    paran_pos,
-                    variable.clone(),
-                );
-                lin_comb_pos = Some(lin_comb_pos.map_or(prod_pos.clone(), |acc| {
-                    builder.binary(BinOpKind::Add, Some(TyKind::EUReal), acc, prod_pos)
-                }));
-
-                // Negative coefficient
-                let templ_neg = declare_template_var(format!(
-                    "template_var_constraint{}_{}_neg",
-                    bool_idx, vardecl.name.name
-                ));
-                let paran_neg = builder.unary(
-                    UnOpKind::Parens,
-                    Some(TyKind::EUReal),
-                    templ_neg,
-                );
-                let prod_neg =
-                    builder.binary(BinOpKind::Mul, Some(TyKind::EUReal), paran_neg, variable);
-                lin_comb_neg = Some(lin_comb_neg.map_or(prod_neg.clone(), |acc| {
-                    builder.binary(BinOpKind::Add, Some(TyKind::EUReal), acc, prod_neg)
-                }));
-            }
-        }
-
-        // Last terms for pos and neg
-        for suffix in ["pos", "neg"] {
-            let last_var = declare_template_var(format!(
-                "template_var_constraint{}_last_{}",
-                bool_idx, suffix
-            ));
-            match suffix {
-                "pos" => {
-                    lin_comb_pos = Some(lin_comb_pos.map_or(last_var.clone(), |acc| {
-                        builder.binary(BinOpKind::Add, Some(TyKind::EUReal), acc, last_var.clone())
-                    }))
-                }
-                "neg" => {
-                    lin_comb_neg = Some(lin_comb_neg.map_or(last_var.clone(), |acc| {
-                        builder.binary(BinOpKind::Add, Some(TyKind::EUReal), acc, last_var.clone())
-                    }))
-                }
-                _ => unreachable!(),
-            }
-        }
-
-        let lin_comb_pos = lin_comb_pos.unwrap();
-        let lin_comb_neg = lin_comb_neg.unwrap();
-
-        let b_iverson = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), b.clone());
-        let not_b = builder.unary(UnOpKind::Not, Some(TyKind::Bool), b.clone());
-        let not_b_iverson = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), not_b);
-
-        let sum_terms = builder.binary(
-            BinOpKind::Add,
-            Some(TyKind::EUReal),
-            builder.binary(
-                BinOpKind::Mul,
-                Some(TyKind::EUReal),
-                b_iverson,
-                lin_comb_pos,
-            ),
-            builder.binary(
-                BinOpKind::Mul,
-                Some(TyKind::EUReal),
-                not_b_iverson,
-                lin_comb_neg,
-            ),
-        );
-
-        final_expr = Some(final_expr.map_or(sum_terms.clone(), |acc| {
-            builder.binary(BinOpKind::Add, Some(TyKind::EUReal), acc, sum_terms.clone())
-        }));
-    }
-
-    (final_expr.unwrap(), template_idents)
-}
-
-pub fn get_synth_functions<'ctx>(
-    un: &'ctx Uninterpreteds<'ctx>,
-) -> HashMap<Ident, &'ctx uninterpreted::FuncEntry<'ctx>> {
-    un.functions()
-        .iter()
-        .filter_map(|(id, f)| if f.syn { Some((id.clone(), f)) } else { None })
-        .collect()
 }
 
 fn get_smtlib(options: &VerifyCommand, prover: &Prover) -> Option<Smtlib> {

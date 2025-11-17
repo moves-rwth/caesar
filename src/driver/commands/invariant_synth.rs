@@ -3,7 +3,8 @@ use std::{collections::HashMap, ops::DerefMut, process::ExitCode, sync::Arc};
 use crate::ast::util::remove_casts;
 use crate::ast::visit::VisitorMut;
 use crate::ast::Ident;
-use crate::smt::partial_eval::{create_subst_mapping, subst_mapping};
+use crate::driver::smt_proof::get_model_for_constraints;
+use crate::smt::inv_synth_helpers::{build_template_expression, create_subst_mapping, get_synth_functions, subst_from_mapping};
 use crate::{
     ast::{self, BinOpKind, Expr, ExprBuilder, FileId, Span, TyKind},
     driver::{
@@ -13,14 +14,13 @@ use crate::{
         front::parse_and_tycheck,
         item::Item,
         quant_proof::{lower_quant_prove_task, BoolVcProveTask, QuantVcProveTask},
-        smt_proof::{
-            build_template_expression, get_synth_functions, mk_function_encoder,
-            set_global_z3_params, update_vc_with_model, SmtVcProveTask,
+        smt_proof::{ mk_function_encoder,
+            set_global_z3_params, SmtVcProveTask,
         },
     },
     resource_limits::{await_with_resource_limits, LimitsRef},
     servers::{Server, SharedServer},
-    smt::{partial_eval::FunctionInliner, translate_exprs::TranslateExprs, DepConfig, SmtCtx},
+    smt::{inv_synth_helpers::FunctionInliner, translate_exprs::TranslateExprs, DepConfig, SmtCtx},
 };
 use z3::Context;
 use z3rro::prover::ProveResult;
@@ -149,7 +149,6 @@ fn synth_inv_main(
         // Set the current unit as ongoing
         server.set_ongoing_unit(name)?;
 
-
         // Lowering the core synth_inv_unit task to a quantitative prove task: applying
         // spec call desugaring, preparing slicing, and verification condition
         // generation.
@@ -220,7 +219,6 @@ fn synth_inv_main(
                 lower_quant_prove_task(options, &limits_ref, &tcx, name, vc_expr.clone())?;
         }
 
-        // Madita, okay, now I just have to get the template into the function. Or replace the function with it?
         // This vc_tvars_pvars is the vc where both tvars and pvars are not instantiated.
         // This will be needed later because it will repeatedly get initiated with new tvars,
         // to check if they are IT
@@ -282,12 +280,12 @@ fn synth_inv_main(
             match prove_result {
                 ProveResult::Proof => {
                     num_proven += 1;
-                    let instantiated_template = subst_mapping(tvar_mapping, &template);
+                    let instantiated_template = subst_from_mapping(tvar_mapping, &template);
 
                     let mut template_task = QuantVcProveTask {
                         expr: instantiated_template,
                         direction: direction,
-                        deps: vcdeps.clone(),
+                        deps: vcdeps,
                     };
 
                     // Unfolding (applies substitutions)
@@ -319,7 +317,7 @@ fn synth_inv_main(
                 // vc_tvars: pre <~ code(post)
                 // this is 0 iff pre >= code(post) (valid if 0)
                 let mapping =
-                    create_subst_mapping(&model, &vc_tvars_pvars.quant_vc.expr, &mut translate);
+                    create_subst_mapping(&model, &mut translate);
 
                 let filtered_mapping: HashMap<Ident, Expr> = mapping
                     .iter()
@@ -327,7 +325,7 @@ fn synth_inv_main(
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
 
-                let vc_tvars = subst_mapping(filtered_mapping, &vc_tvars_pvars.quant_vc.expr);
+                let vc_tvars = subst_from_mapping(filtered_mapping, &vc_tvars_pvars.quant_vc.expr);
 
                 // Create a quantprovetask (so that we get the unfolding)
                 let mut constraints_on_tvars_task = QuantVcProveTask {
@@ -353,7 +351,7 @@ fn synth_inv_main(
                     BinOpKind::And,
                     Some(TyKind::Bool),
                     new_constraint,
-                    constraints.clone(),
+                    constraints,
                 );
 
                 // Create a Boolean verification task from the constraints
@@ -364,21 +362,42 @@ fn synth_inv_main(
 
                 // --- Phase 3: Evaluate template variables in original vc ---
 
-                if let Some((new_vc_pvars, mapping)) = update_vc_with_model(
+                if let Some(mapping) = get_model_for_constraints(
                     &ctx,
                     options,
                     &limits_ref,
-                    &tcx,
                     &name,
                     constraints_on_tvars_bool_task,
-                    &vc_tvars_pvars.quant_vc,
-                    &direction,
-                    &vcdeps,
                     &mut translate,
-                    template_vars.clone(),
                 )? {
-                    vc_pvars = new_vc_pvars;
-                    tvar_mapping = mapping;
+                    let filtered_mapping: HashMap<Ident, Expr> = mapping
+                        .iter()
+                        .filter(|(key, _)| template_vars.contains(key))
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
+                    
+                    let instantiated_vc =
+                        subst_from_mapping(filtered_mapping.clone(), &vc_tvars_pvars.quant_vc.expr);
+
+                    // Rebuild a new Boolean task with the updated formula
+                    let refined_vc = QuantVcProveTask {
+                        expr: instantiated_vc,
+                        direction: direction,
+                        deps: vcdeps.clone(),
+                    };
+
+                    let refined_vc = lower_quant_prove_task(
+                        options,
+                        &limits_ref,
+                        &tcx,
+                        name,
+                        refined_vc,
+                    )?;
+
+                    // Translate again to SMT form
+                    vc_pvars = SmtVcProveTask::translate(refined_vc, &mut translate);
+
+                    tvar_mapping = filtered_mapping;
                     continue; // restart the loop with the new VC
                 } else {
                     println!(

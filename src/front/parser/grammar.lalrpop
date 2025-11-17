@@ -265,7 +265,6 @@ DomainDecl: DomainDecl = {
 }
 
 
-// Madita: do I also need syn + computable? Research this whole thing
 DomainSpec: DomainSpec = {
     <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> <comp:"@computable"?> <r: @R> 
         => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(None), syn: false, computable: comp.is_some(), span: span(file, l, r) })),

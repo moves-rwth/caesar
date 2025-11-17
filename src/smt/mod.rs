@@ -18,7 +18,7 @@ use z3rro::{
 
 pub mod funcs;
 
-pub mod partial_eval;
+pub mod inv_synth_helpers;
 pub mod pretty_model;
 pub mod symbolic;
 mod symbols;
