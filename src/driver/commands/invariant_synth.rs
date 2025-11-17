@@ -1,5 +1,6 @@
 use std::{collections::HashMap, ops::DerefMut, process::ExitCode, sync::Arc};
 
+use crate::ast::util::remove_casts;
 use crate::ast::visit::VisitorMut;
 use crate::ast::Ident;
 use crate::smt::partial_eval::{create_subst_mapping, subst_mapping};
@@ -291,7 +292,7 @@ fn synth_inv_main(
 
                     // Unfolding (applies substitutions)
                     template_task.unfold(options, &limits_ref, &tcx)?;
-                    println!("After {iteration} iterations, the following admissable invariant was found: {}", template_task.expr);
+                    println!("After {iteration} iterations, the following admissable invariant was found: {}", remove_casts(&template_task.expr));
                     break;
                 }
                 ProveResult::Counterexample => {
