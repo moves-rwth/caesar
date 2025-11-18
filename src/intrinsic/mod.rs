@@ -8,6 +8,7 @@ pub mod annotations;
 pub mod distributions;
 
 pub mod list;
+pub mod pos;
 
 use std::{any::Any, fmt, rc::Rc};
 
