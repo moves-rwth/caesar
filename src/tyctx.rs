@@ -151,6 +151,7 @@ impl TyCtx {
         match lit {
             LitKind::Str(_) => TyKind::String,
             LitKind::UInt(_) => TyKind::UInt,
+            LitKind::Int(_) => TyKind::Int,
             LitKind::Frac(_) => TyKind::UReal,
             LitKind::Infinity => TyKind::EUReal,
             LitKind::Bool(_) => TyKind::Bool,

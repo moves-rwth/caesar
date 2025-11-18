@@ -2,7 +2,7 @@
 
 use std::{fmt, str::FromStr};
 
-use num::{BigRational, BigUint, One, Zero};
+use num::{BigInt, BigRational, BigUint, One, Zero};
 
 use crate::{
     pretty::{parens_group, pretty_list, Doc, SimplePretty},
@@ -35,41 +35,49 @@ impl Expr {
     ///   a) as the condition of an ITE
     ///   b) as the operand of an Iverson `[expr]`
     pub fn collect_bool_conditions(&self) -> Vec<Expr> {
-        let mut out = Vec::new();
-        self.collect_bool_conditions_rec(&mut out);
-        out
-    }
+    let mut out = Vec::new();
+    let mut seen: Vec<*const Expr> = Vec::new(); // raw pointers for identity check
+    self.collect_bool_conditions_rec(&mut out, &mut seen);
+    out
+}
 
-    fn collect_bool_conditions_rec(&self, out: &mut Vec<Expr>) {
-        match &self.kind {
-            // --- a) ITE condition ---
-            ExprKind::Ite(cond, then_branch, else_branch) => {
-                // Record the boolean condition
+fn collect_bool_conditions_rec(&self, out: &mut Vec<Expr>, seen: &mut Vec<*const Expr>) {
+    match &self.kind {
+        // --- a) ITE condition ---
+        ExprKind::Ite(cond, then_branch, else_branch) => {
+            let cond_ptr = cond as *const Expr;
+
+            if !seen.contains(&cond_ptr) {
                 out.push(cond.clone());
-
-                // Recurse into all subexpressions
-                cond.collect_bool_conditions_rec(out);
-                then_branch.collect_bool_conditions_rec(out);
-                else_branch.collect_bool_conditions_rec(out);
+                seen.push(cond_ptr);
             }
 
-            // --- b) Unary Iverson operator ---
-            ExprKind::Unary(un_op, operand) if matches!(un_op.node, UnOpKind::Iverson) => {
-                // Record boolean inside the iverson bracket
+            cond.collect_bool_conditions_rec(out, seen);
+            then_branch.collect_bool_conditions_rec(out, seen);
+            else_branch.collect_bool_conditions_rec(out, seen);
+        }
+
+        // --- b) Unary Iverson operator ---
+        ExprKind::Unary(un_op, operand) if matches!(un_op.node, UnOpKind::Iverson) => {
+            let operand_ptr = operand as *const Expr;
+
+            if !seen.contains(&operand_ptr) {
                 out.push(operand.clone());
-
-                // Recurse inside operand
-                operand.collect_bool_conditions_rec(out);
+                seen.push(operand_ptr);
             }
 
-            // All other expression types: recurse into children
-            _ => {
-                for child in self.children() {
-                    child.collect_bool_conditions_rec(out);
-                }
+            operand.collect_bool_conditions_rec(out, seen);
+        }
+
+        // All other expression types: recurse into children
+        _ => {
+            for child in self.children() {
+                child.collect_bool_conditions_rec(out, seen);
             }
         }
     }
+}
+
 }
 
 impl fmt::Display for Expr {
@@ -410,6 +418,8 @@ pub enum LitKind {
     Str(Symbol),
     /// An unsigned integer literal (`123`).
     UInt(BigUint),
+    /// A signed integer literal (`123`).
+    Int(BigInt),
     /// A number literal represented by a fraction.
     Frac(BigRational),
     /// Infinity,
@@ -450,6 +460,7 @@ impl fmt::Display for LitKind {
         match self {
             LitKind::Str(symbol) => f.write_fmt(format_args!("\"{symbol}\"")),
             LitKind::UInt(num) => num.fmt(f),
+            LitKind::Int(num) => num.fmt(f),
             LitKind::Frac(frac) => frac.fmt(f),
             LitKind::Infinity => f.write_str("∞"),
             LitKind::Bool(b) => b.fmt(f),

@@ -276,9 +276,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             }
             ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
-            ExprKind::Lit(lit) => {
-                panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr)
-            }
+            ExprKind::Lit(lit) => match &lit.node {
+                LitKind::Int(value) => Int::from_big_int(self.ctx.ctx, value),
+                _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
+            },
         };
 
         if is_expr_worth_caching(expr) {
