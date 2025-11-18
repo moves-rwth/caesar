@@ -139,7 +139,6 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             }
         }
 
-
         let res = match &expr.kind {
             ExprKind::Var(ident) => self.get_local(*ident).symbolic.clone().into_bool().unwrap(),
             ExprKind::Call(name, args) => self.t_call(*name, args).clone().into_bool().unwrap(),
@@ -222,7 +221,6 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
         };
-        
 
         if is_expr_worth_caching(expr) {
             self.cache.insert(expr, Symbolic::Bool(res.clone()));
@@ -401,9 +399,12 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             }
             ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
-            ExprKind::Lit(lit) => {
-                panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr)
-            }
+            ExprKind::Lit(lit) => match &lit.node {
+                LitKind::Frac(frac) => {
+                  Real::from_big_rational(self.ctx.ctx, frac)
+                }
+                _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
+            },
         };
 
         if is_expr_worth_caching(expr) {
@@ -520,7 +521,6 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 }
             }
             ExprKind::Unary(un_op, operand) => match un_op.node {
-                
                 UnOpKind::Not => self.t_eureal(operand).negate(),
                 UnOpKind::Non => self.t_eureal(operand).conegate(),
                 UnOpKind::Embed => {
