@@ -94,7 +94,7 @@ pub fn create_subst_mapping<'ctx>(
 
             Symbolic::Real(v) => {
                 let eval = v.eval(model);
-                eval.ok().map(|r: BigRational| builder.frac_lit(r))
+                eval.ok().map(|r: BigRational| builder.signed_frac_lit(r))
             }
 
             Symbolic::UReal(v) => {
@@ -103,7 +103,10 @@ pub fn create_subst_mapping<'ctx>(
             }
 
             Symbolic::EUReal(v) => v.eval(model).ok().map(|r| match r {
-                ConcreteEUReal::Real(rat) => builder.frac_lit(rat),
+                ConcreteEUReal::Real(rat) => {
+                    println!("I did this {rat}");
+                    builder.frac_lit(rat)
+                }
                 ConcreteEUReal::Infinity => builder.infinity_lit(),
             }),
 
@@ -151,14 +154,15 @@ fn build_linear_combination(
                 .try_unwrap()
                 .unwrap();
 
-            // Create variable for parameter (and cast to EUReal)
+            // Create variable for parameter (and cast to Real)
             let mut variable = builder.var(vardecl.name, tcx);
 
             if vardecl.ty == TyKind::Bool {
-                variable = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), variable.clone());
+                continue;
+                // variable = builder.unary(UnOpKind::Iverson, Some(TyKind::Real), variable.clone());
             }
 
-            variable = builder.cast(TyKind::EUReal, variable.clone());
+            variable = builder.cast(TyKind::Real, variable.clone());
 
             // Create template variable
             // Template var name
@@ -172,14 +176,14 @@ fn build_linear_combination(
             // Parenthesize template var
             // TODO: this is only needed because fractions get parsed incorrectly:
             // a/b *c gets parsed as a/(b*c)
-            let templ_paren = builder.unary(UnOpKind::Parens, Some(TyKind::EUReal), templ);
+            let templ_paren = builder.unary(UnOpKind::Parens, Some(TyKind::Real), templ);
 
             // Multiply: templ * variable
-            let prod = builder.binary(BinOpKind::Mul, Some(TyKind::EUReal), templ_paren, variable);
+            let prod = builder.binary(BinOpKind::Mul, Some(TyKind::Real), templ_paren, variable);
 
             // Accumulate sum
             lin_comb = Some(lin_comb.map_or(prod.clone(), |acc| {
-                builder.binary(BinOpKind::Add, Some(TyKind::EUReal), acc, prod)
+                builder.binary(BinOpKind::Add, Some(TyKind::Real), acc, prod)
             }));
         }
     }
@@ -190,9 +194,19 @@ fn build_linear_combination(
         bool_idx, infix
     ));
 
-    lin_comb.map_or(last.clone(), |acc| {
-        builder.binary(BinOpKind::Add, Some(TyKind::EUReal), acc, last)
-    })
+    let lin_comb_with_last = lin_comb.map_or(last.clone(), |acc| {
+        builder.binary(BinOpKind::Add, Some(TyKind::Real), acc, last)
+    });
+
+    let pos_name = Ident::with_dummy_span(Symbol::intern("pos"));
+
+    lin_comb = Some(Shared::new(ExprData {
+        kind: ExprKind::Call(pos_name, vec![lin_comb_with_last.clone()]),
+        ty: Some(TyKind::EUReal),
+
+        span: Span::dummy_span(),
+    }));
+    lin_comb.unwrap()
 }
 
 // TODO: Madita: Currently this requires the variables to be named the same in both the function and the code
@@ -238,7 +252,7 @@ pub fn build_template_expression(
         let ident = Ident::with_dummy_span(Symbol::intern(&name));
         let decl = VarDecl {
             name: ident,
-            ty: TyKind::EUReal,
+            ty: TyKind::Real,
             kind: VarKind::Input,
             init: None,
             span: Span::dummy_span(),
@@ -272,7 +286,6 @@ pub fn build_template_expression(
         );
 
         let b_iv = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), b.clone());
-
         let not_b = builder.unary(UnOpKind::Not, Some(TyKind::Bool), b.clone());
         let not_b_iv = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), not_b);
 

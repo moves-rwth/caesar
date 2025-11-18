@@ -2,9 +2,11 @@ use std::{collections::HashMap, ops::DerefMut, process::ExitCode, sync::Arc};
 
 use crate::ast::util::remove_casts;
 use crate::ast::visit::VisitorMut;
-use crate::ast::Ident;
+use crate::ast::{Ident};
 use crate::driver::smt_proof::get_model_for_constraints;
-use crate::smt::inv_synth_helpers::{build_template_expression, create_subst_mapping, get_synth_functions, subst_from_mapping};
+use crate::smt::inv_synth_helpers::{
+    build_template_expression, create_subst_mapping, get_synth_functions, subst_from_mapping,
+};
 use crate::{
     ast::{self, BinOpKind, Expr, ExprBuilder, FileId, Span, TyKind},
     driver::{
@@ -14,9 +16,7 @@ use crate::{
         front::parse_and_tycheck,
         item::Item,
         quant_proof::{lower_quant_prove_task, BoolVcProveTask, QuantVcProveTask},
-        smt_proof::{ mk_function_encoder,
-            set_global_z3_params, SmtVcProveTask,
-        },
+        smt_proof::{mk_function_encoder, set_global_z3_params, SmtVcProveTask},
     },
     resource_limits::{await_with_resource_limits, LimitsRef},
     servers::{Server, SharedServer},
@@ -233,7 +233,7 @@ fn synth_inv_main(
         }
 
         let mut iteration = 0;
-        const MAX_REFINEMENT_ITERS: usize = 10;
+        const MAX_REFINEMENT_ITERS: usize = 70;
 
         // In the first iteration we will use the vc where both tvars and pvars are uninstantiated, but
         // starting from the second loop iteration, the tvars will be instantiated with some value
@@ -304,7 +304,7 @@ fn synth_inv_main(
             }
 
             if iteration >= MAX_REFINEMENT_ITERS {
-                println!("Reached max refinement iterations for {name}.");
+                println!("Reached max refinement iterations ({iteration}) for {name}.");
                 num_failures += 1;
                 break;
             }
@@ -316,8 +316,7 @@ fn synth_inv_main(
             if let Some(model) = result.model {
                 // vc_tvars: pre <~ code(post)
                 // this is 0 iff pre >= code(post) (valid if 0)
-                let mapping =
-                    create_subst_mapping(&model, &mut translate);
+                let mapping = create_subst_mapping(&model, &mut translate);
 
                 let filtered_mapping: HashMap<Ident, Expr> = mapping
                     .iter()
@@ -375,9 +374,10 @@ fn synth_inv_main(
                         .filter(|(key, _)| template_vars.contains(key))
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .collect();
-                    
+
                     let instantiated_vc =
                         subst_from_mapping(filtered_mapping.clone(), &vc_tvars_pvars.quant_vc.expr);
+
 
                     // Rebuild a new Boolean task with the updated formula
                     let refined_vc = QuantVcProveTask {
@@ -386,18 +386,15 @@ fn synth_inv_main(
                         deps: vcdeps.clone(),
                     };
 
-                    let refined_vc = lower_quant_prove_task(
-                        options,
-                        &limits_ref,
-                        &tcx,
-                        name,
-                        refined_vc,
-                    )?;
+                    let refined_vc =
+                        lower_quant_prove_task(options, &limits_ref, &tcx, name, refined_vc)?;
 
+                    
                     // Translate again to SMT form
                     vc_pvars = SmtVcProveTask::translate(refined_vc, &mut translate);
 
                     tvar_mapping = filtered_mapping;
+
                     continue; // restart the loop with the new VC
                 } else {
                     println!(
