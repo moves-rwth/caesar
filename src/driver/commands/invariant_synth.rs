@@ -171,8 +171,7 @@ fn synth_inv_main(
         // Lowering the quantitative task to a Boolean one. This contains (lazy)
         // unfolding, and various optimizations
         // (depending on options).
-        // TODO: Right now there is no quantifier elimination.
-        // Some quantifier elimination can probably be reintroduced
+        // TODO: think about quantifier elimination
         let mut vc_is_valid =
             lower_quant_prove_task(options, &limits_ref, &mut tcx, name, vc_expr.clone())?;
 
