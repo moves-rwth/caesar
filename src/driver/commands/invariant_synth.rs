@@ -169,10 +169,12 @@ fn synth_inv_main(
         let vcdeps = vc_expr.deps.clone();
 
         // Lowering the quantitative task to a Boolean one. This contains (lazy)
-        // unfolding, quantifier elimination, and various optimizations
+        // unfolding, and various optimizations
         // (depending on options).
+        // TODO: Right now there is no quantifier elimination.
+        // Some quantifier elimination can probably be reintroduced
         let mut vc_is_valid =
-            lower_quant_prove_task(options, &limits_ref, &tcx, name, vc_expr.clone())?;
+            lower_quant_prove_task(options, &limits_ref, &mut tcx, name, vc_expr.clone())?;
 
         let ctx = Context::new(&z3::Config::default());
         let function_encoder = mk_function_encoder(&tcx, &depgraph, options)?;
@@ -186,15 +188,15 @@ fn synth_inv_main(
 
         let mut template_vars = Vec::new();
         if !synth.is_empty() {
-            // Extract the single element (key, value)
-            let (synth_name, synth_val) = synth
+            // Right now, assume that there is only one syn function
+            let (_synth_name, synth_val) = synth
                 .iter()
                 .next()
                 .expect("synth should contain exactly one element");
 
             // Call template builder using the single element
             let (temp_template, vars) =
-                build_template_expression((synth_name, synth_val), &vc_expr.expr, &builder, &tcx);
+                build_template_expression(synth_val, &vc_expr.expr, &builder, &tcx);
 
             template_vars = vars;
             template = temp_template;
@@ -255,7 +257,7 @@ fn synth_inv_main(
             // println!("=== Refinement iteration {iteration} ===");
 
             // Instantiating the template and doing unfolding just for logging.
-            // TODO: This should just be optional
+            // TODO: maybe this should optionally be printed
             // let instantiated_template = subst_mapping(tvar_mapping.clone(), &template);
 
             // let mut template_task = QuantVcProveTask {
@@ -394,8 +396,13 @@ fn synth_inv_main(
                         deps: vcdeps.clone(),
                     };
 
-                    let refined_vc =
-                        lower_quant_prove_task(options, &limits_ref, &tcx, name, refined_vc)?;
+                    let refined_vc = lower_quant_prove_task(
+                        options,
+                        &limits_ref,
+                        &tcx,
+                        name,
+                        refined_vc,
+                    )?;
 
                     // Translate again to SMT form
                     vc_pvars = SmtVcProveTask::translate(refined_vc, &mut translate);

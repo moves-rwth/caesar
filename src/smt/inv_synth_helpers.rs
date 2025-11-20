@@ -12,7 +12,6 @@ use crate::{
         BinOpKind, DeclRef, Expr, ExprBuilder, ExprData, ExprKind, Ident, Shared, Span, Symbol,
         TyKind, UnOpKind, VarDecl, VarKind,
     },
-    driver::quant_proof::QuantVcProveTask,
     smt::{
         symbolic::Symbolic,
         uninterpreted::{self, FuncEntry, Uninterpreteds},
@@ -212,7 +211,7 @@ fn build_linear_combination(
 // Build a template by collecting boolean conditions that are "relevant", calcu
 // and
 pub fn build_template_expression(
-    (synth_name, synth_val): (&Ident, &uninterpreted::FuncEntry),
+    synth_val: &uninterpreted::FuncEntry,
     vc_expr: &Expr,
     builder: &ExprBuilder,
     tcx: &TyCtx,
@@ -220,13 +219,11 @@ pub fn build_template_expression(
     let mut allowed_vars = HashSet::new();
     let mut template_idents = Vec::new();
 
-    for entry in synth.values() {
-        for param in &entry.inputs.node {
-            let vardecl = VarDecl::from_param(param, VarKind::Input)
-                .try_unwrap()
-                .unwrap();
-            allowed_vars.insert(vardecl.name.name);
-        }
+    for param in &synth_val.inputs.node {
+        let vardecl = VarDecl::from_param(param, VarKind::Input)
+            .try_unwrap()
+            .unwrap();
+        allowed_vars.insert(vardecl.name.name);
     }
 
     // Get the conditions, filtered to those variables that appear as inputs of the function

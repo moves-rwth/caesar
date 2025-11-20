@@ -102,7 +102,13 @@ impl<'ctx> SmtCtx<'ctx> {
                         self.function_encoder.translate_signature(self, &func)
                     {
                         let domain = domain.iter().collect_vec();
-                        self.uninterpreteds.add_function(name, &domain, &range,func.syn, func.inputs.clone())
+                        self.uninterpreteds.add_function(
+                            name,
+                            &domain,
+                            &range,
+                            func.syn,
+                            func.inputs.clone(),
+                        )
                     }
                 }
             }
@@ -138,13 +144,13 @@ impl<'ctx> SmtCtx<'ctx> {
                             DepConfig::SpecsOnly => continue,
                             _ => {}
                         }
-                        axioms.push((axiom.name, translate.t_bool(&axiom.axiom),false));
+                        axioms.push((axiom.name, translate.t_bool(&axiom.axiom), false));
                     }
                 }
             }
         }
         drop(translate); // drops shared reference on self so we can modify
-        for (name, axiom ,syn) in axioms {
+        for (name, axiom, syn) in axioms {
             self.uninterpreteds.add_axiom(name, axiom, syn);
         }
     }

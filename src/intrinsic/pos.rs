@@ -3,7 +3,7 @@
 use std::rc::Rc;
 
 use z3::ast::{Ast, Int, Real};
-use z3rro::{EUReal, UReal, eureal::pair::EURealFactory};
+use z3rro::{eureal::pair::EURealFactory, EUReal, UReal};
 
 use crate::{
     ast::{DeclKind, Expr, Files, Ident, Span, Symbol, TyKind},
@@ -79,13 +79,13 @@ impl FuncIntrin for PosIntrin {
 
                 let cond = x.gt(&zero);
 
-                let value = EUReal::from_ureal(&factory,&UReal::unchecked_from_real(cond.ite(&x, &zero)));
+                let value =
+                    EUReal::from_ureal(&factory, &UReal::unchecked_from_real(cond.ite(&x, &zero)));
 
-                
                 Symbolic::EUReal(value)
             }
 
-            Some(TyKind::EUReal) => {println!("this is the reason {:?}", &args[0].ty); Symbolic::EUReal(translate.t_eureal(&args[0]))},
+            Some(TyKind::EUReal) => Symbolic::EUReal(translate.t_eureal(&args[0])),
 
             _ => unreachable!("max(x,0) only defined for numeric types"),
         }

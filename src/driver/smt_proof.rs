@@ -7,7 +7,6 @@ use std::io::Write;
 use ariadne::ReportKind;
 use itertools::Itertools;
 use tracing::info_span;
-
 use z3::{
     ast::{Ast, Bool},
     Context, Goal,

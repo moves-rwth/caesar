@@ -117,7 +117,6 @@ impl<'a> VisitorMut for Subst<'a> {
                 }
                 Ok(())
             }
-
             ExprKind::Quant(_, ref mut vars, _, ref mut expr) => {
                 self.push_quant(span, vars, self.tcx);
                 self.visit_expr(expr)?;
