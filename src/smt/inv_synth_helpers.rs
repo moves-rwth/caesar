@@ -20,9 +20,11 @@ use crate::{
 };
 use std::collections::{HashMap, HashSet};
 
+// Takes a function and substitutes calls to that function with the functions body,
+// substituting function parameters with the caller arguments
 pub struct FunctionInliner<'ctx> {
     pub target: Ident,                // the function ident
-    pub entry: &'ctx FuncEntry<'ctx>, // contains params + body
+    pub entry: &'ctx FuncEntry<'ctx>, // contains input params
     pub body: &'ctx Expr,             // the function body expression
 }
 
@@ -39,7 +41,7 @@ impl<'a> VisitorMut for FunctionInliner<'a> {
 
                 let mut wrapped = self.body.clone();
 
-                // Substitute parameters from the function entry into the body
+                // Substitute arguments with which the function is called into the body
                 for (parameter, actual_expr) in parameters.iter().zip(args.iter()) {
                     wrapped = Shared::new(ExprData {
                         kind: ExprKind::Subst(*parameter, actual_expr.clone(), wrapped.clone()),
@@ -59,6 +61,7 @@ impl<'a> VisitorMut for FunctionInliner<'a> {
     }
 }
 
+// Translates a model into a map Ident -> Expression
 pub fn create_subst_mapping<'ctx>(
     model: &InstrumentedModel<'ctx>,
     translate: &mut crate::smt::translate_exprs::TranslateExprs<'_, 'ctx>,
@@ -103,10 +106,7 @@ pub fn create_subst_mapping<'ctx>(
             }
 
             Symbolic::EUReal(v) => v.eval(model).ok().map(|r| match r {
-                ConcreteEUReal::Real(rat) => {
-                    println!("I did this {rat}");
-                    builder.frac_lit(rat)
-                }
+                ConcreteEUReal::Real(rat) => builder.frac_lit(rat),
                 ConcreteEUReal::Infinity => builder.infinity_lit(),
             }),
 
@@ -121,9 +121,9 @@ pub fn create_subst_mapping<'ctx>(
     mapping
 }
 
-/// Instantiate an expression with concrete values from a mapping.
+/// "Instantiate" an expression with concrete values from a mapping.
 /// To do this, wrap the expression in nested `Subst` expressions.
-/// Then the unfolding function can take care of the actual substitutions.
+/// Then later tunfolding can take care of the actual substitutions.
 pub fn subst_from_mapping<'ctx>(mapping: HashMap<ast::symbol::Ident, Expr>, vc: &Expr) -> Expr {
     let mut wrapped = vc.clone();
     for (ident, expr) in mapping {
@@ -209,7 +209,9 @@ fn build_linear_combination(
     lin_comb.unwrap()
 }
 
-// TODO: Madita: Currently this requires the variables to be named the same in both the function and the code
+// TODO: Currently this requires the variables to be named the same in both the function and the code
+// Build a template by collecting boolean conditions that are "relevant", calcu
+// and
 pub fn build_template_expression(
     synth: &HashMap<Ident, &uninterpreted::FuncEntry>,
     vc_expr: &Expr,
@@ -229,7 +231,7 @@ pub fn build_template_expression(
     }
 
     // Get the conditions, filtered to those variables that appear as inputs of the function
-    // TODO: this is kinda unfortunate and should be changed
+    // TODO: this should be changed
     // But how?
     let bool_exprs: Vec<_> = vc_expr
         .collect_bool_conditions()
