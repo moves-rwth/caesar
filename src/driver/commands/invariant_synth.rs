@@ -2,7 +2,7 @@ use std::{collections::HashMap, ops::DerefMut, process::ExitCode, sync::Arc};
 
 use crate::ast::util::remove_casts;
 use crate::ast::visit::VisitorMut;
-use crate::ast::{Ident};
+use crate::ast::Ident;
 use crate::driver::smt_proof::get_model_for_constraints;
 use crate::smt::inv_synth_helpers::{
     build_template_expression, create_subst_mapping, get_synth_functions, subst_from_mapping,
@@ -186,10 +186,19 @@ fn synth_inv_main(
 
         let mut template_vars = Vec::new();
         if !synth.is_empty() {
+            // Extract the single element (key, value)
+            let (synth_name, synth_val) = synth
+                .iter()
+                .next()
+                .expect("synth should contain exactly one element");
+
+            // Call template builder using the single element
             let (temp_template, vars) =
-                build_template_expression(&synth, &vc_expr.expr, &builder, &tcx);
+                build_template_expression((synth_name, synth_val), &vc_expr.expr, &builder, &tcx);
+
             template_vars = vars;
             template = temp_template;
+
             // Create a quantprovetask (so that we get the unfolding)
             let mut template_task = QuantVcProveTask {
                 expr: template.clone(),
@@ -378,7 +387,6 @@ fn synth_inv_main(
                     let instantiated_vc =
                         subst_from_mapping(filtered_mapping.clone(), &vc_tvars_pvars.quant_vc.expr);
 
-
                     // Rebuild a new Boolean task with the updated formula
                     let refined_vc = QuantVcProveTask {
                         expr: instantiated_vc,
@@ -389,7 +397,6 @@ fn synth_inv_main(
                     let refined_vc =
                         lower_quant_prove_task(options, &limits_ref, &tcx, name, refined_vc)?;
 
-                    
                     // Translate again to SMT form
                     vc_pvars = SmtVcProveTask::translate(refined_vc, &mut translate);
 

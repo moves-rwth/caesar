@@ -12,6 +12,7 @@ use crate::{
         BinOpKind, DeclRef, Expr, ExprBuilder, ExprData, ExprKind, Ident, Shared, Span, Symbol,
         TyKind, UnOpKind, VarDecl, VarKind,
     },
+    driver::quant_proof::QuantVcProveTask,
     smt::{
         symbolic::Symbolic,
         uninterpreted::{self, FuncEntry, Uninterpreteds},
@@ -141,51 +142,49 @@ pub fn subst_from_mapping<'ctx>(mapping: HashMap<ast::symbol::Ident, Expr>, vc: 
 fn build_linear_combination(
     infix: &str,
     bool_idx: usize,
-    synth: &HashMap<Ident, &uninterpreted::FuncEntry>,
+    synth_entry: &uninterpreted::FuncEntry,
     builder: &ExprBuilder,
     tcx: &TyCtx,
     declare_template_var: &mut dyn FnMut(String) -> Expr,
 ) -> Expr {
     let mut lin_comb: Option<Expr> = None; // used to accumulate the lin comb
                                            // TODO: currently this assumes that synth has only one entry
-    for entry in synth.values() {
-        for param in &entry.inputs.node {
-            let vardecl = VarDecl::from_param(param, VarKind::Input)
-                .try_unwrap()
-                .unwrap();
+    for param in &synth_entry.inputs.node {
+        let vardecl = VarDecl::from_param(param, VarKind::Input)
+            .try_unwrap()
+            .unwrap();
 
-            // Create variable for parameter (and cast to Real)
-            let mut variable = builder.var(vardecl.name, tcx);
+        // Create variable for parameter (and cast to Real)
+        let mut variable = builder.var(vardecl.name, tcx);
 
-            if vardecl.ty == TyKind::Bool {
-                continue;
-                // variable = builder.unary(UnOpKind::Iverson, Some(TyKind::Real), variable.clone());
-            }
-
-            variable = builder.cast(TyKind::Real, variable.clone());
-
-            // Create template variable
-            // Template var name
-            let name = format!(
-                "template_var_constraint{}_{}_{}",
-                bool_idx, vardecl.name.name, infix
-            );
-
-            let templ = declare_template_var(name);
-
-            // Parenthesize template var
-            // TODO: this is only needed because fractions get parsed incorrectly:
-            // a/b *c gets parsed as a/(b*c)
-            let templ_paren = builder.unary(UnOpKind::Parens, Some(TyKind::Real), templ);
-
-            // Multiply: templ * variable
-            let prod = builder.binary(BinOpKind::Mul, Some(TyKind::Real), templ_paren, variable);
-
-            // Accumulate sum
-            lin_comb = Some(lin_comb.map_or(prod.clone(), |acc| {
-                builder.binary(BinOpKind::Add, Some(TyKind::Real), acc, prod)
-            }));
+        if vardecl.ty == TyKind::Bool {
+            continue;
+            // variable = builder.unary(UnOpKind::Iverson, Some(TyKind::Real), variable.clone());
         }
+
+        variable = builder.cast(TyKind::Real, variable.clone());
+
+        // Create template variable
+        // Template var name
+        let name = format!(
+            "template_var_constraint{}_{}_{}",
+            bool_idx, vardecl.name.name, infix
+        );
+
+        let templ = declare_template_var(name);
+
+        // Parenthesize template var
+        // TODO: this is only needed because fractions get parsed incorrectly:
+        // a/b *c gets parsed as a/(b*c)
+        let templ_paren = builder.unary(UnOpKind::Parens, Some(TyKind::Real), templ);
+
+        // Multiply: templ * variable
+        let prod = builder.binary(BinOpKind::Mul, Some(TyKind::Real), templ_paren, variable);
+
+        // Accumulate sum
+        lin_comb = Some(lin_comb.map_or(prod.clone(), |acc| {
+            builder.binary(BinOpKind::Add, Some(TyKind::Real), acc, prod)
+        }));
     }
 
     // Add the "last" summand
@@ -213,7 +212,7 @@ fn build_linear_combination(
 // Build a template by collecting boolean conditions that are "relevant", calcu
 // and
 pub fn build_template_expression(
-    synth: &HashMap<Ident, &uninterpreted::FuncEntry>,
+    (synth_name, synth_val): (&Ident, &uninterpreted::FuncEntry),
     vc_expr: &Expr,
     builder: &ExprBuilder,
     tcx: &TyCtx,
@@ -272,7 +271,7 @@ pub fn build_template_expression(
         let lc_pos = build_linear_combination(
             "pos",
             bool_idx,
-            synth,
+            synth_val,
             builder,
             tcx,
             &mut declare_template_var,
@@ -281,7 +280,7 @@ pub fn build_template_expression(
         let lc_neg = build_linear_combination(
             "neg",
             bool_idx,
-            synth,
+            synth_val,
             builder,
             tcx,
             &mut declare_template_var,
