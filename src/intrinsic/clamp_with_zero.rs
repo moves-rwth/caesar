@@ -3,7 +3,7 @@
 use std::rc::Rc;
 
 use z3::ast::{Ast, Int, Real};
-use z3rro::{eureal::pair::EURealFactory, EUReal, UReal};
+use z3rro::{eureal::pair::EURealFactory, EUReal, UInt, UReal};
 
 use crate::{
     ast::{DeclKind, Expr, Files, Ident, Span, Symbol, TyKind},
@@ -14,18 +14,19 @@ use crate::{
 
 use super::FuncIntrin;
 
-pub fn init_pos(_files: &mut Files, tcx: &mut TyCtx) {
-    let pos_name = Ident::with_dummy_span(Symbol::intern("pos"));
-    let pos = PosIntrin(pos_name);
-    tcx.declare(DeclKind::FuncIntrin(Rc::new(pos)));
-    tcx.add_global(pos_name);
+pub fn init_clamp_with_zero(_files: &mut Files, tcx: &mut TyCtx) {
+    let clamp_with_zero_name = Ident::with_dummy_span(Symbol::intern("clamp_with_zero"));
+    let clamp_with_zero = ClampWithZeroIntrin(clamp_with_zero_name);
+    tcx.declare(DeclKind::FuncIntrin(Rc::new(clamp_with_zero)));
+    tcx.add_global(clamp_with_zero_name);
 }
 
-/// A function that takes a Real number x and returns max(x,0)
+/// A function that takes a number x and returns max(x,0)
+/// TODO: Should be replaced by clamp_cast(type, number)
 #[derive(Debug)]
-pub struct PosIntrin(Ident);
+pub struct ClampWithZeroIntrin(Ident);
 
-impl FuncIntrin for PosIntrin {
+impl FuncIntrin for ClampWithZeroIntrin {
     fn name(&self) -> Ident {
         self.0
     }
@@ -46,7 +47,6 @@ impl FuncIntrin for PosIntrin {
             });
         };
         tycheck.try_cast(call_span, &TyKind::Real, x)?;
-        // Unsure about this
         Ok(TyKind::EUReal)
     }
 
@@ -61,15 +61,31 @@ impl FuncIntrin for PosIntrin {
             Some(TyKind::Int) => {
                 let x = translate.t_int(&args[0]);
                 let ctx = x.get_ctx();
+                let factory = EURealFactory::new(ctx);
+
                 let zero = Int::from_i64(&ctx, 0);
 
                 let cond = x.gt(&zero);
-                let value = cond.ite(&x, &zero);
+                let value =
+                    EUReal::from_uint(&factory, &UInt::unchecked_from_int(cond.ite(&x, &zero)));
 
-                Symbolic::from_dynamic(translate.ctx, &ty.clone().unwrap(), &value.into())
+                Symbolic::EUReal(value)
             }
 
-            Some(TyKind::UInt) => Symbolic::UInt(translate.t_uint(&args[0])),
+            Some(TyKind::UInt) => {
+                let x_uint = translate.t_uint(&args[0]);
+                let x = x_uint.as_int();
+                let ctx = x.get_ctx();
+                let factory = EURealFactory::new(ctx);
+
+                let zero = Int::from_i64(&ctx, 0);
+
+                let cond = x.gt(&zero);
+                let value =
+                    EUReal::from_uint(&factory, &UInt::unchecked_from_int(cond.ite(&x, &zero)));
+
+                Symbolic::EUReal(value)
+            }
 
             Some(TyKind::Real) => {
                 let x = translate.t_real(&args[0]);
@@ -87,26 +103,7 @@ impl FuncIntrin for PosIntrin {
 
             Some(TyKind::EUReal) => Symbolic::EUReal(translate.t_eureal(&args[0])),
 
-            _ => unreachable!("max(x,0) only defined for numeric types"),
+            _ => unreachable!("clamp_with_zero only defined for numeric types"),
         }
     }
 }
-
-// #[cfg(test)]
-// mod test {
-//     use crate::driver::commands::verify::verify_test;
-
-//     #[test]
-//     fn test_store() {
-//         let code = r#"
-//             proc proc_store(list: []UInt, index: UInt, value: UInt) -> (res: []UInt)
-//                 pre ?(index < len(list))
-//                 post ?(forall i: UInt. (i < len(list) && i != index) ==> (select(res, i) == select(list, i)))
-//                 post ?(select(res, index) == value)
-//             {
-//                 res = store(list, index, value)
-//             }
-//         "#;
-//         assert!(verify_test(code).0.unwrap());
-//     }
-// }

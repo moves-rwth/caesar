@@ -196,10 +196,10 @@ fn build_linear_combination(
         builder.binary(BinOpKind::Add, Some(TyKind::Real), acc, last)
     });
 
-    let pos_name = Ident::with_dummy_span(Symbol::intern("pos"));
+    let clamp_with_zero_name = Ident::with_dummy_span(Symbol::intern("clamp_with_zero"));
 
     lin_comb = Some(Shared::new(ExprData {
-        kind: ExprKind::Call(pos_name, vec![lin_comb_with_last.clone()]),
+        kind: ExprKind::Call(clamp_with_zero_name, vec![lin_comb_with_last.clone()]),
         ty: Some(TyKind::EUReal),
 
         span: Span::dummy_span(),
