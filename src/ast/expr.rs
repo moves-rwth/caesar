@@ -690,6 +690,14 @@ impl ExprBuilder {
             span: self.span,
         })
     }
+
+    pub fn frac_lit_not_extended(&self, value: BigRational) -> Expr {
+        Shared::new(ExprData {
+            kind: ExprKind::Lit(Spanned::new(self.span, LitKind::Frac(value))),
+            ty: Some(TyKind::UReal),
+            span: self.span,
+        })
+    }
     pub fn signed_frac_lit(&self, value: BigRational) -> Expr {
         Shared::new(ExprData {
             kind: ExprKind::Lit(Spanned::new(self.span, LitKind::Frac(value))),

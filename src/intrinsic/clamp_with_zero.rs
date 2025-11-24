@@ -101,6 +101,21 @@ impl FuncIntrin for ClampWithZeroIntrin {
                 Symbolic::EUReal(value)
             }
 
+            Some(TyKind::UReal) => {
+                let x = translate.t_ureal(&args[0]);
+                let x = x.as_real();
+                let ctx = x.get_ctx();
+                let factory = EURealFactory::new(ctx);
+                let zero = Real::from_real(&ctx, 0, 1);
+
+                let cond = x.gt(&zero);
+
+                let value =
+                    EUReal::from_ureal(&factory, &UReal::unchecked_from_real(cond.ite(&x, &zero)));
+
+                Symbolic::EUReal(value)
+            }
+
             Some(TyKind::EUReal) => Symbolic::EUReal(translate.t_eureal(&args[0])),
 
             _ => unreachable!("clamp_with_zero only defined for numeric types"),

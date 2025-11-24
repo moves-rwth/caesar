@@ -102,7 +102,7 @@ pub fn create_subst_mapping<'ctx>(
 
             Symbolic::UReal(v) => {
                 let eval = v.eval(model);
-                eval.ok().map(|r: BigRational| builder.frac_lit(r))
+                eval.ok().map(|r: BigRational| builder.frac_lit_not_extended(r))
             }
 
             Symbolic::EUReal(v) => v.eval(model).ok().map(|r| match r {
