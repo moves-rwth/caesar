@@ -93,6 +93,8 @@ pub async fn synth_inv_files(
     .await??
 }
 
+use std::time::{Duration, Instant};
+
 /// Synchronously synthesize invariants for the given files.
 fn synth_inv_main(
     options: &VerifyCommand,
@@ -100,12 +102,17 @@ fn synth_inv_main(
     server: &mut dyn Server,
     user_files: &[FileId],
 ) -> Result<bool, CaesarError> {
+    let start_total = Instant::now();
+
     let (mut module, mut tcx) = parse_and_tycheck(
         &options.input_options,
         &options.debug_options,
         server,
         user_files,
     )?;
+
+    let duration_parse = start_total.elapsed(); // Parse time
+    println!("Parse time = {:.2}", duration_parse.as_secs_f64());
 
     // Register all relevant source units with the server
     module.register_with_server(server)?;
@@ -193,9 +200,16 @@ fn synth_inv_main(
                 .next()
                 .expect("synth should contain exactly one element");
 
-            // Call template builder using the single element
+            let start_template = Instant::now(); // Start the timer for template building
+                                                 // Call template builder using the single element
             let (temp_template, vars) =
                 build_template_expression(synth_val, &vc_expr.expr, &builder, &tcx);
+
+            let duration_template = start_template.elapsed(); // Template instantiation time
+            println!(
+                "Template building took: {:.2}",
+                duration_template.as_secs_f64()
+            );
 
             template_vars = vars;
             template = temp_template;
@@ -210,7 +224,7 @@ fn synth_inv_main(
             // Unfolding (applies substitutions)
             template_task.unfold(options, &limits_ref, &tcx)?;
 
-            println!("template: {:}", template_task.expr);
+            println!("template: {}", remove_casts(&(template_task.expr.clone())));
 
             let (&func_ident, func_entry) = synth
                 .iter()
@@ -251,7 +265,12 @@ fn synth_inv_main(
 
         let mut tvar_mapping: HashMap<ast::symbol::Ident, Expr> = HashMap::new();
 
+        let mut duration_check = Duration::new(0, 0);
+        let mut duration_template_inst = Duration::new(0, 0);
         loop {
+            let start_check = Instant::now(); // Start the timer for template building
+                                              // Call template builder using the single element
+
             iteration += 1;
             // println!("=== Refinement iteration {iteration} ===");
 
@@ -286,6 +305,7 @@ fn synth_inv_main(
             // Otherwise it will give us a cex (an evaluation of the program vars) that we will
             // add to the constraints on the template vars
             let prove_result = result.prove_result;
+            duration_check = start_check.elapsed() + duration_check; // Template instantiation time
 
             match prove_result {
                 ProveResult::Proof => {
@@ -300,7 +320,22 @@ fn synth_inv_main(
 
                     // Unfolding (applies substitutions)
                     template_task.unfold(options, &limits_ref, &tcx)?;
+                    let duration_inductivity = start_total.elapsed(); // Inductivity check time
                     println!("After {iteration} iterations, the following admissable invariant was found: {}", remove_casts(&template_task.expr));
+                    println!(
+                        "Total synthesis took: {:.2}",
+                        duration_inductivity.as_secs_f64()
+                    );
+                    println!(
+                        "Verification checks took: {:.2}",
+                        duration_check.as_secs_f64()
+                    );
+                     println!(
+                        "Template instantiation took: {:.2}",
+                        duration_template_inst.as_secs_f64()
+                    );
+
+
                     break;
                 }
                 ProveResult::Counterexample => {
@@ -320,6 +355,8 @@ fn synth_inv_main(
             }
 
             // --- Phase 2: Template-model search ---
+
+            let start_template_instatiate = Instant::now(); // Start the timer for template building
 
             // Here we add the original vc_tvars_pvars instantiated with the model for the program variables
             // to the constraint we use to find valuations for the template variables.
@@ -395,18 +432,15 @@ fn synth_inv_main(
                         deps: vcdeps.clone(),
                     };
 
-                    let refined_vc = lower_quant_prove_task(
-                        options,
-                        &limits_ref,
-                        &tcx,
-                        name,
-                        refined_vc,
-                    )?;
+                    let refined_vc =
+                        lower_quant_prove_task(options, &limits_ref, &tcx, name, refined_vc)?;
 
                     // Translate again to SMT form
                     vc_pvars = SmtVcProveTask::translate(refined_vc, &mut translate);
 
                     tvar_mapping = filtered_mapping;
+                    duration_template_inst = start_template_instatiate.elapsed() + duration_template_inst; // Template instantiation time
+
 
                     continue; // restart the loop with the new VC
                 } else {
