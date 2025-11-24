@@ -207,6 +207,18 @@ fn build_linear_combination(
     lin_comb.unwrap()
 }
 
+fn all_assignments(n: usize) -> Vec<Vec<bool>> {
+    let mut result = Vec::new();
+    for mask in 0..(1 << n) {
+        let mut v = Vec::with_capacity(n);
+        for i in 0..n {
+            v.push((mask & (1 << i)) != 0);
+        }
+        result.push(v);
+    }
+    result
+}
+
 // TODO: Currently this requires the variables to be named the same in both the function and the code
 // Build a template by collecting boolean conditions that are "relevant", calcu
 // and
@@ -263,36 +275,34 @@ pub fn build_template_expression(
 
     let mut final_expr: Option<Expr> = None;
 
-    for (bool_idx, b) in bool_exprs.iter().enumerate() {
-        // Create the positive and negative linear combinations
-        let lc_pos = build_linear_combination(
-            "pos",
-            bool_idx,
+    for (assign_idx, assignment) in all_assignments(bool_exprs.len()).into_iter().enumerate() {
+        // 1. Build Π_j Iverson(b_j or ¬b_j)
+        let mut iverson_prod = builder.one_lit(&TyKind::EUReal);
+
+        for (j, &assign_val) in assignment.iter().enumerate() {
+            let b = bool_exprs[j].clone();
+            let cond = if assign_val {
+                builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), b)
+            } else {
+                let not_b = builder.unary(UnOpKind::Not, Some(TyKind::Bool), b);
+                builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), not_b)
+            };
+
+            iverson_prod = builder.binary(BinOpKind::Mul, Some(TyKind::EUReal), iverson_prod, cond);
+        }
+
+        // 2. Build a linear combination for this assignment
+        let lc = build_linear_combination(
+            "case",
+            assign_idx,
             synth_val,
             builder,
             tcx,
             &mut declare_template_var,
         );
 
-        let lc_neg = build_linear_combination(
-            "neg",
-            bool_idx,
-            synth_val,
-            builder,
-            tcx,
-            &mut declare_template_var,
-        );
-
-        let b_iv = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), b.clone());
-        let not_b = builder.unary(UnOpKind::Not, Some(TyKind::Bool), b.clone());
-        let not_b_iv = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), not_b);
-
-        let term = builder.binary(
-            BinOpKind::Add,
-            Some(TyKind::EUReal),
-            builder.binary(BinOpKind::Mul, Some(TyKind::EUReal), b_iv, lc_pos),
-            builder.binary(BinOpKind::Mul, Some(TyKind::EUReal), not_b_iv, lc_neg),
-        );
+        // 3. Multiply and accumulate
+        let term = builder.binary(BinOpKind::Mul, Some(TyKind::EUReal), iverson_prod, lc);
 
         final_expr = Some(final_expr.map_or(term.clone(), |acc| {
             builder.binary(BinOpKind::Add, Some(TyKind::EUReal), acc, term)
