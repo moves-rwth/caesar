@@ -182,6 +182,7 @@ fn synth_inv_main(
         let mut vc_is_valid =
             lower_quant_prove_task(options, &limits_ref, &mut tcx, name, vc_expr.clone())?;
 
+        println!("vc_is_valid: {}", vc_is_valid.vc);
         let ctx = Context::new(&z3::Config::default());
         let function_encoder = mk_function_encoder(&tcx, &depgraph, options)?;
         let dep_config = DepConfig::Set(vc_is_valid.get_dependencies());
@@ -214,17 +215,7 @@ fn synth_inv_main(
             template_vars = vars;
             template = temp_template;
 
-            // Create a quantprovetask (so that we get the unfolding)
-            let mut template_task = QuantVcProveTask {
-                expr: template.clone(),
-                direction: direction,
-                deps: vcdeps.clone(),
-            };
-
-            // Unfolding (applies substitutions)
-            template_task.unfold(options, &limits_ref, &tcx)?;
-
-            println!("template: {}", remove_casts(&(template_task.expr.clone())));
+            println!("template: {}", remove_casts(&(template)));
 
             let (&func_ident, func_entry) = synth
                 .iter()
@@ -239,8 +230,12 @@ fn synth_inv_main(
 
             inliner.visit_expr(&mut vc_expr.expr).unwrap();
 
+
             vc_is_valid =
                 lower_quant_prove_task(options, &limits_ref, &tcx, name, vc_expr.clone())?;
+
+            println!("vc_is_valid after unfolding: {}", vc_is_valid.vc);
+
         }
 
         // This vc_tvars_pvars is the vc where both tvars and pvars are not instantiated.
@@ -330,11 +325,10 @@ fn synth_inv_main(
                         "Verification checks took: {:.2}",
                         duration_check.as_secs_f64()
                     );
-                     println!(
+                    println!(
                         "Template instantiation took: {:.2}",
                         duration_template_inst.as_secs_f64()
                     );
-
 
                     break;
                 }
@@ -439,8 +433,8 @@ fn synth_inv_main(
                     vc_pvars = SmtVcProveTask::translate(refined_vc, &mut translate);
 
                     tvar_mapping = filtered_mapping;
-                    duration_template_inst = start_template_instatiate.elapsed() + duration_template_inst; // Template instantiation time
-
+                    duration_template_inst =
+                        start_template_instatiate.elapsed() + duration_template_inst; // Template instantiation time
 
                     continue; // restart the loop with the new VC
                 } else {

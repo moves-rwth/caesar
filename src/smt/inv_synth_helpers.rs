@@ -6,17 +6,11 @@ use z3rro::{
 
 use crate::{
     ast::{
-        self,
-        util::FreeVariableCollector,
-        visit::{walk_expr, VisitorMut},
-        BinOpKind, DeclRef, Expr, ExprBuilder, ExprData, ExprKind, Ident, Shared, Span, Symbol,
-        TyKind, UnOpKind, VarDecl, VarKind,
-    },
-    smt::{
+        self, BinOpKind, DeclRef, Direction, Expr, ExprBuilder, ExprData, ExprKind, Ident, Shared, Span, Symbol, TyKind, UnOpKind, VarDecl, VarKind, util::FreeVariableCollector, visit::{VisitorMut, walk_expr}
+    }, depgraph::Dependencies, driver::quant_proof::{BoolVcProveTask, QuantVcProveTask}, smt::{
         symbolic::Symbolic,
         uninterpreted::{self, FuncEntry, Uninterpreteds},
-    },
-    tyctx::TyCtx,
+    }, tyctx::TyCtx
 };
 use std::collections::{HashMap, HashSet};
 
@@ -139,7 +133,6 @@ pub fn subst_from_mapping<'ctx>(mapping: HashMap<ast::symbol::Ident, Expr>, vc: 
 // A helper function to build the templates
 // returns (sum_(param_vars)( templ_var * param_var )) + templ_last
 fn build_linear_combination(
-    infix: &str,
     bool_idx: usize,
     synth_entry: &uninterpreted::FuncEntry,
     builder: &ExprBuilder,
@@ -166,8 +159,8 @@ fn build_linear_combination(
         // Create template variable
         // Template var name
         let name = format!(
-            "template_var_constraint{}_{}_{}",
-            bool_idx, vardecl.name.name, infix
+            "tvar{}_{}",
+            bool_idx, vardecl.name.name
         );
 
         let templ = declare_template_var(name);
@@ -188,8 +181,8 @@ fn build_linear_combination(
 
     // Add the "last" summand
     let last = declare_template_var(format!(
-        "template_var_constraint{}_last_{}",
-        bool_idx, infix
+        "tvar_{}_last",
+        bool_idx
     ));
 
     let lin_comb_with_last = lin_comb.map_or(last.clone(), |acc| {
@@ -277,23 +270,39 @@ pub fn build_template_expression(
 
     for (assign_idx, assignment) in all_assignments(bool_exprs.len()).into_iter().enumerate() {
         // 1. Build Π_j Iverson(b_j or ¬b_j)
-        let mut iverson_prod = builder.one_lit(&TyKind::EUReal);
+        let mut iverson_prod = builder.bool_lit(true);
 
         for (j, &assign_val) in assignment.iter().enumerate() {
             let b = bool_exprs[j].clone();
+            println!("expression: {b}");
             let cond = if assign_val {
-                builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), b)
+                b
             } else {
                 let not_b = builder.unary(UnOpKind::Not, Some(TyKind::Bool), b);
-                builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), not_b)
+                not_b
             };
 
-            iverson_prod = builder.binary(BinOpKind::Mul, Some(TyKind::EUReal), iverson_prod, cond);
+            iverson_prod = builder.binary(BinOpKind::And, Some(TyKind::Bool), iverson_prod, cond);
         }
+
+//Direkt filtern
+
+        iverson_prod = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), iverson_prod);
+
+        println!("iverson: {iverson_prod}");
+
+
+
+        //  let refined_vc =
+        //                 lower_quant_prove_task(options, &limits_ref, &tcx, name, refined_vc)?;
+
+        //             // Translate again to SMT form
+        //             vc_pvars = SmtVcProveTask::translate(refined_vc, &mut translate);
+
+
 
         // 2. Build a linear combination for this assignment
         let lc = build_linear_combination(
-            "case",
             assign_idx,
             synth_val,
             builder,

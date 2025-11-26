@@ -134,7 +134,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
             ExprKind::Unary(un_op, operand) => {
                 if let UnOpKind::Embed = un_op.node {
                     // If an embed expression is not top, then its Boolean
-                    // condition must be false.
+                    // condition must be false&negate_expr(operand.clone()).
                     return self.with_sat(&negate_expr(operand.clone()), callback);
                 }
             }
@@ -186,6 +186,57 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                     self.visit_expr(e)
                 }
             }
+            ExprKind::Unary(un_op, op) => match un_op.node {
+                UnOpKind::Iverson => {
+                    // First visit the operand
+                    self.visit_expr(op)?;
+
+                    // 1. Check if operand is satisfiable
+                    let sat_res = self.with_sat(&op.clone(), |this| this.visit_expr(op));
+
+                    if sat_res.is_none() {
+
+                        let builder = ExprBuilder::new(Span::dummy_span());
+                        *e = builder.zero_lit(&ty);
+                        return Ok(());
+                    }
+
+                    // If satisfiable, run visitor through it
+                    sat_res.unwrap()?;
+
+                    // 2. Check if operand is *not* top
+                    // If this returns None → operand is top (trivially valid)
+                    let non_top_res = self.with_nontop(&op.clone(), |this| this.visit_expr(op));
+
+                    if non_top_res.is_none() {
+                        let builder = ExprBuilder::new(Span::dummy_span());
+                        *e = builder.one_lit(&ty);
+                        return Ok(());
+                    }
+
+                    // Operand is neither unsat nor top → keep Iverson(op) unchanged
+                    non_top_res.unwrap()
+                }
+                UnOpKind::Not => {
+                    // First visit the operand
+                    self.visit_expr(op)?;
+
+                    // Check if the operand is also a Unary(Not, inner)
+                    if let ExprKind::Unary(inner_unop, inner_op) = &mut op.kind {
+                        if matches!(inner_unop.node, UnOpKind::Not) {
+                            // Double negation: remove both NOTs
+                            *e = inner_op.clone();
+                            return self.visit_expr(e);
+                        }
+                    }
+
+                    // Otherwise, keep the NOT as-is
+                    Ok(())
+                }
+
+                _ => walk_expr(self, e),
+            },
+
             ExprKind::Binary(bin_op, lhs, rhs) => match bin_op.node {
                 BinOpKind::Mul if matches!(ty, TyKind::Bool | TyKind::UReal | TyKind::EUReal) => {
                     // visit lhs normally first
@@ -201,6 +252,29 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                         Ok(())
                     }
                 }
+                BinOpKind::And => {
+                    self.visit_expr(lhs)?;
+                    let nonbot_res: Option<Result<(), LimitError>> =
+                        self.with_nonbot(lhs, |_| Ok(()));
+                    if nonbot_res.is_none() {
+                        // lhs is bottom -> entire result is bottom
+                        let builder = ExprBuilder::new(Span::dummy_span());
+                        *e = builder.bot_lit(&ty);
+                        return Ok(());
+                    }
+
+                    let non_top_res: Option<Result<(), LimitError>> =
+                        self.with_nontop(lhs, |_| Ok(()));
+                    if non_top_res.is_none() {
+                        // lhs is top → result = rhs
+                        *e = rhs.clone();
+                        return self.visit_expr(e);
+                    }
+
+                    // Visit rhs normally
+                    self.visit_expr(rhs)
+                }
+
                 BinOpKind::Impl | BinOpKind::Compare
                     if matches!(ty, TyKind::Bool | TyKind::EUReal) =>
                 {
