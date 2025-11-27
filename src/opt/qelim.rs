@@ -102,7 +102,7 @@ impl<'tcx> Qelim<'tcx> {
                 _ => {}
             },
             ExprKind::Unary(un_op, ref mut operand) => match un_op.node {
-                UnOpKind::Non => self.qelim_sup(operand),
+                UnOpKind::Non => self.qelim_inf(operand),
                 UnOpKind::Parens => self.qelim_sup(operand),
                 _ => {}
             },
