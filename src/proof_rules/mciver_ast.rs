@@ -138,14 +138,14 @@ impl Encoding for ASTAnnotation {
         inner_approximation_kind: ApproximationKind,
     ) -> ApproximationKind {
         match (fixpoint_semantics, inner_approximation_kind) {
-            (FixpointSemanticsKind::LeastFixedPoint, ApproximationKind::Exact) => {
-                ApproximationKind::Exact
+            (FixpointSemanticsKind::LeastFixedPoint, ApproximationKind::EXACT) => {
+                ApproximationKind::EXACT
             }
-            _ => ApproximationKind::Unknown,
+            _ => ApproximationKind::UNKNOWN,
         }
     }
 
-    fn sound_fixpoint_semantics_kind(&self, _direction: Direction) -> FixpointSemanticsKind {
+    fn default_fixpoint_semantics(&self, _direction: Direction) -> FixpointSemanticsKind {
         FixpointSemanticsKind::LeastFixedPoint
     }
 

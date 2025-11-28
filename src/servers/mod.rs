@@ -12,7 +12,7 @@ use crate::{
         item::{Item, SourceUnitName},
         smt_proof::SmtVcProveResult,
     },
-    proof_rules::calculus::SoundnessBlame,
+    proof_rules::calculus::ProcSoundness,
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
 };
@@ -192,7 +192,7 @@ pub trait Server: Send {
         name: &SourceUnitName,
         result: &mut SmtVcProveResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
-        soundness_blame: &SoundnessBlame,
+        proc_soundness: &ProcSoundness,
     ) -> Result<(), ServerError>;
 
     /// Return an exit code for the process.

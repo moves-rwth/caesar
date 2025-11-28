@@ -96,14 +96,14 @@ impl Encoding for PASTAnnotation {
         inner_approximation_kind: ApproximationKind,
     ) -> ApproximationKind {
         match (fixpoint_semantics, inner_approximation_kind) {
-            (FixpointSemanticsKind::LeastFixedPoint, ApproximationKind::Exact) => {
-                ApproximationKind::Exact
+            (FixpointSemanticsKind::LeastFixedPoint, ApproximationKind::EXACT) => {
+                ApproximationKind::EXACT
             }
-            _ => ApproximationKind::Unknown,
+            _ => ApproximationKind::UNKNOWN,
         }
     }
 
-    fn sound_fixpoint_semantics_kind(&self, direction: Direction) -> FixpointSemanticsKind {
+    fn default_fixpoint_semantics(&self, direction: Direction) -> FixpointSemanticsKind {
         match direction {
             Direction::Up => FixpointSemanticsKind::LeastFixedPoint,
             Direction::Down => FixpointSemanticsKind::GreatestFixedPoint,

@@ -13,7 +13,7 @@ use crate::{
         item::{Item, SourceUnitName},
         smt_proof::SmtVcProveResult,
     },
-    proof_rules::calculus::SoundnessBlame,
+    proof_rules::calculus::ProcSoundness,
     servers::FileStatus,
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
@@ -106,7 +106,7 @@ impl Server for TestServer {
         name: &SourceUnitName,
         result: &mut SmtVcProveResult<'ctx>,
         _translate: &mut TranslateExprs<'smt, 'ctx>,
-        _soundness_blame: &SoundnessBlame,
+        _proc_soundness: &ProcSoundness,
     ) -> Result<(), ServerError> {
         let statuses = &mut self
             .file_statuses

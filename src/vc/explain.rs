@@ -270,7 +270,7 @@ fn explain_unroll(
         stmt_span,
         call_span,
         direction,
-        calculus: None,
+        calculus: None, // calculus only affects the approximation, which is not relevant while explaining unrolling
     };
 
     // 1. generate the explanations for the loop body in k-1 iterations

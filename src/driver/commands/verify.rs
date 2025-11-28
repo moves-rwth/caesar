@@ -221,7 +221,10 @@ fn verify_files_main(
             let soundness_blame = soundness_map.get(item.name()).cloned().unwrap_or_default();
             item.flat_map(|unit| {
                 let core_verify_task = CoreVerifyTask::from_source_unit(unit, &mut depgraph);
-                core_verify_task.map(|task| task.with_soundness_blame(soundness_blame))
+                core_verify_task.map(|mut task| {
+                    task.proc_soundness = soundness_blame.clone();
+                    task
+                })
             })
         })
         .collect();
@@ -261,7 +264,7 @@ fn verify_files_main(
         // (depending on options).
         let vc_is_valid = lower_quant_prove_task(options, &limits_ref, &mut tcx, name, vc_expr)?;
 
-        let soundness_blame = verify_unit.soundness_blame.take().unwrap_or_default();
+        let soundness_blame = &verify_unit.proc_soundness;
 
         // Running the SMT prove task: translating to Z3, running the solver.
         let result = run_smt_prove_task(
@@ -273,7 +276,7 @@ fn verify_files_main(
             server,
             slice_vars,
             vc_is_valid,
-            &soundness_blame,
+            soundness_blame,
         )?;
 
         // Handle reasons to stop the verifier.

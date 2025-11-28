@@ -96,14 +96,14 @@ impl Encoding for UnrollAnnotation {
         fixpoint_semantics: FixpointSemanticsKind,
         inner_approximation_kind: ApproximationKind,
     ) -> ApproximationKind {
-        match fixpoint_semantics {
-            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::Under,
-            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::Over,
-        }
-        .infimum(inner_approximation_kind)
+        let approx = match fixpoint_semantics {
+            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::UNDER,
+            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::OVER,
+        };
+        approx & inner_approximation_kind
     }
 
-    fn sound_fixpoint_semantics_kind(&self, direction: Direction) -> FixpointSemanticsKind {
+    fn default_fixpoint_semantics(&self, direction: Direction) -> FixpointSemanticsKind {
         match direction {
             Direction::Up => FixpointSemanticsKind::GreatestFixedPoint,
             Direction::Down => FixpointSemanticsKind::LeastFixedPoint,

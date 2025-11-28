@@ -90,7 +90,7 @@ pub fn infer_fixpoint_semantics_kind(
 ) -> FixpointSemanticsKind {
     match calculus {
         Some(calculus) => calculus.calculus_type.to_fixed_point_semantics_kind(),
-        None => encoding.sound_fixpoint_semantics_kind(direction),
+        None => encoding.default_fixpoint_semantics(direction),
     }
 }
 
@@ -106,7 +106,7 @@ pub trait Encoding: fmt::Debug {
         args: &mut [Expr],
     ) -> Result<(), ResolveError>;
 
-    /// Typecheck the arguments of the annotation call
+    /// Typecheck the arguments of the annotation call.
     fn tycheck(
         &self,
         tycheck: &mut Tycheck<'_>,
@@ -114,7 +114,7 @@ pub trait Encoding: fmt::Debug {
         args: &mut [Expr],
     ) -> Result<(), TycheckError>;
 
-    /// Transform the annotated loop into a sequence of statements and declarations
+    /// Transform the annotated loop into a sequence of statements and declarations.
     fn transform(
         &self,
         tyctx: &TyCtx,
@@ -123,22 +123,22 @@ pub trait Encoding: fmt::Debug {
         enc_env: EncodingEnvironment,
     ) -> Result<GeneratedEncoding, AnnotationError>;
 
-    /// Check if the given calculus annotation is compatible with the encoding annotation
+    /// Check if the given calculus annotation is compatible with the encoding annotation.
     fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool;
 
-    /// Select an approximation kind based on the semantics type used.
+    /// Select an approximation kind based on the fixpoint semantics and inner approximation kind used.
     fn get_approximation(
         &self,
         fixpoint_semantics: FixpointSemanticsKind,
         inner_approximation_kind: ApproximationKind,
     ) -> ApproximationKind;
 
-    /// Get the sound fixpoint semantics kind for this encoding annotation based on the direction
+    /// Get the sound fixpoint semantics kind for this encoding annotation based on the direction.
     ///
-    /// This function is used when there is no calculus annotation present on the procedure
-    fn sound_fixpoint_semantics_kind(&self, direction: Direction) -> FixpointSemanticsKind;
+    /// This function is used when there is no calculus annotation present on the procedure.
+    fn default_fixpoint_semantics(&self, direction: Direction) -> FixpointSemanticsKind;
 
-    /// Indicates if the encoding annotation is required to be the last statement of a procedure
+    /// Indicates if the encoding annotation is required to be the last statement of a procedure.
     fn is_terminator(&self) -> bool;
 
     /// Return an [`Any`] reference for this encoding.
@@ -236,7 +236,7 @@ impl<'tcx> VisitorMut for EncodingVisitor<'tcx> {
         let proc = proc_ref.borrow();
 
         let curr_calculus =
-            get_calculus(&proc, self.tcx).map_err(EncodingVisitorError::Annotation)?;
+            get_proc_calculus(&proc, self.tcx).map_err(EncodingVisitorError::Annotation)?;
 
         // Store the current procedure context
         self.proc_context = Some(ProcContext {
@@ -392,14 +392,17 @@ impl<'tcx> VisitorMut for EncodingVisitor<'tcx> {
     }
 }
 
-/// Get the calculus from a procedure declaration if it exists
-/// Returns an error if the annotation is not valid
-pub fn get_calculus(proc: &ProcDecl, tcx: &TyCtx) -> Result<Option<Calculus>, AnnotationError> {
+/// Get the calculus from a procedure declaration if it exists.
+///
+/// Returns an error if the annotation is not valid.
+pub fn get_proc_calculus(
+    proc: &ProcDecl,
+    tcx: &TyCtx,
+) -> Result<Option<Calculus>, AnnotationError> {
     // If the procedure has a calculus annotation, try to extract it
     if let Some(ident) = proc.calculus.as_ref() {
         match tcx.get(*ident) {
             Some(decl) => {
-                // If the declaration is a calculus annotation, return it
                 if let DeclKind::AnnotationDecl(AnnotationKind::Calculus(calculus)) = decl.as_ref()
                 {
                     return Ok(Some(*calculus));

@@ -99,14 +99,14 @@ impl Encoding for InvariantAnnotation {
         fixpoint_semantics: FixpointSemanticsKind,
         inner_approximation_kind: ApproximationKind,
     ) -> ApproximationKind {
-        match fixpoint_semantics {
-            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::Over,
-            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::Under,
-        }
-        .infimum(inner_approximation_kind)
+        let approx = match fixpoint_semantics {
+            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::OVER,
+            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::UNDER,
+        };
+        approx & inner_approximation_kind
     }
 
-    fn sound_fixpoint_semantics_kind(&self, direction: Direction) -> FixpointSemanticsKind {
+    fn default_fixpoint_semantics(&self, direction: Direction) -> FixpointSemanticsKind {
         match direction {
             Direction::Up => FixpointSemanticsKind::LeastFixedPoint,
             Direction::Down => FixpointSemanticsKind::GreatestFixedPoint,
@@ -202,14 +202,14 @@ impl Encoding for KIndAnnotation {
         fixpoint_semantics: FixpointSemanticsKind,
         inner_approximation_kind: ApproximationKind,
     ) -> ApproximationKind {
-        match fixpoint_semantics {
-            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::Over,
-            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::Under,
-        }
-        .infimum(inner_approximation_kind)
+        let approx = match fixpoint_semantics {
+            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::OVER,
+            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::UNDER,
+        };
+        approx & inner_approximation_kind
     }
 
-    fn sound_fixpoint_semantics_kind(&self, direction: Direction) -> FixpointSemanticsKind {
+    fn default_fixpoint_semantics(&self, direction: Direction) -> FixpointSemanticsKind {
         match direction {
             Direction::Up => FixpointSemanticsKind::LeastFixedPoint,
             Direction::Down => FixpointSemanticsKind::GreatestFixedPoint,
