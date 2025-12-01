@@ -263,7 +263,7 @@ fn synth_inv_main(
         }
 
         let mut iteration = 0;
-        const MAX_REFINEMENT_ITERS: usize = 2;
+        const MAX_REFINEMENT_ITERS: usize = 40;
 
         // In the first iteration we will use the vc where both tvars and pvars are uninstantiated, but
         // starting from the second loop iteration, the tvars will be instantiated with some value
