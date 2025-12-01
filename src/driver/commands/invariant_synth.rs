@@ -4,6 +4,9 @@ use crate::ast::util::remove_casts;
 use crate::ast::visit::VisitorMut;
 use crate::ast::Ident;
 use crate::driver::smt_proof::get_model_for_constraints;
+use crate::opt::remove_neutrals::NeutralsRemover;
+use crate::opt::unfolder::Unfolder;
+use crate::smt::funcs::axiomatic::AxiomaticFunctionEncoder;
 use crate::smt::inv_synth_helpers::{
     build_template_expression, create_subst_mapping, get_synth_functions, subst_from_mapping,
 };
@@ -22,7 +25,7 @@ use crate::{
     servers::{Server, SharedServer},
     smt::{inv_synth_helpers::FunctionInliner, translate_exprs::TranslateExprs, DepConfig, SmtCtx},
 };
-use z3::Context;
+use z3::{Config, Context};
 use z3rro::prover::ProveResult;
 ///! Right now, just imagine there is only one syn fun. Later maybe some sort of counting up should happen?
 ///! How do I actually put the template instance into the function?
@@ -180,9 +183,7 @@ fn synth_inv_main(
         // (depending on options).
         // TODO: think about quantifier elimination
         let mut vc_is_valid =
-            lower_quant_prove_task(options, &limits_ref, &mut tcx, name, vc_expr.clone())?;
-
-        println!("vc_is_valid: {}", vc_is_valid.vc);
+            lower_quant_prove_task(options, &limits_ref, &tcx, name, vc_expr.clone())?;
         let ctx = Context::new(&z3::Config::default());
         let function_encoder = mk_function_encoder(&tcx, &depgraph, options)?;
         let dep_config = DepConfig::Set(vc_is_valid.get_dependencies());
@@ -214,7 +215,19 @@ fn synth_inv_main(
 
             template_vars = vars;
             template = temp_template;
-
+            let ctx = Context::new(&Config::default());
+            let dep_config = DepConfig::SpecsOnly;
+            let smt_ctx = SmtCtx::new(
+                &ctx,
+                &tcx,
+                Box::new(AxiomaticFunctionEncoder::default()),
+                dep_config,
+            );
+            let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
+            unfolder.visit_expr(&mut template)?;
+            let mut neutrals_remover = NeutralsRemover::new(limits_ref.clone(), &smt_ctx);
+            neutrals_remover.visit_expr(&mut template)?;
+            // template = refined_template.vc;
             println!("template: {}", remove_casts(&(template)));
 
             let (&func_ident, func_entry) = synth
@@ -230,13 +243,11 @@ fn synth_inv_main(
 
             inliner.visit_expr(&mut vc_expr.expr).unwrap();
 
-
             vc_is_valid =
                 lower_quant_prove_task(options, &limits_ref, &tcx, name, vc_expr.clone())?;
-
-            println!("vc_is_valid after unfolding: {}", vc_is_valid.vc);
-
         }
+
+       
 
         // This vc_tvars_pvars is the vc where both tvars and pvars are not instantiated.
         // This will be needed later because it will repeatedly get initiated with new tvars,
@@ -252,7 +263,7 @@ fn synth_inv_main(
         }
 
         let mut iteration = 0;
-        const MAX_REFINEMENT_ITERS: usize = 70;
+        const MAX_REFINEMENT_ITERS: usize = 2;
 
         // In the first iteration we will use the vc where both tvars and pvars are uninstantiated, but
         // starting from the second loop iteration, the tvars will be instantiated with some value
@@ -312,9 +323,9 @@ fn synth_inv_main(
                         direction: direction,
                         deps: vcdeps,
                     };
-
                     // Unfolding (applies substitutions)
                     template_task.unfold(options, &limits_ref, &tcx)?;
+                    template_task.remove_neutrals(&limits_ref, &tcx)?;
                     let duration_inductivity = start_total.elapsed(); // Inductivity check time
                     println!("After {iteration} iterations, the following admissable invariant was found: {}", remove_casts(&template_task.expr));
                     println!(
@@ -399,6 +410,9 @@ fn synth_inv_main(
                     quant_vc: constraints_on_tvars_task,
                     vc: constraints.clone(),
                 };
+
+                println!("constraints_on_tvars: {}", {&constraints_on_tvars_bool_task.vc});
+
 
                 // --- Phase 3: Evaluate template variables in original vc ---
 

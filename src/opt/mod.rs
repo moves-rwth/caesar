@@ -27,6 +27,7 @@ mod fuzz_test;
 pub mod qelim;
 pub mod relational;
 pub mod unfolder;
+pub mod remove_neutrals;
 
 /// This "optimization" removes all parentheses. This makes matching easier in
 /// the real optimizations.

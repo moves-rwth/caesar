@@ -35,49 +35,48 @@ impl Expr {
     ///   a) as the condition of an ITE
     ///   b) as the operand of an Iverson `[expr]`
     pub fn collect_bool_conditions(&self) -> Vec<Expr> {
-    let mut out = Vec::new();
-    let mut seen: Vec<*const Expr> = Vec::new(); // raw pointers for identity check
-    self.collect_bool_conditions_rec(&mut out, &mut seen);
-    out
-}
+        let mut out = Vec::new();
+        let mut seen: Vec<*const Expr> = Vec::new(); // raw pointers for identity check
+        self.collect_bool_conditions_rec(&mut out, &mut seen);
+        out
+    }
 
-fn collect_bool_conditions_rec(&self, out: &mut Vec<Expr>, seen: &mut Vec<*const Expr>) {
-    match &self.kind {
-        // --- a) ITE condition ---
-        ExprKind::Ite(cond, then_branch, else_branch) => {
-            let cond_ptr = cond as *const Expr;
+    fn collect_bool_conditions_rec(&self, out: &mut Vec<Expr>, seen: &mut Vec<*const Expr>) {
+        match &self.kind {
+            // --- a) ITE condition ---
+            ExprKind::Ite(cond, then_branch, else_branch) => {
+                let cond_ptr = cond as *const Expr;
 
-            if !seen.contains(&cond_ptr) {
-                out.push(cond.clone());
-                seen.push(cond_ptr);
+                if !seen.contains(&cond_ptr) {
+                    out.push(cond.clone());
+                    seen.push(cond_ptr);
+                }
+
+                cond.collect_bool_conditions_rec(out, seen);
+                then_branch.collect_bool_conditions_rec(out, seen);
+                else_branch.collect_bool_conditions_rec(out, seen);
             }
 
-            cond.collect_bool_conditions_rec(out, seen);
-            then_branch.collect_bool_conditions_rec(out, seen);
-            else_branch.collect_bool_conditions_rec(out, seen);
-        }
+            // --- b) Unary Iverson operator ---
+            ExprKind::Unary(un_op, operand) if matches!(un_op.node, UnOpKind::Iverson) => {
+                let operand_ptr = operand as *const Expr;
 
-        // --- b) Unary Iverson operator ---
-        ExprKind::Unary(un_op, operand) if matches!(un_op.node, UnOpKind::Iverson) => {
-            let operand_ptr = operand as *const Expr;
+                if !seen.contains(&operand_ptr) {
+                    out.push(operand.clone());
+                    seen.push(operand_ptr);
+                }
 
-            if !seen.contains(&operand_ptr) {
-                out.push(operand.clone());
-                seen.push(operand_ptr);
+                operand.collect_bool_conditions_rec(out, seen);
             }
 
-            operand.collect_bool_conditions_rec(out, seen);
-        }
-
-        // All other expression types: recurse into children
-        _ => {
-            for child in self.children() {
-                child.collect_bool_conditions_rec(out, seen);
+            // All other expression types: recurse into children
+            _ => {
+                for child in self.children() {
+                    child.collect_bool_conditions_rec(out, seen);
+                }
             }
         }
     }
-}
-
 }
 
 impl fmt::Display for Expr {
@@ -440,8 +439,25 @@ impl LitKind {
     pub fn is_bot(&self) -> bool {
         match self {
             LitKind::UInt(num) => num.is_zero(),
+            LitKind::Int(num) => num.is_zero(),
             LitKind::Frac(frac) => frac.is_zero(),
             LitKind::Bool(b) => !b,
+            _ => false,
+        }
+    }
+    pub fn is_zero(&self) -> bool {
+        match self {
+            LitKind::UInt(num) => num.is_zero(),
+            LitKind::Int(num) => num.is_zero(),
+            LitKind::Frac(frac) => frac.is_zero(),
+            _ => false,
+        }
+    }
+     pub fn is_one(&self) -> bool {
+        match self {
+            LitKind::UInt(num) => num.is_one(),
+            LitKind::Int(num) => num.is_one(),
+            LitKind::Frac(frac) => frac.is_one(),
             _ => false,
         }
     }
@@ -686,7 +702,7 @@ impl ExprBuilder {
     pub fn frac_lit(&self, value: BigRational) -> Expr {
         Shared::new(ExprData {
             kind: ExprKind::Lit(Spanned::new(self.span, LitKind::Frac(value))),
-            ty: Some(TyKind::EUReal),
+            ty: Some(TyKind::UReal),
             span: self.span,
         })
     }

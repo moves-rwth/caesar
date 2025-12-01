@@ -6,8 +6,8 @@ use z3rro::{
 
 use crate::{
     ast::{
-        self, BinOpKind, DeclRef, Direction, Expr, ExprBuilder, ExprData, ExprKind, Ident, Shared, Span, Symbol, TyKind, UnOpKind, VarDecl, VarKind, util::FreeVariableCollector, visit::{VisitorMut, walk_expr}
-    }, depgraph::Dependencies, driver::quant_proof::{BoolVcProveTask, QuantVcProveTask}, smt::{
+        self, BinOpKind, DeclRef, Expr, ExprBuilder, ExprData, ExprKind, Ident, Shared, Span, Symbol, TyKind, UnOpKind, VarDecl, VarKind, util::FreeVariableCollector, visit::{VisitorMut, walk_expr}
+    }, smt::{
         symbolic::Symbolic,
         uninterpreted::{self, FuncEntry, Uninterpreteds},
     }, tyctx::TyCtx
@@ -274,7 +274,6 @@ pub fn build_template_expression(
 
         for (j, &assign_val) in assignment.iter().enumerate() {
             let b = bool_exprs[j].clone();
-            println!("expression: {b}");
             let cond = if assign_val {
                 b
             } else {
@@ -285,11 +284,10 @@ pub fn build_template_expression(
             iverson_prod = builder.binary(BinOpKind::And, Some(TyKind::Bool), iverson_prod, cond);
         }
 
-//Direkt filtern
+// TODO: Direkt filtern (either use the unfolder or put parts of the unfolder here?)
+// (we basically only need with_sat here)
 
         iverson_prod = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), iverson_prod);
-
-        println!("iverson: {iverson_prod}");
 
 
 

@@ -12,8 +12,8 @@ use crate::{
     depgraph::Dependencies,
     driver::{commands::verify::VerifyCommand, error::CaesarError, item::SourceUnitName},
     opt::{
-        boolify::Boolify, egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder,
-        RemoveParens,
+        boolify::Boolify, egraph, qelim::Qelim, relational::Relational,
+        remove_neutrals::NeutralsRemover, unfolder::Unfolder, RemoveParens,
     },
     resource_limits::{LimitError, LimitsRef},
     smt::{funcs::axiomatic::AxiomaticFunctionEncoder, DepConfig, SmtCtx},
@@ -44,6 +44,8 @@ pub fn lower_quant_prove_task(
 
     // 3. Now turn this quantitative formula into a Boolean one
     let mut bool_task = quant_task.into_bool_vc();
+
+     println!("vc_tvars_pvars: {}", {&bool_task.vc});
 
     if options.opt_options.egraph {
         bool_task.egraph_simplify();
@@ -105,6 +107,25 @@ impl QuantVcProveTask {
             apply_subst(tcx, &mut self.expr, limits_ref)?;
             Ok(())
         }
+    }
+
+    pub fn remove_neutrals(
+        &mut self,
+        limits_ref: &LimitsRef,
+        tcx: &TyCtx,
+    ) -> Result<(), LimitError> {
+        let span = info_span!("unfolding");
+        let _entered = span.enter();
+        let ctx = Context::new(&Config::default());
+        let dep_config = DepConfig::SpecsOnly;
+        let smt_ctx = SmtCtx::new(
+            &ctx,
+            tcx,
+            Box::new(AxiomaticFunctionEncoder::default()),
+            dep_config,
+        );
+        let mut neutrals_remover = NeutralsRemover::new(limits_ref.clone(), &smt_ctx);
+        neutrals_remover.visit_expr(&mut self.expr)
     }
 
     /// Apply quantitative quantifier elimination.

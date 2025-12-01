@@ -1,6 +1,8 @@
 // Using [`IndexSet`], which is a HashSet that preserves the insertion order, for deterministic results
 use indexmap::IndexSet;
 
+use crate::ast::UnOpKind;
+
 use super::{
     visit::{walk_expr, walk_stmt, VisitorMut},
     Direction, Expr, ExprKind, Ident, StmtKind,
@@ -139,6 +141,35 @@ pub fn is_bot_lit(expr: &Expr) -> bool {
     }
 }
 
+pub fn is_zero_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(lit) => lit.node.is_zero(),
+        ExprKind::Cast(inner) => match &inner.kind {
+            ExprKind::Lit(lit) => lit.node.is_zero(),
+            _ => false,
+        },
+        ExprKind::Unary(un_op, inner) => match un_op.node {
+            UnOpKind::Parens => is_zero_lit(inner),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+pub fn is_one_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(lit) => lit.node.is_one(),
+        ExprKind::Cast(inner) => match &inner.kind {
+            ExprKind::Lit(lit) => lit.node.is_one(),
+            _ => false,
+        },
+        ExprKind::Unary(un_op, inner) => match un_op.node {
+            UnOpKind::Parens => is_one_lit(inner),
+            _ => false,
+        },
+        _ => false,
+    }
+}
 /// Remove [`ExprKind::Cast`] from this expression. This is mainly used to make
 /// the pretty-printed expression look less verbose.
 pub fn remove_casts(expr: &Expr) -> Expr {

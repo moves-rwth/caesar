@@ -395,7 +395,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                         let operand = self.t_ureal(operand);
                         operand.into_real()
                     }
-                    _ => panic!("illegal cast to {:?} from {:?}", &expr.ty, &operand.ty),
+                    _ => panic!("illegal cast to {:?} from {:?} ({expr} and {operand})", &expr.ty, &operand.ty),
                 }
             }
             ExprKind::Quant(_, _, _, _) => todo!(),
