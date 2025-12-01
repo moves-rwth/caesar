@@ -31,7 +31,7 @@ use crate::{
     ast::{
         util::{is_bot_lit, is_one_lit, is_top_lit, is_zero_lit},
         visit::{walk_expr, VisitorMut},
-        BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Shared, Span, SpanVariant, Spanned,
+        BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Shared, Span, Spanned,
         TyKind, UnOpKind,
     },
     resource_limits::{LimitError, LimitsRef},
@@ -124,25 +124,6 @@ impl<'smt, 'ctx> NeutralsRemover<'smt, 'ctx> {
                 _ => {}
             },
             _ if is_bot_lit(expr) => return None,
-            _ => {}
-        }
-        Some(callback(self))
-    }
-
-    fn with_nonzero<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
-        match &expr.kind {
-            ExprKind::Unary(un_op, operand) => match un_op.node {
-                UnOpKind::Embed | UnOpKind::Iverson => {
-                    // If an embed or Iverson expression are nonzero, we know
-                    // the Boolean expression must be true.
-                    return self.with_sat(operand, callback);
-                }
-                UnOpKind::Parens => {
-                    return self.with_nonzero(operand, callback);
-                }
-                _ => {}
-            },
-            _ if is_zero_lit(expr) => return None,
             _ => {}
         }
         Some(callback(self))

@@ -135,6 +135,7 @@ pub fn subst_from_mapping<'ctx>(mapping: HashMap<ast::symbol::Ident, Expr>, vc: 
 fn build_linear_combination(
     bool_idx: usize,
     synth_entry: &uninterpreted::FuncEntry,
+    synth_name: &Ident,
     builder: &ExprBuilder,
     tcx: &TyCtx,
     declare_template_var: &mut dyn FnMut(String) -> Expr,
@@ -159,8 +160,8 @@ fn build_linear_combination(
         // Create template variable
         // Template var name
         let name = format!(
-            "tvar{}_{}",
-            bool_idx, vardecl.name.name
+            "tvar_{synth_name}_{bool_idx}_{}",
+            vardecl.name.name
         );
 
         let templ = declare_template_var(name);
@@ -181,8 +182,8 @@ fn build_linear_combination(
 
     // Add the "last" summand
     let last = declare_template_var(format!(
-        "tvar_{}_last",
-        bool_idx
+        "tvar_{synth_name}_{bool_idx}_last",
+        
     ));
 
     let lin_comb_with_last = lin_comb.map_or(last.clone(), |acc| {
@@ -216,6 +217,7 @@ fn all_assignments(n: usize) -> Vec<Vec<bool>> {
 // Build a template by collecting boolean conditions that are "relevant", calcu
 // and
 pub fn build_template_expression(
+    synth_name: &Ident,
     synth_val: &uninterpreted::FuncEntry,
     vc_expr: &Expr,
     builder: &ExprBuilder,
@@ -290,19 +292,11 @@ pub fn build_template_expression(
         iverson_prod = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), iverson_prod);
 
 
-
-        //  let refined_vc =
-        //                 lower_quant_prove_task(options, &limits_ref, &tcx, name, refined_vc)?;
-
-        //             // Translate again to SMT form
-        //             vc_pvars = SmtVcProveTask::translate(refined_vc, &mut translate);
-
-
-
         // 2. Build a linear combination for this assignment
         let lc = build_linear_combination(
             assign_idx,
             synth_val,
+            synth_name,
             builder,
             tcx,
             &mut declare_template_var,

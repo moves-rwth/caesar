@@ -192,62 +192,68 @@ fn synth_inv_main(
 
         let synth = get_synth_functions(smt_ctx.uninterpreteds());
 
-        let mut template = builder.bool_lit(true);
+        let mut templates = Vec::new(); // list of templates (one per synth fn)
+        let mut all_template_vars = Vec::new();
 
-        let mut template_vars = Vec::new();
         if !synth.is_empty() {
-            // Right now, assume that there is only one syn function
-            let (_synth_name, synth_val) = synth
-                .iter()
-                .next()
-                .expect("synth should contain exactly one element");
+            for (synth_name, synth_val) in synth.iter() {
+                let start_template = Instant::now();
 
-            let start_template = Instant::now(); // Start the timer for template building
-                                                 // Call template builder using the single element
-            let (temp_template, vars) =
-                build_template_expression(synth_val, &vc_expr.expr, &builder, &tcx);
+                // Build template for this particular synthesized function
+                let (temp_template, vars) =
+                    build_template_expression(synth_name, synth_val, &vc_expr.expr, &builder, &tcx);
 
-            let duration_template = start_template.elapsed(); // Template instantiation time
-            println!(
-                "Template building took: {:.2}",
-                duration_template.as_secs_f64()
-            );
+                let duration_template = start_template.elapsed();
+                println!(
+                    "Template building for `{}` took: {:.2}",
+                    synth_name,
+                    duration_template.as_secs_f64()
+                );
 
-            template_vars = vars;
-            template = temp_template;
-            let ctx = Context::new(&Config::default());
-            let dep_config = DepConfig::SpecsOnly;
-            let smt_ctx = SmtCtx::new(
-                &ctx,
-                &tcx,
-                Box::new(AxiomaticFunctionEncoder::default()),
-                dep_config,
-            );
-            let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx);
-            unfolder.visit_expr(&mut template)?;
-            let mut neutrals_remover = NeutralsRemover::new(limits_ref.clone(), &smt_ctx);
-            neutrals_remover.visit_expr(&mut template)?;
-            // template = refined_template.vc;
-            println!("template: {}", remove_casts(&(template)));
+                all_template_vars.extend(vars);
 
-            let (&func_ident, func_entry) = synth
-                .iter()
-                .next()
-                .expect("synth should contain exactly one function");
+                // Process the template (unfold, neutral removal, etc.)
+                let ctx = Context::new(&Config::default());
+                let dep_config = DepConfig::SpecsOnly;
+                let smt_ctx_local = SmtCtx::new(
+                    &ctx,
+                    &tcx,
+                    Box::new(AxiomaticFunctionEncoder::default()),
+                    dep_config,
+                );
 
-            let mut inliner = FunctionInliner {
-                target: func_ident,
-                body: &template,
-                entry: func_entry,
-            };
+                let mut tpl = temp_template.clone();
+                let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx_local);
+                unfolder.visit_expr(&mut tpl)?;
 
-            inliner.visit_expr(&mut vc_expr.expr).unwrap();
+                let mut neutrals_remover = NeutralsRemover::new(limits_ref.clone(), &smt_ctx_local);
+                neutrals_remover.visit_expr(&mut tpl)?;
 
+                println!("template for `{}`: {}", synth_name, remove_casts(&tpl));
+
+                // Store the processed template
+                templates.push((synth_name.clone(), tpl));
+            }
+
+            // Now inline ALL templates into vc_expr
+            for (func_ident, template_expr) in templates.iter() {
+                let func_entry = synth
+                    .get(func_ident)
+                    .expect("synth function disappeared unexpectedly");
+
+                let mut inliner = FunctionInliner {
+                    target: *func_ident,
+                    body: template_expr,
+                    entry: func_entry,
+                };
+
+                inliner.visit_expr(&mut vc_expr.expr).unwrap();
+            }
+
+            // Finally: check validity of the VC with all templates inlined
             vc_is_valid =
                 lower_quant_prove_task(options, &limits_ref, &tcx, name, vc_expr.clone())?;
         }
-
-       
 
         // This vc_tvars_pvars is the vc where both tvars and pvars are not instantiated.
         // This will be needed later because it will repeatedly get initiated with new tvars,
@@ -316,18 +322,34 @@ fn synth_inv_main(
             match prove_result {
                 ProveResult::Proof => {
                     num_proven += 1;
-                    let instantiated_template = subst_from_mapping(tvar_mapping, &template);
 
-                    let mut template_task = QuantVcProveTask {
-                        expr: instantiated_template,
-                        direction: direction,
-                        deps: vcdeps,
-                    };
-                    // Unfolding (applies substitutions)
-                    template_task.unfold(options, &limits_ref, &tcx)?;
-                    template_task.remove_neutrals(&limits_ref, &tcx)?;
-                    let duration_inductivity = start_total.elapsed(); // Inductivity check time
-                    println!("After {iteration} iterations, the following admissable invariant was found: {}", remove_casts(&template_task.expr));
+                    let mut instantiated_tasks = Vec::new();
+
+                    for (synth_name, template_expr) in templates.iter() {
+                        let instantiated = subst_from_mapping(tvar_mapping.clone(), template_expr);
+
+                        let mut task = QuantVcProveTask {
+                            expr: instantiated,
+                            direction,
+                            deps: vcdeps.clone(),
+                        };
+
+                        task.unfold(options, &limits_ref, &tcx)?;
+                        task.remove_neutrals(&limits_ref, &tcx)?;
+
+                        instantiated_tasks.push((synth_name.clone(), task));
+                    }
+
+                    let duration_inductivity = start_total.elapsed();
+
+                    println!(
+        "After {iteration} iterations, the following admissible invariants were found:"
+    );
+
+                    for (name, task) in instantiated_tasks.iter() {
+                        println!("  {} := {}", name, remove_casts(&task.expr));
+                    }
+
                     println!(
                         "Total synthesis took: {:.2}",
                         duration_inductivity.as_secs_f64()
@@ -343,6 +365,7 @@ fn synth_inv_main(
 
                     break;
                 }
+
                 ProveResult::Counterexample => {
                     // println!("Counterexample found, refining template variables...");
                 }
@@ -372,47 +395,46 @@ fn synth_inv_main(
 
                 let filtered_mapping: HashMap<Ident, Expr> = mapping
                     .iter()
-                    .filter(|(key, _)| !template_vars.contains(key))
+                    .filter(|(key, _)| !all_template_vars.contains(key))
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
 
                 let vc_tvars = subst_from_mapping(filtered_mapping, &vc_tvars_pvars.quant_vc.expr);
 
                 // Create a quantprovetask (so that we get the unfolding)
-                let mut constraints_on_tvars_task = QuantVcProveTask {
+                let constraints_on_tvars_task = QuantVcProveTask {
                     expr: vc_tvars,
                     direction: direction,
                     deps: vcdeps.clone(),
                 };
 
-                // Unfolding (applies substitutions)
-                constraints_on_tvars_task.unfold(options, &limits_ref, &tcx)?;
+                let new_constraint = match lower_quant_prove_task(
+                    options,
+                    &limits_ref,
+                    &tcx,
+                    name,
+                    constraints_on_tvars_task,
+                ) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        // handle or return the error
+                        return Err(e.into());
+                    }
+                };
 
-                // For validity later, we will look for a model, s.t. expr = bot
-                let bot = builder.bot_lit(constraints_on_tvars_task.expr.ty.as_ref().unwrap());
-                let new_constraint = builder.binary(
-                    BinOpKind::Eq,
-                    Some(TyKind::Bool),
-                    constraints_on_tvars_task.expr.clone(),
-                    bot,
-                );
-
-                // Add the new constraint to the constraint-"set" via conjunction
+                // Add the new constraint to the constraint-set via conjunction
                 constraints = builder.binary(
                     BinOpKind::And,
                     Some(TyKind::Bool),
-                    new_constraint,
+                    new_constraint.vc,
                     constraints,
                 );
 
                 // Create a Boolean verification task from the constraints
                 let constraints_on_tvars_bool_task = BoolVcProveTask {
-                    quant_vc: constraints_on_tvars_task,
+                    quant_vc: new_constraint.quant_vc,
                     vc: constraints.clone(),
                 };
-
-                println!("constraints_on_tvars: {}", {&constraints_on_tvars_bool_task.vc});
-
 
                 // --- Phase 3: Evaluate template variables in original vc ---
 
@@ -426,7 +448,7 @@ fn synth_inv_main(
                 )? {
                     let filtered_mapping: HashMap<Ident, Expr> = mapping
                         .iter()
-                        .filter(|(key, _)| template_vars.contains(key))
+                        .filter(|(key, _)| all_template_vars.contains(key))
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .collect();
 

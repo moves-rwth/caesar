@@ -45,8 +45,6 @@ pub fn lower_quant_prove_task(
     // 3. Now turn this quantitative formula into a Boolean one
     let mut bool_task = quant_task.into_bool_vc();
 
-     println!("vc_tvars_pvars: {}", {&bool_task.vc});
-
     if options.opt_options.egraph {
         bool_task.egraph_simplify();
     }
