@@ -172,7 +172,7 @@ fn synth_inv_main(
         )?;
 
         // The constraints are a conjunction of Expressions, so we start with true
-        let builder = ExprBuilder::new(Span::dummy_span());
+        let mut builder = ExprBuilder::new(Span::dummy_span());
         let mut constraints = builder.bool_lit(true);
 
         let direction = vc_expr.direction.clone();
@@ -201,7 +201,7 @@ fn synth_inv_main(
 
                 // Build template for this particular synthesized function
                 let (temp_template, vars) =
-                    build_template_expression(synth_name, synth_val, &vc_expr.expr, &builder, &tcx);
+                    build_template_expression(synth_name, synth_val, &vc_expr.expr, &mut builder, &tcx, 1, &mut translate, &ctx);
 
                 let duration_template = start_template.elapsed();
                 println!(
@@ -269,7 +269,7 @@ fn synth_inv_main(
         }
 
         let mut iteration = 0;
-        const MAX_REFINEMENT_ITERS: usize = 40;
+        const MAX_REFINEMENT_ITERS: usize = 80;
 
         // In the first iteration we will use the vc where both tvars and pvars are uninstantiated, but
         // starting from the second loop iteration, the tvars will be instantiated with some value

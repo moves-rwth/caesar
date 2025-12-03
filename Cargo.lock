@@ -1201,9 +1201,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.27"
+version = "0.4.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
+checksum = "34080505efa8e45a4b816c349525ebe327ceaa8559756f0356cba97ef3bf7432"
 
 [[package]]
 name = "lsp-server"
@@ -2752,8 +2752,9 @@ dependencies = [
 
 [[package]]
 name = "z3"
-version = "0.13.2"
-source = "git+https://github.com/prove-rs/z3.rs.git?rev=8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989#8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11593be221028adbadaa25a9ace764693d059c51d58870b27d8c78582aaa6574"
 dependencies = [
  "log",
  "num",
@@ -2862,3 +2863,8 @@ dependencies = [
  "quote",
  "syn 2.0.104",
 ]
+
+[[patch.unused]]
+name = "z3"
+version = "0.13.2"
+source = "git+https://github.com/prove-rs/z3.rs.git?rev=8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989#8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989"
