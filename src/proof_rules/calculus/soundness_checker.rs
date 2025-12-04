@@ -39,69 +39,49 @@ pub struct ApproximationRecord {
     pub stmt_kind: StmtKindName,
     pub kind: ApproximationKind,
 }
-#[derive(Debug, Clone, Default)]
-pub struct ApproximationList(pub Vec<ApproximationRecord>);
+// #[derive(Debug, Clone, Default)]
+// pub struct ApproximationList(pub Vec<ApproximationRecord>);
 
-impl IntoIterator for ApproximationList {
-    type Item = ApproximationRecord;
-    type IntoIter = std::vec::IntoIter<ApproximationRecord>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
-    }
-}
+pub type ApproximationList = Vec<ApproximationRecord>;
 
-impl<'a> IntoIterator for &'a ApproximationList {
-    type Item = &'a ApproximationRecord;
-    type IntoIter = std::slice::Iter<'a, ApproximationRecord>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a mut ApproximationList {
-    type Item = &'a mut ApproximationRecord;
-    type IntoIter = std::slice::IterMut<'a, ApproximationRecord>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.iter_mut()
-    }
-}
-
-impl ApproximationList {
-    pub fn infimum(&self) -> ApproximationKind {
-        self.0
-            .iter()
-            .fold(ApproximationKind::EXACT, |acc, approx_entry| {
-                acc & approx_entry.kind
-            })
-    }
-
-    // convenience helpers
-    pub fn push(&mut self, rec: ApproximationRecord) {
-        self.0.push(rec)
-    }
-
-    pub fn iter(&self) -> std::slice::Iter<'_, ApproximationRecord> {
-        self.0.iter()
-    }
-}
-
-impl From<Vec<ApproximationRecord>> for ApproximationList {
-    fn from(v: Vec<ApproximationRecord>) -> Self {
-        ApproximationList(v)
-    }
-}
-
-impl std::ops::Deref for ApproximationList {
-    type Target = Vec<ApproximationRecord>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for ApproximationList {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
+/// Compute the infimum of approximation kinds in the given approximation list.
+///
+/// This is done by folding the list with the `BitAnd` operation defined for `ApproximationKind`.
+///
+/// ---
+///
+/// Examples:
+///
+/// If `approximations` is empty, the default value is `ApproximationKind::EXACT` as an empty list means no approximations were made.
+/// ```
+/// let approximations = vec![];
+/// assert_eq!(infimum_of_approximation_list(&approximations), ApproximationKind::EXACT);
+/// ```
+///
+///
+/// If it contains only one entry, that entry's kind is returned.
+///
+/// ```
+/// let approximations = vec![
+///     ApproximationRecord { span: Span::dummy_span(), stmt_kind: StmtKindName::Stmt, kind: ApproximationKind::OVER },
+/// ];
+/// assert_eq!(infimum_of_approximation_list(&approximations), ApproximationKind::OVER);
+/// ```
+///
+/// If it contains two or more entries, the infimum of all their kinds is returned.
+///
+/// ```
+/// let approximations = vec![
+///     ApproximationRecord { span: Span::dummy_span(), stmt_kind: StmtKindName::Stmt, kind: ApproximationKind::OVER },
+///     ApproximationRecord { span: Span::dummy_span(), stmt_kind: StmtKindName::Loop, kind: ApproximationKind::UNDER },
+/// ];
+/// assert_eq!(infimum_of_approximation_list(&approximations), ApproximationKind::UNKNOWN);
+pub fn infimum_of_approximation_list(approximations: &ApproximationList) -> ApproximationKind {
+    approximations
+        .iter()
+        .fold(ApproximationKind::EXACT, |acc, approx_entry| {
+            acc & approx_entry.kind
+        })
 }
 
 #[derive(Debug, Clone, Default)]
@@ -119,26 +99,21 @@ impl ProcSoundness {
         approximations: ApproximationList,
         calculus: Option<Calculus>,
     ) -> Self {
-        let approx = approximations.infimum();
-        // The mapping between approximation kinds and soundness is as follows:
-        // (approximation.under, approximation.over) -> (sound_proofs, sound_refutations)
-        // Direction::Down:
-        //                  exact = (false,false) -> (true, true)
-        //                          (true,false)  -> (true, false)
-        //                          (false,true)  -> (false, true)
-        //                unknown = (true,true)  -> (false, false)
-        // Direction::Up :
-        //                  exact = (false,false) -> (true, true)
-        //                          (true,false)  -> (false, true)
-        //                          (false,true)  -> (true, false)
-        //                unknown = (true,true)  -> (false, false)
-
-        // XOR with "approx.over == approx.under" to only flip (false,false) and (true,true) (see mapping above).
-        let over_approx = approx.over ^ (approx.over == approx.under);
-        let under_approx = approx.under ^ (approx.over == approx.under);
+        // If the approximation list is empty, it means no approximations were made, therefore the infimum is EXACT
+        let approx = infimum_of_approximation_list(&approximations);
         let (sound_proofs, sound_refutations) = match direction {
-            Direction::Down => (under_approx, over_approx),
-            Direction::Up => (over_approx, under_approx),
+            Direction::Down => match approx {
+                ApproximationKind::EXACT => (true, true), // Both proofs and refutations are sound
+                ApproximationKind::UNDER => (true, false), // Only proofs are guaranteed to be sound
+                ApproximationKind::OVER => (false, true), // Only refutations are guaranteed to be sound
+                ApproximationKind::UNKNOWN => (false, false), // Neither proofs nor refutations are sound
+            },
+            Direction::Up => match approx {
+                ApproximationKind::EXACT => (true, true), // Both proofs and refutations are sound
+                ApproximationKind::UNDER => (false, true), // Only refutations are guaranteed to be sound
+                ApproximationKind::OVER => (true, false),  // Only proofs are guaranteed to be sound
+                ApproximationKind::UNKNOWN => (false, false), // Neither proofs nor refutations are sound
+            },
         };
         Self {
             sound_proofs,
@@ -147,7 +122,6 @@ impl ProcSoundness {
             calculus,
         }
     }
-
     /// Get whether proofs for this procedure are sound.
     pub fn sound_proofs(&self) -> bool {
         self.sound_proofs
@@ -232,28 +206,38 @@ impl ProcSoundness {
     }
 
     fn overall_approximation(&self) -> ApproximationKind {
-        self.approximations.infimum()
+        infimum_of_approximation_list(&self.approximations)
     }
 }
 
+/// Represents the kind of approximation that the vc semantics introduce for the original program semantics.
+///
+/// Approximations can be introduced by encoding annotations on loops or by negations in the program.
+///
+/// - If the the field `under` is true, it means that the vc semantics under-approximates the original program semantics, i.e. vc\[S\] ≤ semantics\[S\].
+/// - If the field `over` is true, it means that the vc semantics over-approximates the original program semantics, i.e. vc\[S\] ≥ semantics\[S\].
+/// - If both fields are true, it means that the vc semantics both under- and over-approximates the original program semantics, therefore it exactly matches the original program semantics, i.e. (vc\[S\] ≤ semantics\[S\]) and (vc\[S\] ≥ semantics\[S\]) hence (vc\[S\] = semantics\[S\]).
+/// - If both fields are false, it means that the vc semantics neither under- nor over-approximates the original program semantics, therefore the approximation is unknown. i.e. !(vc\[S\] ≤ semantics\[S\]) and !(vc\[S\] ≥ semantics\[S\]).
+///
+/// The original program semantics is based on the calculus annotation or the default fixpoint semantics for loops based on the direction and the encoding used.
+///
+/// See also [`infer_fixpoint_semantics_kind`] for more details on how the semantics kind is inferred.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ApproximationKind {
-    under: bool,
-    over: bool,
+    /// True if the vc semantics under-approximates the original program semantics
+    pub under: bool,
+    /// True if the vc semantics over-approximates the original program semantics
+    pub over: bool,
 }
 
-// Note that the operations are reversed because the exact approximation should be the top element in the lattice but we want it to be (false,false).
-// This is because if there isn't any approximations, i.e., "(false, false)", we consider it as exact.
-// On the other hand "&" should correspond to infimum and "|" to supremum in the lattice of approximations.
-// In that sense the lattice of approximations is the "flipped" lattice of a boolean pair.
 impl BitAnd for ApproximationKind {
     type Output = ApproximationKind;
 
     // This corresponds to infimum in the lattice of approximations
     fn bitand(self, rhs: Self) -> Self::Output {
         ApproximationKind {
-            under: self.under || rhs.under,
-            over: self.over || rhs.over,
+            under: self.under && rhs.under,
+            over: self.over && rhs.over,
         }
     }
 }
@@ -264,28 +248,33 @@ impl BitOr for ApproximationKind {
     // This corresponds to supremum in the lattice of approximations
     fn bitor(self, rhs: Self) -> Self::Output {
         ApproximationKind {
-            under: self.under && rhs.under,
-            over: self.over && rhs.over,
+            under: self.under || rhs.under,
+            over: self.over || rhs.over,
         }
     }
 }
 
 impl ApproximationKind {
+    /// vc is both under- and over-approximating the original program semantics
     pub const EXACT: Self = Self {
-        under: false,
-        over: false,
+        under: true,
+        over: true,
     };
+    /// vc under-approximates the original program semantics
     pub const UNDER: Self = Self {
         under: true,
         over: false,
     };
+    /// vc over-approximates the original program semantics
     pub const OVER: Self = Self {
         under: false,
         over: true,
     };
+    /// vc neither under- nor over-approximates the original program semantics
+    /// This means !(vc[S] ≤ semantics[S]) and !(vc[S] ≥ semantics[S])
     pub const UNKNOWN: Self = Self {
-        under: true,
-        over: true,
+        under: false,
+        over: false,
     };
 }
 
@@ -335,12 +324,8 @@ fn track_approximation_in_block(
     block
         .node
         .iter()
-        .fold(ApproximationList::default(), |mut acc, stmt| {
-            acc.extend(track_approximation_in_statement(
-                stmt, direction, calculus, tcx,
-            ));
-            acc
-        })
+        .flat_map(|stmt| track_approximation_in_statement(stmt, direction, calculus, tcx))
+        .collect()
 }
 
 /// Determine the approximation kind of a statement and track approximation in its sub-statements.
@@ -354,13 +339,8 @@ fn track_approximation_in_statement(
         // Composite statements are handled recursively to collect approximations from sub-statements
         StmtKind::Seq(stmts) => stmts
             .iter()
-            .fold(ApproximationList::default(), |mut acc, stmt| {
-                let stmt_approx_kind =
-                    track_approximation_in_statement(stmt, direction, calculus, tcx);
-                acc.extend(stmt_approx_kind);
-                acc
-            }),
-
+            .flat_map(|stmt| track_approximation_in_statement(stmt, direction, calculus, tcx))
+            .collect(),
         StmtKind::If(_, ref block1, ref block2)
         | StmtKind::Demonic(ref block1, ref block2)
         | StmtKind::Angelic(ref block1, ref block2) => {
@@ -372,12 +352,16 @@ fn track_approximation_in_statement(
         }
         // A loop itself do not introduce an approximation, but an encoding annotation on top of it may do so.
         // Therefore, we only track the approximation inside the loop body recursively in this case.
+        // This means that the approximation kind of a while loop is the approximation kind of the loop body.
+        // While loops can not be used without an encoding annotation therefore this inner approximation is never directly recorded.
+        // Instead this will be used by the annotation case below.
         StmtKind::While(_, ref block) => {
             track_approximation_in_block(block, direction, calculus, tcx)
         }
         // Encoding annotations may cause approximations
         // This approximation is based on the direction, calculus and the approximation in the loop body
         StmtKind::Annotation(_, ident, _, inner_stmt) => {
+            // This inner statement is the While case above
             let mut inner_approximation_list =
                 track_approximation_in_statement(inner_stmt, direction, calculus, tcx);
 
@@ -392,7 +376,7 @@ fn track_approximation_in_statement(
                     direction,
                 );
 
-                let inner_approximation = inner_approximation_list.infimum();
+                let inner_approximation = infimum_of_approximation_list(&inner_approximation_list);
 
                 // Ask the respective annotation what the resulting approximation(s) will be
                 let approximation = anno_ref.get_approximation(semantics_type, inner_approximation);
@@ -405,13 +389,13 @@ fn track_approximation_in_statement(
             inner_approximation_list
         }
         // Negations lead to unknown approximations
-        StmtKind::Negate(_) => ApproximationList(vec![ApproximationRecord {
+        StmtKind::Negate(_) => vec![ApproximationRecord {
             span: s.span,
             stmt_kind: StmtKindName::Stmt,
             kind: ApproximationKind::UNKNOWN,
-        }]),
-        // All other statements do not change the approximation kind
-        _ => ApproximationList::default(),
+        }],
+        // All other statements do not change the approximation kind, which means they have the EXACT approximation kind
+        _ => vec![],
     }
 }
 
@@ -425,20 +409,8 @@ pub fn soundness_blame_of_proc(decl: &ProcDecl, tcx: &mut TyCtx) -> Option<ProcS
         let direction = decl.direction;
 
         let approx_list = track_approximation_in_block(block, direction, calculus, tcx);
-        let infimum_approx = approx_list.infimum();
 
-        return Some(ProcSoundness {
-            sound_proofs: match direction {
-                Direction::Down => infimum_approx == ApproximationKind::UNDER,
-                Direction::Up => infimum_approx == ApproximationKind::OVER,
-            },
-            sound_refutations: match direction {
-                Direction::Down => infimum_approx == ApproximationKind::OVER,
-                Direction::Up => infimum_approx == ApproximationKind::UNDER,
-            },
-            approximations: approx_list,
-            calculus,
-        });
+        return Some(ProcSoundness::new(direction, approx_list, calculus));
     }
     None
 }
