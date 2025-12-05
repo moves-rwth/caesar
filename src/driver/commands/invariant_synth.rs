@@ -106,11 +106,11 @@ fn synth_inv_main(
     user_files: &[FileId],
 ) -> Result<bool, CaesarError> {
     let start_total = Instant::now();
-    let mut split_count = 0;
+    let mut split_count = 2;
     let mut num_proven: usize = 0;
     let mut num_failures: usize = 0;
-    const MAX_REFINEMENT_ITERS: usize = 400;
-    const MAX_SPLIT_COUNT: usize = 0;
+    const MAX_REFINEMENT_ITERS: usize = 100;
+    const MAX_SPLIT_COUNT: usize = 2;
 
     while split_count <= MAX_SPLIT_COUNT {
         let (mut module, mut tcx) = parse_and_tycheck(
@@ -497,10 +497,10 @@ fn synth_inv_main(
                         println!(
                         "No template model found; stopping refinement after iteration {iteration}."
                     );
-                        println!(
-                            "The last condition that was checked was: {}",
-                            remove_casts(&vc_pvars.quant_vc.expr)
-                        );
+                        // println!(
+                        //     "The last condition that was checked was: {}",
+                        //     remove_casts(&vc_pvars.quant_vc.expr)
+                        // );
 
                         num_failures += 1;
                         break;
