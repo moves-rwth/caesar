@@ -217,6 +217,7 @@ mod test {
             init: None,
             span: Span::dummy_span(),
             created_from: None,
+            range: None,
         })));
         let mut expr = builder.binary(
             BinOpKind::And,

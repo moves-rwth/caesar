@@ -44,6 +44,13 @@ Ident: Ident = {
     },
 }
 
+Range: Range =
+    "[" <lo: r"[0-9]+"> "," <hi: r"[0-9]+"> "]"
+        => Range {
+            lower: lo.parse::<u64>().expect("range lower bound does not fit in u64"),
+            upper: hi.parse::<u64>().expect("range upper bound does not fit in u64"),
+        };
+
 // ---------------------------------------
 // Types
 
@@ -88,7 +95,7 @@ QuantOp: QuantOp = {
 
 QuantVar: QuantVar = {
     <l: @L> <name: Ident> ":" <ty: Ty> <r: @R>
-        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty, kind: VarKind::Quant, init: None, span: span(file, l, r), created_from: None }))
+        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty, kind: VarKind::Quant, init: None, span: span(file, l, r), created_from: None, range: None }))
 }
 
 QuantAnn: QuantAnn = {
@@ -194,9 +201,33 @@ pub SpannedStmts: Spanned<Vec<Stmt>> = {
 StmtKind: StmtKind = {
     <block: Block> => StmtKind::Seq(block.node),
     <l: @L> "var" <ident: Ident> ":" <ty: Ty> "=" <rhs: Expr> <r: @R>
-        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: Some(rhs), span: span(file, l, r), created_from: None })),
+        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: Some(rhs), span: span(file, l, r), created_from: None, range: None })),
     <l: @L> "var" <ident: Ident> ":" <ty: Ty> <r: @R>
-        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: None, span: span(file, l, r), created_from: None })),
+        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: None, span: span(file, l, r), created_from: None, range: None})),
+   <l: @L> "var" <ident: Ident> ":" <ty: Ty> <rng: Range> "=" <rhs: Expr> <r: @R>
+        => StmtKind::Var(DeclRef::new(VarDecl {
+            name: ident,
+            ty,
+            kind: VarKind::Mut,
+            init: Some(rhs),
+            span: span(file, l, r),
+            created_from: None,
+            range: Some(rng),
+        })),
+
+
+    <l: @L> "var" <ident: Ident> ":" <ty: Ty> <rng: Range> <r: @R>
+        => StmtKind::Var(DeclRef::new(VarDecl {
+            name: ident,
+            ty,
+            kind: VarKind::Mut,
+            init: None,
+            span: span(file, l, r),
+            created_from: None,
+            range: Some(rng),
+        })),
+
+
     <lhs: CommaPlus<Ident>> "=" <rhs: Expr> => StmtKind::Assign(lhs, rhs),
     <call: ExprTier<ExprCall>> => StmtKind::Assign(vec![], call),
     "havoc" <vars: CommaPlus<Ident>> => StmtKind::Havoc(Direction::Down, vars),
@@ -253,7 +284,8 @@ ParamList: Spanned<Vec<Param>> = {
 }
 
 Param: Param = {
-    <l: @L> <name: Ident> ":" <ty: Ty> <r: @R> => Param { name, ty: Box::new(ty), literal_only: false ,span: span(file, l, r) }
+    <l: @L> <name: Ident> ":" <ty: Ty> <r: @R> => Param { name, ty: Box::new(ty), literal_only: false ,span: span(file, l, r), range: None },
+    <l: @L> <name: Ident> ":" <ty: Ty> <rng: Range> <r: @R> => Param { name, ty: Box::new(ty), literal_only: false ,span: span(file, l, r), range: Some(rng) },
 }
 
 ProcSpec: ProcSpec = {

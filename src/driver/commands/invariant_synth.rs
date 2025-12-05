@@ -109,6 +109,7 @@ fn synth_inv_main(
     let mut split_count = 0;
     let mut num_proven: usize = 0;
     let mut num_failures: usize = 0;
+    const MAX_REFINEMENT_ITERS: usize = 400;
     const MAX_SPLIT_COUNT: usize = 0;
 
     while split_count <= MAX_SPLIT_COUNT {
@@ -262,12 +263,13 @@ fn synth_inv_main(
                     inliner.visit_expr(&mut vc_expr.expr).unwrap();
                 }
 
-
                 // Lower to boolean proof task and unfold
                 vc_is_valid =
                     lower_quant_prove_task(options, &limits_ref, &tcx, name, vc_expr.clone())?;
-                println!("vc expression with inlined templates: {}",remove_casts(&vc_is_valid.quant_vc.expr));
-                
+                // println!(
+                //     "vc expression with inlined templates: {}",
+                //     remove_casts(&vc_is_valid.quant_vc.expr)
+                // );
             }
 
             // This vc_tvars_pvars is the vc where both tvars and pvars are not instantiated.
@@ -284,7 +286,6 @@ fn synth_inv_main(
             }
 
             let mut iteration = 0;
-            const MAX_REFINEMENT_ITERS: usize = 200;
 
             // In the first iteration we will use the vc where both tvars and pvars are uninstantiated, but
             // starting from the second loop iteration, the tvars will be instantiated with some value
@@ -378,7 +379,7 @@ fn synth_inv_main(
                             "Template instantiation took: {:.2}",
                             duration_template_inst.as_secs_f64()
                         );
-                        split_count = MAX_SPLIT_COUNT+1;
+                        split_count = MAX_SPLIT_COUNT + 1;
                         break;
                     }
 
@@ -496,6 +497,11 @@ fn synth_inv_main(
                         println!(
                         "No template model found; stopping refinement after iteration {iteration}."
                     );
+                        println!(
+                            "The last condition that was checked was: {}",
+                            remove_casts(&vc_pvars.quant_vc.expr)
+                        );
+
                         num_failures += 1;
                         break;
                     }

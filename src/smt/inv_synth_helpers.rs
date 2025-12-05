@@ -210,6 +210,7 @@ fn build_linear_combination(
 pub fn collect_relevant_bool_conditions(
     synth_val: &uninterpreted::FuncEntry,
     vc_expr: &Expr,
+    tcx: &TyCtx,
 ) -> Vec<Expr> {
     let mut allowed_vars = HashSet::new();
 
@@ -227,6 +228,9 @@ pub fn collect_relevant_bool_conditions(
             let mut collector = FreeVariableCollector::new();
             let mut cloned = b.clone();
             let vars = collector.collect_and_clear(&mut cloned);
+            for var in &vars{
+                tcx.print_var_range(*var);
+            }
             vars.iter().all(|id| allowed_vars.contains(&id.name))
         })
         .collect()
@@ -254,6 +258,7 @@ pub fn get_variable_region_splits<'ctx>(
             program_vars.push(casted);
         }
     }
+
 
     // ---- Generate threshold variables ----
     let mut threshold_vars = Vec::<Vec<Expr>>::new();
@@ -406,6 +411,7 @@ pub fn build_template_expression<'smt, 'ctx>(
             init: None,
             span: Span::dummy_span(),
             created_from: None,
+            range: None,
         };
         tcx.declare(crate::ast::DeclKind::VarDecl(DeclRef::new(decl.clone())));
         template_idents.push(decl.name);
@@ -415,7 +421,7 @@ pub fn build_template_expression<'smt, 'ctx>(
     // -------------------------------------------------------------------------
     // Step 1: Collect Boolean conditions relevant to the inputs
     // -------------------------------------------------------------------------
-    let bool_exprs = collect_relevant_bool_conditions(synth_val, vc_expr);
+    let bool_exprs = collect_relevant_bool_conditions(synth_val, vc_expr, tcx);
 
     assert!(
         !bool_exprs.is_empty(),
