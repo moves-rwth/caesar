@@ -207,9 +207,179 @@ fn build_linear_combination(
     lin_comb.unwrap()
 }
 
-// TODO: Currently this requires the variables to be named the same in both the function and the code
-// Build a template by collecting boolean conditions that are "relevant", calcu
-// and
+pub fn collect_relevant_bool_conditions(
+    synth_val: &uninterpreted::FuncEntry,
+    vc_expr: &Expr,
+) -> Vec<Expr> {
+    let mut allowed_vars = HashSet::new();
+
+    for param in &synth_val.inputs.node {
+        let vardecl = VarDecl::from_param(param, VarKind::Input)
+            .try_unwrap()
+            .unwrap();
+        allowed_vars.insert(vardecl.name.name);
+    }
+
+    vc_expr
+        .collect_bool_conditions()
+        .into_iter()
+        .filter(|b| {
+            let mut collector = FreeVariableCollector::new();
+            let mut cloned = b.clone();
+            let vars = collector.collect_and_clear(&mut cloned);
+            vars.iter().all(|id| allowed_vars.contains(&id.name))
+        })
+        .collect()
+}
+
+
+
+pub fn get_variable_region_splits<'ctx>(
+    synth_name: &Ident,
+    synth_val: &uninterpreted::FuncEntry,
+    split_count: usize,
+    builder: &mut ExprBuilder,
+    tcx: &TyCtx,
+    declare_template_var: &mut dyn FnMut(String) -> decl::VarDecl,
+) -> Vec<Expr> {
+    // ---- Collect non-boolean program variables ----
+    let mut program_vars = Vec::new();
+    for param in &synth_val.inputs.node {
+        let vardecl = VarDecl::from_param(param, VarKind::Input)
+            .try_unwrap()
+            .unwrap();
+        if vardecl.ty != TyKind::Bool {
+            let raw = builder.var(vardecl.name, tcx);
+            let casted = builder.cast(TyKind::Real, raw);
+            program_vars.push(casted);
+        }
+    }
+
+    // ---- Generate threshold variables ----
+    let mut threshold_vars = Vec::<Vec<Expr>>::new();
+    for (i, _) in program_vars.iter().enumerate() {
+        let mut cuts = Vec::new();
+        for j in 0..split_count {
+            let name = format!("{}_split_threshold_{}_{}", synth_name.name, i, j);
+            let decl = declare_template_var(name);
+            let t = builder.var(decl.name, tcx);
+            cuts.push(t);
+        }
+        threshold_vars.push(cuts);
+    }
+
+    // ---- Build region conditions ----
+    let mut region_conditions = Vec::new();
+    let total_regions;
+
+    if program_vars.is_empty() || split_count == 0 {
+        region_conditions.push(builder.bool_lit(true));
+    } else {
+        let n = program_vars.len();
+        let regions_per_var = split_count + 1;
+        total_regions = regions_per_var.pow(n as u32);
+
+        for region_index in 0..total_regions {
+            let mut cond = builder.bool_lit(true);
+            let mut idx = region_index;
+
+            for var_i in 0..n {
+                let reg = idx % regions_per_var;
+                idx /= regions_per_var;
+
+                let pv = program_vars[var_i].clone();
+                let cuts = &threshold_vars[var_i];
+
+                let pred = match reg {
+                    0 => builder.binary(
+                        BinOpKind::Lt,
+                        Some(TyKind::Bool),
+                        pv.clone(),
+                        cuts[0].clone(),
+                    ),
+                    r if r == regions_per_var - 1 => builder.binary(
+                        BinOpKind::Ge,
+                        Some(TyKind::Bool),
+                        pv.clone(),
+                        cuts.last().unwrap().clone(),
+                    ),
+                    r => {
+                        let ge_prev = builder.binary(
+                            BinOpKind::Ge,
+                            Some(TyKind::Bool),
+                            pv.clone(),
+                            cuts[r - 1].clone(),
+                        );
+                        let lt_next = builder.binary(
+                            BinOpKind::Lt,
+                            Some(TyKind::Bool),
+                            pv.clone(),
+                            cuts[r].clone(),
+                        );
+                        builder.binary(BinOpKind::And, Some(TyKind::Bool), ge_prev, lt_next)
+                    }
+                };
+
+                cond = builder.binary(BinOpKind::And, Some(TyKind::Bool), cond, pred);
+            }
+
+            region_conditions.push(cond);
+        }
+    }
+
+    region_conditions
+}
+
+pub fn assemble_piecewise_expression(
+    synth_name: &Ident,
+    synth_val: &uninterpreted::FuncEntry,
+    valid_iversons: &[Expr],
+    split_conditions: &Vec<Expr>,
+    builder: &mut ExprBuilder,
+    tcx: &TyCtx,
+    mut declare_template_var: &mut dyn FnMut(String) -> decl::VarDecl,
+) -> Expr {
+    let mut final_expr: Option<Expr> = None;
+
+    for (i_idx, iv_prod) in valid_iversons.iter().enumerate() {
+        let iv_eureal = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), iv_prod.clone());
+
+        for (s_idx, split) in split_conditions.iter().enumerate() {
+            let split_iv = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), split.clone());
+
+            // Create lincomb with unique name
+            let lc_name = format!("{}_{}", i_idx, s_idx);
+            let lc = build_linear_combination(
+                lc_name,
+                synth_val,
+                synth_name,
+                builder,
+                tcx,
+                &mut declare_template_var,
+            );
+
+            let full = builder.binary(
+                BinOpKind::Mul,
+                Some(TyKind::EUReal),
+                builder.binary(
+                    BinOpKind::Mul,
+                    Some(TyKind::EUReal),
+                    iv_eureal.clone(),
+                    split_iv,
+                ),
+                lc,
+            );
+
+            final_expr = Some(match final_expr {
+                None => full,
+                Some(acc) => builder.binary(BinOpKind::Add, Some(TyKind::EUReal), acc, full),
+            });
+        }
+    }
+
+    final_expr.unwrap()
+}
+
 pub fn build_template_expression<'smt, 'ctx>(
     synth_name: &Ident,
     synth_val: &uninterpreted::FuncEntry,
@@ -220,61 +390,15 @@ pub fn build_template_expression<'smt, 'ctx>(
     translate: &mut TranslateExprs<'smt, 'ctx>,
     ctx: &'ctx z3::Context,
 ) -> (Expr, Vec<Ident>) {
-    let mut allowed_vars = HashSet::new();
-    let mut template_idents = Vec::new();
-
-    for param in &synth_val.inputs.node {
-        let vardecl = VarDecl::from_param(param, VarKind::Input)
-            .try_unwrap()
-            .unwrap();
-        allowed_vars.insert(vardecl.name.name);
-    }
-
-    // Get the conditions, filtered to those variables that appear as inputs of the function
-    // TODO: this should be changed
-    // But how?
-    let bool_exprs: Vec<_> = vc_expr
-        .collect_bool_conditions()
-        .into_iter()
-        .filter(|b| {
-            let mut collector = FreeVariableCollector::new();
-            let mut cloned = b.clone();
-            let vars = collector.collect_and_clear(&mut cloned);
-            vars.iter().all(|id| allowed_vars.contains(&id.name))
-        })
-        .collect();
-
-    assert!(
-        !bool_exprs.is_empty(),
-        "No boolean expressions remain after filtering."
-    );
-
     // -------------------------------------------------------------------------
-    // Collect all non-bool input parameters as program-variable expressions
-    // Cast each one to Real *here*, so the rest of the code can just reuse it.
+    // Storage for all newly created template parameter identifiers
     // -------------------------------------------------------------------------
-    let mut program_vars: Vec<Expr> = Vec::new();
+    let mut template_idents: Vec<Ident> = Vec::new();
 
-    for param in &synth_val.inputs.node {
-        let vardecl = VarDecl::from_param(param, VarKind::Input)
-            .try_unwrap()
-            .unwrap();
-
-        if vardecl.ty != TyKind::Bool {
-            // build raw variable
-            let raw = builder.var(vardecl.name, tcx);
-            // cast to real
-            let casted = builder.cast(TyKind::Real, raw);
-            program_vars.push(casted);
-        }
-    }
-
-    // println!("program_vars: {program_vars:?}");
-
-    // Helper to declare a template variable and return its Expr
+    // Template-variable declaration closure
     let mut declare_template_var = |name: String| -> decl::VarDecl {
-        let name = name + &split_count.to_string();
-        let ident = Ident::with_dummy_span(Symbol::intern(&name));
+        let full_name = format!("{}{}", name, split_count);
+        let ident = Ident::with_dummy_span(Symbol::intern(&full_name));
         let decl = VarDecl {
             name: ident,
             ty: TyKind::Real,
@@ -283,178 +407,70 @@ pub fn build_template_expression<'smt, 'ctx>(
             span: Span::dummy_span(),
             created_from: None,
         };
-
         tcx.declare(crate::ast::DeclKind::VarDecl(DeclRef::new(decl.clone())));
         template_idents.push(decl.name);
-        // Return the decl object instead of immediately calling builder
         decl
     };
 
     // -------------------------------------------------------------------------
-    // Generate threshold variables for each program variable
+    // Step 1: Collect Boolean conditions relevant to the inputs
     // -------------------------------------------------------------------------
-    let mut threshold_vars: Vec<Vec<Expr>> = Vec::new(); // threshold_vars[i][j] = τ_{i,j}
+    let bool_exprs = collect_relevant_bool_conditions(synth_val, vc_expr);
 
-    for (i, _pv) in program_vars.iter().enumerate() {
-        let mut cuts = Vec::new();
-        for j in 0..split_count {
-            let name = format!("{}_split_threshold_{}_{}", synth_name.name, i, j,);
-            let decl = declare_template_var(name);
-            let t = builder.var(decl.name, tcx);
-            cuts.push(t);
-        }
-        threshold_vars.push(cuts);
-    }
-
-    // println!("threshold_vars: {threshold_vars:?}");
+    assert!(
+        !bool_exprs.is_empty(),
+        "No boolean expressions remain after filtering."
+    );
 
     // -------------------------------------------------------------------------
-    //
-    // For each variable with k cuts (τ_0, ..., τ_{k-1}), regions are:
-    //
-    // R0: x < τ_0
-    // R1: x ≥ τ_0 && x < τ_1
-    // R2: x ≥ τ_1 && x < τ_2
-    // ...
-    // Rk: x ≥ τ_{k-1}
-    //
-    // For n variables, we form the Cartesian product of (k+1) regions per variable.
+    // Step 2: Build all split predicates
     // -------------------------------------------------------------------------
+    let split_conditions = get_variable_region_splits(
+        synth_name,
+        synth_val,
+        split_count,
+        builder,
+        tcx,
+        &mut declare_template_var,
+    );
 
-    let mut all_region_conditions: Vec<Expr> = Vec::new();
-
-    let mut total_regions = 1;
-    if program_vars.is_empty() || split_count == 0 {
-        // no splits → just the trivial region "true"
-        all_region_conditions.push(builder.bool_lit(true));
-    } else {
-        let n = program_vars.len();
-        let regions_per_var = split_count + 1;
-        total_regions = regions_per_var.pow(n as u32);
-
-        for region_index in 0..total_regions {
-            let mut cond = builder.bool_lit(true);
-
-            let mut idx = region_index;
-            for var_i in 0..n {
-                let region_for_var = idx % regions_per_var;
-                idx /= regions_per_var;
-
-                let pv = program_vars[var_i].clone();
-                let cuts = &threshold_vars[var_i];
-
-                let region_pred = if region_for_var == 0 {
-                    // R0: x < τ_0
-                    builder.binary(
-                        BinOpKind::Lt,
-                        Some(TyKind::Bool),
-                        pv.clone(),
-                        cuts[0].clone(),
-                    )
-                } else if region_for_var == regions_per_var - 1 {
-                    // Rk: x ≥ τ_{k-1}
-                    builder.binary(
-                        BinOpKind::Ge,
-                        Some(TyKind::Bool),
-                        pv.clone(),
-                        cuts[cuts.len() - 1].clone(),
-                    )
-                } else {
-                    // Ri: x ≥ τ_{i-1} && x < τ_i
-                    let ge_prev = builder.binary(
-                        BinOpKind::Ge,
-                        Some(TyKind::Bool),
-                        pv.clone(),
-                        cuts[region_for_var - 1].clone(),
-                    );
-                    let lt_next = builder.binary(
-                        BinOpKind::Lt,
-                        Some(TyKind::Bool),
-                        pv.clone(),
-                        cuts[region_for_var].clone(),
-                    );
-                    builder.binary(BinOpKind::And, Some(TyKind::Bool), ge_prev, lt_next)
-                };
-
-                cond = builder.binary(BinOpKind::And, Some(TyKind::Bool), cond, region_pred);
-            }
-
-            all_region_conditions.push(cond);
-        }
-    }
-
-    // println!("all region conditions: {all_region_conditions:?}");
-
-    let initial_iver = builder.bool_lit(true);
-    let mut partial_assign = Vec::new();
-
-    let mut valid_iversons = Vec::new(); // This will store all satisfiable Iverson products
-
+    // -------------------------------------------------------------------------
+    // Step 3: Compute satisfiable guards from Boolean conditions
+    // -------------------------------------------------------------------------
+    let mut valid_iversons = Vec::new();
     explore_boolean_assignments(
         0,
         bool_exprs.as_slice(),
         builder,
         translate,
         ctx,
-        &mut partial_assign,
-        initial_iver,
-        &mut valid_iversons, // Pass the mutable reference to collect Iverson products
+        &mut Vec::new(),        // partial assignment
+        builder.bool_lit(true), // initial Iverson factor
+        &mut valid_iversons,    // output
     );
 
-    // println!("Without pruning, number of expressions for {synth_name} would be {}", num::pow(2,bool_exprs.len()));
     println!(
-        "Number of expressions for {synth_name} is {}",
-        valid_iversons.len() * total_regions
+        "Number of expressions for {} is {}",
+        synth_name,
+        valid_iversons.len() * split_conditions.len()
     );
 
-    // Now `valid_iversons` contains all satisfiable Iverson products
+    // -------------------------------------------------------------------------
+    // Step 4: Combine original guars × split conditions and multiply each with own lin.exp
+    // -------------------------------------------------------------------------
+    let final_expr = assemble_piecewise_expression(
+        synth_name,
+        synth_val,
+        &valid_iversons,
+        &split_conditions,
+        builder,
+        tcx,
+        &mut declare_template_var,
+    );
 
-    let mut final_expr: Option<Expr> = None;
-    for (idx, iverson_prod) in valid_iversons.iter().enumerate() {
-        let iverson_eureal = builder.unary(
-            UnOpKind::Iverson,
-            Some(TyKind::EUReal),
-            iverson_prod.clone(),
-        );
-
-        // Multiply by all region conditions and accumulate
-        for (r_idx, region_cond) in all_region_conditions.iter().enumerate() {
-            // Build linear combination for each Iverson product
-            let lc = build_linear_combination(
-                format!("{}_{}", idx, r_idx),
-                synth_val,
-                synth_name,
-                builder,
-                tcx,
-                &mut declare_template_var,
-            );
-
-            let region_iver =
-                builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), region_cond.clone());
-
-            let full_iver = builder.binary(
-                BinOpKind::Mul,
-                Some(TyKind::EUReal),
-                iverson_eureal.clone(),
-                region_iver,
-            );
-
-            let term = builder.binary(BinOpKind::Mul, Some(TyKind::EUReal), full_iver, lc.clone());
-
-            final_expr = Some(
-                final_expr
-                    .take()
-                    .map(|acc| {
-                        builder.binary(BinOpKind::Add, Some(TyKind::EUReal), acc, term.clone())
-                    })
-                    .unwrap_or(term),
-            );
-        }
-    }
-
-    // Return the final expression
-    (final_expr.unwrap(), template_idents)
+    (final_expr, template_idents)
 }
+
 pub fn get_synth_functions<'ctx>(
     un: &'ctx Uninterpreteds<'ctx>,
 ) -> HashMap<Ident, &'ctx uninterpreted::FuncEntry<'ctx>> {
@@ -465,36 +481,19 @@ pub fn get_synth_functions<'ctx>(
 }
 
 /// Explores all possible Boolean assignments for a given set of Boolean expressions
-/// and accumulates the Iverson products for all satisfiable assignments found.
+/// and accumulates the guards for all satisfiable assignments found.
 ///
 /// This function recursively explores each possible Boolean assignment by branching on
 /// whether each Boolean variable is assigned `true` or `false`. For each partial
-/// assignment, it builds the corresponding conjunction (Iverson product) and checks
+/// assignment, it builds the corresponding conjunction (these are the guards) and checks
 /// whether the assignment satisfies the given Boolean expressions using a SAT solver.
 ///
 /// Instead of stopping at the first satisfiable assignment, this version collects
-/// Iverson products for all satisfiable assignments found and returns them as a vector.
+/// guards for all satisfiable assignments found and returns them as a vector.
 ///
 /// The recursion stops at a complete assignment (when all Boolean variables have been
 /// assigned) or when an unsatisfiable prefix is encountered. If a satisfiable assignment
-/// is found, the Iverson product for that assignment is added to the result list.
-///
-/// # Arguments
-///
-/// - `idx`: The current index of the Boolean expression to assign (used for recursion).
-/// - `bool_exprs`: A slice of Boolean expressions that represent the constraints to satisfy.
-/// - `builder`: A mutable reference to the expression builder used for constructing the Iverson product.
-/// - `translate`: A mutable reference to the expression translator for converting the Iverson product
-///   to a Z3 expression.
-/// - `ctx`: The Z3 context used for SAT solving.
-/// - `partial_assign`: A mutable vector that holds the current partial Boolean assignment (prefix) being explored.
-/// - `iverson_prod`: The current Iverson product (a conjunction of assigned conditions so far).
-/// - `valid_iversons`: A mutable reference to the vector that will store all satisfiable Iverson products found.
-///
-/// # Returns
-///
-/// This function does not return any value directly. Instead, it accumulates the satisfiable Iverson products
-/// in the `valid_iversons` vector passed as a mutable reference.
+/// is found, the guards for that assignment is added to the result list.
 
 fn explore_boolean_assignments<'smt, 'ctx>(
     idx: usize,
