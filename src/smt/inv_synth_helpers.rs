@@ -143,7 +143,7 @@ pub fn subst_from_mapping<'ctx>(mapping: HashMap<ast::symbol::Ident, Expr>, vc: 
 // A helper function to build the templates
 // returns (sum_(param_vars)( templ_var * param_var )) + templ_last
 fn build_linear_combination(
-    bool_idx: usize,
+    name_addon: String,
     synth_entry: &uninterpreted::FuncEntry,
     synth_name: &Ident,
     builder: &ExprBuilder,
@@ -169,7 +169,7 @@ fn build_linear_combination(
 
         // Create template variable
         // Template var name
-        let name = format!("tvar_{synth_name}_{bool_idx}_{}", vardecl.name.name);
+        let name = format!("tvar_{synth_name}_{name_addon}_{}", vardecl.name.name);
 
         let decl = declare_template_var(name);
         let templ = builder.var(decl.name, tcx);
@@ -189,7 +189,7 @@ fn build_linear_combination(
     }
 
     // Add the "last" summand
-    let decl = declare_template_var(format!("tvar_{synth_name}_{bool_idx}_last",));
+    let decl = declare_template_var(format!("tvar_{synth_name}_{name_addon}_last",));
     let last = builder.var(decl.name, tcx);
 
     let lin_comb_with_last = lin_comb.map_or(last.clone(), |acc| {
@@ -216,7 +216,7 @@ pub fn build_template_expression<'smt, 'ctx>(
     vc_expr: &Expr,
     builder: &mut ExprBuilder,
     tcx: &TyCtx,
-    extra_split_count: usize,
+    split_count: usize,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     ctx: &'ctx z3::Context,
 ) -> (Expr, Vec<Ident>) {
@@ -273,6 +273,7 @@ pub fn build_template_expression<'smt, 'ctx>(
 
     // Helper to declare a template variable and return its Expr
     let mut declare_template_var = |name: String| -> decl::VarDecl {
+        let name = name + &split_count.to_string();
         let ident = Ident::with_dummy_span(Symbol::intern(&name));
         let decl = VarDecl {
             name: ident,
@@ -296,8 +297,8 @@ pub fn build_template_expression<'smt, 'ctx>(
 
     for (i, _pv) in program_vars.iter().enumerate() {
         let mut cuts = Vec::new();
-        for j in 0..extra_split_count {
-            let name = format!("{}_split_threshold_{}_{}", synth_name.name, i, j);
+        for j in 0..split_count {
+            let name = format!("{}_split_threshold_{}_{}", synth_name.name, i, j,);
             let decl = declare_template_var(name);
             let t = builder.var(decl.name, tcx);
             cuts.push(t);
@@ -322,13 +323,14 @@ pub fn build_template_expression<'smt, 'ctx>(
 
     let mut all_region_conditions: Vec<Expr> = Vec::new();
 
-    if program_vars.is_empty() || extra_split_count == 0 {
+    let mut total_regions = 1;
+    if program_vars.is_empty() || split_count == 0 {
         // no splits → just the trivial region "true"
         all_region_conditions.push(builder.bool_lit(true));
     } else {
         let n = program_vars.len();
-        let regions_per_var = extra_split_count + 1;
-        let total_regions = regions_per_var.pow(n as u32);
+        let regions_per_var = split_count + 1;
+        total_regions = regions_per_var.pow(n as u32);
 
         for region_index in 0..total_regions {
             let mut cond = builder.bool_lit(true);
@@ -399,28 +401,34 @@ pub fn build_template_expression<'smt, 'ctx>(
         &mut valid_iversons, // Pass the mutable reference to collect Iverson products
     );
 
-
-    println!("Without pruning, number of expressions for {synth_name} would be {}", num::pow(2,bool_exprs.len()));
-    println!("Number of expressions for {synth_name} is {}", valid_iversons.len());
+    // println!("Without pruning, number of expressions for {synth_name} would be {}", num::pow(2,bool_exprs.len()));
+    println!(
+        "Number of expressions for {synth_name} is {}",
+        valid_iversons.len() * total_regions
+    );
 
     // Now `valid_iversons` contains all satisfiable Iverson products
 
     let mut final_expr: Option<Expr> = None;
     for (idx, iverson_prod) in valid_iversons.iter().enumerate() {
-        let iverson_eureal = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), iverson_prod.clone());
-
-        // Build linear combination for each Iverson product
-        let lc = build_linear_combination(
-            idx, 
-            synth_val,
-            synth_name,
-            builder,
-            tcx,
-            &mut declare_template_var,
+        let iverson_eureal = builder.unary(
+            UnOpKind::Iverson,
+            Some(TyKind::EUReal),
+            iverson_prod.clone(),
         );
 
         // Multiply by all region conditions and accumulate
-        for region_cond in &all_region_conditions {
+        for (r_idx, region_cond) in all_region_conditions.iter().enumerate() {
+            // Build linear combination for each Iverson product
+            let lc = build_linear_combination(
+                format!("{}_{}", idx, r_idx),
+                synth_val,
+                synth_name,
+                builder,
+                tcx,
+                &mut declare_template_var,
+            );
+
             let region_iver =
                 builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), region_cond.clone());
 

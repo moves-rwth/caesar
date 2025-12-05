@@ -106,381 +106,402 @@ fn synth_inv_main(
     user_files: &[FileId],
 ) -> Result<bool, CaesarError> {
     let start_total = Instant::now();
-
-    let (mut module, mut tcx) = parse_and_tycheck(
-        &options.input_options,
-        &options.debug_options,
-        server,
-        user_files,
-    )?;
-
-    let duration_parse = start_total.elapsed(); // Parse time
-    println!("Parse time = {:.2}", duration_parse.as_secs_f64());
-
-    // Register all relevant source units with the server
-    module.register_with_server(server)?;
-
-    // Visit every source unit and check possible cases of unsoundness
-    // based on the provided calculus annotations
-    module.check_calculus_rules(&mut tcx)?;
-
-    // Desugar encodings from source units.
-    module.apply_encodings(&mut tcx, server)?;
-
-    if options.debug_options.print_core_procs {
-        println!("HeyVL invariant synthesis task with generated procs:");
-        println!("{module}");
-    }
-
-    // generate dependency graph to determine which declarations are needed for
-    // the SMT translation later
-    let mut depgraph = module.generate_depgraph(&options.opt_options.function_encoding)?;
-
-    let mut synth_inv_units: Vec<Item<CoreVerifyTask>> = module
-        .items
-        .into_iter()
-        .flat_map(|item| {
-            item.flat_map(|unit| CoreVerifyTask::from_source_unit(unit, &mut depgraph))
-        })
-        .collect();
-
-    // set requested global z3 options
-    set_global_z3_params(options, &limits_ref);
-
+    let mut split_count = 0;
     let mut num_proven: usize = 0;
     let mut num_failures: usize = 0;
+    const MAX_SPLIT_COUNT: usize = 0;
 
-    for synth_inv_unit in &mut synth_inv_units {
-        // --- Phase 0: Create the completely uninstatiated verification condition ---
-        limits_ref.check_limits()?;
-
-        let (name, mut synth_inv_unit) = synth_inv_unit.enter_with_name();
-
-        // Set the current unit as ongoing
-        server.set_ongoing_unit(name)?;
-
-        // Lowering the core synth_inv_unit task to a quantitative prove task: applying
-        // spec call desugaring, preparing slicing, and verification condition
-        // generation.
-        let (mut vc_expr, slice_vars) = lower_core_verify_task(
-            &mut tcx,
-            name,
-            options,
-            &limits_ref,
+    while split_count <= MAX_SPLIT_COUNT {
+        let (mut module, mut tcx) = parse_and_tycheck(
+            &options.input_options,
+            &options.debug_options,
             server,
-            &mut synth_inv_unit,
+            user_files,
         )?;
 
-        // The constraints are a conjunction of Expressions, so we start with true
-        let mut builder = ExprBuilder::new(Span::dummy_span());
-        let mut constraints = builder.bool_lit(true);
+        let duration_parse = start_total.elapsed(); // Parse time
+        println!("Parse time = {:.2}", duration_parse.as_secs_f64());
 
-        let direction = vc_expr.direction.clone();
-        let vcdeps = vc_expr.deps.clone();
+        // Register all relevant source units with the server
+        module.register_with_server(server)?;
 
-        // Lowering the quantitative task to a Boolean one. This contains (lazy)
-        // unfolding, and various optimizations
-        // (depending on options).
-        // TODO: think about quantifier elimination
-        let mut vc_is_valid =
-            lower_quant_prove_task(options, &limits_ref, &tcx, name, vc_expr.clone())?;
-        let ctx = Context::new(&z3::Config::default());
-        let function_encoder = mk_function_encoder(&tcx, &depgraph, options)?;
-        let dep_config = DepConfig::Set(vc_is_valid.get_dependencies());
-        let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoder, dep_config);
-        let mut translate = TranslateExprs::new(&smt_ctx);
+        // Visit every source unit and check possible cases of unsoundness
+        // based on the provided calculus annotations
+        module.check_calculus_rules(&mut tcx)?;
 
-        let synth = get_synth_functions(smt_ctx.uninterpreteds());
+        // Desugar encodings from source units.
+        module.apply_encodings(&mut tcx, server)?;
 
-        let mut templates = Vec::new(); // list of templates (one per synth fn)
-        let mut all_template_vars = Vec::new();
-
-        if !synth.is_empty() {
-            for (synth_name, synth_val) in synth.iter() {
-                let start_template = Instant::now();
-
-                // Build template for this particular synthesized function
-                let (temp_template, vars) =
-                    build_template_expression(synth_name, synth_val, &vc_expr.expr, &mut builder, &tcx, 1, &mut translate, &ctx);
-
-                let duration_template = start_template.elapsed();
-                println!(
-                    "Template building for `{}` took: {:.2}",
-                    synth_name,
-                    duration_template.as_secs_f64()
-                );
-
-                all_template_vars.extend(vars);
-
-                // Process the template (unfold, neutral removal, etc.)
-                let ctx = Context::new(&Config::default());
-                let dep_config = DepConfig::SpecsOnly;
-                let smt_ctx_local = SmtCtx::new(
-                    &ctx,
-                    &tcx,
-                    Box::new(AxiomaticFunctionEncoder::default()),
-                    dep_config,
-                );
-
-                let mut tpl = temp_template.clone();
-                let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx_local);
-                unfolder.visit_expr(&mut tpl)?;
-
-                let mut neutrals_remover = NeutralsRemover::new(limits_ref.clone(), &smt_ctx_local);
-                neutrals_remover.visit_expr(&mut tpl)?;
-
-                println!("template for `{}`: {}", synth_name, remove_casts(&tpl));
-
-                // Store the processed template
-                templates.push((synth_name.clone(), tpl));
-            }
-
-            // Now inline ALL templates into vc_expr
-            for (func_ident, template_expr) in templates.iter() {
-                let func_entry = synth
-                    .get(func_ident)
-                    .expect("synth function disappeared unexpectedly");
-
-                let mut inliner = FunctionInliner {
-                    target: *func_ident,
-                    body: template_expr,
-                    entry: func_entry,
-                };
-
-                inliner.visit_expr(&mut vc_expr.expr).unwrap();
-            }
-
-            // Finally: check validity of the VC with all templates inlined
-            vc_is_valid =
-                lower_quant_prove_task(options, &limits_ref, &tcx, name, vc_expr.clone())?;
+        if options.debug_options.print_core_procs {
+            println!("HeyVL invariant synthesis task with generated procs:");
+            println!("{module}");
         }
 
-        // This vc_tvars_pvars is the vc where both tvars and pvars are not instantiated.
-        // This will be needed later because it will repeatedly get initiated with new tvars,
-        // to check if they are IT
-        let mut vc_tvars_pvars = SmtVcProveTask::translate(vc_is_valid, &mut translate);
+        // generate dependency graph to determine which declarations are needed for
+        // the SMT translation later
+        let mut depgraph = module.generate_depgraph(&options.opt_options.function_encoding)?;
 
-        if !options.opt_options.no_simplify {
-            vc_tvars_pvars.simplify();
-        }
+        let mut synth_inv_units: Vec<Item<CoreVerifyTask>> = module
+            .items
+            .into_iter()
+            .flat_map(|item| {
+                item.flat_map(|unit| CoreVerifyTask::from_source_unit(unit, &mut depgraph))
+            })
+            .collect();
 
-        if options.debug_options.z3_trace {
-            tracing::info!("Z3 tracing output will be written to `z3.log`.");
-        }
+        // set requested global z3 options
+        set_global_z3_params(options, &limits_ref);
 
-        let mut iteration = 0;
-        const MAX_REFINEMENT_ITERS: usize = 80;
+        for synth_inv_unit in &mut synth_inv_units {
+            // --- Phase 0: Create the completely uninstatiated verification condition ---
+            limits_ref.check_limits()?;
 
-        // In the first iteration we will use the vc where both tvars and pvars are uninstantiated, but
-        // starting from the second loop iteration, the tvars will be instantiated with some value
-        let mut vc_pvars = vc_tvars_pvars.clone();
+            let (name, mut synth_inv_unit) = synth_inv_unit.enter_with_name();
 
-        let mut tvar_mapping: HashMap<ast::symbol::Ident, Expr> = HashMap::new();
+            // Set the current unit as ongoing
+            server.set_ongoing_unit(name)?;
 
-        let mut duration_check = Duration::new(0, 0);
-        let mut duration_template_inst = Duration::new(0, 0);
-        loop {
-            let start_check = Instant::now(); // Start the timer for template building
-                                              // Call template builder using the single element
-
-            iteration += 1;
-            // println!("=== Refinement iteration {iteration} ===");
-
-            // Instantiating the template and doing unfolding just for logging.
-            // TODO: maybe this should optionally be printed
-            // let instantiated_template = subst_mapping(tvar_mapping.clone(), &template);
-
-            // let mut template_task = QuantVcProveTask {
-            //     expr: instantiated_template,
-            //     direction: direction,
-            //     deps: vcdeps.clone(),
-            // };
-
-            // // Unfolding (applies substitutions)
-            // template_task.unfold(options, &limits_ref, &tcx)?;
-            // println!("Checking template: {}", template_task.expr);
-
-            // --- Phase 1: Check if tvars are already good (run verification with some eval) ---
-
-            // After the first iteration, vc_pvars shouldn't have any template variables in it
-            // Run the solver
-            let result = vc_pvars.clone().run_solver(
+            // Lowering the core synth_inv_unit task to a quantitative prove task: applying
+            // spec call desugaring, preparing slicing, and verification condition
+            // generation.
+            let (mut vc_expr, slice_vars) = lower_core_verify_task(
+                &mut tcx,
+                name,
                 options,
                 &limits_ref,
-                name,
-                &ctx,
-                &mut translate,
-                &slice_vars,
+                server,
+                &mut synth_inv_unit,
             )?;
 
-            // This result is Proof iff we have already found an admissable template variable evaluation
-            // Otherwise it will give us a cex (an evaluation of the program vars) that we will
-            // add to the constraints on the template vars
-            let prove_result = result.prove_result;
-            duration_check = start_check.elapsed() + duration_check; // Template instantiation time
+            // The constraints are a conjunction of Expressions, so we start with true
 
-            match prove_result {
-                ProveResult::Proof => {
-                    num_proven += 1;
+            let direction = vc_expr.direction.clone();
+            let vcdeps = vc_expr.deps.clone();
 
-                    let mut instantiated_tasks = Vec::new();
+            // Lowering the quantitative task to a Boolean one. This contains (lazy)
+            // unfolding, and various optimizations
+            // (depending on options).
+            // TODO: think about quantifier elimination
 
-                    for (synth_name, template_expr) in templates.iter() {
-                        let instantiated = subst_from_mapping(tvar_mapping.clone(), template_expr);
+            let mut builder = ExprBuilder::new(Span::dummy_span());
+            let mut constraints = builder.bool_lit(true);
+            let mut vc_is_valid =
+                lower_quant_prove_task(options, &limits_ref, &tcx, name, vc_expr.clone())?;
+            let ctx = Context::new(&z3::Config::default());
+            let function_encoder = mk_function_encoder(&tcx, &depgraph, options)?;
+            let dep_config = DepConfig::Set(vc_is_valid.get_dependencies());
+            let smt_ctx = SmtCtx::new(&ctx, &tcx, function_encoder, dep_config);
+            let mut translate = TranslateExprs::new(&smt_ctx);
 
-                        let mut task = QuantVcProveTask {
-                            expr: instantiated,
-                            direction,
-                            deps: vcdeps.clone(),
-                        };
+            let synth = get_synth_functions(smt_ctx.uninterpreteds());
 
-                        task.unfold(options, &limits_ref, &tcx)?;
-                        task.remove_neutrals(&limits_ref, &tcx)?;
+            let mut templates = Vec::new(); // list of templates (one per synth fn)
+            let mut all_template_vars = Vec::new();
+            if !synth.is_empty() {
+                for (synth_name, synth_val) in synth.iter() {
+                    let start_template = Instant::now();
 
-                        instantiated_tasks.push((synth_name.clone(), task));
-                    }
+                    // Build template for this particular synthesized function
+                    let (temp_template, vars) = build_template_expression(
+                        synth_name,
+                        synth_val,
+                        &vc_expr.expr,
+                        &mut builder,
+                        &tcx,
+                        split_count,
+                        &mut translate,
+                        &ctx,
+                    );
+                    println!("Template vars {vars:?}");
 
-                    let duration_inductivity = start_total.elapsed();
-
+                    let duration_template = start_template.elapsed();
                     println!(
+                        "Template building for `{}` took: {:.2}",
+                        synth_name,
+                        duration_template.as_secs_f64()
+                    );
+
+                    all_template_vars.extend(vars);
+
+                    // Process the template (unfold, neutral removal, etc.)
+                    let ctx = Context::new(&Config::default());
+                    let dep_config = DepConfig::SpecsOnly;
+                    let smt_ctx_local = SmtCtx::new(
+                        &ctx,
+                        &tcx,
+                        Box::new(AxiomaticFunctionEncoder::default()),
+                        dep_config,
+                    );
+
+                    let mut tpl = temp_template.clone();
+                    let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx_local);
+                    unfolder.visit_expr(&mut tpl)?;
+
+                    let mut neutrals_remover =
+                        NeutralsRemover::new(limits_ref.clone(), &smt_ctx_local);
+                    neutrals_remover.visit_expr(&mut tpl)?;
+
+                    println!("template for `{}`: {}", synth_name, remove_casts(&tpl));
+
+                    // Store the processed template
+                    templates.push((synth_name.clone(), tpl));
+                }
+
+                // Now inline ALL templates into vc_expr
+                for (func_ident, template_expr) in templates.iter() {
+                    let func_entry = synth
+                        .get(func_ident)
+                        .expect("synth function disappeared unexpectedly");
+
+                    let mut inliner = FunctionInliner {
+                        target: *func_ident,
+                        body: template_expr,
+                        entry: func_entry,
+                    };
+
+                    inliner.visit_expr(&mut vc_expr.expr).unwrap();
+                }
+
+
+                // Lower to boolean proof task and unfold
+                vc_is_valid =
+                    lower_quant_prove_task(options, &limits_ref, &tcx, name, vc_expr.clone())?;
+                println!("vc expression with inlined templates: {}",remove_casts(&vc_is_valid.quant_vc.expr));
+                
+            }
+
+            // This vc_tvars_pvars is the vc where both tvars and pvars are not instantiated.
+            // This will be needed later because it will repeatedly get initiated with new tvars,
+            // to check if they are IT
+            let mut vc_tvars_pvars = SmtVcProveTask::translate(vc_is_valid, &mut translate);
+
+            if !options.opt_options.no_simplify {
+                vc_tvars_pvars.simplify();
+            }
+
+            if options.debug_options.z3_trace {
+                tracing::info!("Z3 tracing output will be written to `z3.log`.");
+            }
+
+            let mut iteration = 0;
+            const MAX_REFINEMENT_ITERS: usize = 200;
+
+            // In the first iteration we will use the vc where both tvars and pvars are uninstantiated, but
+            // starting from the second loop iteration, the tvars will be instantiated with some value
+            let mut vc_pvars = vc_tvars_pvars.clone();
+
+            let mut tvar_mapping: HashMap<ast::symbol::Ident, Expr> = HashMap::new();
+
+            let mut duration_check = Duration::new(0, 0);
+            let mut duration_template_inst = Duration::new(0, 0);
+            loop {
+                let start_check = Instant::now(); // Start the timer for template building
+                                                  // Call template builder using the single element
+
+                iteration += 1;
+                // println!("=== Refinement iteration {iteration} ===");
+
+                // Instantiating the template and doing unfolding just for logging.
+                // TODO: maybe this should optionally be printed
+                // let instantiated_template = subst_mapping(tvar_mapping.clone(), &template);
+
+                // let mut template_task = QuantVcProveTask {
+                //     expr: instantiated_template,
+                //     direction: direction,
+                //     deps: vcdeps.clone(),
+                // };
+
+                // // Unfolding (applies substitutions)
+                // template_task.unfold(options, &limits_ref, &tcx)?;
+                // println!("Checking template: {}", template_task.expr);
+
+                // --- Phase 1: Check if tvars are already good (run verification with some eval) ---
+
+                // After the first iteration, vc_pvars shouldn't have any template variables in it
+                // Run the solver
+                let result = vc_pvars.clone().run_solver(
+                    options,
+                    &limits_ref,
+                    name,
+                    &ctx,
+                    &mut translate,
+                    &slice_vars,
+                )?;
+
+                // This result is Proof iff we have already found an admissable template variable evaluation
+                // Otherwise it will give us a cex (an evaluation of the program vars) that we will
+                // add to the constraints on the template vars
+                let prove_result = result.prove_result;
+                duration_check = start_check.elapsed() + duration_check; // Template instantiation time
+
+                match prove_result {
+                    ProveResult::Proof => {
+                        num_proven += 1;
+
+                        let mut instantiated_tasks = Vec::new();
+
+                        for (synth_name, template_expr) in templates.iter() {
+                            let instantiated =
+                                subst_from_mapping(tvar_mapping.clone(), template_expr);
+
+                            let mut task = QuantVcProveTask {
+                                expr: instantiated,
+                                direction,
+                                deps: vcdeps.clone(),
+                            };
+
+                            task.unfold(options, &limits_ref, &tcx)?;
+                            task.remove_neutrals(&limits_ref, &tcx)?;
+
+                            instantiated_tasks.push((synth_name.clone(), task));
+                        }
+
+                        let duration_inductivity = start_total.elapsed();
+
+                        println!(
         "After {iteration} iterations, the following admissible invariants were found:"
     );
 
-                    for (name, task) in instantiated_tasks.iter() {
-                        println!("  {} := {}", name, remove_casts(&task.expr));
+                        for (name, task) in instantiated_tasks.iter() {
+                            println!("  {} := {}", name, remove_casts(&task.expr));
+                        }
+
+                        println!(
+                            "Total synthesis took: {:.2}",
+                            duration_inductivity.as_secs_f64()
+                        );
+                        println!(
+                            "Verification checks took: {:.2}",
+                            duration_check.as_secs_f64()
+                        );
+                        println!(
+                            "Template instantiation took: {:.2}",
+                            duration_template_inst.as_secs_f64()
+                        );
+                        split_count = MAX_SPLIT_COUNT+1;
+                        break;
                     }
 
-                    println!(
-                        "Total synthesis took: {:.2}",
-                        duration_inductivity.as_secs_f64()
-                    );
-                    println!(
-                        "Verification checks took: {:.2}",
-                        duration_check.as_secs_f64()
-                    );
-                    println!(
-                        "Template instantiation took: {:.2}",
-                        duration_template_inst.as_secs_f64()
-                    );
-
-                    break;
+                    ProveResult::Counterexample => {
+                        // println!("Counterexample found, refining template variables...");
+                    }
+                    ProveResult::Unknown(msg) => {
+                        num_failures += 1;
+                        println!("Solver returned unknown for {name}: {msg}");
+                        break;
+                    }
                 }
 
-                ProveResult::Counterexample => {
-                    // println!("Counterexample found, refining template variables...");
-                }
-                ProveResult::Unknown(msg) => {
+                if iteration >= MAX_REFINEMENT_ITERS {
+                    println!("Reached max refinement iterations ({iteration}) for {name}.");
                     num_failures += 1;
-                    println!("Solver returned unknown for {name}: {msg}");
                     break;
                 }
-            }
 
-            if iteration >= MAX_REFINEMENT_ITERS {
-                println!("Reached max refinement iterations ({iteration}) for {name}.");
-                num_failures += 1;
-                break;
-            }
+                // --- Phase 2: Template-model search ---
 
-            // --- Phase 2: Template-model search ---
+                let start_template_instatiate = Instant::now(); // Start the timer for template building
 
-            let start_template_instatiate = Instant::now(); // Start the timer for template building
+                // Here we add the original vc_tvars_pvars instantiated with the model for the program variables
+                // to the constraint we use to find valuations for the template variables.
+                if let Some(model) = result.model {
+                    // vc_tvars: pre <~ code(post)
+                    // this is 0 iff pre >= code(post) (valid if 0)
+                    let mapping = create_subst_mapping(&model, &mut translate);
 
-            // Here we add the original vc_tvars_pvars instantiated with the model for the program variables
-            // to the constraint we use to find valuations for the template variables.
-            if let Some(model) = result.model {
-                // vc_tvars: pre <~ code(post)
-                // this is 0 iff pre >= code(post) (valid if 0)
-                let mapping = create_subst_mapping(&model, &mut translate);
-
-                let filtered_mapping: HashMap<Ident, Expr> = mapping
-                    .iter()
-                    .filter(|(key, _)| !all_template_vars.contains(key))
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect();
-
-                let vc_tvars = subst_from_mapping(filtered_mapping, &vc_tvars_pvars.quant_vc.expr);
-
-                // Create a quantprovetask (so that we get the unfolding)
-                let constraints_on_tvars_task = QuantVcProveTask {
-                    expr: vc_tvars,
-                    direction: direction,
-                    deps: vcdeps.clone(),
-                };
-
-                let new_constraint = match lower_quant_prove_task(
-                    options,
-                    &limits_ref,
-                    &tcx,
-                    name,
-                    constraints_on_tvars_task,
-                ) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        // handle or return the error
-                        return Err(e.into());
-                    }
-                };
-
-                // Add the new constraint to the constraint-set via conjunction
-                constraints = builder.binary(
-                    BinOpKind::And,
-                    Some(TyKind::Bool),
-                    new_constraint.vc,
-                    constraints,
-                );
-
-                // Create a Boolean verification task from the constraints
-                let constraints_on_tvars_bool_task = BoolVcProveTask {
-                    quant_vc: new_constraint.quant_vc,
-                    vc: constraints.clone(),
-                };
-
-                // --- Phase 3: Evaluate template variables in original vc ---
-
-                if let Some(mapping) = get_model_for_constraints(
-                    &ctx,
-                    options,
-                    &limits_ref,
-                    &name,
-                    constraints_on_tvars_bool_task,
-                    &mut translate,
-                )? {
                     let filtered_mapping: HashMap<Ident, Expr> = mapping
                         .iter()
-                        .filter(|(key, _)| all_template_vars.contains(key))
+                        .filter(|(key, _)| !all_template_vars.contains(key))
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .collect();
 
-                    let instantiated_vc =
-                        subst_from_mapping(filtered_mapping.clone(), &vc_tvars_pvars.quant_vc.expr);
+                    let vc_tvars =
+                        subst_from_mapping(filtered_mapping, &vc_tvars_pvars.quant_vc.expr);
 
-                    // Rebuild a new Boolean task with the updated formula
-                    let refined_vc = QuantVcProveTask {
-                        expr: instantiated_vc,
+                    // Create a quantprovetask (so that we get the unfolding)
+                    let constraints_on_tvars_task = QuantVcProveTask {
+                        expr: vc_tvars,
                         direction: direction,
                         deps: vcdeps.clone(),
                     };
 
-                    let refined_vc =
-                        lower_quant_prove_task(options, &limits_ref, &tcx, name, refined_vc)?;
+                    let new_constraint = match lower_quant_prove_task(
+                        options,
+                        &limits_ref,
+                        &tcx,
+                        name,
+                        constraints_on_tvars_task,
+                    ) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            // handle or return the error
+                            return Err(e.into());
+                        }
+                    };
 
-                    // Translate again to SMT form
-                    vc_pvars = SmtVcProveTask::translate(refined_vc, &mut translate);
+                    // Add the new constraint to the constraint-set via conjunction
+                    constraints = builder.binary(
+                        BinOpKind::And,
+                        Some(TyKind::Bool),
+                        new_constraint.vc,
+                        constraints,
+                    );
 
-                    tvar_mapping = filtered_mapping;
-                    duration_template_inst =
-                        start_template_instatiate.elapsed() + duration_template_inst; // Template instantiation time
+                    // Create a Boolean verification task from the constraints
+                    let constraints_on_tvars_bool_task = BoolVcProveTask {
+                        quant_vc: new_constraint.quant_vc,
+                        vc: constraints.clone(),
+                    };
 
-                    continue; // restart the loop with the new VC
-                } else {
-                    println!(
+                    // --- Phase 3: Evaluate template variables in original vc ---
+
+                    if let Some(mapping) = get_model_for_constraints(
+                        &ctx,
+                        options,
+                        &limits_ref,
+                        &name,
+                        constraints_on_tvars_bool_task,
+                        &mut translate,
+                    )? {
+                        let filtered_mapping: HashMap<Ident, Expr> = mapping
+                            .iter()
+                            .filter(|(key, _)| all_template_vars.contains(key))
+                            .map(|(k, v)| (k.clone(), v.clone()))
+                            .collect();
+
+                        let instantiated_vc = subst_from_mapping(
+                            filtered_mapping.clone(),
+                            &vc_tvars_pvars.quant_vc.expr,
+                        );
+
+                        // Rebuild a new Boolean task with the updated formula
+                        let refined_vc = QuantVcProveTask {
+                            expr: instantiated_vc,
+                            direction: direction,
+                            deps: vcdeps.clone(),
+                        };
+
+                        let refined_vc =
+                            lower_quant_prove_task(options, &limits_ref, &tcx, name, refined_vc)?;
+
+                        // Translate again to SMT form
+                        vc_pvars = SmtVcProveTask::translate(refined_vc, &mut translate);
+
+                        tvar_mapping = filtered_mapping;
+                        duration_template_inst =
+                            start_template_instatiate.elapsed() + duration_template_inst; // Template instantiation time
+
+                        continue; // restart the loop with the new VC
+                    } else {
+                        println!(
                         "No template model found; stopping refinement after iteration {iteration}."
                     );
-                    num_failures += 1;
-                    break;
+                        num_failures += 1;
+                        break;
+                    }
                 }
             }
+            split_count = split_count + 1;
         }
     }
 
