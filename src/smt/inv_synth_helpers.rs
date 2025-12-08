@@ -373,21 +373,22 @@ pub fn get_variable_region_splits<'ctx>(
     region_conditions
 }
 
+
+// Creates the expression (collected_guards x split_conditions) * lc
 pub fn assemble_piecewise_expression<'smt, 'ctx>(
     synth_name: &Ident,
-    synth_val: &uninterpreted::FuncEntry,
-    valid_iversons: &[Expr],
+    collected_guards: &[Expr],
     split_conditions: &Vec<Expr>,
     builder: &mut ExprBuilder,
     tcx: &TyCtx,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     ctx: &'ctx z3::Context,
     declare_template_var: &mut dyn FnMut(String) -> decl::VarDecl,
-    program_var_decls: &[VarDecl], // new argument
+    program_var_decls: &[VarDecl],
 ) -> Expr {
     let mut final_expr: Option<Expr> = None;
 
-    for (i_idx, iv_prod) in valid_iversons.iter().enumerate() {
+    for (i_idx, iv_prod) in collected_guards.iter().enumerate() {
         for (s_idx, split) in split_conditions.iter().enumerate() {
             let both = builder.binary(
                 BinOpKind::And,
@@ -395,6 +396,9 @@ pub fn assemble_piecewise_expression<'smt, 'ctx>(
                 iv_prod.clone(),
                 split.clone(),
             );
+
+            // Check satisfiability of guard && split_condition, since this is a short formula
+            // and if it is not sat we don't have to add the lc
             let expr_z3 = translate.t_bool(&both);
             let mut prover = Prover::new(&ctx, IncrementalMode::Native);
             prover.add_assumption(&expr_z3);
@@ -436,14 +440,12 @@ pub fn build_template_expression<'smt, 'ctx>(
     translate: &mut TranslateExprs<'smt, 'ctx>,
     ctx: &'ctx z3::Context,
 ) -> (Expr, Vec<Ident>) {
-    // -------------------------------------------------------------------------
     // Storage for all newly created template parameter identifiers
-    // -------------------------------------------------------------------------
     let mut template_idents: Vec<Ident> = Vec::new();
 
-    // ---- Collect non-boolean program variables and VarDecls once ----
     let mut program_var_decls = Vec::new();
     let mut program_vars = Vec::new();
+    let mut program_vars_no_cast = Vec::new();
 
     for param in &synth_val.inputs.node {
         let vardecl = VarDecl::from_param(param, VarKind::Input)
@@ -451,11 +453,13 @@ pub fn build_template_expression<'smt, 'ctx>(
             .unwrap();
         if vardecl.ty != TyKind::Bool {
             let raw = builder.var(vardecl.name, tcx);
-            let casted = builder.cast(TyKind::Real, raw);
+            let casted = builder.cast(TyKind::Real, raw.clone());
             program_var_decls.push(vardecl);
             program_vars.push(casted);
+            program_vars_no_cast.push(raw);
         }
     }
+
     // Template-variable declaration closure
     let mut declare_template_var = |name: String| -> decl::VarDecl {
         let full_name = format!("{}{}", name, split_count);
@@ -474,20 +478,15 @@ pub fn build_template_expression<'smt, 'ctx>(
         decl
     };
 
-    // -------------------------------------------------------------------------
     // Step 1: Collect Boolean conditions relevant to the inputs
-    // -------------------------------------------------------------------------
     let bool_exprs = collect_relevant_bool_conditions(synth_val, vc_expr);
 
     assert!(
         !bool_exprs.is_empty(),
         "No boolean expressions remain after filtering."
     );
-    println!("bool_exprs: {:?}", bool_exprs);
 
-    // -------------------------------------------------------------------------
     // Step 2: Build all split predicates
-    // -------------------------------------------------------------------------
     let ranged_vars: Vec<(Expr, Range)> = program_var_decls
         .iter()
         .filter_map(|v| {
@@ -499,11 +498,8 @@ pub fn build_template_expression<'smt, 'ctx>(
 
     let split_conditions = get_fix_region_splits(&ranged_vars, split_count, builder);
 
-    println!("split_conditions: {:?}", split_conditions);
 
-    // -------------------------------------------------------------------------
     // Step 3: Compute satisfiable guards from Boolean conditions
-    // -------------------------------------------------------------------------
     let mut valid_iversons = Vec::new();
     explore_boolean_assignments(
         0,
@@ -522,12 +518,9 @@ pub fn build_template_expression<'smt, 'ctx>(
         valid_iversons.len() * split_conditions.len()
     );
 
-    // -------------------------------------------------------------------------
-    // Step 4: Combine original guars × split conditions and multiply each with own lin.exp
-    // -------------------------------------------------------------------------
-    let final_expr = assemble_piecewise_expression(
+    // Step 4: Combine original guards × split conditions and multiply each with own lin.exp
+    let mut final_expr = assemble_piecewise_expression(
         synth_name,
-        synth_val,
         &valid_iversons,
         &split_conditions,
         builder,
@@ -537,6 +530,21 @@ pub fn build_template_expression<'smt, 'ctx>(
         &mut declare_template_var,
         &program_var_decls, // pass here
     );
+
+    // Step 5: Substitute only program variables in final_expr
+    let free_vars = collect_program_vars(&final_expr);
+
+    // Build substitution iterator only for variables that match program_var_decls
+    let subst_iter = free_vars.into_iter().filter_map(|id| {
+        // Find index of program_var_decl with same name
+        program_var_decls
+            .iter()
+            .position(|decl| decl.name.name == id.name)
+            .map(|idx| (id, program_vars_no_cast[idx].clone()))
+    });
+
+    // Apply substitution
+    final_expr = builder.subst(final_expr, subst_iter);
 
     (final_expr, template_idents)
 }
@@ -604,7 +612,7 @@ fn explore_boolean_assignments<'smt, 'ctx>(
         prover.add_assumption(&expr_z3);
 
         if prover.check_sat() == SatResult::Sat {
-            // Prefix is SAT → explore deeper
+            // Prefix is SAT -> explore deeper
             explore_boolean_assignments(
                 idx + 1,
                 bool_exprs,

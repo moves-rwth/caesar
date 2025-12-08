@@ -106,21 +106,22 @@ fn synth_inv_main(
     user_files: &[FileId],
 ) -> Result<bool, CaesarError> {
     let start_total = Instant::now();
-    let mut split_count = 2;
+    let mut split_count = 0;
     let mut num_proven: usize = 0;
     let mut num_failures: usize = 0;
-    const MAX_REFINEMENT_ITERS: usize = 100;
-    const MAX_SPLIT_COUNT: usize = 2;
+    const MAX_REFINEMENT_ITERS: usize = 300;
+    const MAX_SPLIT_COUNT: usize = 3;
 
     while split_count <= MAX_SPLIT_COUNT {
+        // I have to reset the tcx, how do I do that without parsing new?
         let (mut module, mut tcx) = parse_and_tycheck(
             &options.input_options,
             &options.debug_options,
             server,
             user_files,
         )?;
-
         let duration_parse = start_total.elapsed(); // Parse time
+
         println!("Parse time = {:.2}", duration_parse.as_secs_f64());
 
         // Register all relevant source units with the server
@@ -213,7 +214,6 @@ fn synth_inv_main(
                         &mut translate,
                         &ctx,
                     );
-                    println!("Template vars {vars:?}");
 
                     let duration_template = start_template.elapsed();
                     println!(
@@ -235,6 +235,7 @@ fn synth_inv_main(
                     );
 
                     let mut tpl = temp_template.clone();
+
                     let mut unfolder = Unfolder::new(limits_ref.clone(), &smt_ctx_local);
                     unfolder.visit_expr(&mut tpl)?;
 
@@ -406,8 +407,6 @@ fn synth_inv_main(
                 // Here we add the original vc_tvars_pvars instantiated with the model for the program variables
                 // to the constraint we use to find valuations for the template variables.
                 if let Some(model) = result.model {
-                    // vc_tvars: pre <~ code(post)
-                    // this is 0 iff pre >= code(post) (valid if 0)
                     let mapping = create_subst_mapping(&model, &mut translate);
 
                     let filtered_mapping: HashMap<Ident, Expr> = mapping
