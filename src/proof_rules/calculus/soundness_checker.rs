@@ -39,8 +39,6 @@ pub struct ApproximationRecord {
     pub stmt_kind: StmtKindName,
     pub kind: ApproximationKind,
 }
-// #[derive(Debug, Clone, Default)]
-// pub struct ApproximationList(pub Vec<ApproximationRecord>);
 
 pub type ApproximationList = Vec<ApproximationRecord>;
 
@@ -122,6 +120,7 @@ impl ProcSoundness {
             calculus,
         }
     }
+
     /// Get whether proofs for this procedure are sound.
     pub fn sound_proofs(&self) -> bool {
         self.sound_proofs
@@ -222,11 +221,11 @@ impl ProcSoundness {
 /// The original program semantics is based on the calculus annotation or the default fixpoint semantics for loops based on the direction and the encoding used.
 ///
 /// See also [`infer_fixpoint_semantics_kind`] for more details on how the semantics kind is inferred.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ApproximationKind {
-    /// True if the vc semantics under-approximates the original program semantics
+    /// True if the vc semantics under-approximates the original program semantics.
     pub under: bool,
-    /// True if the vc semantics over-approximates the original program semantics
+    /// True if the vc semantics over-approximates the original program semantics.
     pub over: bool,
 }
 
@@ -255,23 +254,24 @@ impl BitOr for ApproximationKind {
 }
 
 impl ApproximationKind {
-    /// vc is both under- and over-approximating the original program semantics
+    /// vc is both under- and over-approximating the original program semantics.
     pub const EXACT: Self = Self {
         under: true,
         over: true,
     };
-    /// vc under-approximates the original program semantics
+    /// vc under-approximates the original program semantics.
     pub const UNDER: Self = Self {
         under: true,
         over: false,
     };
-    /// vc over-approximates the original program semantics
+    /// vc over-approximates the original program semantics.
     pub const OVER: Self = Self {
         under: false,
         over: true,
     };
-    /// vc neither under- nor over-approximates the original program semantics
-    /// This means !(vc[S] ≤ semantics[S]) and !(vc[S] ≥ semantics[S])
+    /// vc neither under- nor over-approximates the original program semantics.
+    ///
+    /// This means !(vc[S] ≤ semantics[S]) and !(vc[S] ≥ semantics[S]).
     pub const UNKNOWN: Self = Self {
         under: false,
         over: false,
