@@ -487,6 +487,7 @@ fn slice_sat_binary_search<'ctx>(
     let min_least_bound = 0;
     let mut minimize = PartialMinimizer::new(min_least_bound..=slice_vars.len());
 
+    
     let mut cur_solver_n = None;
     let mut slice_searcher = SliceModelSearch::new(active_slice_vars.to_vec());
     while let Some(n) = minimize.next_trial() {
@@ -513,6 +514,7 @@ fn slice_sat_binary_search<'ctx>(
         if prover.get_reason_unknown() == Some(ReasonUnknown::Interrupted) {
             return Err(CaesarError::Interrupted);
         }
+
 
         let mut done = false;
         if let Some(model) = prover.get_model() {

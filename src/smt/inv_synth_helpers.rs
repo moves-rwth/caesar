@@ -128,11 +128,11 @@ pub fn create_subst_mapping<'ctx>(
 /// "Instantiate" an expression with concrete values from a mapping.
 /// To do this, wrap the expression in nested `Subst` expressions.
 /// Then later tunfolding can take care of the actual substitutions.
-pub fn subst_from_mapping<'ctx>(mapping: HashMap<ast::symbol::Ident, Expr>, vc: &Expr) -> Expr {
+pub fn subst_from_mapping<'ctx>(mapping: &HashMap<ast::symbol::Ident, Expr>, vc: &Expr) -> Expr {
     let mut wrapped = vc.clone();
     for (ident, expr) in mapping {
         wrapped = Shared::new(ExprData {
-            kind: ExprKind::Subst(ident, expr, wrapped.clone()),
+            kind: ExprKind::Subst(*ident, expr.clone(), wrapped.clone()),
             ty: wrapped.ty.clone(),
             span: vc.span,
         });
@@ -294,7 +294,7 @@ fn cartesian_and(lists: &[Vec<Expr>], builder: &ExprBuilder) -> Vec<Expr> {
     acc
 }
 
-pub fn get_variable_region_splits<'ctx>(
+pub fn _get_variable_region_splits<'ctx>(
     program_vars: &[Expr], // precomputed builder variables
     split_count: usize,
     builder: &mut ExprBuilder,
@@ -373,7 +373,6 @@ pub fn get_variable_region_splits<'ctx>(
     region_conditions
 }
 
-
 // Creates the expression (collected_guards x split_conditions) * lc
 pub fn assemble_piecewise_expression<'smt, 'ctx>(
     synth_name: &Ident,
@@ -388,6 +387,8 @@ pub fn assemble_piecewise_expression<'smt, 'ctx>(
 ) -> Expr {
     let mut final_expr: Option<Expr> = None;
 
+    // let mut prover = Prover::new(&ctx, IncrementalMode::Emulated);
+
     for (i_idx, iv_prod) in collected_guards.iter().enumerate() {
         for (s_idx, split) in split_conditions.iter().enumerate() {
             let both = builder.binary(
@@ -400,7 +401,10 @@ pub fn assemble_piecewise_expression<'smt, 'ctx>(
             // Check satisfiability of guard && split_condition, since this is a short formula
             // and if it is not sat we don't have to add the lc
             let expr_z3 = translate.t_bool(&both);
+
+            // prover.reset();
             let mut prover = Prover::new(&ctx, IncrementalMode::Native);
+
             prover.add_assumption(&expr_z3);
 
             if prover.check_sat() == SatResult::Sat {
@@ -439,7 +443,7 @@ pub fn build_template_expression<'smt, 'ctx>(
     split_count: usize,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     ctx: &'ctx z3::Context,
-) -> (Expr, Vec<Ident>) {
+) -> (Expr, Vec<Ident>, usize) {
     // Storage for all newly created template parameter identifiers
     let mut template_idents: Vec<Ident> = Vec::new();
 
@@ -498,7 +502,6 @@ pub fn build_template_expression<'smt, 'ctx>(
 
     let split_conditions = get_fix_region_splits(&ranged_vars, split_count, builder);
 
-
     // Step 3: Compute satisfiable guards from Boolean conditions
     let mut valid_iversons = Vec::new();
     explore_boolean_assignments(
@@ -510,12 +513,6 @@ pub fn build_template_expression<'smt, 'ctx>(
         &mut Vec::new(),        // partial assignment
         builder.bool_lit(true), // initial Iverson factor
         &mut valid_iversons,    // output
-    );
-
-    println!(
-        "Number of expressions for {} is {}",
-        synth_name,
-        valid_iversons.len() * split_conditions.len()
     );
 
     // Step 4: Combine original guards × split conditions and multiply each with own lin.exp
@@ -546,7 +543,11 @@ pub fn build_template_expression<'smt, 'ctx>(
     // Apply substitution
     final_expr = builder.subst(final_expr, subst_iter);
 
-    (final_expr, template_idents)
+    (
+        final_expr,
+        template_idents,
+        valid_iversons.len() * split_conditions.len(),
+    )
 }
 
 pub fn get_synth_functions<'ctx>(
@@ -589,6 +590,8 @@ fn explore_boolean_assignments<'smt, 'ctx>(
         return;
     }
 
+    // let mut prover = Prover::new(&ctx, IncrementalMode::Emulated);
+
     // Recursive case: branch on bit = false / true
     for &bit in &[false, true] {
         partial_assign.push(bit);
@@ -607,8 +610,11 @@ fn explore_boolean_assignments<'smt, 'ctx>(
         }
 
         // SAT check for the prefix
+        // prover.reset();
+        // println!("prover: {:?}",prover.get_assertions());
         let expr_z3 = translate.t_bool(&new_iverson);
         let mut prover = Prover::new(&ctx, IncrementalMode::Native);
+
         prover.add_assumption(&expr_z3);
 
         if prover.check_sat() == SatResult::Sat {

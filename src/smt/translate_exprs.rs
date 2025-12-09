@@ -665,7 +665,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     }
 
     /// Call to a function.
-    fn t_call(&mut self, name: Ident, args: &[Expr]) -> Symbolic<'ctx> {
+    pub fn t_call(&mut self, name: Ident, args: &[Expr]) -> Symbolic<'ctx> {
         match self.ctx.tcx().get(name).as_deref() {
             Some(DeclKind::FuncDecl(func)) => {
                 let args = args.iter().map(|arg| self.t_symbolic(arg)).collect_vec();

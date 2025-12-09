@@ -154,7 +154,6 @@ impl<'ctx> Prover<'ctx> {
 
     /// `self.check_proof_assuming(&[])`.
     pub fn check_proof(&mut self) -> ProveResult {
-
         self.check_proof_assuming(&[])
     }
 
@@ -195,9 +194,6 @@ impl<'ctx> Prover<'ctx> {
 
     /// Do the regular SAT check.
     pub fn check_sat(&mut self) -> SatResult {
-        // println!("it happens in check_sat");
-        // println!("these are the assertions: {:?}", self.get_assertions());
-        // println!("This is the context: {:?}", self.get_context());
         if let Some(cached_result) = &self.last_result {
             return cached_result.last_result;
         }
@@ -305,6 +301,14 @@ impl<'ctx> Prover<'ctx> {
         match self.solver {
             StackSolver::Native(solver) => solver,
             StackSolver::Emulated(solver, _) => solver,
+        }
+    }
+
+    /// See [`Solver::reset`].
+    pub fn reset(&mut self) {
+        match &mut self.solver {
+            StackSolver::Native(solver) => solver.reset(),
+            StackSolver::Emulated(solver, _) => solver.reset(),
         }
     }
 

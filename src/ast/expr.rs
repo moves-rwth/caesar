@@ -1,8 +1,8 @@
 //! Abstract representation of expressions.
 
-use std::{fmt, str::FromStr};
-
+use num::Signed;
 use num::{BigInt, BigRational, BigUint, One, Zero};
+use std::{fmt, str::FromStr};
 
 use crate::{
     pretty::{parens_group, pretty_list, Doc, SimplePretty},
@@ -458,6 +458,14 @@ impl LitKind {
             LitKind::UInt(num) => num.is_one(),
             LitKind::Int(num) => num.is_one(),
             LitKind::Frac(frac) => frac.is_one(),
+            _ => false,
+        }
+    }
+    pub fn is_negative(&self) -> bool {
+        match self {
+            LitKind::UInt(_) => false,
+            LitKind::Int(num) => num.is_negative(),
+            LitKind::Frac(frac) => frac.is_negative(),
             _ => false,
         }
     }

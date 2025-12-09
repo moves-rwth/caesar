@@ -27,13 +27,6 @@ use crate::{
 };
 use z3::{Config, Context};
 use z3rro::prover::ProveResult;
-///! Right now, just imagine there is only one syn fun. Later maybe some sort of counting up should happen?
-///! How do I actually put the template instance into the function?
-///! Okay lets think...
-///! For just linear: For each input parameter, create one template variable + one extra one
-///! Then put them together in a sum, somehow get that into the function body,
-///! Once for each boolean condition and negated (this might be a bit nonsensical, its just for now)
-///
 /// The inner loop of the invariant synthesis procedure.
 ///
 /// This loop refines candidate invariants iteratively through several phases:
@@ -109,7 +102,7 @@ fn synth_inv_main(
     let mut split_count = 0;
     let mut num_proven: usize = 0;
     let mut num_failures: usize = 0;
-    const MAX_REFINEMENT_ITERS: usize = 300;
+    const MAX_CEGIS_ITERS: usize = 300;
     const MAX_SPLIT_COUNT: usize = 3;
 
     while split_count <= MAX_SPLIT_COUNT {
@@ -204,7 +197,7 @@ fn synth_inv_main(
                     let start_template = Instant::now();
 
                     // Build template for this particular synthesized function
-                    let (temp_template, vars) = build_template_expression(
+                    let (temp_template, vars, temp_num_guards) = build_template_expression(
                         synth_name,
                         synth_val,
                         &vc_expr.expr,
@@ -222,7 +215,7 @@ fn synth_inv_main(
                         duration_template.as_secs_f64()
                     );
 
-                    all_template_vars.extend(vars);
+                    all_template_vars.extend(vars.clone());
 
                     // Process the template (unfold, neutral removal, etc.)
                     let ctx = Context::new(&Config::default());
@@ -246,11 +239,11 @@ fn synth_inv_main(
                     println!("template for `{}`: {}", synth_name, remove_casts(&tpl));
 
                     // Store the processed template
-                    templates.push((synth_name.clone(), tpl));
+                    templates.push((synth_name.clone(), tpl, temp_num_guards));
                 }
 
                 // Now inline ALL templates into vc_expr
-                for (func_ident, template_expr) in templates.iter() {
+                for (func_ident, template_expr, _num_guards) in templates.iter() {
                     let func_entry = synth
                         .get(func_ident)
                         .expect("synth function disappeared unexpectedly");
@@ -301,22 +294,53 @@ fn synth_inv_main(
                                                   // Call template builder using the single element
 
                 iteration += 1;
-                // println!("=== Refinement iteration {iteration} ===");
+                // println!("=== CEGIS loop {iteration} ===");
 
                 // Instantiating the template and doing unfolding just for logging.
                 // TODO: maybe this should optionally be printed
-                // let instantiated_template = subst_mapping(tvar_mapping.clone(), &template);
+                // let mut instantiated_tasks = Vec::new();
 
-                // let mut template_task = QuantVcProveTask {
-                //     expr: instantiated_template,
-                //     direction: direction,
-                //     deps: vcdeps.clone(),
-                // };
+                // for (synth_name, template_expr, num_guards, template_vars) in templates.iter() {
+                //     let instantiated = subst_from_mapping(tvar_mapping.clone(), template_expr);
 
-                // // Unfolding (applies substitutions)
-                // template_task.unfold(options, &limits_ref, &tcx)?;
-                // println!("Checking template: {}", template_task.expr);
+                //     let mut task = QuantVcProveTask {
+                //         expr: instantiated,
+                //         direction,
+                //         deps: vcdeps.clone(),
+                //     };
 
+                //     task.unfold(options, &limits_ref, &tcx)?;
+                //     // templatVariables that are still not instantiated, can be whatever value, we set them to zero to
+                //     // minimise the size of the invariant
+
+                //     let map_to_zero: HashMap<Ident, _> = template_vars
+                //         .iter()
+                //         .cloned()
+                //         .map(|id| (id, builder.zero_lit(&TyKind::Real)))
+                //         .collect();
+                //     let instantiated = subst_from_mapping(map_to_zero, &task.expr);
+                //     println!("Instantiated invariant {instantiated}");
+                //     let mut task = QuantVcProveTask {
+                //         expr: instantiated,
+                //         direction,
+                //         deps: vcdeps.clone(),
+                //     };
+
+                //     task.unfold(options, &limits_ref, &tcx)?;
+                //     // task.remove_neutrals(&limits_ref, &tcx)?;
+
+                //     instantiated_tasks.push((synth_name.clone(), task));
+                //     println!(
+                //         "Number of guard expressions for invariant {synth_name}: {}",
+                //         num_guards
+                //     );
+                // }
+
+                // println!("We will now check invariants:");
+
+                // for (name, task) in instantiated_tasks.iter() {
+                //     println!("  {} := {}", name, remove_casts(&task.expr));
+                // }
                 // --- Phase 1: Check if tvars are already good (run verification with some eval) ---
 
                 // After the first iteration, vc_pvars shouldn't have any template variables in it
@@ -342,9 +366,11 @@ fn synth_inv_main(
 
                         let mut instantiated_tasks = Vec::new();
 
-                        for (synth_name, template_expr) in templates.iter() {
+                        for (synth_name, template_expr, num_guards) in
+                            templates.iter()
+                        {
                             let instantiated =
-                                subst_from_mapping(tvar_mapping.clone(), template_expr);
+                                subst_from_mapping(&tvar_mapping.clone(), template_expr);
 
                             let mut task = QuantVcProveTask {
                                 expr: instantiated,
@@ -356,13 +382,17 @@ fn synth_inv_main(
                             task.remove_neutrals(&limits_ref, &tcx)?;
 
                             instantiated_tasks.push((synth_name.clone(), task));
+                            println!(
+                                "Number of guard expressions for invariant {synth_name}: {}",
+                                num_guards
+                            );
                         }
 
                         let duration_inductivity = start_total.elapsed();
 
                         println!(
-        "After {iteration} iterations, the following admissible invariants were found:"
-    );
+                                    "After {iteration} CEGIS loop iterations, the following admissible invariants were found:"
+                                );
 
                         for (name, task) in instantiated_tasks.iter() {
                             println!("  {} := {}", name, remove_casts(&task.expr));
@@ -380,6 +410,8 @@ fn synth_inv_main(
                             "Template instantiation took: {:.2}",
                             duration_template_inst.as_secs_f64()
                         );
+                        println!("Number of templates generated: {}", split_count + 1);
+
                         split_count = MAX_SPLIT_COUNT + 1;
                         break;
                     }
@@ -394,8 +426,8 @@ fn synth_inv_main(
                     }
                 }
 
-                if iteration >= MAX_REFINEMENT_ITERS {
-                    println!("Reached max refinement iterations ({iteration}) for {name}.");
+                if iteration >= MAX_CEGIS_ITERS {
+                    println!("Reached max num of CEGIS loops ({iteration}) for {name}.");
                     num_failures += 1;
                     break;
                 }
@@ -416,7 +448,7 @@ fn synth_inv_main(
                         .collect();
 
                     let vc_tvars =
-                        subst_from_mapping(filtered_mapping, &vc_tvars_pvars.quant_vc.expr);
+                        subst_from_mapping(&filtered_mapping, &vc_tvars_pvars.quant_vc.expr);
 
                     // Create a quantprovetask (so that we get the unfolding)
                     let constraints_on_tvars_task = QuantVcProveTask {
@@ -463,23 +495,34 @@ fn synth_inv_main(
                         constraints_on_tvars_bool_task,
                         &mut translate,
                     )? {
-                        let filtered_mapping: HashMap<Ident, Expr> = mapping
+                        // templatVariables that are still not instantiated, can be whatever value, we set them to zero to
+                        // minimise the size of the invariant
+                        let zero_extended_mapping: HashMap<Ident, Expr> = all_template_vars
                             .iter()
-                            .filter(|(key, _)| all_template_vars.contains(key))
-                            .map(|(k, v)| (k.clone(), v.clone()))
+                            .cloned()
+                            .map(|id| {
+                                let value = mapping
+                                    .get(&id.clone())
+                                    .cloned()
+                                    .unwrap_or_else(|| builder.zero_lit(&TyKind::EUReal));
+                                (id.clone(), value)
+                            })
                             .collect();
 
                         let instantiated_vc = subst_from_mapping(
-                            filtered_mapping.clone(),
+                            &zero_extended_mapping,
                             &vc_tvars_pvars.quant_vc.expr,
                         );
 
                         // Rebuild a new Boolean task with the updated formula
-                        let refined_vc = QuantVcProveTask {
+                        let mut refined_vc = QuantVcProveTask {
                             expr: instantiated_vc,
                             direction: direction,
                             deps: vcdeps.clone(),
                         };
+
+                        refined_vc.unfold(options, &limits_ref, &tcx)?;
+                        refined_vc.remove_neutrals(&limits_ref, &tcx)?;
 
                         let refined_vc =
                             lower_quant_prove_task(options, &limits_ref, &tcx, name, refined_vc)?;
@@ -487,14 +530,14 @@ fn synth_inv_main(
                         // Translate again to SMT form
                         vc_pvars = SmtVcProveTask::translate(refined_vc, &mut translate);
 
-                        tvar_mapping = filtered_mapping;
+                        tvar_mapping = zero_extended_mapping;
                         duration_template_inst =
                             start_template_instatiate.elapsed() + duration_template_inst; // Template instantiation time
 
                         continue; // restart the loop with the new VC
                     } else {
                         println!(
-                        "No template model found; stopping refinement after iteration {iteration}."
+                        "No template model found; stopping CEGIS loop after iteration {iteration}."
                     );
                         // println!(
                         //     "The last condition that was checked was: {}",

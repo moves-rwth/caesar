@@ -156,6 +156,37 @@ pub fn is_zero_lit(expr: &Expr) -> bool {
     }
 }
 
+pub fn is_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(lit) => true,
+        ExprKind::Cast(inner) => match &inner.kind {
+            ExprKind::Lit(lit) => true,
+            _ => false,
+        },
+        ExprKind::Unary(un_op, inner) => match un_op.node {
+            UnOpKind::Parens => is_lit(inner),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+
+pub fn is_neg_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(lit) => lit.node.is_negative(),
+        ExprKind::Cast(inner) => match &inner.kind {
+            ExprKind::Lit(lit) => lit.node.is_negative(),
+            _ => false,
+        },
+        ExprKind::Unary(un_op, inner) => match un_op.node {
+            UnOpKind::Parens => is_lit(inner),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
 pub fn is_one_lit(expr: &Expr) -> bool {
     match &expr.kind {
         ExprKind::Lit(lit) => lit.node.is_one(),

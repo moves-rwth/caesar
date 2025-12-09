@@ -29,9 +29,9 @@ use z3rro::prover::{IncrementalMode, Prover};
 
 use crate::{
     ast::{
-        util::{is_bot_lit, is_one_lit, is_top_lit, is_zero_lit},
+        util::{is_bot_lit, is_lit, is_neg_lit, is_one_lit, is_top_lit, is_zero_lit},
         visit::{walk_expr, VisitorMut},
-        BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Shared, Span, Spanned,
+        BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Ident, Shared, Span, Spanned, Symbol,
         TyKind, UnOpKind,
     },
     resource_limits::{LimitError, LimitsRef},
@@ -162,6 +162,26 @@ impl<'smt, 'ctx> VisitorMut for NeutralsRemover<'smt, 'ctx> {
                 }
                 Ok(())
             }
+            ExprKind::Call(func_ident, args) => {
+                let clamp_with_zero_name =
+                    Ident::with_dummy_span(Symbol::intern("clamp_with_zero"));
+                let _ = self.visit_exprs(args);
+                if func_ident.name == clamp_with_zero_name.name {
+                    let builder = ExprBuilder::new(Span::dummy_span());
+                    if is_neg_lit(&args[0]) {
+                        *e = builder.zero_lit(&TyKind::EUReal);
+                    } else if is_lit(&args[0]) {
+                        // using cast doesn't work, because maybe the type is unsinged.
+                        // but since we know the value is positive, we can do this. 
+                        *e = Expr::new(ExprData {
+                            kind: args[0].kind.clone(),
+                            ty: Some(TyKind::EUReal),
+                            span: args[0].span,
+                        });
+                    }
+                }
+                Ok(())
+            }
 
             // ----- subst node -----
             ExprKind::Subst(ident, subst, body) => {
@@ -182,9 +202,7 @@ impl<'smt, 'ctx> VisitorMut for NeutralsRemover<'smt, 'ctx> {
                 use BinOpKind::*;
 
                 match bin_op.node {
-                    // --------------------------
                     // MUL: remove 1
-                    // --------------------------
                     Mul => {
                         if is_one_lit(lhs) {
                             *e = rhs.clone();
@@ -194,12 +212,14 @@ impl<'smt, 'ctx> VisitorMut for NeutralsRemover<'smt, 'ctx> {
                             *e = lhs.clone();
                             return Ok(());
                         }
+                        // remove rhs 0
+                        if is_zero_lit(rhs) {
+                            *e = rhs.clone();
+                            return Ok(());
+                        }
                         Ok(())
                     }
-
-                    // --------------------------
                     // ADD: remove 0
-                    // --------------------------
                     Add => {
                         if is_zero_lit(lhs) {
                             *e = rhs.clone();
@@ -212,39 +232,44 @@ impl<'smt, 'ctx> VisitorMut for NeutralsRemover<'smt, 'ctx> {
                         Ok(())
                     }
 
-                    // --------------------------
                     // AND: remove true
-                    // --------------------------
                     BinOpKind::And => {
                         // Visit children first
                         self.visit_expr(lhs)?;
                         self.visit_expr(rhs)?;
 
-                        // 1) bottom(lhs) → result is bottom
-                        let nonbot:  Option<Result<(), LimitError>> = self.with_nonbot(lhs, |_| Ok(()));
+                        // 1) bottom(lhs) -> result is bottom
+                        let nonbot: Option<Result<(), LimitError>> =
+                            self.with_nonbot(lhs, |_| Ok(()));
                         if nonbot.is_none() {
                             let b = ExprBuilder::new(e.span);
                             *e = b.bot_lit(&ty);
                             return Ok(());
                         }
 
-                        // 2) lhs == true (top) → result = rhs
-                        let nontop:  Option<Result<(), LimitError>> = self.with_nontop(lhs, |_| Ok(()));
+                        // 2) lhs == true (top) -> result = rhs
+                        let nontop: Option<Result<(), LimitError>> =
+                            self.with_nontop(lhs, |_| Ok(()));
                         if nontop.is_none() {
                             *e = rhs.clone();
                             return Ok(());
                         }
 
-                        // 3) NEW: if lhs ⇒ rhs, remove rhs
+                        // 3) if lhs => rhs, remove rhs
                         {
                             let builder = ExprBuilder::new(Span::dummy_span());
 
                             // build (lhs && !rhs)
-                            let not_rhs = builder.unary(UnOpKind::Not, Some(ty.clone()), rhs.clone());
-                            let lhs_and_not_rhs =
-                                builder.binary(BinOpKind::And.into(),  Some(ty),lhs.clone(), not_rhs);
+                            let not_rhs =
+                                builder.unary(UnOpKind::Not, Some(ty.clone()), rhs.clone());
+                            let lhs_and_not_rhs = builder.binary(
+                                BinOpKind::And.into(),
+                                Some(ty),
+                                lhs.clone(),
+                                not_rhs,
+                            );
 
-                            // unsat → implied
+                            // unsat -> implied
                             let implied = self.with_sat(&lhs_and_not_rhs, |_| ());
                             if implied.is_none() {
                                 *e = lhs.clone(); // keep only lhs
@@ -256,9 +281,7 @@ impl<'smt, 'ctx> VisitorMut for NeutralsRemover<'smt, 'ctx> {
                         Ok(())
                     }
 
-                    // --------------------------
                     // OR: remove false
-                    // --------------------------
                     Or => {
                         // same bottom/top structure:
                         let nonbot: Option<Result<(), LimitError>> =
@@ -269,7 +292,7 @@ impl<'smt, 'ctx> VisitorMut for NeutralsRemover<'smt, 'ctx> {
                             return Ok(());
                         }
 
-                        // remove neutral "false → rhs"
+                        // remove neutral "false -> rhs"
                         if is_bot_lit(lhs) {
                             *e = rhs.clone();
                             return Ok(());
