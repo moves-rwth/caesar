@@ -102,18 +102,23 @@ fn synth_inv_main(
     let mut split_count = 0;
     let mut num_proven: usize = 0;
     let mut num_failures: usize = 0;
-    const MAX_CEGIS_ITERS: usize = 300;
+    let mut total_num_cegis_its = 0;
+    const MAX_CEGIS_ITERS: usize = 3000;
     const MAX_SPLIT_COUNT: usize = 3;
+    let mut template_satchecks = 0;
+    let mut duration_template_building = Duration::new(0, 0);
 
     while split_count <= MAX_SPLIT_COUNT {
         // I have to reset the tcx, how do I do that without parsing new?
+    let start_parse = Instant::now();
+
         let (mut module, mut tcx) = parse_and_tycheck(
             &options.input_options,
             &options.debug_options,
             server,
             user_files,
         )?;
-        let duration_parse = start_total.elapsed(); // Parse time
+        let duration_parse = start_parse.elapsed(); // Parse time
 
         println!("Parse time = {:.2}", duration_parse.as_secs_f64());
 
@@ -197,18 +202,21 @@ fn synth_inv_main(
                     let start_template = Instant::now();
 
                     // Build template for this particular synthesized function
-                    let (temp_template, vars, temp_num_guards) = build_template_expression(
-                        synth_name,
-                        synth_val,
-                        &vc_expr.expr,
-                        &mut builder,
-                        &tcx,
-                        split_count,
-                        &mut translate,
-                        &ctx,
-                    );
+                    let (temp_template, vars, temp_num_guards, temp_num_sat_checks) =
+                        build_template_expression(
+                            synth_name,
+                            synth_val,
+                            &vc_expr.expr,
+                            &mut builder,
+                            &tcx,
+                            split_count,
+                            &mut translate,
+                            &ctx,
+                        );
+                    template_satchecks = template_satchecks + temp_num_sat_checks;
 
                     let duration_template = start_template.elapsed();
+                    duration_template_building += duration_template;
                     println!(
                         "Template building for `{}` took: {:.2}",
                         synth_name,
@@ -290,57 +298,12 @@ fn synth_inv_main(
             let mut duration_check = Duration::new(0, 0);
             let mut duration_template_inst = Duration::new(0, 0);
             loop {
+                total_num_cegis_its += 1;
                 let start_check = Instant::now(); // Start the timer for template building
                                                   // Call template builder using the single element
 
                 iteration += 1;
-                // println!("=== CEGIS loop {iteration} ===");
-
-                // Instantiating the template and doing unfolding just for logging.
-                // TODO: maybe this should optionally be printed
-                // let mut instantiated_tasks = Vec::new();
-
-                // for (synth_name, template_expr, num_guards, template_vars) in templates.iter() {
-                //     let instantiated = subst_from_mapping(tvar_mapping.clone(), template_expr);
-
-                //     let mut task = QuantVcProveTask {
-                //         expr: instantiated,
-                //         direction,
-                //         deps: vcdeps.clone(),
-                //     };
-
-                //     task.unfold(options, &limits_ref, &tcx)?;
-                //     // templatVariables that are still not instantiated, can be whatever value, we set them to zero to
-                //     // minimise the size of the invariant
-
-                //     let map_to_zero: HashMap<Ident, _> = template_vars
-                //         .iter()
-                //         .cloned()
-                //         .map(|id| (id, builder.zero_lit(&TyKind::Real)))
-                //         .collect();
-                //     let instantiated = subst_from_mapping(map_to_zero, &task.expr);
-                //     println!("Instantiated invariant {instantiated}");
-                //     let mut task = QuantVcProveTask {
-                //         expr: instantiated,
-                //         direction,
-                //         deps: vcdeps.clone(),
-                //     };
-
-                //     task.unfold(options, &limits_ref, &tcx)?;
-                //     // task.remove_neutrals(&limits_ref, &tcx)?;
-
-                //     instantiated_tasks.push((synth_name.clone(), task));
-                //     println!(
-                //         "Number of guard expressions for invariant {synth_name}: {}",
-                //         num_guards
-                //     );
-                // }
-
-                // println!("We will now check invariants:");
-
-                // for (name, task) in instantiated_tasks.iter() {
-                //     println!("  {} := {}", name, remove_casts(&task.expr));
-                // }
+                println!("=== CEGIS loop {iteration} ===");
                 // --- Phase 1: Check if tvars are already good (run verification with some eval) ---
 
                 // After the first iteration, vc_pvars shouldn't have any template variables in it
@@ -366,11 +329,9 @@ fn synth_inv_main(
 
                         let mut instantiated_tasks = Vec::new();
 
-                        for (synth_name, template_expr, num_guards) in
-                            templates.iter()
-                        {
+                        for (synth_name, template_expr, num_guards) in templates.iter() {
                             let instantiated =
-                                subst_from_mapping(&tvar_mapping.clone(), template_expr);
+                                subst_from_mapping(tvar_mapping.clone(), template_expr);
 
                             let mut task = QuantVcProveTask {
                                 expr: instantiated,
@@ -403,6 +364,10 @@ fn synth_inv_main(
                             duration_inductivity.as_secs_f64()
                         );
                         println!(
+                            "Template building took: {:.2}",
+                            duration_template_building.as_secs_f64()
+                        );
+                        println!(
                             "Verification checks took: {:.2}",
                             duration_check.as_secs_f64()
                         );
@@ -411,7 +376,8 @@ fn synth_inv_main(
                             duration_template_inst.as_secs_f64()
                         );
                         println!("Number of templates generated: {}", split_count + 1);
-
+                        println!("Number of sat checks/get models done in CEGIS loop to find tvars fullfilling the constraints {total_num_cegis_its}");
+                        println!("Number of sat checks in template building {template_satchecks}");
                         split_count = MAX_SPLIT_COUNT + 1;
                         break;
                     }
@@ -448,7 +414,7 @@ fn synth_inv_main(
                         .collect();
 
                     let vc_tvars =
-                        subst_from_mapping(&filtered_mapping, &vc_tvars_pvars.quant_vc.expr);
+                        subst_from_mapping(filtered_mapping, &vc_tvars_pvars.quant_vc.expr);
 
                     // Create a quantprovetask (so that we get the unfolding)
                     let constraints_on_tvars_task = QuantVcProveTask {
@@ -495,7 +461,7 @@ fn synth_inv_main(
                         constraints_on_tvars_bool_task,
                         &mut translate,
                     )? {
-                        // templatVariables that are still not instantiated, can be whatever value, we set them to zero to
+                        // templateVariables that are still not instantiated, can be whatever value, we set them to zero to
                         // minimise the size of the invariant
                         let zero_extended_mapping: HashMap<Ident, Expr> = all_template_vars
                             .iter()
@@ -510,7 +476,7 @@ fn synth_inv_main(
                             .collect();
 
                         let instantiated_vc = subst_from_mapping(
-                            &zero_extended_mapping,
+                            zero_extended_mapping.clone(),
                             &vc_tvars_pvars.quant_vc.expr,
                         );
 

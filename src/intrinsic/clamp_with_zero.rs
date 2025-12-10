@@ -116,7 +116,7 @@ impl FuncIntrin for ClampWithZeroIntrin {
                 Symbolic::EUReal(value)
             }
 
-            Some(TyKind::EUReal) => {println!("eurealll");Symbolic::EUReal(translate.t_eureal(&args[0]))},
+            Some(TyKind::EUReal) => Symbolic::EUReal(translate.t_eureal(&args[0])),
 
             _ => unreachable!("clamp_with_zero only defined for numeric types"),
         }

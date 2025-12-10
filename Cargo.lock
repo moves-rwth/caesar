@@ -2699,6 +2699,7 @@ dependencies = [
 [[package]]
 name = "z3"
 version = "0.13.2"
+source = "git+https://github.com/prove-rs/z3.rs.git?rev=8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989#8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989"
 dependencies = [
  "log",
  "num",
@@ -2708,6 +2709,7 @@ dependencies = [
 [[package]]
 name = "z3-sys"
 version = "0.9.3"
+source = "git+https://github.com/prove-rs/z3.rs.git?rev=8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989#8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989"
 dependencies = [
  "bindgen",
  "cmake",

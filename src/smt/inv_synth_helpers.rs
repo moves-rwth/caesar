@@ -128,11 +128,11 @@ pub fn create_subst_mapping<'ctx>(
 /// "Instantiate" an expression with concrete values from a mapping.
 /// To do this, wrap the expression in nested `Subst` expressions.
 /// Then later tunfolding can take care of the actual substitutions.
-pub fn subst_from_mapping<'ctx>(mapping: &HashMap<ast::symbol::Ident, Expr>, vc: &Expr) -> Expr {
+pub fn subst_from_mapping<'ctx>(mapping: HashMap<ast::symbol::Ident, Expr>, vc: &Expr) -> Expr {
     let mut wrapped = vc.clone();
     for (ident, expr) in mapping {
         wrapped = Shared::new(ExprData {
-            kind: ExprKind::Subst(*ident, expr.clone(), wrapped.clone()),
+            kind: ExprKind::Subst(ident, expr, wrapped.clone()),
             ty: wrapped.ty.clone(),
             span: vc.span,
         });
@@ -294,7 +294,7 @@ fn cartesian_and(lists: &[Vec<Expr>], builder: &ExprBuilder) -> Vec<Expr> {
     acc
 }
 
-pub fn _get_variable_region_splits<'ctx>(
+pub fn get_variable_region_splits<'ctx>(
     program_vars: &[Expr], // precomputed builder variables
     split_count: usize,
     builder: &mut ExprBuilder,
@@ -373,6 +373,7 @@ pub fn _get_variable_region_splits<'ctx>(
     region_conditions
 }
 
+
 // Creates the expression (collected_guards x split_conditions) * lc
 pub fn assemble_piecewise_expression<'smt, 'ctx>(
     synth_name: &Ident,
@@ -384,11 +385,10 @@ pub fn assemble_piecewise_expression<'smt, 'ctx>(
     ctx: &'ctx z3::Context,
     declare_template_var: &mut dyn FnMut(String) -> decl::VarDecl,
     program_var_decls: &[VarDecl],
-) -> Expr {
+) -> (Expr, usize) {
     let mut final_expr: Option<Expr> = None;
 
-    // let mut prover = Prover::new(&ctx, IncrementalMode::Emulated);
-
+    let mut num_sat_checks = 0;
     for (i_idx, iv_prod) in collected_guards.iter().enumerate() {
         for (s_idx, split) in split_conditions.iter().enumerate() {
             let both = builder.binary(
@@ -401,12 +401,10 @@ pub fn assemble_piecewise_expression<'smt, 'ctx>(
             // Check satisfiability of guard && split_condition, since this is a short formula
             // and if it is not sat we don't have to add the lc
             let expr_z3 = translate.t_bool(&both);
-
-            // prover.reset();
             let mut prover = Prover::new(&ctx, IncrementalMode::Native);
-
             prover.add_assumption(&expr_z3);
 
+            num_sat_checks = num_sat_checks + 1;
             if prover.check_sat() == SatResult::Sat {
                 let iverson_both = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), both);
 
@@ -431,7 +429,7 @@ pub fn assemble_piecewise_expression<'smt, 'ctx>(
         }
     }
 
-    final_expr.unwrap()
+    (final_expr.unwrap(), num_sat_checks)
 }
 
 pub fn build_template_expression<'smt, 'ctx>(
@@ -443,9 +441,10 @@ pub fn build_template_expression<'smt, 'ctx>(
     split_count: usize,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     ctx: &'ctx z3::Context,
-) -> (Expr, Vec<Ident>, usize) {
+) -> (Expr, Vec<Ident>, usize, usize) {
     // Storage for all newly created template parameter identifiers
     let mut template_idents: Vec<Ident> = Vec::new();
+    let mut num_sat_checks = 0;
 
     let mut program_var_decls = Vec::new();
     let mut program_vars = Vec::new();
@@ -502,9 +501,10 @@ pub fn build_template_expression<'smt, 'ctx>(
 
     let split_conditions = get_fix_region_splits(&ranged_vars, split_count, builder);
 
+
     // Step 3: Compute satisfiable guards from Boolean conditions
     let mut valid_iversons = Vec::new();
-    explore_boolean_assignments(
+    num_sat_checks = num_sat_checks + explore_boolean_assignments(
         0,
         bool_exprs.as_slice(),
         builder,
@@ -515,8 +515,10 @@ pub fn build_template_expression<'smt, 'ctx>(
         &mut valid_iversons,    // output
     );
 
+
+
     // Step 4: Combine original guards × split conditions and multiply each with own lin.exp
-    let mut final_expr = assemble_piecewise_expression(
+    let (mut final_expr, temp_sat_checks) = assemble_piecewise_expression(
         synth_name,
         &valid_iversons,
         &split_conditions,
@@ -527,6 +529,7 @@ pub fn build_template_expression<'smt, 'ctx>(
         &mut declare_template_var,
         &program_var_decls, // pass here
     );
+    num_sat_checks = num_sat_checks + temp_sat_checks;
 
     // Step 5: Substitute only program variables in final_expr
     let free_vars = collect_program_vars(&final_expr);
@@ -543,11 +546,7 @@ pub fn build_template_expression<'smt, 'ctx>(
     // Apply substitution
     final_expr = builder.subst(final_expr, subst_iter);
 
-    (
-        final_expr,
-        template_idents,
-        valid_iversons.len() * split_conditions.len(),
-    )
+    (final_expr, template_idents, valid_iversons.len() * split_conditions.len(), num_sat_checks)
 }
 
 pub fn get_synth_functions<'ctx>(
@@ -583,15 +582,14 @@ fn explore_boolean_assignments<'smt, 'ctx>(
     partial_assign: &mut Vec<bool>,
     iverson_prod: Expr,
     valid_iversons: &mut Vec<Expr>, // Accumulate Iverson products here
-) {
+) -> usize {
     // Base case: a complete assignment
     if idx == bool_exprs.len() {
         valid_iversons.push(iverson_prod); // Add this Iverson product to the list of valid ones
-        return;
+        return 0;
     }
 
-    // let mut prover = Prover::new(&ctx, IncrementalMode::Emulated);
-
+    let mut num_sat_checks = 0;
     // Recursive case: branch on bit = false / true
     for &bit in &[false, true] {
         partial_assign.push(bit);
@@ -610,16 +608,13 @@ fn explore_boolean_assignments<'smt, 'ctx>(
         }
 
         // SAT check for the prefix
-        // prover.reset();
-        // println!("prover: {:?}",prover.get_assertions());
         let expr_z3 = translate.t_bool(&new_iverson);
         let mut prover = Prover::new(&ctx, IncrementalMode::Native);
-
         prover.add_assumption(&expr_z3);
 
         if prover.check_sat() == SatResult::Sat {
             // Prefix is SAT -> explore deeper
-            explore_boolean_assignments(
+            num_sat_checks = 1 + explore_boolean_assignments(
                 idx + 1,
                 bool_exprs,
                 builder,
@@ -635,4 +630,5 @@ fn explore_boolean_assignments<'smt, 'ctx>(
 
         partial_assign.pop();
     }
+    num_sat_checks
 }
