@@ -256,22 +256,20 @@ fn synth_inv_main(
                         .get(func_ident)
                         .expect("synth function disappeared unexpectedly");
 
-                    let mut inliner = FunctionInliner {
-                        target: *func_ident,
-                        body: template_expr,
-                        entry: func_entry,
-                    };
+                    let mut inliner = FunctionInliner::new(*func_ident, func_entry, template_expr, &tcx);
+                println!("there");
 
                     inliner.visit_expr(&mut vc_expr.expr).unwrap();
                 }
 
+                println!("here");
                 // Lower to boolean proof task and unfold
                 vc_is_valid =
                     lower_quant_prove_task(options, &limits_ref, &tcx, name, vc_expr.clone())?;
-                // println!(
-                //     "vc expression with inlined templates: {}",
-                //     remove_casts(&vc_is_valid.quant_vc.expr)
-                // );
+                println!(
+                    "vc expression with inlined templates: {}",
+                    remove_casts(&vc_is_valid.quant_vc.expr)
+                );
             }
 
             // This vc_tvars_pvars is the vc where both tvars and pvars are not instantiated.

@@ -11,8 +11,8 @@ use crate::{
         self, decl,
         util::FreeVariableCollector,
         visit::{walk_expr, VisitorMut},
-        BinOpKind, DeclRef, Expr, ExprBuilder, ExprData, ExprKind, Ident, Range, Shared, Span,
-        Symbol, TyKind, UnOpKind, VarDecl, VarKind,
+        BinOpKind, DeclKind, DeclRef, Expr, ExprBuilder, ExprData, ExprKind, Ident, Range, Shared,
+        Span, Symbol, TyKind, UnOpKind, VarDecl, VarKind,
     },
     smt::{
         symbolic::Symbolic,
@@ -24,27 +24,50 @@ use crate::{
 use std::collections::{HashMap, HashSet};
 
 // Takes a function and substitutes calls to that function with the functions body,
-// substituting function parameters with the caller arguments
-pub struct FunctionInliner<'ctx> {
-    pub target: Ident,                // the function ident
-    pub entry: &'ctx FuncEntry<'ctx>, // contains input params
-    pub body: &'ctx Expr,             // the function body expression
+// substituting function parameters with the caller argumentspub struct FunctionInliner<'ctx, T: FuncLookup> {
+pub struct FunctionInliner<'smt, 'ctx> {
+    pub target: Ident,
+    pub entry: &'ctx FuncEntry<'ctx>,
+    pub body: &'ctx Expr,
+    pub tcx: &'smt TyCtx,
+
+    /// Track which functions are currently being inlined
+    inlining_stack: Vec<Ident>, // to avoid infinitely inlining recursive functions
 }
 
-impl<'a> VisitorMut for FunctionInliner<'a> {
+impl<'smt, 'ctx> FunctionInliner<'smt, 'ctx> {
+    pub fn new(
+        target: Ident,
+        entry: &'ctx FuncEntry<'ctx>,
+        body: &'ctx Expr,
+        tcx: &'smt TyCtx,
+    ) -> Self {
+        Self {
+            target,
+            entry,
+            body,
+            tcx,
+            inlining_stack: Vec::new(),
+        }
+    }
+}
+
+impl<'smt, 'ctx> VisitorMut for FunctionInliner<'smt, 'ctx> {
     type Err = ();
 
     fn visit_expr(&mut self, expr: &mut Expr) -> Result<(), Self::Err> {
         let span = expr.span;
 
         match &mut expr.kind {
+            // ============================================
+            // Case 1: INLINE THE TARGET FUNCTION (existing)
+            // ============================================
             ExprKind::Call(func_ident, args) if *func_ident == self.target => {
                 let parameters: Vec<Ident> =
                     self.entry.inputs.node.iter().map(|p| p.name).collect();
 
                 let mut wrapped = self.body.clone();
 
-                // Substitute arguments with which the function is called into the body
                 for (parameter, actual_expr) in parameters.iter().zip(args.iter()) {
                     wrapped = Shared::new(ExprData {
                         kind: ExprKind::Subst(*parameter, actual_expr.clone(), wrapped.clone()),
@@ -53,16 +76,70 @@ impl<'a> VisitorMut for FunctionInliner<'a> {
                     });
                 }
 
-                // Replace the call with the body wrapped in substitutions
                 *expr = wrapped.clone();
+                return Ok(());
+            }
 
-                Ok(())
+            // ===================================================
+            // Case 2: INLINE OTHER FUNCTIONS (with recursion guard)
+            // ===================================================
+            ExprKind::Call(func_ident, args) => {
+                // RECURSION GUARD: do NOT inline if this function is already being processed
+                if self.inlining_stack.contains(func_ident) {
+                    // Still recurse through arguments, but do not inline the body
+                    return walk_expr(self, expr);
+                }
+
+                // Lookup the function definition
+                if let Some(DeclKind::FuncDecl(func_ref)) =
+                    self.tcx.get(*func_ident).as_deref()
+                {
+                    let func = func_ref.borrow();
+                    let body_opt = func.body.borrow();
+                    let parameters: Vec<Ident> =
+                        func.inputs.node.iter().map(|p| p.name).collect();
+
+                    if let Some(body_expr) = body_opt.clone() {
+                        // Mark this function as "inlining in progress"
+                        self.inlining_stack.push(*func_ident);
+
+                        let mut wrapped = body_expr;
+
+                        // Substitute parameters
+                        for (parameter, actual_expr) in parameters.iter().zip(args.iter()) {
+                            wrapped = Shared::new(ExprData {
+                                kind: ExprKind::Subst(
+                                    *parameter,
+                                    actual_expr.clone(),
+                                    wrapped.clone(),
+                                ),
+                                ty: wrapped.ty.clone(),
+                                span,
+                            });
+                        }
+
+                        // Recursively inline inside the substituted body
+                        let mut wrapped_mut = wrapped.clone();
+                        self.visit_expr(&mut wrapped_mut)?;
+
+                        // Done processing this function
+                        self.inlining_stack.pop();
+
+                        *expr = wrapped_mut;
+                        return Ok(());
+                    }
+
+                    return walk_expr(self, expr);
+                }
+
+                walk_expr(self, expr)
             }
 
             _ => walk_expr(self, expr),
         }
     }
 }
+
 
 // Translates a model into a map Ident -> Expression
 pub fn create_subst_mapping<'ctx>(
@@ -373,7 +450,6 @@ pub fn get_variable_region_splits<'ctx>(
     region_conditions
 }
 
-
 // Creates the expression (collected_guards x split_conditions) * lc
 pub fn assemble_piecewise_expression<'smt, 'ctx>(
     synth_name: &Ident,
@@ -482,12 +558,11 @@ pub fn build_template_expression<'smt, 'ctx>(
     };
 
     // Step 1: Collect Boolean conditions relevant to the inputs
-    let bool_exprs = collect_relevant_bool_conditions(synth_val, vc_expr);
+    let mut bool_exprs = collect_relevant_bool_conditions(synth_val, vc_expr);
 
-    assert!(
-        !bool_exprs.is_empty(),
-        "No boolean expressions remain after filtering."
-    );
+    if bool_exprs.is_empty() {
+        bool_exprs.push(builder.bool_lit(true));
+    }
 
     // Step 2: Build all split predicates
     let ranged_vars: Vec<(Expr, Range)> = program_var_decls
@@ -501,21 +576,19 @@ pub fn build_template_expression<'smt, 'ctx>(
 
     let split_conditions = get_fix_region_splits(&ranged_vars, split_count, builder);
 
-
     // Step 3: Compute satisfiable guards from Boolean conditions
     let mut valid_iversons = Vec::new();
-    num_sat_checks = num_sat_checks + explore_boolean_assignments(
-        0,
-        bool_exprs.as_slice(),
-        builder,
-        translate,
-        ctx,
-        &mut Vec::new(),        // partial assignment
-        builder.bool_lit(true), // initial Iverson factor
-        &mut valid_iversons,    // output
-    );
-
-
+    num_sat_checks = num_sat_checks
+        + explore_boolean_assignments(
+            0,
+            bool_exprs.as_slice(),
+            builder,
+            translate,
+            ctx,
+            &mut Vec::new(),        // partial assignment
+            builder.bool_lit(true), // initial Iverson factor
+            &mut valid_iversons,    // output
+        );
 
     // Step 4: Combine original guards × split conditions and multiply each with own lin.exp
     let (mut final_expr, temp_sat_checks) = assemble_piecewise_expression(
@@ -546,7 +619,12 @@ pub fn build_template_expression<'smt, 'ctx>(
     // Apply substitution
     final_expr = builder.subst(final_expr, subst_iter);
 
-    (final_expr, template_idents, valid_iversons.len() * split_conditions.len(), num_sat_checks)
+    (
+        final_expr,
+        template_idents,
+        valid_iversons.len() * split_conditions.len(),
+        num_sat_checks,
+    )
 }
 
 pub fn get_synth_functions<'ctx>(
