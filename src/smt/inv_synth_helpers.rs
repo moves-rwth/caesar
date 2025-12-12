@@ -59,9 +59,7 @@ impl<'smt, 'ctx> VisitorMut for FunctionInliner<'smt, 'ctx> {
         let span = expr.span;
 
         match &mut expr.kind {
-            // ============================================
             // Case 1: INLINE THE TARGET FUNCTION (existing)
-            // ============================================
             ExprKind::Call(func_ident, args) if *func_ident == self.target => {
                 let parameters: Vec<Ident> =
                     self.entry.inputs.node.iter().map(|p| p.name).collect();
@@ -80,9 +78,7 @@ impl<'smt, 'ctx> VisitorMut for FunctionInliner<'smt, 'ctx> {
                 return Ok(());
             }
 
-            // ===================================================
             // Case 2: INLINE OTHER FUNCTIONS (with recursion guard)
-            // ===================================================
             ExprKind::Call(func_ident, args) => {
                 // RECURSION GUARD: do NOT inline if this function is already being processed
                 if self.inlining_stack.contains(func_ident) {
@@ -91,13 +87,10 @@ impl<'smt, 'ctx> VisitorMut for FunctionInliner<'smt, 'ctx> {
                 }
 
                 // Lookup the function definition
-                if let Some(DeclKind::FuncDecl(func_ref)) =
-                    self.tcx.get(*func_ident).as_deref()
-                {
+                if let Some(DeclKind::FuncDecl(func_ref)) = self.tcx.get(*func_ident).as_deref() {
                     let func = func_ref.borrow();
                     let body_opt = func.body.borrow();
-                    let parameters: Vec<Ident> =
-                        func.inputs.node.iter().map(|p| p.name).collect();
+                    let parameters: Vec<Ident> = func.inputs.node.iter().map(|p| p.name).collect();
 
                     if let Some(body_expr) = body_opt.clone() {
                         // Mark this function as "inlining in progress"
@@ -139,7 +132,6 @@ impl<'smt, 'ctx> VisitorMut for FunctionInliner<'smt, 'ctx> {
         }
     }
 }
-
 
 // Translates a model into a map Ident -> Expression
 pub fn create_subst_mapping<'ctx>(
@@ -461,6 +453,7 @@ pub fn assemble_piecewise_expression<'smt, 'ctx>(
     ctx: &'ctx z3::Context,
     declare_template_var: &mut dyn FnMut(String) -> decl::VarDecl,
     program_var_decls: &[VarDecl],
+    output_type: TyKind,
 ) -> (Expr, usize) {
     let mut final_expr: Option<Expr> = None;
 
@@ -482,7 +475,7 @@ pub fn assemble_piecewise_expression<'smt, 'ctx>(
 
             num_sat_checks = num_sat_checks + 1;
             if prover.check_sat() == SatResult::Sat {
-                let iverson_both = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), both);
+                let iverson_both = builder.unary(UnOpKind::Iverson, Some(output_type.clone()), both);
 
                 // Pass precomputed program_var_decls
                 let lc_name = format!("{}_{}", i_idx, s_idx);
@@ -495,11 +488,11 @@ pub fn assemble_piecewise_expression<'smt, 'ctx>(
                     program_var_decls,
                 );
 
-                let full = builder.binary(BinOpKind::Mul, Some(TyKind::EUReal), iverson_both, lc);
+                let full = builder.binary(BinOpKind::Mul, Some(output_type.clone()), iverson_both, lc);
 
                 final_expr = Some(match final_expr {
                     None => full,
-                    Some(acc) => builder.binary(BinOpKind::Add, Some(TyKind::EUReal), acc, full),
+                    Some(acc) => builder.binary(BinOpKind::Add, Some(output_type.clone()), acc, full),
                 });
             }
         }
@@ -537,6 +530,10 @@ pub fn build_template_expression<'smt, 'ctx>(
             program_vars.push(casted);
             program_vars_no_cast.push(raw);
         }
+    }
+    let mut output_type = TyKind::EUReal;
+    if let Some(DeclKind::FuncDecl(func_ref)) = tcx.get(*synth_name).as_deref() {
+        output_type = func_ref.borrow().output.clone();
     }
 
     // Template-variable declaration closure
@@ -600,7 +597,8 @@ pub fn build_template_expression<'smt, 'ctx>(
         translate,
         ctx,
         &mut declare_template_var,
-        &program_var_decls, // pass here
+        &program_var_decls,
+        output_type,
     );
     num_sat_checks = num_sat_checks + temp_sat_checks;
 

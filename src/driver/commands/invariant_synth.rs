@@ -110,7 +110,7 @@ fn synth_inv_main(
 
     while split_count <= MAX_SPLIT_COUNT {
         // I have to reset the tcx, how do I do that without parsing new?
-    let start_parse = Instant::now();
+        let start_parse = Instant::now();
 
         let (mut module, mut tcx) = parse_and_tycheck(
             &options.input_options,
@@ -256,8 +256,9 @@ fn synth_inv_main(
                         .get(func_ident)
                         .expect("synth function disappeared unexpectedly");
 
-                    let mut inliner = FunctionInliner::new(*func_ident, func_entry, template_expr, &tcx);
-                println!("there");
+                    let mut inliner =
+                        FunctionInliner::new(*func_ident, func_entry, template_expr, &tcx);
+                    println!("there");
 
                     inliner.visit_expr(&mut vc_expr.expr).unwrap();
                 }
@@ -306,6 +307,7 @@ fn synth_inv_main(
 
                 // After the first iteration, vc_pvars shouldn't have any template variables in it
                 // Run the solver
+                println!("finding counterexample for {}", vc_pvars.quant_vc.expr);
                 let result = vc_pvars.clone().run_solver(
                     options,
                     &limits_ref,
@@ -314,6 +316,8 @@ fn synth_inv_main(
                     &mut translate,
                     &slice_vars,
                 )?;
+                println!("cex found (or proven)");
+
 
                 // This result is Proof iff we have already found an admissable template variable evaluation
                 // Otherwise it will give us a cex (an evaluation of the program vars) that we will

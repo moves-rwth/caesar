@@ -350,6 +350,8 @@ impl<'ctx> SliceSolver<'ctx> {
         self.prover.add_assumption(&inactive_formula);
         self.prover.push();
 
+        println!("smtlib: {:}", self.prover.get_smtlib().into_string());
+
         slice_sat_binary_search(&mut self.prover, &active_toggle_values, options, limits_ref)?;
         let res = self.prover.check_proof();
         let model = if let Some(model) = self.prover.get_model() {
