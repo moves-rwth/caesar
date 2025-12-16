@@ -3,6 +3,10 @@ sidebar_position: 6
 description: Approximating original program semantics
 ---
 
+```mdx-code-block
+import Link from '@docusaurus/Link';
+```
+
 As mentioned [before](https://www.caesarverifier.org/docs/heyvl/statements#semantics), HeyVL statements are interpreted via the (quantitative) verification condition semantics (vc), which are similar to other calculi such as wp, wlp, and ert. For such calculi, exactly computing the pre-expectation of a loop requires computing a least or greatest fixed point, which is infeasible in general. Instead, we use [proof rules](./README.md) to *approximate* the actual pre-expectation. In addition, other statements such as [negations](../heyvl/statements#negations) can also cause approximations.
 
 Caesar keeps track of these approximations and derives soundness diagnostics based on them. This means that Caesar can indicate that a verification result might be unsound. There are four possible approximation kinds: _Over_, _Under_, _Exact_, and _Unknown_.
