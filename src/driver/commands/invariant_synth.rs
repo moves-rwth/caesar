@@ -11,7 +11,7 @@ use crate::smt::inv_synth_helpers::{
     build_template_expression, create_subst_mapping, get_synth_functions, subst_from_mapping,
 };
 use crate::{
-    ast::{self, BinOpKind, Expr, ExprBuilder, FileId, Span, TyKind},
+    ast::{BinOpKind, Expr, ExprBuilder, FileId, Span, TyKind},
     driver::{
         commands::{mk_cli_server, print_timings, verify::VerifyCommand},
         core_verify::{lower_core_verify_task, CoreVerifyTask},
@@ -258,19 +258,12 @@ fn synth_inv_main(
 
                     let mut inliner =
                         FunctionInliner::new(*func_ident, func_entry, template_expr, &tcx);
-                    println!("there");
-
                     inliner.visit_expr(&mut vc_expr.expr).unwrap();
                 }
 
-                println!("here");
                 // Lower to boolean proof task and unfold
                 vc_is_valid =
                     lower_quant_prove_task(options, &limits_ref, &tcx, name, vc_expr.clone())?;
-                println!(
-                    "vc expression with inlined templates: {}",
-                    remove_casts(&vc_is_valid.quant_vc.expr)
-                );
             }
 
             // This vc_tvars_pvars is the vc where both tvars and pvars are not instantiated.
@@ -290,24 +283,59 @@ fn synth_inv_main(
 
             // In the first iteration we will use the vc where both tvars and pvars are uninstantiated, but
             // starting from the second loop iteration, the tvars will be instantiated with some value
-            let mut vc_pvars = vc_tvars_pvars.clone();
-
-            let mut tvar_mapping: HashMap<ast::symbol::Ident, Expr> = HashMap::new();
+            let mut vc_pvars;
+            let mut tvar_mapping: HashMap<Ident, Expr> = HashMap::new();
 
             let mut duration_check = Duration::new(0, 0);
             let mut duration_template_inst = Duration::new(0, 0);
             loop {
                 total_num_cegis_its += 1;
                 let start_check = Instant::now(); // Start the timer for template building
-                                                  // Call template builder using the single element
 
                 iteration += 1;
                 println!("=== CEGIS loop {iteration} ===");
-                // --- Phase 1: Check if tvars are already good (run verification with some eval) ---
 
-                // After the first iteration, vc_pvars shouldn't have any template variables in it
-                // Run the solver
-                println!("finding counterexample for {}", vc_pvars.quant_vc.expr);
+                // Map all template variables to the value to try out.
+                // Template variables with no mapping will be mapped to zero
+                let zero_extended_mapping: HashMap<Ident, Expr> = all_template_vars
+                    .iter()
+                    .cloned()
+                    .map(|id| {
+                        let value = tvar_mapping
+                            .get(&id)
+                            .cloned()
+                            .unwrap_or_else(|| builder.zero_lit(&TyKind::EUReal));
+                        (id.clone(), value)
+                    })
+                    .collect();
+
+                let instantiated_vc = subst_from_mapping(
+                    zero_extended_mapping.clone(),
+                    &vc_tvars_pvars.quant_vc.expr,
+                );
+
+                println!("mapping used:");
+                for (key, val) in &zero_extended_mapping {
+                    println!("{key} -> {val}");
+                }
+
+                // Rebuild a new Boolean task with the updated formula
+                let mut refined_vc = QuantVcProveTask {
+                    expr: instantiated_vc,
+                    direction: direction,
+                    deps: vcdeps.clone(),
+                };
+
+                refined_vc.unfold(options, &limits_ref, &tcx)?;
+                refined_vc.remove_neutrals(&limits_ref, &tcx)?;
+
+                let refined_vc =
+                    lower_quant_prove_task(options, &limits_ref, &tcx, name, refined_vc)?;
+                // Translate again to SMT form
+                vc_pvars = SmtVcProveTask::translate(refined_vc, &mut translate);
+
+                // println!("finding counterexample for {}", vc_pvars.quant_vc.expr);
+
                 let result = vc_pvars.clone().run_solver(
                     options,
                     &limits_ref,
@@ -316,12 +344,6 @@ fn synth_inv_main(
                     &mut translate,
                     &slice_vars,
                 )?;
-                println!("cex found (or proven)");
-
-
-                // This result is Proof iff we have already found an admissable template variable evaluation
-                // Otherwise it will give us a cex (an evaluation of the program vars) that we will
-                // add to the constraints on the template vars
                 let prove_result = result.prove_result;
                 duration_check = start_check.elapsed() + duration_check; // Template instantiation time
 
@@ -333,7 +355,7 @@ fn synth_inv_main(
 
                         for (synth_name, template_expr, num_guards) in templates.iter() {
                             let instantiated =
-                                subst_from_mapping(tvar_mapping.clone(), template_expr);
+                                subst_from_mapping(zero_extended_mapping.clone(), template_expr);
 
                             let mut task = QuantVcProveTask {
                                 expr: instantiated,
@@ -354,8 +376,8 @@ fn synth_inv_main(
                         let duration_inductivity = start_total.elapsed();
 
                         println!(
-                                    "After {iteration} CEGIS loop iterations, the following admissible invariants were found:"
-                                );
+                "After {iteration} CEGIS loop iterations, the following admissible invariants were found:"
+            );
 
                         for (name, task) in instantiated_tasks.iter() {
                             println!("  {} := {}", name, remove_casts(&task.expr));
@@ -434,7 +456,6 @@ fn synth_inv_main(
                     ) {
                         Ok(c) => c,
                         Err(e) => {
-                            // handle or return the error
                             return Err(e.into());
                         }
                     };
@@ -463,60 +484,24 @@ fn synth_inv_main(
                         constraints_on_tvars_bool_task,
                         &mut translate,
                     )? {
-                        // templateVariables that are still not instantiated, can be whatever value, we set them to zero to
-                        // minimise the size of the invariant
-                        let zero_extended_mapping: HashMap<Ident, Expr> = all_template_vars
-                            .iter()
-                            .cloned()
-                            .map(|id| {
-                                let value = mapping
-                                    .get(&id.clone())
-                                    .cloned()
-                                    .unwrap_or_else(|| builder.zero_lit(&TyKind::EUReal));
-                                (id.clone(), value)
-                            })
-                            .collect();
+                        // Update template variable mapping; zero-extension happens at top of loop
+                        tvar_mapping = mapping;
 
-                        let instantiated_vc = subst_from_mapping(
-                            zero_extended_mapping.clone(),
-                            &vc_tvars_pvars.quant_vc.expr,
-                        );
-
-                        // Rebuild a new Boolean task with the updated formula
-                        let mut refined_vc = QuantVcProveTask {
-                            expr: instantiated_vc,
-                            direction: direction,
-                            deps: vcdeps.clone(),
-                        };
-
-                        refined_vc.unfold(options, &limits_ref, &tcx)?;
-                        refined_vc.remove_neutrals(&limits_ref, &tcx)?;
-
-                        let refined_vc =
-                            lower_quant_prove_task(options, &limits_ref, &tcx, name, refined_vc)?;
-
-                        // Translate again to SMT form
-                        vc_pvars = SmtVcProveTask::translate(refined_vc, &mut translate);
-
-                        tvar_mapping = zero_extended_mapping;
                         duration_template_inst =
-                            start_template_instatiate.elapsed() + duration_template_inst; // Template instantiation time
+                            start_template_instatiate.elapsed() + duration_template_inst;
 
                         continue; // restart the loop with the new VC
                     } else {
                         println!(
-                        "No template model found; stopping CEGIS loop after iteration {iteration}."
-                    );
-                        // println!(
-                        //     "The last condition that was checked was: {}",
-                        //     remove_casts(&vc_pvars.quant_vc.expr)
-                        // );
+                "No template model found; stopping CEGIS loop after iteration {iteration}."
+            );
 
                         num_failures += 1;
                         break;
                     }
                 }
             }
+
             split_count = split_count + 1;
         }
     }

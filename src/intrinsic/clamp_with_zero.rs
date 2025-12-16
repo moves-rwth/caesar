@@ -3,7 +3,7 @@
 use std::rc::Rc;
 
 use z3::ast::{Ast, Int, Real};
-use z3rro::{eureal::pair::EURealFactory, EUReal, UInt, UReal};
+use z3rro::{UInt, UReal};
 
 use crate::{
     ast::{DeclKind, Expr, Files, Ident, Span, Symbol, TyKind},
@@ -47,7 +47,7 @@ impl FuncIntrin for ClampWithZeroIntrin {
             });
         };
         tycheck.try_cast(call_span, &TyKind::Real, x)?;
-        Ok(TyKind::EUReal)
+        Ok(TyKind::UReal)
     }
 
     fn translate_call<'smt, 'ctx>(
@@ -61,62 +61,72 @@ impl FuncIntrin for ClampWithZeroIntrin {
             Some(TyKind::Int) => {
                 let x = translate.t_int(&args[0]);
                 let ctx = x.get_ctx();
-                let factory = EURealFactory::new(ctx);
 
                 let zero = Int::from_i64(&ctx, 0);
 
                 let cond = x.gt(&zero);
                 let value =
-                    EUReal::from_uint(&factory, &UInt::unchecked_from_int(cond.ite(&x, &zero)));
+                    UReal::from_uint(&UInt::unchecked_from_int(cond.ite(&x, &zero)));
 
-                Symbolic::EUReal(value)
+                Symbolic::UReal(value)
             }
 
             Some(TyKind::UInt) => {
                 let x_uint = translate.t_uint(&args[0]);
                 let x = x_uint.as_int();
                 let ctx = x.get_ctx();
-                let factory = EURealFactory::new(ctx);
 
                 let zero = Int::from_i64(&ctx, 0);
 
                 let cond = x.gt(&zero);
                 let value =
-                    EUReal::from_uint(&factory, &UInt::unchecked_from_int(cond.ite(&x, &zero)));
+                    UReal::from_uint(&UInt::unchecked_from_int(cond.ite(&x, &zero)));
 
-                Symbolic::EUReal(value)
+                Symbolic::UReal(value)
             }
 
             Some(TyKind::Real) => {
                 let x = translate.t_real(&args[0]);
                 let ctx = x.get_ctx();
-                let factory = EURealFactory::new(ctx);
                 let zero = Real::from_real(&ctx, 0, 1);
 
                 let cond = x.gt(&zero);
 
                 let value =
-                    EUReal::from_ureal(&factory, &UReal::unchecked_from_real(cond.ite(&x, &zero)));
+                   UReal::unchecked_from_real(cond.ite(&x, &zero));
 
-                Symbolic::EUReal(value)
+                Symbolic::UReal(value)
             }
 
             Some(TyKind::UReal) => {
                 let x = translate.t_ureal(&args[0]);
                 let x = x.as_real();
                 let ctx = x.get_ctx();
-                let factory = EURealFactory::new(ctx);
                 let zero = Real::from_real(&ctx, 0, 1);
 
                 let cond = x.gt(&zero);
 
                 let value =
-                    EUReal::from_ureal(&factory, &UReal::unchecked_from_real(cond.ite(&x, &zero)));
+                   UReal::unchecked_from_real(cond.ite(&x, &zero));
 
-                Symbolic::EUReal(value)
+                Symbolic::UReal(value)
             }
 
-            Some(TyKind::EUReal) => Symbolic::EUReal(translate.t_eureal(&args[0])),
+            Some(TyKind::EUReal) => {
+                let x = translate.t_eureal(&args[0]);
+                let x = x.get_ureal();
+                let x = x.as_real();
+
+                let ctx = x.get_ctx();
+                let zero = Real::from_real(&ctx, 0, 1);
+
+                let cond = x.gt(&zero);
+
+                let value =
+                   UReal::unchecked_from_real(cond.ite(&x, &zero));
+
+                Symbolic::UReal(value)
+            },
 
             _ => unreachable!("clamp_with_zero only defined for numeric types"),
         }

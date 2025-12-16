@@ -395,15 +395,16 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                         let operand = self.t_ureal(operand);
                         operand.into_real()
                     }
-                    _ => panic!("illegal cast to {:?} from {:?} ({expr} and {operand})", &expr.ty, &operand.ty),
+                    _ => panic!(
+                        "illegal cast to {:?} from {:?} ({expr} and {operand})",
+                        &expr.ty, &operand.ty
+                    ),
                 }
             }
             ExprKind::Quant(_, _, _, _) => todo!(),
             ExprKind::Subst(_, _, _) => todo!(),
             ExprKind::Lit(lit) => match &lit.node {
-                LitKind::Frac(frac) => {
-                  Real::from_big_rational(self.ctx.ctx, frac)
-                }
+                LitKind::Frac(frac) => Real::from_big_rational(self.ctx.ctx, frac),
                 _ => panic!("illegal exprkind {:?} of expression {:?}", &lit.node, &expr),
             },
         };
@@ -454,6 +455,12 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             },
             ExprKind::Unary(un_op, operand) => match un_op.node {
                 UnOpKind::Parens => self.t_ureal(operand),
+                UnOpKind::Iverson => {
+                    let operand = self.t_bool(operand);
+                    EUReal::iverson(self.ctx.eureal(), &operand)
+                        .get_ureal()
+                        .clone()
+                }
                 _ => panic!("illegal exprkind {:?} of expression {:?}", un_op, &expr),
             },
             ExprKind::Cast(operand) => {

@@ -169,13 +169,13 @@ impl<'smt, 'ctx> VisitorMut for NeutralsRemover<'smt, 'ctx> {
                 if func_ident.name == clamp_with_zero_name.name {
                     let builder = ExprBuilder::new(Span::dummy_span());
                     if is_neg_lit(&args[0]) {
-                        *e = builder.zero_lit(&TyKind::EUReal);
+                        *e = builder.zero_lit(&TyKind::UReal);
                     } else if is_lit(&args[0]) {
                         // using cast doesn't work, because maybe the type is unsinged.
                         // but since we know the value is positive, we can do this. 
                         *e = Expr::new(ExprData {
                             kind: args[0].kind.clone(),
-                            ty: Some(TyKind::EUReal),
+                            ty: Some(TyKind::UReal),
                             span: args[0].span,
                         });
                     }

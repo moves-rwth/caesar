@@ -178,10 +178,10 @@ pub fn create_subst_mapping<'ctx>(
                     .map(|r: BigRational| builder.frac_lit_not_extended(r))
             }
 
-            Symbolic::EUReal(v) => v.eval(model).ok().map(|r| match r {
+            Symbolic::EUReal(v) => {v.eval(model).ok().map(|r| match r {
                 ConcreteEUReal::Real(rat) => builder.frac_lit(rat),
                 ConcreteEUReal::Infinity => builder.infinity_lit(),
-            }),
+            })},
 
             _ => None,
         };
@@ -217,7 +217,8 @@ fn build_linear_combination(
     builder: &ExprBuilder,
     tcx: &TyCtx,
     declare_template_var: &mut dyn FnMut(String) -> decl::VarDecl,
-    program_var_decls: &[VarDecl], // use this instead of looping
+    program_var_decls: &[VarDecl],
+    output_type: TyKind,
 ) -> Expr {
     let mut lin_comb: Option<Expr> = None;
 
@@ -244,12 +245,20 @@ fn build_linear_combination(
         builder.binary(BinOpKind::Add, Some(TyKind::Real), acc, last)
     });
 
+    // if lin_comb_with_last.ty != Some(output_type.clone()) {
+    //     lin_comb_with_last = builder.cast(output_type.clone(), lin_comb_with_last);
+    // }
+
     let clamp_with_zero_name = Ident::with_dummy_span(Symbol::intern("clamp_with_zero"));
-    let final_expr = Shared::new(ExprData {
+    let mut final_expr = Shared::new(ExprData {
         kind: ExprKind::Call(clamp_with_zero_name, vec![lin_comb_with_last.clone()]),
-        ty: Some(TyKind::EUReal),
+        ty: Some(TyKind::UReal),
         span: Span::dummy_span(),
     });
+
+    if final_expr.ty != Some(output_type.clone()) {
+        final_expr = builder.cast(output_type, final_expr);
+    }
 
     final_expr
 }
@@ -363,7 +372,7 @@ fn cartesian_and(lists: &[Vec<Expr>], builder: &ExprBuilder) -> Vec<Expr> {
     acc
 }
 
-pub fn get_variable_region_splits<'ctx>(
+pub fn _get_variable_region_splits<'ctx>(
     program_vars: &[Expr], // precomputed builder variables
     split_count: usize,
     builder: &mut ExprBuilder,
@@ -486,6 +495,7 @@ pub fn assemble_piecewise_expression<'smt, 'ctx>(
                     tcx,
                     declare_template_var,
                     program_var_decls,
+                    output_type.clone(),
                 );
 
                 let full = builder.binary(BinOpKind::Mul, Some(output_type.clone()), iverson_both, lc);
@@ -525,7 +535,10 @@ pub fn build_template_expression<'smt, 'ctx>(
             .unwrap();
         if vardecl.ty != TyKind::Bool {
             let raw = builder.var(vardecl.name, tcx);
-            let casted = builder.cast(TyKind::Real, raw.clone());
+            let mut casted=raw.clone();
+            if vardecl.ty != TyKind::Real{
+                casted = builder.cast(TyKind::Real, raw.clone());
+            }
             program_var_decls.push(vardecl);
             program_vars.push(casted);
             program_vars_no_cast.push(raw);
@@ -538,7 +551,7 @@ pub fn build_template_expression<'smt, 'ctx>(
 
     // Template-variable declaration closure
     let mut declare_template_var = |name: String| -> decl::VarDecl {
-        let full_name = format!("{}{}", name, split_count);
+        let full_name = format!("{}{}", name, split_count+1);
         let ident = Ident::with_dummy_span(Symbol::intern(&full_name));
         let decl = VarDecl {
             name: ident,
@@ -554,8 +567,11 @@ pub fn build_template_expression<'smt, 'ctx>(
         decl
     };
 
+    let mut bool_exprs: Vec<Shared<ExprData>> = [].into();
     // Step 1: Collect Boolean conditions relevant to the inputs
-    let mut bool_exprs = collect_relevant_bool_conditions(synth_val, vc_expr);
+    if split_count >= 1 {
+        bool_exprs = collect_relevant_bool_conditions(synth_val, vc_expr);
+    }
 
     if bool_exprs.is_empty() {
         bool_exprs.push(builder.bool_lit(true));
