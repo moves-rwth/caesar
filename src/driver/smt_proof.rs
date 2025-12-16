@@ -170,7 +170,7 @@ pub fn run_smt_prove_task(
     Ok(result.prove_result)
 }
 
-/// Get a model for the constraints if it exists and instantiate vc_tvars_pvars with it
+/// Get a model for a BoolVcProveTask representing a constraint and return it as a hashmap
 pub fn get_model_for_constraints<'smt, 'ctx, 'tcx: 'ctx>(
     ctx: &'ctx z3::Context,
     options: &VerifyCommand,
