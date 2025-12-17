@@ -1,27 +1,3 @@
-//! Unfold an [`Expr`] incrementally by checking whether particular parts of the
-//! expression are actually reachable using simple SAT checks. We basically
-//! implement a simple form of bounded model checking to unfold the expression.
-//!
-//! The smart unfolding of expressions is particularly important after
-//! verification condition generation ([`crate::vc`]) where expressions with
-//! possibly exponential size in the input program are generated. Since the
-//! generated verification conditions use shared references to sub-expressions,
-//! we can reasily represent gigantic expressions with small memory usage.
-//!
-//! But for later operations on the verification conditions such as quantifier
-//! elimination or the final SAT check using Z3, we need to visit the complete
-//! expression. This explodes when the represented expression is very large.
-//!
-//! This is why we recursively un-share the expression in this module, but keep
-//! track of (some of) the conditions to reach parts of the expression. When we
-//! can prove that some parts are unreachable, we can avoid expanding a
-//! potentially huge sub-expression and replace it with a constant.
-//!
-//! The reachability checks implemented here are just conservative
-//! approximations, so there are many expressions where we do not detect
-//! unreachability. However, we must *never* falsely eliminate reachable
-//! parts of the expression.
-
 use std::ops::DerefMut;
 
 use z3::SatResult;
@@ -309,7 +285,6 @@ impl<'smt, 'ctx> VisitorMut for NeutralsRemover<'smt, 'ctx> {
                 }
             }
 
-            // ----- default recursive walk -----
             _ => walk_expr(self, e),
         }
     }

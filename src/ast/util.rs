@@ -158,11 +158,8 @@ pub fn is_zero_lit(expr: &Expr) -> bool {
 
 pub fn is_lit(expr: &Expr) -> bool {
     match &expr.kind {
-        ExprKind::Lit(lit) => true,
-        ExprKind::Cast(inner) => match &inner.kind {
-            ExprKind::Lit(lit) => true,
-            _ => false,
-        },
+        ExprKind::Lit(_) => true,
+        ExprKind::Cast(inner) => is_lit(inner),
         ExprKind::Unary(un_op, inner) => match un_op.node {
             UnOpKind::Parens => is_lit(inner),
             _ => false,
