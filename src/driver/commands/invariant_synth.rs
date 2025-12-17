@@ -3,13 +3,11 @@ use std::{collections::HashMap, ops::DerefMut, process::ExitCode, sync::Arc};
 use crate::ast::util::remove_casts;
 use crate::ast::visit::VisitorMut;
 use crate::ast::Ident;
-use crate::driver::smt_proof::get_model_for_constraints;
+use crate::invariant_synthesis::inv_synth_helpers::{FunctionInliner, create_subst_mapping, get_model_for_constraints, subst_from_mapping};
+use crate::invariant_synthesis::template_gen::{build_template_expression, get_synth_functions};
 use crate::opt::remove_neutrals::NeutralsRemover;
 use crate::opt::unfolder::Unfolder;
 use crate::smt::funcs::axiomatic::AxiomaticFunctionEncoder;
-use crate::smt::inv_synth_helpers::{
-    build_template_expression, create_subst_mapping, get_synth_functions, subst_from_mapping,
-};
 use crate::{
     ast::{BinOpKind, Expr, ExprBuilder, FileId, Span, TyKind},
     driver::{
@@ -23,7 +21,7 @@ use crate::{
     },
     resource_limits::{await_with_resource_limits, LimitsRef},
     servers::{Server, SharedServer},
-    smt::{inv_synth_helpers::FunctionInliner, translate_exprs::TranslateExprs, DepConfig, SmtCtx},
+    smt::{translate_exprs::TranslateExprs, DepConfig, SmtCtx},
 };
 use z3::{Config, Context};
 use z3rro::prover::ProveResult;
@@ -480,7 +478,6 @@ fn synth_inv_main(
                         &ctx,
                         options,
                         &limits_ref,
-                        &name,
                         constraints_on_tvars_bool_task,
                         &mut translate,
                     )? {

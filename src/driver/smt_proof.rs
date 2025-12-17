@@ -1,6 +1,5 @@
 //! SMT-based proofs of formulas.
 
-use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 
@@ -21,7 +20,6 @@ use z3rro::{
     util::{PrefixWriter, ReasonUnknown},
 };
 
-use crate::ast::{self, Expr};
 use crate::depgraph::DepGraph;
 use crate::driver::commands::options::{
     DebugOptions, FunctionEncodingOption, QuantifierInstantiation, SliceVerifyMethod,
@@ -37,7 +35,6 @@ use crate::smt::funcs::fuel::{
     FuelEncodingOptions, FuelMonoFunctionEncoder, FuelParamFunctionEncoder,
 };
 use crate::smt::funcs::{FunctionEncoder, RecFunFunctionEncoder};
-use crate::smt::inv_synth_helpers::create_subst_mapping;
 use crate::smt::{DepConfig, SmtCtx};
 use crate::tyctx::TyCtx;
 use crate::{
@@ -168,55 +165,6 @@ pub fn run_smt_prove_task(
         .map_err(CaesarError::ServerError)?;
 
     Ok(result.prove_result)
-}
-
-/// Get a model for a BoolVcProveTask representing a constraint and return it as a hashmap
-pub fn get_model_for_constraints<'smt, 'ctx, 'tcx: 'ctx>(
-    ctx: &'ctx z3::Context,
-    options: &VerifyCommand,
-    limits_ref: &LimitsRef,
-    name: &SourceUnitName,
-    constraints: BoolVcProveTask,
-    translate: &mut TranslateExprs<'smt, 'ctx>,
-) -> Result<Option<HashMap<ast::symbol::Ident, Expr>>, CaesarError> {
-    let mut constraints_prove_task = SmtVcProveTask::translate(constraints, translate);
-    if !options.opt_options.no_simplify {
-        constraints_prove_task.simplify();
-    }
-    let mut prover = Prover::new(&ctx, IncrementalMode::Native);
-    if let Some(remaining) = limits_ref.time_left() {
-        prover.set_timeout(remaining);
-    }
-    if let Some(smtlib) = get_smtlib(options, &prover) {
-        write_smtlib(&options.debug_options, name, &smtlib, None)?;
-    }
-    // Add axioms and assumptions
-    translate.ctx.add_lit_axioms_to_prover(&mut prover);
-    translate
-        .ctx
-        .uninterpreteds()
-        .add_axioms_to_prover(&mut prover);
-    translate
-        .local_scope()
-        .add_assumptions_to_prover(&mut prover);
-
-    // Add the verification condition. This should be checked for satisfiability.
-    // Therefore, add_assumption is used (which just adds it as an smtlib assert)
-    // vs. add_provable, which would negate it first.
-    prover.add_assumption(&constraints_prove_task.vc);
-
-    // Run solver & retrieve model if available
-    prover.check_sat();
-    let model = prover.get_model();
-
-    // If we find a model for the template constraints, filter it to the template variables and create a mapping from it.
-    if let Some(template_model) = model {
-        let mapping = create_subst_mapping(&template_model, translate);
-        Ok(Some(mapping))
-    } else {
-        // No template model found;.
-        Ok(None)
-    }
 }
 
 /// Create the function encoder based on the given command's options.
