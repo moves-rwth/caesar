@@ -85,8 +85,8 @@ pub fn collect_relevant_bool_conditions(
         allowed_vars.insert(vardecl.name.name);
     }
 
-    vc_expr
-        .collect_bool_conditions()
+    
+        collect_bool_conditions(vc_expr)
         .into_iter()
         .filter(|b| {
             let vars = collect_program_vars(b);
@@ -529,4 +529,52 @@ fn explore_boolean_assignments<'smt, 'ctx>(
         partial_assign.pop();
     }
     num_sat_checks
+}
+
+/// Collect all boolean expressions that appear either:
+///   a) as the condition of an ITE
+///   b) as the operand of an Iverson `[expr]`
+pub fn collect_bool_conditions(expr: &Expr) -> Vec<Expr> {
+    let mut out = Vec::new();
+    let mut seen: Vec<*const Expr> = Vec::new(); // identity via raw pointers
+    collect_bool_conditions_rec(expr, &mut out, &mut seen);
+    out
+}
+fn collect_bool_conditions_rec(
+    expr: &Expr,
+    out: &mut Vec<Expr>,
+    seen: &mut Vec<*const Expr>,
+) {
+    match &expr.kind {
+        // a) ITE condition
+        ExprKind::Ite(cond, then_branch, else_branch) => {
+            record_if_new(cond, out, seen);
+
+            collect_bool_conditions_rec(cond, out, seen);
+            collect_bool_conditions_rec(then_branch, out, seen);
+            collect_bool_conditions_rec(else_branch, out, seen);
+        }
+
+        // b) Unary Iverson operator
+        ExprKind::Unary(un_op, operand)
+            if matches!(un_op.node, UnOpKind::Iverson) =>
+        {
+            record_if_new(operand, out, seen);
+            collect_bool_conditions_rec(operand, out, seen);
+        }
+
+        // all other expressions
+        _ => {
+            for child in expr.children() {
+                collect_bool_conditions_rec(child, out, seen);
+            }
+        }
+    }
+}
+fn record_if_new(expr: &Expr, out: &mut Vec<Expr>, seen: &mut Vec<*const Expr>) {
+    let ptr = expr as *const Expr;
+    if !seen.contains(&ptr) {
+        out.push(expr.clone());
+        seen.push(ptr);
+    }
 }

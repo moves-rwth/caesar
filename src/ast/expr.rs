@@ -31,52 +31,6 @@ impl Expr {
         };
         replace_with::replace_with(self, default, f)
     }
-    /// Collect all boolean expressions that appear either:
-    ///   a) as the condition of an ITE
-    ///   b) as the operand of an Iverson `[expr]`
-    pub fn collect_bool_conditions(&self) -> Vec<Expr> {
-        let mut out = Vec::new();
-        let mut seen: Vec<*const Expr> = Vec::new(); // raw pointers for identity check
-        self.collect_bool_conditions_rec(&mut out, &mut seen);
-        out
-    }
-
-    fn collect_bool_conditions_rec(&self, out: &mut Vec<Expr>, seen: &mut Vec<*const Expr>) {
-        match &self.kind {
-            // --- a) ITE condition ---
-            ExprKind::Ite(cond, then_branch, else_branch) => {
-                let cond_ptr = cond as *const Expr;
-
-                if !seen.contains(&cond_ptr) {
-                    out.push(cond.clone());
-                    seen.push(cond_ptr);
-                }
-
-                cond.collect_bool_conditions_rec(out, seen);
-                then_branch.collect_bool_conditions_rec(out, seen);
-                else_branch.collect_bool_conditions_rec(out, seen);
-            }
-
-            // --- b) Unary Iverson operator ---
-            ExprKind::Unary(un_op, operand) if matches!(un_op.node, UnOpKind::Iverson) => {
-                let operand_ptr = operand as *const Expr;
-
-                if !seen.contains(&operand_ptr) {
-                    out.push(operand.clone());
-                    seen.push(operand_ptr);
-                }
-
-                operand.collect_bool_conditions_rec(out, seen);
-            }
-
-            // All other expression types: recurse into children
-            _ => {
-                for child in self.children() {
-                    child.collect_bool_conditions_rec(out, seen);
-                }
-            }
-        }
-    }
 }
 
 impl fmt::Display for Expr {
