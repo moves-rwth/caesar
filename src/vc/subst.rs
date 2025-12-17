@@ -30,7 +30,7 @@ struct SubstFrame {
 
 /// A structure to apply variable substitutions in expressions.
 pub struct Subst<'a> {
-    tcx: &'a TyCtx,
+    pub tcx: &'a TyCtx,
     cur: SubstFrame,
     stack: Vec<SubstFrame>,
     pub limits_ref: LimitsRef,

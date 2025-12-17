@@ -26,6 +26,7 @@ mod timing;
 mod tyctx;
 mod vc;
 mod version;
+mod invariant_synthesis;
 
 /// Caesar's main entry point redirects to [`CaesarCli::main`].
 #[tokio::main]
