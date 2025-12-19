@@ -4,9 +4,8 @@ use tracing::debug;
 
 use crate::{
     ast::{
-        util::FreeVariableCollector, visit::VisitorMut, BinOpKind, Direction, Expr, ExprBuilder,
-        ExprData, ExprKind, Ident, QuantOpKind, QuantVar, Span, SpanVariant, TyKind, UnOpKind,
-        VarKind,
+        BinOpKind, Direction, Expr, ExprBuilder, ExprData, ExprKind, Ident, LitKind, QuantOpKind,
+        QuantVar, Span, SpanVariant, TyKind, UnOpKind, VarKind,
     },
     driver::quant_proof::QuantVcProveTask,
     tyctx::TyCtx,
@@ -49,18 +48,19 @@ impl<'tcx> Qelim<'tcx> {
                     self.qelim_inf(a);
                     self.qelim_inf(b)
                 }
-                BinOpKind::Mul if is_const(a) => self.qelim_inf(b),
+                BinOpKind::Mul if is_finite(a) => self.qelim_inf(b),
+                BinOpKind::Mul if is_finite(b) => self.qelim_inf(a),
                 BinOpKind::Impl | BinOpKind::Compare => {
                     self.qelim_sup(a);
                     self.qelim_inf(b);
                 }
                 _ => {}
             },
-            ExprKind::Unary(un_op, ref mut operand) => {
-                if un_op.node == UnOpKind::Not {
-                    self.qelim_sup(operand)
-                }
-            }
+            ExprKind::Unary(un_op, ref mut operand) => match un_op.node {
+                UnOpKind::Not => self.qelim_sup(operand),
+                UnOpKind::Parens => self.qelim_inf(operand),
+                _ => {}
+            },
             ExprKind::Cast(ref mut inner) => self.qelim_inf(inner),
             ExprKind::Quant(quant_op, quant_vars, _, operand) => match quant_op.node {
                 QuantOpKind::Inf | QuantOpKind::Forall => {
@@ -95,18 +95,19 @@ impl<'tcx> Qelim<'tcx> {
                     self.qelim_sup(a);
                     self.qelim_sup(b)
                 }
-                BinOpKind::Mul if is_const(a) => self.qelim_sup(b),
+                BinOpKind::Mul if is_finite(a) => self.qelim_sup(b),
+                BinOpKind::Mul if is_finite(b) => self.qelim_sup(a),
                 BinOpKind::CoImpl | BinOpKind::CoCompare => {
                     self.qelim_inf(a);
                     self.qelim_sup(b);
                 }
                 _ => {}
             },
-            ExprKind::Unary(un_op, ref mut operand) => {
-                if un_op.node == UnOpKind::Non {
-                    self.qelim_sup(operand)
-                }
-            }
+            ExprKind::Unary(un_op, ref mut operand) => match un_op.node {
+                UnOpKind::Non => self.qelim_inf(operand),
+                UnOpKind::Parens => self.qelim_sup(operand),
+                _ => {}
+            },
             ExprKind::Cast(ref mut inner) => self.qelim_sup(inner),
             ExprKind::Quant(quant_op, quant_vars, _, operand) => match quant_op.node {
                 QuantOpKind::Sup | QuantOpKind::Exists => {
@@ -139,9 +140,26 @@ impl<'tcx> Qelim<'tcx> {
     }
 }
 
-// check whether an expression is constant by checking that there are no free variables.
-fn is_const(expr: &mut Expr) -> bool {
-    let mut visitor = FreeVariableCollector::new();
-    visitor.visit_expr(expr).unwrap();
-    visitor.variables.is_empty()
+/// Simple heuristic to check whether an expression is always a finite number
+/// (never equal to infty). May return false negatives.
+fn is_finite(expr: &Expr) -> bool {
+    if let TyKind::UInt | TyKind::UReal = expr.ty.as_ref().unwrap() {
+        return true;
+    }
+    match &expr.kind {
+        ExprKind::Binary(bin_op, lhs, rhs) => match bin_op.node {
+            BinOpKind::Add | BinOpKind::Mul | BinOpKind::Sup => is_finite(lhs) && is_finite(rhs),
+            BinOpKind::Inf => is_finite(lhs) || is_finite(rhs),
+            BinOpKind::Sub => is_finite(lhs),
+            _ => false,
+        },
+        ExprKind::Unary(un_op, inner) => match un_op.node {
+            UnOpKind::Iverson => true,
+            UnOpKind::Parens => is_finite(inner),
+            _ => false,
+        },
+        ExprKind::Cast(inner) => is_finite(inner),
+        ExprKind::Lit(lit) => matches!(&lit.node, LitKind::UInt(_) | LitKind::Frac(_)),
+        _ => false,
+    }
 }
