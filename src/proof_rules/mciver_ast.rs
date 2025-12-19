@@ -25,6 +25,7 @@ use crate::{
     intrinsic::annotations::{
         tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
     },
+    proof_rules::{calculus::ApproximationKind, FixpointSemanticsKind},
     tyctx::TyCtx,
 };
 
@@ -129,6 +130,23 @@ impl Encoding for ASTAnnotation {
 
     fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
         matches!(calculus.calculus_type, CalculusType::Wp) && direction == Direction::Down
+    }
+
+    fn get_approximation(
+        &self,
+        fixpoint_semantics: FixpointSemanticsKind,
+        inner_approximation_kind: ApproximationKind,
+    ) -> ApproximationKind {
+        match (fixpoint_semantics, inner_approximation_kind) {
+            (FixpointSemanticsKind::LeastFixedPoint, ApproximationKind::EXACT) => {
+                ApproximationKind::EXACT
+            }
+            _ => ApproximationKind::UNKNOWN,
+        }
+    }
+
+    fn default_fixpoint_semantics(&self, _direction: Direction) -> FixpointSemanticsKind {
+        FixpointSemanticsKind::LeastFixedPoint
     }
 
     fn transform(
