@@ -353,7 +353,7 @@ pub struct SliceOptions {
     pub slice_error_inconsistent: bool,
 
     /// Enable slicing tick/reward statements during slicing for errors.
-    #[arg(long)]
+    #[arg(long, alias = "slice-reward")]
     pub slice_ticks: bool,
 
     /// Enable slicing sampling statements (must also be selected via

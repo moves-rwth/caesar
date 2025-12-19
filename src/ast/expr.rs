@@ -62,7 +62,8 @@ pub enum ExprKind {
     Cast(Expr),
     /// A quantifier over some variables.
     Quant(QuantOp, Vec<QuantVar>, QuantAnn, Expr),
-    /// A substitution.
+    /// A substitution `Subst(var, subst, expr)` that replaces all occurrences
+    /// of `var` in `expr` with `subst`.
     Subst(Ident, Expr, Expr),
     /// A value literal.
     Lit(Lit),
