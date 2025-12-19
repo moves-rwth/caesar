@@ -22,10 +22,6 @@ const config = {
   organizationName: 'moves-rwth', // Usually your GitHub org/user name.
   projectName: 'caesar', // Usually your repo name.
 
-  // the broken links detection seems to be broken for links to images in the blog, so we set it to warn only
-  onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
-
   // Even if you don't use internalization, you can use this field to set useful
   // metadata like html lang. For example, if your site is Chinese, you may want
   // to replace "en" with "zh-Hans".

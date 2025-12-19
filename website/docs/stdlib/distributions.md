@@ -46,7 +46,7 @@ proc unif(a: UInt, b: UInt) -> (r: UInt)
 
 The [uniform distribution](https://en.wikipedia.org/wiki/Discrete_uniform_distribution) returns the values in the closed interval `[a,b]` with uniform probability.
 
-Note that calls with `a <= b` will result in a constant zero expectation.
+Note that calls with `a < b` will result in a constant zero expectation.
 
 ## Binomial
 
