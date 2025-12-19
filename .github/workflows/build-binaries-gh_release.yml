@@ -47,7 +47,7 @@ jobs:
           target: aarch64-apple-darwin
 
         - build: macos-intel
-          os: macos-13 # newest available Github runner on Intel
+          os: macos-15-intel # newest available Github runner on Intel
           rust: stable
           target: x86_64-apple-darwin
 
