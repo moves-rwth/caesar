@@ -49,6 +49,7 @@ impl<'tcx> Qelim<'tcx> {
                     self.qelim_inf(b)
                 }
                 BinOpKind::Mul if is_finite(a) => self.qelim_inf(b),
+                BinOpKind::Mul if is_finite(b) => self.qelim_inf(a),
                 BinOpKind::Impl | BinOpKind::Compare => {
                     self.qelim_sup(a);
                     self.qelim_inf(b);
@@ -95,6 +96,7 @@ impl<'tcx> Qelim<'tcx> {
                     self.qelim_sup(b)
                 }
                 BinOpKind::Mul if is_finite(a) => self.qelim_sup(b),
+                BinOpKind::Mul if is_finite(b) => self.qelim_sup(a),
                 BinOpKind::CoImpl | BinOpKind::CoCompare => {
                     self.qelim_inf(a);
                     self.qelim_sup(b);
@@ -138,14 +140,21 @@ impl<'tcx> Qelim<'tcx> {
     }
 }
 
-/// Check whether an expression is always a finite number (never equal to
-/// infty).
+/// Simple heuristic to check whether an expression is always a finite number
+/// (never equal to infty). May return false negatives.
 fn is_finite(expr: &Expr) -> bool {
     if let TyKind::UInt | TyKind::UReal = expr.ty.as_ref().unwrap() {
         return true;
     }
     match &expr.kind {
+        ExprKind::Binary(bin_op, lhs, rhs) => match bin_op.node {
+            BinOpKind::Add | BinOpKind::Mul | BinOpKind::Sup => is_finite(lhs) && is_finite(rhs),
+            BinOpKind::Inf => is_finite(lhs) || is_finite(rhs),
+            BinOpKind::Sub => is_finite(lhs),
+            _ => false,
+        },
         ExprKind::Unary(un_op, inner) => match un_op.node {
+            UnOpKind::Iverson => true,
             UnOpKind::Parens => is_finite(inner),
             _ => false,
         },
