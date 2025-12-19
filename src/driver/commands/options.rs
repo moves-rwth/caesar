@@ -126,6 +126,8 @@ pub enum QuantifierInstantiation {
     EMatching,
     /// Only use MBQI for quantifier instantiation.
     Mbqi,
+    /// Disable both e-matching and MBQI.
+    None,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]

@@ -88,6 +88,7 @@ pub fn set_global_z3_params(command: &VerifyCommand, limits_ref: &LimitsRef) {
     // set quantifier instantiation options
     global_params.set_param("smt.qi.eager_threshold", "100");
     global_params.set_param("smt.qi.lazy_threshold", "1000");
+
     match command.opt_options.quantifier_instantiation {
         QuantifierInstantiation::EMatching => {
             // we *could* fully disable MBQI (and thus also auto-config) like so:
@@ -104,6 +105,10 @@ pub fn set_global_z3_params(command: &VerifyCommand, limits_ref: &LimitsRef) {
         }
         QuantifierInstantiation::Mbqi => {
             global_params.set_param("smt.ematching", "false");
+        }
+        QuantifierInstantiation::None => {
+            global_params.set_param("smt.ematching", "false");
+            global_params.set_param("smt.mbqi.id", QuantifierMeta::MBQI_PREFIX);
         }
         QuantifierInstantiation::All => {}
     }
