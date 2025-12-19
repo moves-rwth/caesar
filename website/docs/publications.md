@@ -75,6 +75,8 @@ We also presented this paper at the [Dafny 2024 workshop](/blog/2024/01/14/dafny
 
 <iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/riDqWQlAk84?si=Wh4bZT9OyFMzJdYs" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
+The talk slides are [available in PDF format](pathname:///assets/talks/dafny2024.pdf).
+
 ## Bachelor and Master Theses
 
 Below are some selected theses that contributed to the development of Caesar and HeyVL.
