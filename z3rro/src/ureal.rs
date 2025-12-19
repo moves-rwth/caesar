@@ -13,7 +13,6 @@ use super::{
 };
 use crate::lit::{LitFactory, LitWrap};
 use crate::{
-    forward_binary_op,
     model::{InstrumentedModel, SmtEval, SmtEvalError},
     scope::SmtAlloc,
     Factory, SmtFactory, SmtInvariant, UInt,
