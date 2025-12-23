@@ -2,11 +2,42 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://www.caesarverifier.org/blog</id>
     <title>Caesar Blog</title>
-    <updated>2025-08-26T00:00:00.000Z</updated>
+    <updated>2025-12-23T00:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://www.caesarverifier.org/blog"/>
     <subtitle>Caesar Blog</subtitle>
     <icon>https://www.caesarverifier.org/img/laurel-square.svg</icon>
+    <entry>
+        <title type="html"><![CDATA[Paper on Slicing Accepted at ESOP 2026]]></title>
+        <id>https://www.caesarverifier.org/blog/2025/12/23/esop26-slicing</id>
+        <link href="https://www.caesarverifier.org/blog/2025/12/23/esop26-slicing"/>
+        <updated>2025-12-23T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[Our paper "Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing" was accepted at the European Symposium on Programming (ESOP) 2026 to be held in Turin, Italy.]]></summary>
+        <content type="html"><![CDATA[<p>Our paper <em>"Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing"</em> was accepted at the <a href="https://etaps.org/2026/conferences/esop/" target="_blank" rel="noopener noreferrer" class="">European Symposium on Programming (ESOP) 2026</a> to be held in Turin, Italy.
+The authors are Philipp Schröer, Darion Haase, and Joost-Pieter Katoen.</p>
+<p>The paper presents theoretical foundations and the implementation of our slicing-based user diagnostics in Caesar, which we dub <em>Brutus</em>.
+On this website, you can also find the <a class="" href="https://www.caesarverifier.org/docs/caesar/slicing">user guide-level documentation on slicing in Caesar</a>.
+See also the <a class="" href="https://www.caesarverifier.org/blog/2024/05/20/caesar-2-0">announcement of Caesar 2.0</a>, which introduced the first slicing implementation in Caesar.</p>
+<p>The theory is about <em>slices</em>, i.e. smaller sub-programs, to provide</p>
+<ol>
+<li class="">error localization (<em>error-witnessing slices</em>),</li>
+<li class="">proof simplification (<em>verification-witnessing slices</em>), and</li>
+<li class="">preserving successful verification results (<em>verification-preserving slices</em>).</li>
+</ol>
+<p>These notions are defined on the quantitative intermediate verification language HeyVL, and thus the theory and implementation work for all statements expressible in HeyVL, such as <code>assume</code> and <code>assert</code> statements.
+Based on these notions, specialized slicing-based diagnostics are provided for various proof rules, such as the <a class="" href="https://www.caesarverifier.org/docs/proof-rules/induction">induction proof rule</a> or <a class="" href="https://www.caesarverifier.org/docs/heyvl/procs">procedure calls</a> (called <em>specification statements</em> in the paper).
+The correctness of the above is formally proven in the paper.</p>
+<p>The paper also reports on the implementation of these ideas.
+We explain the algorithms to compute the different slice types efficiently.
+For error reporting, we use a binary search-based algorithm to find minimal error-witnessing slices.
+For the other two slice types, we compare different algorithms based on unsat core extraction, minimal unsat subset enumeration, and a direct SMT encoding of the slicing problem.
+Our empirical evaluation of Brutus on existing and new benchmarks shows that we can find slices that are both small and informative.</p>]]></content>
+        <author>
+            <name>Philipp Schroer</name>
+            <uri>https://moves.rwth-aachen.de/people/philipp-schroer/</uri>
+        </author>
+        <category label="publications" term="publications"/>
+    </entry>
     <entry>
         <title type="html"><![CDATA[QEST + FORMATS 2025 Keynote Talk]]></title>
         <id>https://www.caesarverifier.org/blog/2025/08/26/qest-keynote</id>
