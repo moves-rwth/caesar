@@ -63,7 +63,7 @@ To our knowledge, Caesar's implementation of slicing is the first one that combi
 
 :::note
 
-Our slicing approach is still a work-in-progress which we hope to present in an upcoming academic publication.
+Our paper on the theory and implementation of slicing was [recently accepted at ESOP 2026](/blog/2025/12/23/esop26-slicing).
 
 :::
 

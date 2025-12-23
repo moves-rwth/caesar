@@ -27,6 +27,16 @@ import TOCInline from '@theme/TOCInline';
 
 ## Peer-Reviewed Papers
 
+### ESOP '26: Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing
+
+The paper _"Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing"_ by Philipp Schröer, Darion Haase, and Joost-Pieter Katoen was accepted at the [European Symposium on Programming (ESOP) 2026](https://etaps.org/2026/conferences/esop/) to be held in Turin, Italy.
+The paper presents theoretical foundations and the implementation of our slicing-based user diagnostics in Caesar, dubbed *Brutus*, and introduces different kinds of slices: error-witnessing (for error localization), verification-witnessing (for proof simplification), and verification-preserving (to maintain successful verification results).
+
+Further links:
+ * [Blog post about the ESOP '26 paper](/blog/2025/12/23/esop26-slicing),
+ * [User guide-level documentation on slicing in Caesar](/docs/caesar/slicing),
+ * [Announcement of Caesar 2.0](/blog/2024/05/20/caesar-2-0), which introduced the first slicing implementation in Caesar.
+
 ### OOPSLA '25: Foundations for Deductive Verification of Continuous Probabilistic Programs
 
 The paper [_"Foundations for Deductive Verification of Continuous Probabilistic Programs: From Lebesgue to Riemann and Back"_](https://dl.acm.org/doi/10.1145/3720429) by Kevin Batz, Joost-Pieter Katoen, Francesca Randone, and Tobias Winkler was recently published at [OOPSLA 2025](https://2025.splashcon.org/track/OOPSLA). DOI: https://doi.org/10.1145/3720429.
