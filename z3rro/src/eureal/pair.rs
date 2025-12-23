@@ -7,7 +7,7 @@ use std::ops::{Add, Mul, Sub};
 use z3::{ast::Bool, Context};
 
 use crate::model::{InstrumentedModel, SmtEval, SmtEvalError};
-use crate::{forward_binary_op, scope::SmtAlloc, Factory, SmtEq, SmtFactory, SmtInvariant, UReal};
+use crate::{scope::SmtAlloc, Factory, SmtEq, SmtFactory, SmtInvariant, UReal};
 
 use super::ConcreteEUReal;
 use crate::lit::{LitFactory, LitWrap};

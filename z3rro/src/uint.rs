@@ -7,7 +7,6 @@ use z3::{
 };
 
 use crate::{
-    forward_binary_op,
     model::{InstrumentedModel, SmtEval, SmtEvalError},
     scope::SmtAlloc,
     Factory, LitFactory, LitWrap, SmtFactory, SmtInvariant,
