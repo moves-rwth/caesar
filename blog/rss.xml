@@ -14,11 +14,12 @@
             <guid>https://www.caesarverifier.org/blog/2025/12/23/esop26-slicing</guid>
             <pubDate>Tue, 23 Dec 2025 00:00:00 GMT</pubDate>
             <description><![CDATA[Our paper "Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing" was accepted at the European Symposium on Programming (ESOP) 2026 to be held in Turin, Italy.]]></description>
-            <content:encoded><![CDATA[<p>Our paper <em>"Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing"</em> was accepted at the <a href="https://etaps.org/2026/conferences/esop/" target="_blank" rel="noopener noreferrer" class="">European Symposium on Programming (ESOP) 2026</a> to be held in Turin, Italy.
+            <content:encoded><![CDATA[<p>Our paper <a href="https://arxiv.org/abs/2512.20214" target="_blank" rel="noopener noreferrer" class=""><em>"Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing"</em></a> was accepted at the <a href="https://etaps.org/2026/conferences/esop/" target="_blank" rel="noopener noreferrer" class="">European Symposium on Programming (ESOP) 2026</a> to be held in Turin, Italy.
 The authors are Philipp Schröer, Darion Haase, and Joost-Pieter Katoen.</p>
 <p>The paper presents theoretical foundations and the implementation of our slicing-based user diagnostics in Caesar, which we dub <em>Brutus</em>.
 On this website, you can also find the <a class="" href="https://www.caesarverifier.org/docs/caesar/slicing">user guide-level documentation on slicing in Caesar</a>.
 See also the <a class="" href="https://www.caesarverifier.org/blog/2024/05/20/caesar-2-0">announcement of Caesar 2.0</a>, which introduced the first slicing implementation in Caesar.</p>
+<a href="https://www.caesarverifier.org/assets/images/slicing-demo-433a52249f8293132265395163c2dca4.png"><img src="https://www.caesarverifier.org/assets/images/slicing-demo-433a52249f8293132265395163c2dca4.png" style="float:right;max-width:350px;margin-left:1em" class="item shadow--tl"></a>
 <p>The theory is about <em>slices</em>, i.e. smaller sub-programs, to provide</p>
 <ol>
 <li class="">error localization (<em>error-witnessing slices</em>),</li>
@@ -28,6 +29,7 @@ See also the <a class="" href="https://www.caesarverifier.org/blog/2024/05/20/ca
 <p>These notions are defined on the quantitative intermediate verification language HeyVL, and thus the theory and implementation work for all statements expressible in HeyVL, such as <code>assume</code> and <code>assert</code> statements.
 Based on these notions, specialized slicing-based diagnostics are provided for various proof rules, such as the <a class="" href="https://www.caesarverifier.org/docs/proof-rules/induction">induction proof rule</a> or <a class="" href="https://www.caesarverifier.org/docs/heyvl/procs">procedure calls</a> (called <em>specification statements</em> in the paper).
 The correctness of the above is formally proven in the paper.</p>
+<a href="https://www.caesarverifier.org/assets/images/general-slicing-demo-448dc2ed5f2790c1067e1f5e67703716.png"><img src="https://www.caesarverifier.org/assets/images/general-slicing-demo-448dc2ed5f2790c1067e1f5e67703716.png" style="float:right;max-width:400px;margin-left:1em" class="item shadow--tl"></a>
 <p>The paper also reports on the implementation of these ideas.
 We explain the algorithms to compute the different slice types efficiently.
 For error reporting, we use a binary search-based algorithm to find minimal error-witnessing slices.
