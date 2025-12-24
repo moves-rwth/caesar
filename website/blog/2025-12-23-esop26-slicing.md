@@ -6,6 +6,7 @@ tags: [publications]
 
 Our paper [_"Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing"_](https://arxiv.org/abs/2512.20214) was accepted at the [European Symposium on Programming (ESOP) 2026](https://etaps.org/2026/conferences/esop/) to be held in Turin, Italy.
 The authors are Philipp Schröer, Darion Haase, and Joost-Pieter Katoen.
+[A preprint is available on arXiv](https://arxiv.org/abs/2512.20214).
 
 The paper presents theoretical foundations and the implementation of our slicing-based user diagnostics in Caesar, which we dub *Brutus*.
 On this website, you can also find the [user guide-level documentation on slicing in Caesar](/docs/caesar/slicing).
