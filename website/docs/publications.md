@@ -29,7 +29,10 @@ import TOCInline from '@theme/TOCInline';
 
 ### ESOP '26: Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing
 
-The paper _"Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing"_ by Philipp Schröer, Darion Haase, and Joost-Pieter Katoen was accepted at the [European Symposium on Programming (ESOP) 2026](https://etaps.org/2026/conferences/esop/) to be held in Turin, Italy.
+The paper [_"Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing"_](https://arxiv.org/abs/2512.20214) by Philipp Schröer, Darion Haase, and Joost-Pieter Katoen was accepted at the [European Symposium on Programming (ESOP) 2026](https://etaps.org/2026/conferences/esop/) to be held in Turin, Italy.
+
+An **extended version with proofs and additional material** is available on arXiv: [Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing (Extended Version) — arXiv:2512.20214](https://arxiv.org/abs/2512.20214).
+
 The paper presents theoretical foundations and the implementation of our slicing-based user diagnostics in Caesar, dubbed *Brutus*, and introduces different kinds of slices: error-witnessing (for error localization), verification-witnessing (for proof simplification), and verification-preserving (to maintain successful verification results).
 
 Further links:
@@ -70,7 +73,7 @@ For publication, please cite as follows ([BibTeX file](https://dblp.org/rec/jour
 
 > Philipp Schröer, Kevin Batz, Benjamin Lucien Kaminski, Joost-Pieter Katoen, Christoph Matheja. *A Deductive Verification Infrastructure for Probabilistic Programs.* Proceedings of the ACM on Programming Languages 7, OOPSLA 2023. DOI: https://doi.org/10.1145/3622870.
 
-An **extended version with proofs, details on encodings, and typo fixes** is available on arXiv: [A Deductive Verification Infrastructure for Probabilistic Programs (extended version) — arXiv:2309.07781](https://arxiv.org/abs/2309.07781).
+An **extended version with proofs, details on encodings, and typo fixes** is available on arXiv: [A Deductive Verification Infrastructure for Probabilistic Programs (Extended Version) — arXiv:2309.07781](https://arxiv.org/abs/2309.07781).
 
 **The artifact** for our OOPSLA '23 publication is [available on Zenodo](https://zenodo.org/record/8146987).
 [It has received the *Distinguished Artifact* award](/blog/2023/10/27/oopsla23-distinguished-artifact), praising exceptionally high quality of the artifact.
