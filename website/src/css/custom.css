@@ -73,3 +73,28 @@ article a[target="_blank"]:not(.button):hover {
 /* by default, katex equations are bigger than the surrounding text. we want our
 math to nicely be contained in the surrounding text. */
 .katex { font-size: 1em !important; }
+
+.float-right-responsive {
+  float: right;
+  margin: 0 0 1rem 1rem;
+  max-width: 50%;
+}
+
+/* for images inside the helper, ensure they behave well */
+.float-right-responsive img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* below the breakpoint: stop floating and center */
+@media (max-width: 650px) {
+  .float-right-responsive {
+    float: none !important;
+    display: block;
+    margin: 2rem;
+    max-width: 80%;
+    clear: both;
+    text-align: center;
+  }
+}

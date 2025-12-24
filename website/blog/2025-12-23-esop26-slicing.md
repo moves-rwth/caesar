@@ -13,8 +13,8 @@ See also the [announcement of Caesar 2.0](./2024-05-20-caesar-2-0.md), which int
 
 <!-- truncate -->
 
-<a href={require("/img/slicing-demo.png").default}>
-    <img src={require("/img/slicing-demo.png").default} style={{"float": "right", "maxWidth": "350px", "marginLeft": "1em"}} className="item shadow--tl" />
+<a href={require("/img/slicing-demo.png").default} className="float-right-responsive">
+    <img src={require("/img/slicing-demo.png").default} className="item shadow--tl" />
 </a>
 
 The theory is about *slices*, i.e. smaller sub-programs, to provide
@@ -26,8 +26,8 @@ These notions are defined on the quantitative intermediate verification language
 Based on these notions, specialized slicing-based diagnostics are provided for various proof rules, such as the [induction proof rule](/docs/proof-rules/induction) or [procedure calls](/docs/heyvl/procs) (called *specification statements* in the paper).
 The correctness of the above is formally proven in the paper.
 
-<a href={require("/img/general-slicing-demo.png").default}>
-    <img src={require("/img/general-slicing-demo.png").default} style={{"float": "right", "maxWidth": "400px", "marginLeft": "1em"}} className="item shadow--tl" />
+<a href={require("/img/general-slicing-demo.png").default} className="float-right-responsive">
+    <img src={require("/img/general-slicing-demo.png").default} className="item shadow--tl" />
 </a>
 
 The paper also reports on the implementation of these ideas.
