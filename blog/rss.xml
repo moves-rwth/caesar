@@ -16,7 +16,7 @@
             <description><![CDATA[Our paper "Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing" was accepted at the European Symposium on Programming (ESOP) 2026 to be held in Turin, Italy.]]></description>
             <content:encoded><![CDATA[<p>Our paper <a href="https://arxiv.org/abs/2512.20214" target="_blank" rel="noopener noreferrer" class=""><em>"Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing"</em></a> was accepted at the <a href="https://etaps.org/2026/conferences/esop/" target="_blank" rel="noopener noreferrer" class="">European Symposium on Programming (ESOP) 2026</a> to be held in Turin, Italy.
 The authors are Philipp Schröer, Darion Haase, and Joost-Pieter Katoen.
-<a href="https://arxiv.org/abs/2512.20214" target="_blank" rel="noopener noreferrer" class="">A preprint is available on arXiv</a>.</p>
+<a href="https://arxiv.org/abs/2512.20214" target="_blank" rel="noopener noreferrer" class="">An extended version of the paper is already available on arXiv</a>.</p>
 <p>The paper presents theoretical foundations and the implementation of our slicing-based user diagnostics in Caesar, which we dub <em>Brutus</em>.
 On this website, you can also find the <a class="" href="https://www.caesarverifier.org/docs/caesar/slicing">user guide-level documentation on slicing in Caesar</a>.
 See also the <a class="" href="https://www.caesarverifier.org/blog/2024/05/20/caesar-2-0">announcement of Caesar 2.0</a>, which introduced the first slicing implementation in Caesar.</p>
