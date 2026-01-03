@@ -1,21 +1,4 @@
-use crate::driver::{commands::verify::verify_test, error::CaesarError};
-
-#[test]
-fn test_wp_with_kind_fail() {
-    let source = r#"
-    @wp
-    proc main() -> () {
-        var x: UInt
-        @k_induction(1, x)
-        while 1 <= x {
-            x = x - 1
-        }
-    }
-    "#;
-    let res = matches!(verify_test(source).0, Err(CaesarError::Diagnostic(_)));
-
-    assert!(res);
-}
+use crate::driver::commands::verify::verify_test;
 
 #[test]
 fn test_wp_with_kind_ok() {
@@ -47,28 +30,6 @@ fn test_wlp_with_kind_ok() {
     "#;
     let res = verify_test(source).0.unwrap();
     assert!(!res)
-}
-
-#[test]
-fn test_calculus_encoding_mismatch() {
-    // this should produce an error
-    let source = r#"
-        @wp
-        proc main() -> () {
-            var x: UInt
-            @invariant(x) // invariant encoding within wp reasoning is not sound!
-            while 1 <= x {
-                x = x - 1
-            }
-        }
-    "#;
-    let res = verify_test(source).0;
-    assert!(res.is_err());
-    let err = res.unwrap_err();
-    assert_eq!(
-        err.to_string(),
-        "Error: In procs, the `wp` calculus does not support the `invariant` proof rule."
-    );
 }
 
 #[test]

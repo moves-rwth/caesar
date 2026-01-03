@@ -20,6 +20,7 @@ use crate::{
     intrinsic::annotations::{
         tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
     },
+    proof_rules::{calculus::ApproximationKind, FixpointSemanticsKind},
     tyctx::TyCtx,
 };
 
@@ -88,6 +89,25 @@ impl Encoding for UnrollAnnotation {
             (CalculusType::Wp | CalculusType::Ert, Direction::Down)
                 | (CalculusType::Wlp, Direction::Up)
         )
+    }
+
+    fn get_approximation(
+        &self,
+        fixpoint_semantics: FixpointSemanticsKind,
+        inner_approximation_kind: ApproximationKind,
+    ) -> ApproximationKind {
+        let approx = match fixpoint_semantics {
+            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::UNDER,
+            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::OVER,
+        };
+        approx & inner_approximation_kind
+    }
+
+    fn default_fixpoint_semantics(&self, direction: Direction) -> FixpointSemanticsKind {
+        match direction {
+            Direction::Up => FixpointSemanticsKind::GreatestFixedPoint,
+            Direction::Down => FixpointSemanticsKind::LeastFixedPoint,
+        }
     }
 
     fn transform(

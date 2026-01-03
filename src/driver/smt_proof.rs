@@ -28,6 +28,7 @@ use crate::driver::commands::verify::VerifyCommand;
 use crate::driver::error::CaesarError;
 use crate::driver::item::SourceUnitName;
 use crate::driver::quant_proof::{BoolVcProveTask, QuantVcProveTask};
+use crate::proof_rules::calculus::ProcSoundness;
 use crate::slicing::transform::SliceStmts;
 use crate::smt::funcs::axiomatic::{AxiomInstantiation, AxiomaticFunctionEncoder, PartialEncoding};
 use crate::smt::funcs::fuel::literals::LiteralExprCollector;
@@ -146,6 +147,7 @@ pub fn run_smt_prove_task(
     server: &mut dyn Server,
     slice_vars: SliceStmts,
     vc_is_valid: BoolVcProveTask,
+    proc_soundness: &ProcSoundness,
 ) -> Result<ProveResult, CaesarError> {
     let ctx = Context::new(&z3::Config::default());
     let function_encoder = mk_function_encoder(tcx, depgraph, options)?;
@@ -166,7 +168,7 @@ pub fn run_smt_prove_task(
         vc_is_valid.run_solver(options, limits_ref, name, &ctx, &mut translate, &slice_vars)?;
 
     server
-        .handle_vc_check_result(name, &mut result, &mut translate)
+        .handle_vc_check_result(name, &mut result, &mut translate, proc_soundness)
         .map_err(CaesarError::ServerError)?;
 
     Ok(result.prove_result)
@@ -563,6 +565,7 @@ impl<'ctx> SmtVcProveResult<'ctx> {
         span: Span,
         server: &mut dyn Server,
         translate: &mut TranslateExprs<'smt, 'ctx>,
+        proc_soundness: &ProcSoundness,
     ) -> Result<(), CaesarError> {
         // TODO: batch all those messages
 
@@ -572,8 +575,25 @@ impl<'ctx> SmtVcProveResult<'ctx> {
             }
         }
 
+        let approximation_labels = proc_soundness.diagnostic_labels();
+        let approx_note = proc_soundness.diagnostic_note();
+
         match &mut self.prove_result {
-            ProveResult::Proof => {}
+            ProveResult::Proof => {
+                if !proc_soundness.sound_proofs() {
+                    let msg = if let Some(note) = approx_note {
+                        format!("The verification result might be unsound because {}", note)
+                    } else {
+                        "The verification result might be unsound.".to_string()
+                    };
+
+                    let diag = Diagnostic::new(ReportKind::Warning, span)
+                        .with_message(msg)
+                        .with_labels(approximation_labels);
+
+                    server.add_diagnostic(diag)?;
+                }
+            }
             ProveResult::Counterexample => {
                 let model = self.model.as_ref().unwrap();
                 let mut labels = vec![];
@@ -623,6 +643,14 @@ impl<'ctx> SmtVcProveResult<'ctx> {
                 let diagnostic = Diagnostic::new(ReportKind::Error, span)
                     .with_message(text)
                     .with_labels(labels);
+
+                let diagnostic = if proc_soundness.sound_refutations() {
+                    diagnostic
+                } else {
+                    diagnostic
+                        .with_note("This counter-example might be spurious and might not apply to the real program.")
+                        .with_labels(approximation_labels)
+                };
                 server.add_diagnostic(diagnostic)?;
             }
             ProveResult::Unknown(reason) => {
