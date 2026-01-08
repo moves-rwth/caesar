@@ -90,7 +90,9 @@ After completion, the results will be written into respective CSV files:
  3. `result-verification-witnessing.csv`,
  4. `result-verifying.csv`,
  5. `result-verifying-subset.csv`.
-The data in `result-verifying.csv` and `result-verifying-subset.csv` is used to generate a PDF `plots.pdf` with the paper's plots. 
+The data in `result-verifying.csv` and `result-verifying-subset.csv` is used to generate a PDF `plots.pdf` with the paper's plots.
+
+Use `column -t -s, [FILENAME]` to view the CSV files in a tabular format
 
 We've attached our own results for reference in the `/root/caesar/slicing-benchmarks/paper-results/` directory.
 
