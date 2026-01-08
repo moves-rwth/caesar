@@ -183,7 +183,14 @@ In particular, the `src` and `z3rro` directories contain the main source code.
 
 To build the multi-platform Docker image, run:
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 -t caesar -f docker/ESOP26.dockerfile .
-docker save caesar | gzip > caesar.tar.gz
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t caesar \
+  -f docker/ESOP26.dockerfile \
+  --output type=oci,dest=caesar.oci.tar \
+  .
+
+gzip caesar.oci.tar
 ```
-The resulting `caesar.tar.gz` file should contain the multi-platform Docker image.
+
+The resulting `caesar.oci.tar.gz` file should contain the multi-platform Docker image.
