@@ -19,27 +19,27 @@ echo "On an Apple M1 Pro, this finishes in < 10 minutes."
 echo
 echo "-------------------------------"
 echo "Running benchmarks in error-witnessing.txt... (Table 5)"
-cat error-witnessing.txt | $scooter_cmd --timeout 30 | column -t -s ',' > result-error-witnessing.csv
+cat error-witnessing.txt | $scooter_cmd --timeout 30 > result-error-witnessing.csv
 
 echo
 echo "-------------------------------"
 echo "Running benchmarks in verification-preserving.txt... (Table 6)"
-cat verification-preserving.txt | $scooter_cmd --timeout 30 | column -t -s ',' > result-verification-preserving.csv
+cat verification-preserving.txt | $scooter_cmd --timeout 30 > result-verification-preserving.csv
 
 echo
 echo "-------------------------------"
 echo "Running benchmarks in verification-witnessing.txt... (Table 6)"
-cat verification-witnessing.txt | $scooter_cmd --timeout 30 | column -t -s ',' > result-verification-witnessing.csv
+cat verification-witnessing.txt | $scooter_cmd --timeout 30 > result-verification-witnessing.csv
 
 echo
 echo "-------------------------------"
 echo "Running benchmarks in verifying.txt... (Figure 23, Figure 24)"
-cat verifying.txt | $scooter_cmd --timeout 30 | column -t -s ',' > result-verifying.csv
+cat verifying.txt | $scooter_cmd --timeout 30 > result-verifying.csv
 
 echo
 echo "-------------------------------"
 echo "Running benchmarks in verifying-subset.txt... (Figure 14)"
-cat verifying-subset.txt | $scooter_cmd --timeout 30 | column -t -s ',' > result-verifying-subset.csv
+cat verifying-subset.txt | $scooter_cmd --timeout 30 > result-verifying-subset.csv
 
 
 echo

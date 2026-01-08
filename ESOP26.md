@@ -39,7 +39,7 @@ Simply run the `caesar` image with Docker.
 This will open a `bash` shell in the `/root/caesar` directory with the `caesar` command available.
 
 ```bash
-docker run -it ghcr.io/moves-rwth/caesar:esop26-aec
+docker run -it caesar:esop26-aec
 ```
 The image is based on Debian Bullseye (slim), so the `apt` package manager is available.
 The editors `vim` and `nano` are installed already.
