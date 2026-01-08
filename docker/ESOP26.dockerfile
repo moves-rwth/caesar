@@ -32,7 +32,7 @@ COPY --from=builder /result/scooter /usr/local/bin/scooter
 RUN mkdir -p /root/caesar/target/release && ln -s /usr/local/bin/caesar /root/caesar/target/release/caesar && ln -s /usr/local/bin/scooter /root/caesar/target/release/scooter
 
 # install some helpers, texlive for re-generating figures
-RUN apt-get update && apt-get install -y fish vim nano wget texlive && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y fish vim nano wget texlive latexmk && rm -rf /var/lib/apt/lists/*
 
 # entry point
 WORKDIR /root/caesar
