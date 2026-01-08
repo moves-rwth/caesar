@@ -6,3 +6,4 @@ vscode-ext/node_modules/
 vscode-ext/out/
 node_modules/
 *.oci.tar.gz
+*.oci.tar
