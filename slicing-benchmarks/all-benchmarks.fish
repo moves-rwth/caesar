@@ -18,8 +18,8 @@ echo "On an Apple M1 Pro, this finishes in < 10 minutes."
 
 echo
 echo "-------------------------------"
-echo "Running benchmarks in error-preserving.txt... (Figure 14, Table 5)"
-cat error-preserving.txt | $scooter_cmd --timeout 30 | column -t -s ',' > result-error-preserving.csv
+echo "Running benchmarks in error-witnessing.txt... (Table 5)"
+cat error-witnessing.txt | $scooter_cmd --timeout 30 | column -t -s ',' > result-error-witnessing.csv
 
 echo
 echo "-------------------------------"
@@ -38,5 +38,26 @@ cat verifying.txt | $scooter_cmd --timeout 30 | column -t -s ',' > result-verify
 
 echo
 echo "-------------------------------"
+echo "Running benchmarks in verifying-subset.txt... (Figure 14)"
+cat verifying-subset.txt | $scooter_cmd --timeout 30 | column -t -s ',' > result-verifying-subset.csv
+
+
+echo
+echo "-------------------------------"
+echo "Generating plots (Figure 14, Figure 23, Figure 24)."
+# Replace timeouts by a large value (30000) for the plots
+sed -e 's/-/30000/g' result-verifying.csv > plots/result-verifying-plot.csv
+sed -e 's/-/30000/g' result-verifying-subset.csv |
+# Add an ID to each row to generate the bar plot (https://stackoverflow.com/a/30530523)
+    awk -F',' -v OFS=',' ' 
+        NR == 1 {print "id", $0; next}
+        {print (NR-1), $0}
+    ' > plots/result-verifying-subset-plot.csv
+latexmk -lualatex plots/plots.tex -outdir=plots
+cp plots/plots.pdf plots.pdf
+
+echo
+echo "-------------------------------"
 echo "All benchmarks completed."
 echo "Results are in result-*.csv files."
+echo "Plots are in plots.pdf"

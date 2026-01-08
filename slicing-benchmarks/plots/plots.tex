@@ -1,0 +1,280 @@
+%% ------ CONFIGURATION FOR DOUBLE-BLIND REVIEW SUBMISSION ------
+
+%% -- DOUBLE-BLIND -- %%
+% \documentclass[runningheads,citeauthoryear]{llncs}
+
+% ANONYMIZATION
+% \newcommand{\ifAnon}[2]{#1}
+
+%% -- CAMERA-READY -- %%
+\documentclass[runningheads,citeauthoryear]{llncs}
+
+% NO ANONYMIZATION
+\newcommand{\ifAnon}[2]{#2}
+
+
+% \documentclass[acmsmall,screen,dvipsnames,x11names,svgnames]{acmart}
+% \settopmatter{printacmref=false}
+% \renewcommand\footnotetextcopyrightpermission[1]{}
+
+%\paperwidth=\dimexpr \paperwidth + 6cm\relax
+%\oddsidemargin=\dimexpr\oddsidemargin + 3cm\relax
+%\evensidemargin=\dimexpr\evensidemargin + 3cm\relax
+%\marginparwidth=\dimexpr \marginparwidth + 3cm\relax
+%\usepackage{todonotes}
+
+%% ------ END OF DOUBLE-BLIND REVIEW SUBMISSION CONFIG ------
+
+\usepackage[T1]{fontenc}
+\usepackage{graphicx} % For including graphics
+\usepackage{amsmath}  % For mathematical symbols
+\usepackage{amssymb}  % For additional math symbols
+\usepackage{booktabs} % For formal tables
+\usepackage{subcaption} % For subfigures/subcaptions
+\usepackage{adjustbox}
+\usepackage{color}
+\usepackage{colortbl}
+\usepackage{stmaryrd}
+\usepackage{xcolor}
+\usepackage{csquotes}
+\usepackage{xfrac}
+\usepackage{xspace}
+\usepackage{colortbl}
+\usepackage{mathtools}
+\usepackage{stmaryrd}
+\usepackage[
+	pdfencoding=auto,
+	psdextra,
+	colorlinks=true,
+	linkcolor=blue!50!black,
+	citecolor=blue!50!black,
+	urlcolor=blue!50!black,
+	bookmarks=true,
+	bookmarksopen=true,
+	bookmarksnumbered=true,
+	pdfstartview=FitH,
+	bookmarksdepth=2 % lncs fucks this up, so we need to enable bookmarks
+]{hyperref}
+\usepackage[nameinlink]{cleveref}
+\renewcommand{\cref}{\Cref}
+\usepackage{thm-restate}
+\usepackage{multirow}
+\usepackage{braket}
+\usepackage{siunitx}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+\usetikzlibrary{shapes.geometric, arrows}
+\usepackage{pgfplots}
+\pgfplotsset{compat=newest}
+\usepgfplotslibrary{groupplots}
+\usepackage[normalem]{ulem}
+\usepackage[most]{tcolorbox}
+\usepackage{nicefrac}
+\usepackage{dirtytalk}
+\usepackage{transparent}
+\usepackage{wrapfig}
+\usepackage[inline]{enumitem}
+\usepackage{listings}
+\usepackage{array}
+
+
+\usepackage[
+  backend=biber,
+  style=lncs
+]{biblatex}
+% \addbibresource{literature.bib}
+% interpret \_ escapes as _
+\DeclareSourcemap{
+  \maps[datatype=bibtex]{
+    \map{
+      \step[fieldsource=url, match=\regexp{\\_}, replace=_]
+    }
+    \map{
+      \step[fieldsource=doi, match=\regexp{\\_}, replace=_]
+    }
+  }
+}
+
+
+% LNCS sucks
+\providecommand{\Description}[1]{}
+\newcommand{\qedhere}{\hfill\ensuremath{\square}}
+
+% leftsquigarrow by reflecting (see https://tex.stackexchange.com/a/195027)
+\makeatletter
+\providecommand{\leftsquigarrow}{%
+  \mathrel{\mathpalette\reflect@squig\relax}%
+}
+\newcommand{\reflect@squig}[2]{%
+  \reflectbox{$\m@th#1\rightsquigarrow$}%
+}
+\makeatother
+
+% Make lemma and definition share theorem counter
+\makeatletter
+\let\c@lemma=\c@theorem
+\let\c@definition=\c@theorem
+\let\c@example=\c@theorem
+\makeatother
+
+\input{macros.tex}
+
+\newcommand{\tikzxmark}{%
+	\tikz[scale=0.23] {
+		\draw[line width=0.7,line cap=round] (0,0) to [bend left=6] (1,1);
+		\draw[line width=0.7,line cap=round] (0.2,0.95) to [bend right=3] (0.8,0.05);
+	}}
+\newcommand{\tikzcmark}{%
+	\tikz[scale=0.23] {
+		\draw[line width=0.7,line cap=round] (0.25,0) to [bend left=10] (1,1);
+		\draw[line width=0.8,line cap=round] (0,0.35) to [bend right=1] (0.23,0);
+	}}
+
+\lstset{
+	basicstyle=\ttfamily\footnotesize,
+	keywordstyle=\color{blue}\bfseries,
+	commentstyle=\color{green!50!black}\itshape,
+	stringstyle=\color{red},
+	numbers=left,
+	numberstyle=\tiny\color{darkgray},
+	stepnumber=1,
+	numbersep=5pt,
+	showspaces=false,
+	showstringspaces=false,
+	showtabs=false,
+	tabsize=4,
+	captionpos=b,
+	breaklines=true,
+	breakatwhitespace=false,
+	escapeinside={(*@}{@*)},
+	morekeywords={*,...},
+	xleftmargin=2em
+}
+
+\lstdefinelanguage{HeyVL}{
+	morekeywords={var,while,if,else,@invariant,@slice_verify,@slice_error,Int,Bool,EUReal,UInt,proc,coproc,pre,post,flip,coassume,assume,assert,coassert,\cup,cohavoc,havoc},
+	morecomment=[l]{//},
+	sensitive=true
+}
+
+\definecolor{darkred}{rgb}{0.8, 0.0, 0.0}
+\newcommand{\marknewtext}[1]{#1}
+
+\newcommand{\rotstift}[1]{\textcolor{darkred}{#1}}
+
+\begin{document}
+
+\title{Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing (Plots)}
+\titlerunning{Diagnostics for Probabilistic Program Verification}
+
+
+\ifAnon{
+	\author{Anonymous\\Authors}%
+	\authorrunning{Anonymous}
+	\institute{\phantom{ }\\\phantom{ }}
+}{
+	\author{Philipp Schröer\inst{1}\orcidID{0000-0002-4329-530X} \and
+		Darion Haase\inst{1}\orcidID{0000-0001-5664-6773} \and
+		Joost-Pieter Katoen\inst{1}\orcidID{0000-0002-6143-1926}
+	}%
+	\authorrunning{P. Schröer et al.}
+	\institute{RWTH Aachen University, Germany \\
+		\email{\{phisch, darion.haase, katoen\}@cs.rwth-aachen.de}}
+}
+
+\maketitle
+
+
+\subsection*{Figure 14}
+\begin{figure}[h]
+	\centering
+	\newcommand{\legendcols}{2}
+	\newcommand{\legendstyle}{at={(0.45,1.05)},anchor=south}
+	\relativeslicesizeruntimeplot{result-verifying-subset-plot.csv}%
+	{core,
+		mus,
+		sus,
+		exists_forall}%
+	{{\sliceMethod{core}},
+		{\sliceMethod{mus}},
+		{\sliceMethod{sus}},
+		{\sliceMethod{exists-forall}}}%
+	{relative removal}%
+	{time in milliseconds}%
+	{states}%
+	{30}% max num of stmts in slice
+	\caption{Dual bar chart showing run-time (positive y-axis, log-scaled) and percentage of removed sliceable statements (negative y-axis, linear scale). TO indicates timeout (30s). We show only 20 of our 30 verifying slices for readability. The bars are grouped by benchmark. Methods: \sliceMethod{core} (\textcolor{barplotcolora}{$\blacksquare$}), \sliceMethod{mus} (\textcolor{barplotcolorb}{$\blacksquare$}), \sliceMethod{sus} (\textcolor{barplotcolorc}{$\blacksquare$}), \sliceMethod{exists-forall} (\textcolor{barplotcolord}{$\blacksquare$}).}
+	\label{fig:evaluation:verifying_slices}
+\end{figure}
+
+\newpage
+\subsection*{Figure 23}
+\begin{figure}[h]
+    \centering
+    \newcommand{\legendcols}{2}
+    \newcommand{\legendstyle}{at={(0.45,1.05)},anchor=south}
+    \begin{subfigure}[t]{.45\textwidth}
+        \numberruntimeplot{result-verifying-plot.csv}%
+        {core,
+            mus,
+            sus,
+            exists_forall}%
+        {{\sliceMethod{core}},
+            {\sliceMethod{mus}},
+            {\sliceMethod{sus}},
+            {\sliceMethod{exists-forall}}}%
+        {slice size}%
+        {time in milliseconds}%
+        {states}%
+        {27}% max num of stmts in slice
+        \caption{\marknewtext{Absolute size of slices vs.\ computation time.}}
+        \label{fig:evaluation:scatter_plots:verifying_slices:absolute}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{.45\textwidth}
+        \relativenumberruntimeplot{result-verifying-plot.csv}%
+        {core,
+            mus,
+            sus,
+            exists_forall}%
+        {{\sliceMethod{core}},
+            {\sliceMethod{mus}},
+            {\sliceMethod{sus}},
+            {\sliceMethod{exists-forall}}}%
+        {slice size}%
+        {time in milliseconds}%
+        {states}%
+        {27}% max num of stmts in slice
+        \caption{\marknewtext{Relative size of slices, compared to total sliceable statements, vs.\ computation time.}}
+        \label{fig:evaluation:scatter_plots:verifying_slices:relative}
+    \end{subfigure}
+    \caption{\marknewtext{Scatter plots showing the size of verifying slices computed by different methods with the time needed (log scale). OOR represents computations that did not finish within the timeout of 30 seconds.}}
+    \label{fig:evaluation:scatter_plots:verifying_slices}
+\end{figure}
+
+\newpage
+\subsection*{Figure 24}
+\begin{figure}[h]
+    \centering
+    \newcommand{\legendcols}{2}
+    \newcommand{\legendstyle}{at={(0.45,1.05)},anchor=south}
+
+    \relativeslicesizeruntimeplotscatter{result-verifying-plot.csv}%
+    {core,
+        mus,
+        sus,
+        exists_forall}%
+    {{\sliceMethod{core}},
+        {\sliceMethod{mus}},
+        {\sliceMethod{sus}},
+        {\sliceMethod{exists-forall}}}%
+    {relative removal}%
+    {time in milliseconds}%
+    {states}%
+    {27}% max num of stmts in slice
+    \caption{\marknewtext{Scatter plot showing the ratio of statements removed from verifying slices computed by different methods compared to the optimal slice computed by \sliceMethod{sus}, with the time needed (log scale). OOR represents computations that did not finish within the timeout of 30 seconds.}}
+    \label{fig:evaluation:scatter_plots:verifying_slices:relative_removal:scatter}
+\end{figure}
+
+
+\end{document}

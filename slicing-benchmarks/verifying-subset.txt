@@ -1,15 +1,5 @@
-barros_program1: barros12/program1.heyvl
-barros_program2: barros12/program2.heyvl
-barros_program3: barros12/program3.heyvl
-barros_program4: barros12/program4.heyvl
-barros_program5: barros12/program5.heyvl
-barros_program6: barros12/program6.heyvl
-barros_program7: barros12/program7.heyvl
-barros_program8: barros12/program8.heyvl
 navarro20_page31: forwards_backwards_claims/navarro20_page31.heyvl
 gehr18_1: gehr18/1_verification_preserving.heyvl
-gehr18_2: gehr18/2_verification_preserving.heyvl
-gehr18_3: gehr18/3_verification_witnessing.heyvl
 navarro20_ex4_3: navarro20/example4_3.heyvl
 navarro20_ex4_5: navarro20/example4_5.heyvl
 navarro20_ex5_8: navarro20/example5_8.heyvl

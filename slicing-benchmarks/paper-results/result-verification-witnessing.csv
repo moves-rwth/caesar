@@ -1,6 +1,6 @@
 name,loc,original_size,core_slice_size,core_slice_time,mus_slice_size,mus_slice_time,sus_slice_size,sus_slice_time,exists_forall_slice_size,exists_forall_slice_time
-park_1,16,3,3,0,3,2,3,2,3,3
-park_5,16,3,3,0,2,2,2,2,3,1
-park_6,16,3,1,0,1,0,1,0,1,0
-algorithm_r,16,4,4,5,3,17,3,14,3,4
-bn_passified,47,25,17,342,10,4340,10,5280,18,17700
+park_1,16,3,3,0,3,11,3,10,3,9
+park_5,16,3,3,0,2,9,2,9,3,7
+park_6,16,3,1,0,1,8,1,8,1,5
+algorithm_r,16,4,4,105,3,125,3,132,3,18
+bn_passified,47,25,17,370,10,3390,10,3810,-,-

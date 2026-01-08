@@ -79,19 +79,24 @@ fish all-benchmarks.fish
 ```
 
 The script will run the list of benchmarks specified under `/root/caesar/slicing-benchmarks/` in the following files:
- 1. `error-preserving.txt` (Figure 14, Table 5),
+ 1. `error-witnessing.txt` (Table 5),
  2. `verification-preserving.txt` (Table 6) and
  3. `verification-witnessing.txt` (Table 6), and
- 4. `verifying.txt` (Figure 23 and Figure 24).
+ 4. `verifying.txt` (Figure 23 and Figure 24), and
+ 5. `verifying-subset.txt` (Figure 14).
 After completion, the results will be written into respective CSV files:
- 1. `result-error-preserving.csv`,
+ 1. `result-error-witnessing.csv`,
  2. `result-verification-preserving.csv`,
  3. `result-verification-witnessing.csv`,
- 4. `result-verifying.csv`.
+ 4. `result-verifying.csv`,
+ 5. `result-verifying-subset.csv`.
+The data in `result-verifying.csv` and `result-verifying-subset.csv` is used to generate a PDF `plots.pdf` with the paper's plots. 
 
 We've attached our own results for reference in the `/root/caesar/slicing-benchmarks/paper-results/` directory.
 
-Note that the `verifying.txt` benchmarks are a subset of the combined benchmark sets `verification-preserving.txt` and `verification-witnessing.txt`, where the `barros_programX` and `gehr18_2` and `gehr18_3` benchmarks are excluded (as they are very similar and would skew the diagram).
+Note that the `verifying.txt` benchmarks are the combined benchmark sets `verification-preserving.txt` and `verification-witnessing.txt`.
+`verifying-subset.txt` is a subset of `verifying.txt` where the `barros_programX` and `gehr18_2` and `gehr18_3` benchmarks are excluded (as they are very similar and would skew the diagram).
+For each benchmark set 1 - 5, the benchmarks are executed individually. This can result in slight deviations of times between the tables and plots.
 
 ## 2.2. The Caesar/Brutus Tool
 
@@ -104,7 +109,7 @@ Both are documented using Rust doc comments.
 It can be executed with `caesar verify [filename]` where the file contains a HeyVL program.
 
 Regarding slicing:
- * Slicing for erroring programs is enabled by default (for error-preserving slicing).
+ * Slicing for erroring programs is enabled by default (for error-witnessing slicing).
  * Slicing for verifying programs is disabled by default. It can be enabled with the `--slice-verify` command-line option (for verification-preserving and verification-witnessing slicing).
     * By default, Caesar uses strategy `core`. This can be changed with the option `--slice-verify-via METHOD` where `METHOD` can be one of `core`, `mus`, `sus`, or `exists-forall`.
     * Slicing probabilistic sampling statements must be enabled via the command-line flag `--slice-sampling`.
@@ -163,7 +168,7 @@ Below, we list paper sections and how to inspect their corresponding implementat
 	- One needs to enable slicing for verifying slices via the command-line flag `--slice-verify`.
 	- By default, Caesar uses unsatisfiable cores (strategy `core`). This can be changed with the option `--slice-verify-via` METHOD where METHOD can be one of `core`, `mus`, `sus`, or `exists-forall`.
 - Section 5/Appendix B, Benchmarks
-	- Locations of benchmark files are listed in the files `/root/caesar/slicing-benchmarks/error-preserving.txt` (Table 5), `/root/caesar/slicing-benchmarks/verification-preserving.txt` and `/root/caesar/slicing-benchmarks/verification-witnessing.txt` (Table 6).
+	- Locations of benchmark files are listed in the files `/root/caesar/slicing-benchmarks/error-witnessing.txt` (Table 5), `/root/caesar/slicing-benchmarks/verification-preserving.txt` and `/root/caesar/slicing-benchmarks/verification-witnessing.txt` (Table 6).
 	- The paper's Appendix B contains more detailed explanations for selected examples.
 
 ## 3.2. Source Code Structure
