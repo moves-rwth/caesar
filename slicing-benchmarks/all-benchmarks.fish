@@ -53,7 +53,7 @@ sed -e 's/-/30000/g' result-verifying-subset.csv |
         NR == 1 {print "id", $0; next}
         {print (NR-1), $0}
     ' > plots/result-verifying-subset-plot.csv
-latexmk -lualatex plots/plots.tex -outdir=plots
+latexmk plots/plots.tex -lualatex -outdir=plots -interaction=nonstopmode --halt-on-error -file-line-error > plots/buildplots.log
 cp plots/plots.pdf plots.pdf
 
 echo

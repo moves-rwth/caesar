@@ -27,12 +27,7 @@ Contained within the artifact:
 * Our benchmark set should terminate in under 10 minutes.
 
 **Downloading the artifact.**
-If you downloaded the artifact from Zenodo, run `docker image load -i caesar.tar.gz`.
-
-Alternatively, [via Github packages](https://github.com/moves-rwth/caesar/pkgs/container/caesar):
-```bash
-docker pull ghcr.io/moves-rwth/caesar:esop26-aec
-```
+With the downloaded artifact from Zenodo, run `docker image load -i caesar.tar.gz`.
 
 **Entering the artifact environment.**
 Simply run the `caesar` image with Docker.
@@ -192,7 +187,7 @@ To build the multi-platform Docker image, run:
 ```bash
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t caesar \
+  -t caesar:esop26-aec \
   -f docker/ESOP26.dockerfile \
   --output type=oci,dest=caesar.oci.tar \
   .
