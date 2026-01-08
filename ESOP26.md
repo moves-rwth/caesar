@@ -56,7 +56,7 @@ See Section 2.1 for more details.
 
 **Documentation.**
 
-* We provide much more detailed usage and syntax instructions in our documentation. It is [available online](https://www.caesarverifier.org), and the source code can be found in `website/docs` (Markdown files).
+* We provide much more detailed usage and syntax instructions in our documentation. It is [available online](https://www.caesarverifier.org), and the source code can be found in `/root/caesar/website/docs` (Markdown files).
     * The website uses Google Analytics, so use an Adblocker to prevent tracking.
     * **For slicing specifically, we have [online documentation](https://www.caesarverifier.org/docs/caesar/slicing) (offline: `website/docs/caesar/slicing.md`).**
 * Caesar has Rustdoc documentation, but we do not include the generated files or the Rust compiler in this artifact.
@@ -158,12 +158,12 @@ Below, we list paper sections and how to inspect their corresponding implementat
 	- Slicing probabilistic sampling statements must be enabled via the command-line flag `--slice-sampling`.
 	- Slicing reward statements must be enabled via the command-line flag `--slice-ticks`.
 - Section 5, Searching for Erroring Slices
-	- Caesar searches for the smallest erroring slices by default (strategy opt). The command-line flag `--slice-error-first` returns the first slice found (strategy first).
+	- Caesar searches for the smallest erroring slices by default (strategy `opt`). The command-line flag `--slice-error-first` returns the first slice found (strategy `first`).
 - Section 5, Searching for Verifying Slices
 	- One needs to enable slicing for verifying slices via the command-line flag `--slice-verify`.
 	- By default, Caesar uses unsatisfiable cores (strategy `core`). This can be changed with the option `--slice-verify-via` METHOD where METHOD can be one of `core`, `mus`, `sus`, or `exists-forall`.
 - Section 5/Appendix B, Benchmarks
-	- Locations of benchmarks are given in the files `/root/caesar/slicing-benchmarks/error-preserving.txt` (Table 5), `/root/caesar/slicing-benchmarks/verification-preserving.txt` and `/root/caesar/slicing-benchmarks/verification-witnessing.txt` (Table 6).
+	- Locations of benchmark files are listed in the files `/root/caesar/slicing-benchmarks/error-preserving.txt` (Table 5), `/root/caesar/slicing-benchmarks/verification-preserving.txt` and `/root/caesar/slicing-benchmarks/verification-witnessing.txt` (Table 6).
 	- The paper's Appendix B contains more detailed explanations for selected examples.
 
 ## 3.2. Source Code Structure
