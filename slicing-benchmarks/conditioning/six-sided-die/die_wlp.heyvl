@@ -1,0 +1,24 @@
+// A variation of the conditioning example from the Schroer et al. 2023 paper
+// where the program encoded is
+//
+// var a: Bool = flip(0.5)
+// var b: Bool = flip(0.5)
+// var c: Bool = flip(0.5)
+// r = 4 * [a] + 2 * [b] + [c] + 1
+// observe ?(r <= 5)
+//
+// But we cannot show a lower bound of 6/8 on the probability of successful
+// termination (satisfying all guards), and we need the post *and* the final
+// assert for a minimal error-witnessing slice.
+
+proc die_wlp() -> (r: EUReal)
+    pre 0.75
+    post 1
+{
+    var a: Bool = flip(0.5)
+    var b: Bool = flip(0.5)
+    var c: Bool = flip(0.5)
+    r = 4 * [a] + 2 * [b] + [c] + 1
+     // changed from r <= 6
+    assert ?(r <= 5)
+}

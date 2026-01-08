@@ -1,0 +1,15 @@
+// Program (1) from page 6 of Leino et al.'s 2005 paper on generating error traces
+
+proc program1(k: UInt, A: []UInt) -> (x: UInt)
+    pre ?(true)
+    post ?(true)
+{
+    var j: UInt
+    if !(k < 10) && k < 20 {
+        j = k
+    } else {
+        j = k
+    }
+    assert ?(j < len(A))
+    x = select(A, j)
+}

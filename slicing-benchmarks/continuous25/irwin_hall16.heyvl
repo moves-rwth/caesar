@@ -1,0 +1,15 @@
+// Irwin-Hall distribution modeling the sum of M unif[0,1]-distributed random variables.
+coproc irwin_hall(M : UReal) -> (x : UReal)
+    pre 0.531*M // changed pre so that pre might not entail invariant
+    post x
+{
+    x = 0
+    var i : UReal = 1
+    @invariant(ite(i <= M, (x + 0.532*((M-i) + 1)), x))
+    while i <= M {
+        // var inc : UReal = unif[0,1]
+        var inc : UReal; var N : UInt = 16; var j : UInt = unif(0, 15); cohavoc inc; coassume ?!(j / N <= inc && inc <= (j+1) / N)
+        x = x + inc
+        i = i + 1
+    }
+}

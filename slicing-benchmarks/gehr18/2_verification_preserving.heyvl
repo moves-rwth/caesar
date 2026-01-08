@@ -1,0 +1,22 @@
+// Taken from Gehr et al. 2018 about Bayonet
+
+coproc networkUpper() -> (delivered: Bool)
+    pre 0.9995
+    post [delivered]
+{
+    @slice_verify {
+        var s0choice: Bool = flip(0.5)
+        if s0choice {
+            // via s1
+            delivered = true // this is sliced
+        } else {
+            // via s2
+            var prob_choice: Bool = flip(1-1/1000)
+            if prob_choice {
+                delivered = true  // this is sliced
+            } else {
+                delivered = false
+            }
+        }
+    }
+}

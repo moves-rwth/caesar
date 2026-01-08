@@ -17,7 +17,6 @@ pub fn build_caesar() -> io::Result<()> {
     cmd.arg("build").arg("--release");
     let mut spawn_res = match cmd.spawn() {
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            eprintln!("info: cargo not found, not rebuilding caesar.");
             return Ok(());
         }
         spawn_res => spawn_res?,

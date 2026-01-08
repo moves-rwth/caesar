@@ -1,0 +1,18 @@
+// Taken from Gehr et al. 2018 about Bayonet
+
+proc networkLower_slice() -> (delivered: Bool)
+    pre 0.5
+    post [delivered]
+{
+    var s0choice: Bool = flip(0.5)
+    if \cap {
+        assume ?(s0choice) // this is sliced
+        // via s1
+        delivered = true
+    } else {
+        assume ?(!s0choice) // this is sliced
+        // via s2
+        var prob_choice: Bool = flip(1-1/1000)
+        if prob_choice { delivered = true } else { delivered = false }
+    }
+}

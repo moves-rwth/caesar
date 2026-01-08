@@ -1,0 +1,19 @@
+@ert
+coproc main(init_x: UInt, init_n: UInt) -> (x: UInt, n: UInt)
+    pre 2 * ((init_n + 1) - init_x)
+    post 0
+{
+    var prob_choice: Bool
+    x = init_x
+    n = init_n
+    @invariant(2 * ((n + 1) - x))
+    while x < n {
+        prob_choice = flip((1/2))
+        if prob_choice {
+            x = x + 2
+        } else {
+            x = x - 1
+        }
+        tick 1
+    }
+}

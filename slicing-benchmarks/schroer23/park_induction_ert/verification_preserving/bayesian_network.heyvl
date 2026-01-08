@@ -1,0 +1,104 @@
+// Here, all assignments can be sliced
+
+@ert
+coproc main(init_i: UInt, init_d: UInt, init_s: UInt, init_l: UInt, init_g: UInt, init_n: UInt) -> (i: UInt, d: UInt, s: UInt, l: UInt, g: UInt, n: UInt)
+    pre 5 * init_n
+    post 0
+{
+    var prob_choice: Bool
+    i = init_i
+    d = init_d
+    s = init_s
+    l = init_l
+    g = init_g
+    n = init_n
+    @slice_verify @invariant(5 * n)
+    while 0 < n {
+        prob_choice = flip(0.3)
+        if prob_choice {
+            i = 1
+        } else {
+            i = 0
+        }
+        tick 1
+        prob_choice = flip(0.4)
+        if prob_choice {
+            d = 1
+        } else {
+            d = 0
+        }
+        tick 1
+        if (i < 1) && (d < 1) {
+            prob_choice = flip(0.7)
+            if prob_choice {
+                g = 1
+            } else {
+                g = 0
+            }
+            tick 1
+        } else {
+            if (i < 1) && (0 < d) {
+                prob_choice = flip(0.95)
+                if prob_choice {
+                    g = 1
+                } else {
+                    g = 0
+                }
+                tick 1
+            } else {
+                if (0 < i) && (d < 1) {
+                    prob_choice = flip(0.1)
+                    if prob_choice {
+                        g = 1
+                    } else {
+                        g = 0
+                    }
+                    tick 1
+                } else {
+                    prob_choice = flip(0.5)
+                    if prob_choice {
+                        g = 1
+                    } else {
+                        g = 0
+                    }
+                    tick 1
+                }
+            }
+        }
+        if i < 1 {
+            prob_choice = flip(0.05)
+            if prob_choice {
+                s = 1
+            } else {
+                s = 0
+            }
+            tick 1
+        } else {
+            prob_choice = flip(0.8)
+            if prob_choice {
+                s = 1
+            } else {
+                s = 0
+            }
+            tick 1
+        }
+        if g < 1 {
+            prob_choice = flip(0.1)
+            if prob_choice {
+                l = 1
+            } else {
+                l = 0
+            }
+            tick 1
+        } else {
+            prob_choice = flip(0.6)
+            if prob_choice {
+                l = 1
+            } else {
+                l = 0
+            }
+            tick 1
+        }
+        n = n - 1
+    }
+}

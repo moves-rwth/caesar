@@ -1,0 +1,16 @@
+coproc geo_pre_error(init_x: UInt) -> (x: UInt)
+    pre 0
+    post x
+{
+    x = init_x
+    var cont: Bool = true
+    @invariant(x)
+    while cont {
+        var prob_choice: Bool = flip(0.5)
+        if prob_choice {
+            cont = false
+        } else {
+            x = 1
+        }
+    }
+}

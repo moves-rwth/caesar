@@ -1,0 +1,21 @@
+// Changed pre so that the pre might not entail the invariant anymore.
+
+@ert
+coproc main(init_n: UInt, init_m: UInt) -> (n: UInt, m: UInt)
+    pre init_m - init_n
+    post 0
+{
+    var prob_choice: Bool
+    n = init_n
+    m = init_m
+    @invariant(m + n) // pre might not entail invariant
+    while (0 < n) && (0 < m) {
+        prob_choice = flip((1/2))
+        if prob_choice {
+            n = n - 1
+        } else {
+            m = m - 1
+        }
+        tick 1
+    }
+}

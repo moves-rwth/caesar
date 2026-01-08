@@ -1,0 +1,14 @@
+// In Section 3.3. of the Barros paper, they claim that their algorithms that do either forwards OR backwards
+// reasoning cannot slice in the following program. We can.
+
+proc barros_program6(init_x: Int) -> (x: Int)
+    pre ?(true)
+    post ?(x >= 100)
+{
+    x = init_x
+    @slice_verify {
+        x = x * x
+        x = x + 100
+        x = x + 50 // this is sliced
+    }
+}

@@ -1,0 +1,89 @@
+// Reduced and passified version of Figure 7 from Navarro and Olmedo's 2022 paper
+
+proc figure7_reduced() -> (a: Bool, s: Bool, t: Bool, l: Bool, b: Bool, e: Bool, x: Bool, d: Bool)
+    pre 138161/2000000
+    post [e]
+{
+
+        // i1
+        var choice: Bool = flip(1/100)
+        if choice { havoc a; assume ?(a) } else { havoc a; assume ?(!a) }
+
+        // i2
+        choice = flip(1/2)
+        if choice { havoc s; assume ?(s) } else { havoc s; assume ?(!s) }
+
+        // i3
+        if a {
+            choice = flip(1/2)
+            if choice { havoc t; assume ?(t) } else { havoc t; assume ?(!t) }
+        } else {
+            choice = flip(1/100)
+            if choice { havoc t; assume ?(t) } else { havoc t; assume ?(!t) }
+        }
+
+        // i4
+        if s {
+            choice = flip(1/10)
+            if choice { havoc l; assume ?(l) } else { havoc l; assume ?(!l) }
+        } else {
+            choice = flip(1/100)
+            if choice { havoc l; assume ?(l) } else { havoc l; assume ?(!l) }
+        }
+
+        // i5
+        if s {
+            choice = flip(6/10)
+            if choice { havoc b; assume ?(b) } else { havoc b; assume ?(!b) }
+        } else {
+            choice = flip(3/10)
+            if choice { havoc b; assume ?(b) } else { havoc b; assume ?(!b) }
+        }
+
+        // i6
+        if t && l {
+            choice = flip(1)
+            if choice { havoc e; assume ?(e) } else { havoc e; assume ?(!e) }
+        } else {
+            if t && !l {
+                choice = flip(1)
+                if choice { havoc e; assume ?(e) } else { havoc e; assume ?(!e) }
+            } else {
+                if !t && l {
+                    choice = flip(1)
+                    if choice {havoc e;  assume ?(e) } else { havoc e; assume ?(!e) }
+                } else {
+                    choice = flip(0)
+                    if choice { havoc e; assume ?(e) } else { havoc e; assume ?(!e) }
+                }
+            }
+        }
+
+        // // i7
+        // if e {
+        //     choice = flip(98/100)
+        //     if choice { havoc x; assume ?(x) } else { havoc x; assume ?(!x) }
+        // } else {
+        //     choice = flip(5/100)
+        //     if choice { havoc x; assume ?(x) } else { havoc x; assume ?(!x) }
+        // }
+
+        // // i8
+        // if e && b {
+        //     choice = flip(9/10)
+        //     if choice { havoc d; assume ?(d) } else { havoc d; assume ?(!d) }
+        // } else {
+        //     if e && !b {
+        //         choice = flip(7/10)
+        //         if choice { havoc d; assume ?(d) } else { havoc d; assume ?(!d) }
+        //     } else {
+        //         if !e && b {
+        //             choice = flip(8/10)
+        //             if choice { havoc d; assume ?(d) } else { havoc d; assume ?(!d) }
+        //         } else {
+        //             choice = flip(1/10)
+        //             if choice { havoc d; assume ?(d) } else { havoc d; assume ?(!d) }
+        //         }
+        //     }
+        // }
+}

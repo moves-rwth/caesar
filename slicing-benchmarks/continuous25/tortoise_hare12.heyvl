@@ -1,0 +1,42 @@
+/*
+
+// ? Race between tortoise and hare (taken from http://publications.rwth-aachen.de/record/814578/files/814578.pdf,)
+while (h <= t) {
+    if flip(0.5) then
+        r = unif[0,11]
+        h = h+r
+    else
+        skip
+
+    t = t + 1
+    count = count + 1
+}
+// 1
+
+*/
+
+// bound 3.38(t - h + 2)
+coproc tortoise_hare(h_init : UReal, t_init : UReal) -> (count : UReal)
+    pre 3.38*((t_init - h_init) + 2)
+    post count
+{
+    var h : UReal = h_init
+    var t : UReal = t_init
+
+    count = 0
+
+    @invariant(ite(h<=t, count + 3.38*((t-h) + 2), count))
+    while h <= t {
+        var choice : Bool = flip(0.5)
+        if choice {
+            //inc h = h + unif[0,10]
+            var inc : UReal; var N : UInt = 8; var j : UInt = unif(0, 11); cohavoc inc; coassume ?!(j / N <= inc && inc <= (j+1) / N)
+            inc = 10 * inc
+            h = h + inc
+            coassert !?(h <= t) // inserted this coassert which is responsible for an error
+        } else {}
+
+        t = t+1
+        count = count + 1
+    }
+}

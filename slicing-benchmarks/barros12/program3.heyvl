@@ -1,0 +1,11 @@
+proc program3(init_x: Int) -> (x: Int)
+    pre ?(init_x >= 0)
+    post ?(x >= 100)
+{
+    @slice_verify {
+        x = init_x
+        x = x + 100
+        x = x - 200 // sliced
+        x = x + 200 // sliced
+    }
+}

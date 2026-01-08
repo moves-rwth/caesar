@@ -1,0 +1,26 @@
+@ert
+coproc main(init_x: UInt, init_n: UInt, init_r: UInt) -> (x: UInt, n: UInt, r: UInt)
+    pre 5 * (init_n - init_x)
+    post 0
+{
+    var prob_choice: Bool
+    x = init_x
+    n = init_n
+    r = init_r
+    @invariant(5 * (n - x))
+    while (x + 2) <= n {
+        prob_choice = flip((117/145))
+        if prob_choice {
+            r = 0
+        } else {
+            prob_choice = flip((27/28))
+            if prob_choice {
+                r = 1
+            } else {
+                r = 2
+            }
+        }
+        x = x + r
+        tick 1
+    }
+}

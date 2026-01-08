@@ -1,0 +1,16 @@
+coproc algorithm_r_wrong(n: UInt, x: UInt) -> (c: UInt)
+    pre !?(n > 0 && n >= x && x >= 1)
+    pre 1/n
+    post [c == x]
+{
+    c = 0
+    var i: UInt = 1
+    @invariant((1/n) * [i <= x && x <= n] + [x == c]) // while could be an if statement
+    while i <= n {
+        var prob_choice: Bool = flip(1/n)
+        if prob_choice {
+            c = i
+        } else {}
+        i = i + 1
+    }
+}

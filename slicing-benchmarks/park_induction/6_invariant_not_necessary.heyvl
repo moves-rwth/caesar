@@ -1,0 +1,16 @@
+proc geo_invariant_useless(init_x: UInt) -> (x: UInt)
+    pre 0
+    post x
+{
+    x = init_x
+    var cont: Bool = true
+    @invariant(ite(cont, x + 1, x))
+    while cont {
+        var prob_choice: Bool = flip(0.5)
+        if prob_choice {
+            cont = false
+        } else {
+            x = 1
+        }
+    }
+}

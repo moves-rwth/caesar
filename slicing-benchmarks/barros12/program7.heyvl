@@ -1,0 +1,9 @@
+proc program7(x0: Int, y: Int) -> (x: Int)
+    pre ?(x0 == y * 2)
+    post ?(x == x0)
+{
+    @slice_verify {
+        x = y + 2 // sliced
+        x = y * 2
+    }
+}

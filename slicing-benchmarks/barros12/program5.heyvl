@@ -1,0 +1,16 @@
+proc program5(y: Int) -> (x: Int)
+    pre ?(y > 10)
+    post ?(x >= 0)
+{
+    @slice_verify {
+        if y > 0 {
+            x = 100
+            x = x + 50 // sliced
+            x = x - 100 // sliced
+        } else {
+            x = x - 150 // sliced
+            x = x - 100 // sliced
+            x = x + 100 // sliced
+        }
+    }
+}
