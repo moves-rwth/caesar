@@ -27,7 +27,7 @@ Contained within the artifact:
 * Our benchmark set should terminate in under 10 minutes.
 
 **Downloading the artifact.**
-With the downloaded artifact from Zenodo, run `docker image load -i caesar.tar.gz`.
+With the downloaded artifact from Zenodo, run `docker image load -i caesar.oci.tar.gz`.
 
 **Entering the artifact environment.**
 Simply run the `caesar` image with Docker.
