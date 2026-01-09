@@ -25,6 +25,9 @@ RUN mkdir /result && \
 # ---- Building the final Docker image ----
 FROM debian:bookworm-slim
 
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
+
 # setup caesar environment
 COPY --from=builder /root/caesar /root/caesar
 COPY --from=builder /result/caesar /usr/local/bin/caesar
