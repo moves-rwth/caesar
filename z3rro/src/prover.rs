@@ -304,6 +304,14 @@ impl<'ctx> Prover<'ctx> {
         }
     }
 
+    /// See [`Solver::reset`].
+    pub fn reset(&mut self) {
+        match &mut self.solver {
+            StackSolver::Native(solver) => solver.reset(),
+            StackSolver::Emulated(solver, _) => solver.reset(),
+        }
+    }
+
     /// Create an exists-forall solver. All constants provided in the iterator
     /// will be universally quantified. The rest will be existentially
     /// quantified.

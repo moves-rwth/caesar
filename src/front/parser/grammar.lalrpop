@@ -3,6 +3,7 @@ use crate::front::parser::parser_util::*;
 use std::str::FromStr;
 use std::cell::RefCell;
 use num::bigint::BigUint;
+use num::BigInt;
 
 grammar(
     file: FileId,
@@ -42,6 +43,13 @@ Ident: Ident = {
         Ident { name, span: span(file, l, r) }
     },
 }
+
+Range: Range =
+    "[" <lo: r"[0-9]+"> "," <hi: r"[0-9]+"> "]"
+        => Range {
+            lower: lo.parse::<u64>().expect("range lower bound does not fit in u64"),
+            upper: hi.parse::<u64>().expect("range upper bound does not fit in u64"),
+        };
 
 // ---------------------------------------
 // Types
@@ -87,7 +95,7 @@ QuantOp: QuantOp = {
 
 QuantVar: QuantVar = {
     <l: @L> <name: Ident> ":" <ty: Ty> <r: @R>
-        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty, kind: VarKind::Quant, init: None, span: span(file, l, r), created_from: None }))
+        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty, kind: VarKind::Quant, init: None, span: span(file, l, r), created_from: None, range: None }))
 }
 
 QuantAnn: QuantAnn = {
@@ -168,7 +176,8 @@ SymInfty: () = { "∞", "\\infty" }
 pub LitKind: LitKind = {
     <s:r#""[^"]*""#> => LitKind::Str(Symbol::intern(&s[1..s.len()-1])),
     <num: r"[0-9]+"> => LitKind::UInt(BigUint::from_str(num).unwrap()),
-    <num: r"[0-9]+\.[0-9]+"> => LitKind::Frac(parse_decimal(num).unwrap()),
+    <num: r"-[0-9]+"> => LitKind::Int(BigInt::from_str(num).unwrap()),
+    <num: r"-?[0-9]+\.[0-9]+"> => LitKind::Frac(parse_decimal(num).unwrap()),
     SymInfty => LitKind::Infinity,
     "true" => LitKind::Bool(true),
     "false" => LitKind::Bool(false),
@@ -192,9 +201,33 @@ pub SpannedStmts: Spanned<Vec<Stmt>> = {
 StmtKind: StmtKind = {
     <block: Block> => StmtKind::Seq(block.node),
     <l: @L> "var" <ident: Ident> ":" <ty: Ty> "=" <rhs: Expr> <r: @R>
-        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: Some(rhs), span: span(file, l, r), created_from: None })),
+        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: Some(rhs), span: span(file, l, r), created_from: None, range: None })),
     <l: @L> "var" <ident: Ident> ":" <ty: Ty> <r: @R>
-        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: None, span: span(file, l, r), created_from: None })),
+        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: None, span: span(file, l, r), created_from: None, range: None})),
+   <l: @L> "var" <ident: Ident> ":" <ty: Ty> <rng: Range> "=" <rhs: Expr> <r: @R>
+        => StmtKind::Var(DeclRef::new(VarDecl {
+            name: ident,
+            ty,
+            kind: VarKind::Mut,
+            init: Some(rhs),
+            span: span(file, l, r),
+            created_from: None,
+            range: Some(rng),
+        })),
+
+
+    <l: @L> "var" <ident: Ident> ":" <ty: Ty> <rng: Range> <r: @R>
+        => StmtKind::Var(DeclRef::new(VarDecl {
+            name: ident,
+            ty,
+            kind: VarKind::Mut,
+            init: None,
+            span: span(file, l, r),
+            created_from: None,
+            range: Some(rng),
+        })),
+
+
     <lhs: CommaPlus<Ident>> "=" <rhs: Expr> => StmtKind::Assign(lhs, rhs),
     <call: ExprTier<ExprCall>> => StmtKind::Assign(vec![], call),
     "havoc" <vars: CommaPlus<Ident>> => StmtKind::Havoc(Direction::Down, vars),
@@ -251,7 +284,8 @@ ParamList: Spanned<Vec<Param>> = {
 }
 
 Param: Param = {
-    <l: @L> <name: Ident> ":" <ty: Ty> <r: @R> => Param { name, ty: Box::new(ty), literal_only: false ,span: span(file, l, r) }
+    <l: @L> <name: Ident> ":" <ty: Ty> <r: @R> => Param { name, ty: Box::new(ty), literal_only: false ,span: span(file, l, r), range: None },
+    <l: @L> <name: Ident> ":" <ty: Ty> <rng: Range> <r: @R> => Param { name, ty: Box::new(ty), literal_only: false ,span: span(file, l, r), range: Some(rng) },
 }
 
 ProcSpec: ProcSpec = {
@@ -264,12 +298,15 @@ DomainDecl: DomainDecl = {
         => DomainDecl { name, body, span: span(file, l, r) }
 }
 
+
 DomainSpec: DomainSpec = {
-    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> <comp:"@computable"?> <r: @R>
-        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(None), computable: comp.is_some(), span: span(file, l, r) })),
-    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> "=" <body: Expr> <r: @R>
-        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(Some(body)), computable: false, span: span(file, l, r) })),
-    <l: @L> "axiom" <name: Ident> <axiom: Expr> <r: @R>
+    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> <comp:"@computable"?> <r: @R> 
+        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(None), syn: false, computable: comp.is_some(), span: span(file, l, r) })),
+    <l: @L> "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> "=" <body: Expr> <r: @R> 
+        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output, body: RefCell::new(Some(body)), syn: false, computable: false, span: span(file, l, r) })),
+    <l: @L> "syn" "func" <name: Ident> <inputs: ParamList> ":" <output: Ty> <r: @R> 
+        => DomainSpec::Function(DeclRef::new(FuncDecl { name, inputs, output: output, body: RefCell::new(None), syn: true, computable: false, span: span(file, l, r) })),
+    <l: @L> "axiom" <name: Ident> <axiom: Expr> <r: @R> 
         => DomainSpec::Axiom(DeclRef::new(AxiomDecl{ name, axiom, span: span(file, l, r) }))
 }
 
