@@ -23,4 +23,4 @@ The proof rules are implemented in Caesar and were used to verify termination of
     We have implemented our proof rules on top of Caesar, a program verifier for probabilistic programs. We use our proof rule to give SMT-based proofs for termination properties of randomized asynchronous consensus protocols, including Ben-Or's protocol and graded binary consensus, for both crash and Byzantine faults. These protocols have notoriously difficult proofs of termination but fall within the scope of our proof rule.
 </details>
 
-We will make more detailed information on how to use these techniques with Caesar on this website in the future.
+We will make more detailed information available on how to use these techniques with Caesar on this website in the future.
