@@ -27,15 +27,27 @@ import TOCInline from '@theme/TOCInline';
 
 ## Peer-Reviewed Papers
 
+### POPL '26: Verifying Almost-Sure Termination for Randomized Distributed Algorithms
+
+The paper [_"Verifying Almost-Sure Termination for Randomized Distributed Algorithms"_](https://doi.org/10.1145/3776691) was presented at the [POPL 2026](https://popl26.sigplan.org/).
+The authors are Constantin Enea (LIX, CNRS, Ecole Polytechnique), Rupak Majumdar (MPI-SWS), Harshit Jitendra Motwani (MPI-SWS), V.R. Sathiyanarayana (MPI-SWS).
+
+The paper presents a verification technique for liveness properties of randomized distributed algorithms.
+It introduces a proof rule for fair almost-sure termination of distributed systems, combining martingale-based arguments for probabilistic termination with reasoning about weak fairness.
+The proof rules are implemented in Caesar and were used to verify termination of randomized asynchronous consensus protocols, including Ben-Or’s protocol and graded binary consensus, under both crash and Byzantine faults.
+
+See also [our blog post for more details](/blog/2026/01/15/popl26-ast-distributed).
+
 ### ESOP '26: Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing
 
-The paper [_"Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing"_](https://arxiv.org/abs/2512.20214) by Philipp Schröer, Darion Haase, and Joost-Pieter Katoen was accepted at the [European Symposium on Programming (ESOP) 2026](https://etaps.org/2026/conferences/esop/) to be held in Turin, Italy.
+The paper [_"Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing"_](https://arxiv.org/abs/2512.20214) by Philipp Schröer, Darion Haase, and Joost-Pieter Katoen was accepted at the [ESOP 2026](https://etaps.org/2026/conferences/esop/) to be held in Turin, Italy.
 
 An **extended version with proofs and additional material** is available on arXiv: [Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing (Extended Version) — arXiv:2512.20214](https://arxiv.org/abs/2512.20214).
 
 The paper presents theoretical foundations and the implementation of our slicing-based user diagnostics in Caesar, dubbed *Brutus*, and introduces different kinds of slices: error-witnessing (for error localization), verification-witnessing (for proof simplification), and verification-preserving (to maintain successful verification results).
 
-Further links:
+See also:
+ * [Talk about the ESOP '26 paper at Dafny 2026](/blog/2026/01/11/dafny26-slicing),
  * [Blog post about the ESOP '26 paper](/blog/2025/12/23/esop26-slicing),
  * [User guide-level documentation on slicing in Caesar](/docs/caesar/slicing),
  * [Announcement of Caesar 2.0](/blog/2024/05/20/caesar-2-0), which introduced the first slicing implementation in Caesar.
