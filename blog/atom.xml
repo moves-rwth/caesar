@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://www.caesarverifier.org/blog</id>
-    <title>Caesar Blog</title>
+    <title>Caesar Verifier Blog</title>
     <updated>2026-01-15T00:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://www.caesarverifier.org/blog"/>
-    <subtitle>Caesar Blog</subtitle>
+    <subtitle>Caesar Verifier Blog</subtitle>
     <icon>https://www.caesarverifier.org/img/laurel-square.svg</icon>
     <entry>
         <title type="html"><![CDATA[Verification of Almost-Sure Termination with Distributed Algorithms at POPL 2026]]></title>
