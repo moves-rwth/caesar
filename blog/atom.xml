@@ -2,11 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://www.caesarverifier.org/blog</id>
     <title>Caesar Blog</title>
-    <updated>2025-12-23T00:00:00.000Z</updated>
+    <updated>2026-01-15T00:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://www.caesarverifier.org/blog"/>
     <subtitle>Caesar Blog</subtitle>
     <icon>https://www.caesarverifier.org/img/laurel-square.svg</icon>
+    <entry>
+        <title type="html"><![CDATA[Verification of Almost-Sure Termination with Distributed Algorithms at POPL 2026]]></title>
+        <id>https://www.caesarverifier.org/blog/2026/01/15/popl26-ast-distributed</id>
+        <link href="https://www.caesarverifier.org/blog/2026/01/15/popl26-ast-distributed"/>
+        <updated>2026-01-15T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[The paper "Verifying Almost-Sure Termination for Randomized Distributed Algorithms" was presented at the ACM SIGPLAN Symposium on Principles of Programming Languages (POPL) 2026 held in Rennes, France.]]></summary>
+        <content type="html"><![CDATA[<p>The paper <a href="https://doi.org/10.1145/3776691" target="_blank" rel="noopener noreferrer" class=""><em>"Verifying Almost-Sure Termination for Randomized Distributed Algorithms"</em></a> was presented at the <a href="https://popl26.sigplan.org/" target="_blank" rel="noopener noreferrer" class="">ACM SIGPLAN Symposium on Principles of Programming Languages (POPL) 2026</a> held in Rennes, France.
+The authors are Constantin Enea (LIX, CNRS, Ecole Polytechnique), Rupak Majumdar (MPI-SWS), Harshit Jitendra Motwani (MPI-SWS), V.R. Sathiyanarayana (MPI-SWS).</p>
+<p>The paper presents a verification technique for liveness properties of randomized distributed algorithms.
+It introduces a proof rule for fair almost-sure termination of distributed systems, combining martingale-based arguments for probabilistic termination with reasoning about weak fairness.
+The proof rules are implemented in Caesar and were used to verify termination of randomized asynchronous consensus protocols, including Ben-Or’s protocol and graded binary consensus, under both crash and Byzantine faults.</p>
+<details class="details_lb9f alert alert--info details_b_Ee" data-collapsed="true"><summary>Full abstract (as provided by the authors)</summary><div><div class="collapsibleContent_i85q"><p>We present a technique for the verification of liveness properties of randomized distributed algorithms. Our technique gives SMT-based proofs for many common consensus algorithms, both for crash faults and for Byzantine faults. It is based on a sound proof rule for fair almost-sure termination of distributed systems that combines martingale-based techniques for almost-sure termination with reasoning about weak fairness.</p><p>Our proof rule is able to handle parametrized protocols where the state grows unboundedly and every variant function is unbounded. These protocols were out of scope for previous approaches, which either relied on bounded variant functions or on reductions to (non-probabilistic) fairness.</p><p>We have implemented our proof rules on top of Caesar, a program verifier for probabilistic programs. We use our proof rule to give SMT-based proofs for termination properties of randomized asynchronous consensus protocols, including Ben-Or's protocol and graded binary consensus, for both crash and Byzantine faults. These protocols have notoriously difficult proofs of termination but fall within the scope of our proof rule.</p></div></div></details>
+<p>We will make more detailed information on how to use these techniques with Caesar on this website in the future.</p>]]></content>
+        <author>
+            <name>Philipp Schroer</name>
+            <uri>https://moves.rwth-aachen.de/people/philipp-schroer/</uri>
+        </author>
+        <category label="publications" term="publications"/>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Talk on Slicing at Dafny 2026]]></title>
+        <id>https://www.caesarverifier.org/blog/2026/01/11/dafny26-slicing</id>
+        <link href="https://www.caesarverifier.org/blog/2026/01/11/dafny26-slicing"/>
+        <updated>2026-01-11T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[Darion Haase presented our work on slicing-based diagnostics for probabilistic program verification at Dafny 2026, which took place on January 11, 2026, in Rennes, France.]]></summary>
+        <content type="html"><![CDATA[<p>Darion Haase <a href="https://popl26.sigplan.org/details/dafny-2026-papers/3/Diagnostics-in-Probabilistic-Program-Verification" target="_blank" rel="noopener noreferrer" class="">presented our work on slicing-based diagnostics for probabilistic program verification</a> at <a href="https://popl26.sigplan.org/home/dafny-2026" target="_blank" rel="noopener noreferrer" class="">Dafny 2026</a>, which took place on January 11, 2026, in Rennes, France.</p>
+<p>The presentation gave an overview of the main ideas behind our ESOP 2026 paper <a class="" href="https://www.caesarverifier.org/docs/publications#esop-26-error-localization-certificates-and-hints-for-probabilistic-program-verification-via-slicing"><em>"Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing"</em></a>.
+It gave an introduction to our three notions of slicing (error-witnessing, verification-witnessing, and verification-preserving slices) and explained how they can be used to provide useful and formally justified diagnostics for deductive verifiers like Caesar and Dafny.</p>
+<p><a href="https://www.caesarverifier.org/assets/talks/dafny2026-slicing.pdf" target="_blank" rel="noopener noreferrer" class="">The talk slides are available in PDF format.</a></p>]]></content>
+        <author>
+            <name>Philipp Schroer</name>
+            <uri>https://moves.rwth-aachen.de/people/philipp-schroer/</uri>
+        </author>
+        <category label="talks" term="talks"/>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Paper on Slicing Accepted at ESOP 2026]]></title>
         <id>https://www.caesarverifier.org/blog/2025/12/23/esop26-slicing</id>
