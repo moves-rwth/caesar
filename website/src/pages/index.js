@@ -56,7 +56,7 @@ export default function Home() {
   const { siteConfig } = useDocusaurusContext();
   return (
     <Layout
-      title={`Caesar Verification Infrastructure`}
+      title={`Caesar Verifier`}
       description={`${siteConfig.tagline}`}>
       <HomepageHeader />
       <main>

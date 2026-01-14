@@ -7,7 +7,7 @@ import rehypeKatex from 'rehype-katex';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'Caesar',
+  title: 'Caesar Verifier',
   tagline: 'Verify probabilistic programs with Caesar, a deductive verifier built on the HeyVL intermediate verification language.',
   favicon: 'img/laurel-square.svg',
 
