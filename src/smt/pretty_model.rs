@@ -47,6 +47,46 @@ pub fn pretty_model<'smt, 'ctx>(
     Doc::intersperse(res, Doc::line_().append(Doc::line_())).append(Doc::line_())
 }
 
+/// Pretty-print a model for get models.
+pub fn pretty_nontrivial_model<'smt, 'ctx>(
+    files: &Files,
+    vc_expr: &QuantVcProveTask,
+    translate: &mut TranslateExprs<'smt, 'ctx>,
+    model: &InstrumentedModel<'ctx>,
+) -> Doc {
+    let mut res: Vec<Doc> = vec![];
+
+    // Print the values of the global variables in the model.
+    pretty_globals(translate, model, files, &mut res);
+
+    // Print the unaccessed definitions.
+    if let Some(unaccessed) = pretty_unaccessed(model) {
+        res.push(unaccessed);
+    }
+
+    res.push(pretty_get_models_value(vc_expr, translate, model));
+
+    Doc::intersperse(res, Doc::line_().append(Doc::line_())).append(Doc::line_())
+}
+
+pub fn pretty_get_models_value<'smt, 'ctx>(
+    vc_expr: &QuantVcProveTask,
+    translate: &mut TranslateExprs<'smt, 'ctx>,
+    model: &InstrumentedModel<'ctx>,
+) -> Doc {
+    let original_program_vc = vc_expr.expr.clone();
+    let mut lines = vec![];
+
+    let ast = translate.t_symbolic(&original_program_vc);
+    let value = ast.eval(model);
+    let res = pretty_eval_result(value);
+    lines.push(
+        Doc::text("the pre-quantity evaluated to:").append(Doc::hardline().append(res).nest(4)),
+    );
+
+    Doc::intersperse(lines, Doc::line())
+}
+
 pub fn pretty_vc_value<'smt, 'ctx>(
     vc_expr: &QuantVcProveTask,
     translate: &mut TranslateExprs<'smt, 'ctx>,
