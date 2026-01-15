@@ -13,6 +13,19 @@ The proof rules are implemented in Caesar and were used to verify termination of
 
 <!-- truncate -->
 
+The excellent presentation by Sathiya is available on YouTube:
+
+<iframe
+  width="560"
+  height="315"
+  src="https://www.youtube-nocookie.com/embed/MaoVQWD8z5Q?si=09q5hbsBYVRBbMhu&start=2880"
+  title="YouTube video player"
+  frameborder="0"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+  referrerpolicy="strict-origin-when-cross-origin"
+  allowfullscreen>
+</iframe>
+
 <details>
     <summary>Full abstract (as provided by the authors)</summary>
 
