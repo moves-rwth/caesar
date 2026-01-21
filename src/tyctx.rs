@@ -9,7 +9,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::ast::FuncDecl;
+use crate::{ast::FuncDecl, intrinsic::annotations::AnnotationKind};
 use crate::{
     ast::{DeclKind, DeclRef, DomainDecl, Ident, LitKind, Span, Symbol, TyKind, VarKind},
     intrinsic::distributions::DistributionProc,
@@ -155,6 +155,19 @@ impl TyCtx {
             LitKind::Infinity => TyKind::EUReal,
             LitKind::Bool(_) => TyKind::Bool,
         }
+    }
+
+    /// Get all annotation declarations that can be used on top of statements. These are slicing and encoding annotations.
+    pub fn get_statement_annotations(&self) -> IndexMap<Symbol, Rc<DeclKind>> {
+        IndexMap::from_iter(self.declarations.borrow().iter().flat_map(|(ident, decl)| {
+            if let DeclKind::AnnotationDecl(
+                AnnotationKind::Slicing(_) | AnnotationKind::Encoding(_),
+            ) = decl.deref()
+            {
+                return Some((ident.name, decl.clone()));
+            }
+            None
+        }))
     }
 
     pub fn get_distributions(&self) -> IndexMap<Ident, Rc<DistributionProc>> {
