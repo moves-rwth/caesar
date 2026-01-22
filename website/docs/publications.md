@@ -127,6 +127,7 @@ Caesar is a deductive verifier for probabilistic programs. It builds on modern S
 It uses the *Bounded Retransmission Protocol* (BRP) as a case study to explore the practical verification of probabilistic programs using Caesar and gives insights into the strengths and limitations of Caesar in practice.
 
 The PDF file is available via the [UT Student Theses website](https://purl.utwente.nl/essays/106318).
+An artifact with HeyVL files is [available on Zenodo](https://zenodo.org/records/15408743).
 
 <details>
 <summary>Abstract</summary>
