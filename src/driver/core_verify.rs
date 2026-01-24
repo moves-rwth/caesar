@@ -24,6 +24,7 @@ use crate::{
         proc_verify::{encode_proc_verify, to_direction_lower_bounds},
         SpecCall,
     },
+    proof_rules::calculus::ProcSoundness,
     resource_limits::LimitsRef,
     servers::Server,
     slicing::{
@@ -70,6 +71,7 @@ pub struct CoreVerifyTask {
     pub deps: Dependencies,
     pub direction: Direction,
     pub block: Block,
+    pub proc_soundness: ProcSoundness,
 }
 
 impl CoreVerifyTask {
@@ -96,6 +98,7 @@ impl CoreVerifyTask {
                             deps,
                             direction,
                             block,
+                            proc_soundness: ProcSoundness::default(),
                         })
                     }
                     DeclKind::DomainDecl(_domain_decl) => None, // TODO: check that the axioms are not contradictions
@@ -107,6 +110,7 @@ impl CoreVerifyTask {
                 deps,
                 direction: Direction::Down,
                 block,
+                proc_soundness: ProcSoundness::default(),
             }),
         }
     }
