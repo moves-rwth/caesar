@@ -3,6 +3,8 @@
 //! in this place. Resolution is therefore concerned with creating and resolving
 //! variable scopes.
 
+use std::rc::Rc;
+
 use ariadne::ReportKind;
 
 use crate::{
@@ -215,15 +217,21 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
                 self.with_subscope(|this| this.visit_block(block))
             }
             StmtKind::Annotation(_, ref mut ident, ref mut args, ref mut inner_stmt) => {
-                self.visit_ident(ident)?;
-
-                match self.tcx.get(*ident).as_deref() {
-                    None => {} // Declaration not found
+                // Resolve the annotation ident to the declaration
+                // Here we only look through annotation declarations therefore other declarations do not shadow annotations
+                match self
+                    .tcx
+                    .get_statement_annotations()
+                    .get(&ident.name)
+                    .map(Rc::as_ref)
+                {
                     Some(DeclKind::AnnotationDecl(intrin)) => {
+                        *ident = intrin.name(); // Resolve to the declaration ident
                         let intrin = intrin.clone(); // clone so we can mutably borrow self
                         intrin.resolve(self, s.span, args)?;
                     }
-                    _ => {} // Not an annotation declaration
+                    _ => return Err(ResolveError::NotFound(*ident)), // Either not declared or not declared as an annotation,
+                                                                     // This case is same as None since we only look through annotations
                 }
 
                 self.with_subscope(|this| this.visit_stmt(inner_stmt))
