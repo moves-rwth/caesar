@@ -17,7 +17,7 @@ use crate::{
     },
     driver::{
         commands::{mk_cli_server, print_timings, verify::VerifyCommand},
-        core_verify::{lower_core_verify_task, CoreVerifyTask},
+        core_heyvl::{lower_core_heyvl_task, CoreHeyVLTask},
         error::{finalize_caesar_result, CaesarError},
         front::{parse_and_tycheck, SourceUnit},
         item::Item,
@@ -121,13 +121,13 @@ async fn verify_entailment(
         };
 
         let mut first_verify_unit = first
-            .flat_map(|u| CoreVerifyTask::from_source_unit(u, &mut depgraph))
+            .flat_map(|u| CoreHeyVLTask::from_proc_verify(u, &mut depgraph))
             .unwrap();
         let mut second_verify_unit = second
-            .flat_map(|u| CoreVerifyTask::from_source_unit(u, &mut depgraph))
+            .flat_map(|u| CoreHeyVLTask::from_proc_verify(u, &mut depgraph))
             .unwrap();
 
-        let (first_vc, first_slice_stmts) = lower_core_verify_task(
+        let (first_vc, first_slice_stmts) = lower_core_heyvl_task(
             &mut tcx,
             &first_name,
             options,
@@ -135,7 +135,7 @@ async fn verify_entailment(
             server,
             &mut first_verify_unit.enter_mut(),
         )?;
-        let (second_vc, second_slice_stmts) = lower_core_verify_task(
+        let (second_vc, second_slice_stmts) = lower_core_heyvl_task(
             &mut tcx,
             &first_name,
             options,

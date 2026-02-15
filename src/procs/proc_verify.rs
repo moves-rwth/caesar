@@ -1,9 +1,59 @@
 use crate::{
-    ast::{Block, Direction, ProcDecl, SpanVariant, Spanned, StmtKind},
-    driver::core_verify::CoreVerifyTask,
+    ast::{
+        BinOpKind, Block, Direction, ExprData, ExprKind, ProcDecl, Shared, Span, SpanVariant,
+        Spanned, StmtKind, TyKind,
+    },
+    driver::core_heyvl::CoreHeyVLTask,
     slicing::{wrap_with_error_message, wrap_with_success_message},
 };
 
+/// Encode the preexpectations as a formula for which a model is a nontrivial bound.
+///
+/// For proc:
+///     goal: Find a model such that (pre1 ⊓ pre2 ⊓...) > 0
+/// For coproc:
+///     goal: Find a model such that (pre1 ⊔ pre2 ⊔...) < top
+pub fn encode_preexpectation(proc: &ProcDecl) -> Option<(Direction, Block)> {
+    let direction = proc.direction;
+
+    let body_ref = proc.body.borrow();
+    let body = match &*body_ref {
+        Some(body) => body,
+        None => return None,
+    };
+    let mut block = Spanned::new(body.span, vec![]);
+
+    fn get_combination(direction: Direction) -> BinOpKind {
+        let combination = match direction {
+            Direction::Down => BinOpKind::Inf,
+            Direction::Up => BinOpKind::Sup,
+        };
+        combination
+    }
+
+    // Combine the preexpectations using the correct operator
+    let build_expr = proc
+        .requires()
+        .cloned()
+        .reduce(|lhs, rhs| {
+            Shared::new(ExprData {
+                kind: ExprKind::Binary(
+                    Spanned::with_dummy_span(get_combination(direction)).clone(),
+                    lhs,
+                    rhs,
+                ),
+                ty: Some(TyKind::EUReal),
+                span: Span::dummy_span(),
+            })
+        })
+        .expect("No preconditions to check");
+
+    block.node.push(Spanned::new(
+        Span::dummy_span(),
+        StmtKind::Assert(direction, build_expr),
+    ));
+    Some((direction, block))
+}
 /// Generates the HeyVL code to verify a procedure implementation. Returns
 /// `None` if the proc has no body does not need verification.
 ///
@@ -71,7 +121,7 @@ pub fn encode_proc_verify(proc: &ProcDecl) -> Option<(Direction, Block)> {
 /// This is currently not used in the code anymore as we want to track the
 /// direction explicitly to have better error messages, but exists for the sake
 /// of completeness.
-pub fn to_direction_lower_bounds(mut verify_unit: CoreVerifyTask) -> CoreVerifyTask {
+pub fn to_direction_lower_bounds(mut verify_unit: CoreHeyVLTask) -> CoreHeyVLTask {
     if verify_unit.direction == Direction::Up {
         verify_unit.direction = Direction::Down;
         verify_unit.block.node.insert(

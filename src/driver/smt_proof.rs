@@ -6,6 +6,7 @@ use std::io::Write;
 use ariadne::ReportKind;
 use itertools::Itertools;
 use tracing::info_span;
+use z3::SatResult;
 use z3::{
     ast::{Ast, Bool},
     Context, Goal,
@@ -48,7 +49,8 @@ use crate::{
     },
     smt::{
         pretty_model::{
-            pretty_model, pretty_slice, pretty_unaccessed, pretty_var_value, pretty_vc_value,
+            pretty_model, pretty_nontrivial_model, pretty_slice, pretty_unaccessed,
+            pretty_var_value, pretty_vc_value,
         },
         translate_exprs::TranslateExprs,
     },
@@ -170,6 +172,86 @@ pub fn run_smt_prove_task(
         .map_err(CaesarError::ServerError)?;
 
     Ok(result.prove_result)
+}
+
+/// Run the SMT satisfiability check: translate the verification condition to Z3,
+/// add axioms and assumptions, check if its sat and find a model,
+/// print the result and model and return the result.
+pub fn run_smt_check_sat<'tcx>(
+    options: &VerifyCommand,
+    limits_ref: &LimitsRef,
+    tcx: &'tcx TyCtx,
+    depgraph: &DepGraph,
+    name: &SourceUnitName,
+    bool_task: BoolVcProveTask,
+    server: &mut dyn Server,
+) -> Result<SatResult, CaesarError> {
+    let ctx = Context::new(&z3::Config::default());
+    let function_encoder = mk_function_encoder(tcx, depgraph, options)?;
+    let dep_config = DepConfig::Set(bool_task.get_dependencies());
+    let smt_ctx = SmtCtx::new(&ctx, tcx, function_encoder, dep_config);
+    let mut translate = TranslateExprs::new(&smt_ctx);
+    let mut vc_is_valid = SmtVcProveTask::translate(bool_task, &mut translate);
+
+    if !options.opt_options.no_simplify {
+        vc_is_valid.simplify();
+    }
+
+    if options.debug_options.z3_trace {
+        tracing::info!("Z3 tracing output will be written to `z3.log`.");
+    }
+
+    let mut prover = Prover::new(&ctx, IncrementalMode::Native);
+
+    if let Some(remaining) = limits_ref.time_left() {
+        prover.set_timeout(remaining);
+    }
+
+    // Add axioms and assumptions
+    translate.ctx.add_lit_axioms_to_prover(&mut prover);
+    translate
+        .ctx
+        .uninterpreteds()
+        .add_axioms_to_prover(&mut prover);
+    translate
+        .local_scope()
+        .add_assumptions_to_prover(&mut prover);
+
+    // Add the verification condition. This should be checked for satisfiability.
+    // Therefore, add_assumption is used (which just adds it as an smtlib assert)
+    // vs. add_provable, which would negate it first.
+    prover.add_assumption(&vc_is_valid.vc);
+
+    // Optionally dump SMT-LIB representation
+    if let Some(smtlib) = get_smtlib(options, &prover) {
+        write_smtlib(&options.debug_options, name, &smtlib, None)?;
+    }
+
+    // Run solver & retrieve model if available
+    let sat_result = prover.check_sat();
+    let model = prover.get_model();
+
+    let files = server.get_files_internal().lock().unwrap();
+    match &sat_result {
+        SatResult::Sat => {
+            println!("{name}: A non-trivial bound is given for example by the following model:");
+            let model = model.as_ref().unwrap();
+            let mut w = Vec::new();
+            let doc = pretty_nontrivial_model(&files, &vc_is_valid.quant_vc, &mut translate, model);
+            doc.nest(4).render(120, &mut w).unwrap();
+            println!("    {}", String::from_utf8(w).unwrap());
+        }
+        SatResult::Unsat => {
+            println!(
+                    "{name}: The bound introduced by the preexpectations is always trivial (bottom for proc/top for coproc)"
+                );
+        }
+        SatResult::Unknown => {
+            println!("{name}: Unknown result!");
+        }
+    }
+
+    Ok(sat_result)
 }
 
 /// Create the function encoder based on the given command's options.
