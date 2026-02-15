@@ -12,11 +12,11 @@ use crate::{
 };
 
 pub struct Qelim<'tcx> {
-    tcx: &'tcx mut TyCtx,
+    tcx: &'tcx TyCtx,
 }
 
 impl<'tcx> Qelim<'tcx> {
-    pub fn new(tcx: &'tcx mut TyCtx) -> Self {
+    pub fn new(tcx: &'tcx TyCtx) -> Self {
         Qelim { tcx }
     }
 

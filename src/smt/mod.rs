@@ -22,7 +22,7 @@ pub mod pretty_model;
 pub mod symbolic;
 mod symbols;
 pub mod translate_exprs;
-mod uninterpreted;
+pub(crate) mod uninterpreted;
 
 /// Which dependencies to include in the SMT context.
 #[derive(Debug)]
@@ -101,14 +101,20 @@ impl<'ctx> SmtCtx<'ctx> {
                         self.function_encoder.translate_signature(self, &func)
                     {
                         let domain = domain.iter().collect_vec();
-                        self.uninterpreteds.add_function(name, &domain, &range)
+                        self.uninterpreteds.add_function(
+                            name,
+                            &domain,
+                            &range,
+                            func.syn,
+                            func.inputs.clone(),
+                        )
                     }
                 }
             }
         }
 
         // Step 3. translate & add axioms and function definitions
-        let mut axioms: Vec<(Ident, Bool<'ctx>)> = Vec::new();
+        let mut axioms: Vec<(Ident, Bool<'ctx>, bool)> = Vec::new();
         let mut translate = TranslateExprs::new(self);
         for decl_ref in &domains {
             let decl = decl_ref.borrow();
@@ -126,7 +132,7 @@ impl<'ctx> SmtCtx<'ctx> {
                             self.function_encoder
                                 .translate_axioms(&mut translate, &func)
                                 .into_iter()
-                                .map(move |axiom| (name, axiom)),
+                                .map(move |axiom| (name, axiom, false)),
                         );
                     }
                     DomainSpec::Axiom(axiom_ref) => {
@@ -137,14 +143,14 @@ impl<'ctx> SmtCtx<'ctx> {
                             DepConfig::SpecsOnly => continue,
                             _ => {}
                         }
-                        axioms.push((axiom.name, translate.t_bool(&axiom.axiom)));
+                        axioms.push((axiom.name, translate.t_bool(&axiom.axiom), false));
                     }
                 }
             }
         }
         drop(translate); // drops shared reference on self so we can modify
-        for (name, axiom) in axioms {
-            self.uninterpreteds.add_axiom(name, axiom);
+        for (name, axiom, syn) in axioms {
+            self.uninterpreteds.add_axiom(name, axiom, syn);
         }
     }
 

@@ -247,6 +247,7 @@ impl<'tcx> SpecCall<'tcx> {
                 init: Some(value),
                 span,
                 created_from: Some(param.name),
+                range: None,
             };
             let decl = DeclRef::new(var_decl);
             self.tcx.declare(DeclKind::VarDecl(decl.clone()));

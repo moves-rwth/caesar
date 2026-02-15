@@ -128,6 +128,7 @@ impl SliceAnnotation {
                         ty: Box::new(TyKind::String),
                         literal_only: true,
                         span: Span::dummy_span(),
+                        range: None,
                     }]),
                     span: Span::dummy_span(),
                 }

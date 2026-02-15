@@ -100,6 +100,7 @@ impl Encoding for ASTAnnotation {
                 init: None,
                 span: call_span,
                 created_from: None,
+                range: None,
             };
             // Declare the free variable to be used in the omega invariant
             resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;

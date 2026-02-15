@@ -14,8 +14,7 @@ use tracing::{info_span, instrument, trace};
 
 use crate::{
     ast::{
-        visit::VisitorMut, Block, DeclKind, Diagnostic, Direction, ExprBuilder, FileId, Files,
-        SourceFilePath, Span, StoredFile, TyKind,
+        Block, DeclKind, Diagnostic, Direction, ExprBuilder, FileId, Files, SourceFilePath, Span, StoredFile, TyKind, visit::VisitorMut
     },
     depgraph::DepGraph,
     driver::{
@@ -30,13 +29,12 @@ use crate::{
         resolve::Resolve,
         tycheck::Tycheck,
     },
-    intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists},
+    intrinsic::{annotations::init_calculi, distributions::init_distributions, list::init_lists, clamp_with_zero::init_clamp_with_zero},
     mc,
     pretty::{Doc, SimplePretty},
     procs::monotonicity::MonotonicityVisitor,
     proof_rules::{
-        calculus::{find_recursive_procs, CalculusVisitor},
-        init_encodings, EncodingVisitor,
+        EncodingVisitor, calculus::{CalculusVisitor, find_recursive_procs}, init_encodings
     },
     resource_limits::LimitsRef,
     servers::Server,
@@ -287,6 +285,7 @@ pub fn init_tcx(files: &mut Files) -> TyCtx {
     init_encodings(files, &mut tcx);
     init_distributions(files, &mut tcx);
     init_lists(files, &mut tcx);
+    init_clamp_with_zero(files, &mut tcx);
     init_slicing(&mut tcx);
     tcx
 }

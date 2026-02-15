@@ -12,8 +12,8 @@ use crate::{
     depgraph::Dependencies,
     driver::{commands::verify::VerifyCommand, error::CaesarError, item::SourceUnitName},
     opt::{
-        boolify::Boolify, egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder,
-        RemoveParens,
+        boolify::Boolify, egraph, qelim::Qelim, relational::Relational,
+        remove_neutrals::NeutralsRemover, unfolder::Unfolder, RemoveParens,
     },
     resource_limits::{LimitError, LimitsRef},
     smt::{funcs::axiomatic::AxiomaticFunctionEncoder, DepConfig, SmtCtx},
@@ -27,7 +27,7 @@ use crate::{
 pub fn lower_quant_prove_task(
     options: &VerifyCommand,
     limits_ref: &LimitsRef,
-    tcx: &mut TyCtx,
+    tcx: &TyCtx,
     name: &SourceUnitName,
     mut quant_task: QuantVcProveTask,
 ) -> Result<BoolVcProveTask, CaesarError> {
@@ -72,7 +72,7 @@ pub fn lower_quant_prove_task(
 }
 
 /// Quantitative verification conditions that are to be checked.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct QuantVcProveTask {
     pub deps: Dependencies,
     pub direction: Direction,
@@ -107,8 +107,27 @@ impl QuantVcProveTask {
         }
     }
 
+    pub fn remove_neutrals(
+        &mut self,
+        limits_ref: &LimitsRef,
+        tcx: &TyCtx,
+    ) -> Result<(), LimitError> {
+        let span = info_span!("unfolding");
+        let _entered = span.enter();
+        let ctx = Context::new(&Config::default());
+        let dep_config = DepConfig::SpecsOnly;
+        let smt_ctx = SmtCtx::new(
+            &ctx,
+            tcx,
+            Box::new(AxiomaticFunctionEncoder::default()),
+            dep_config,
+        );
+        let mut neutrals_remover = NeutralsRemover::new(limits_ref.clone(), &smt_ctx);
+        neutrals_remover.visit_expr(&mut self.expr)
+    }
+
     /// Apply quantitative quantifier elimination.
-    pub fn qelim(&mut self, tcx: &mut TyCtx, limits_ref: &LimitsRef) -> Result<(), CaesarError> {
+    pub fn qelim(&mut self, tcx: &TyCtx, limits_ref: &LimitsRef) -> Result<(), CaesarError> {
         let mut qelim = Qelim::new(tcx);
         qelim.qelim(self);
         // Apply/eliminate substitutions again

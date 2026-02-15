@@ -29,10 +29,7 @@ use z3rro::prover::{IncrementalMode, Prover};
 
 use crate::{
     ast::{
-        util::{is_bot_lit, is_top_lit},
-        visit::{walk_expr, VisitorMut},
-        BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Shared, Span, SpanVariant, Spanned,
-        TyKind, UnOpKind,
+        BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Shared, Span, SpanVariant, Spanned, TyKind, UnOpKind, util::{is_bot_lit, is_top_lit, is_zero_lit}, visit::{VisitorMut, walk_expr}
     },
     resource_limits::{LimitError, LimitsRef},
     smt::SmtCtx,
@@ -118,9 +115,31 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
                     // the Boolean expression must be true.
                     return self.with_sat(operand, callback);
                 }
+                UnOpKind::Parens => {
+                    return self.with_nonbot(operand, callback);
+                }
                 _ => {}
             },
             _ if is_bot_lit(expr) => return None,
+            _ => {}
+        }
+        Some(callback(self))
+    }
+
+     fn with_nonzero<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
+        match &expr.kind {
+            ExprKind::Unary(un_op, operand) => match un_op.node {
+                UnOpKind::Embed | UnOpKind::Iverson => {
+                    // If an embed or Iverson expression are nonzero, we know
+                    // the Boolean expression must be true.
+                    return self.with_sat(operand, callback);
+                }
+                UnOpKind::Parens => {
+                    return self.with_nonzero(operand, callback);
+                }
+                _ => {}
+            },
+            _ if is_zero_lit(expr) => return None,
             _ => {}
         }
         Some(callback(self))
@@ -186,21 +205,50 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                     self.visit_expr(e)
                 }
             }
+
             ExprKind::Binary(bin_op, lhs, rhs) => match bin_op.node {
-                BinOpKind::Mul if matches!(ty, TyKind::Bool | TyKind::UReal | TyKind::EUReal) => {
+                BinOpKind::Mul
+                    if matches!(
+                        ty,
+                        TyKind::Bool | TyKind::UReal | TyKind::EUReal | TyKind::Real
+                    ) =>
+                {
                     // visit lhs normally first
                     self.visit_expr(lhs)?;
                     // visit the rhs with the knowledge that lhs will be nonzero
-                    let nonzero_res = self.with_nonbot(lhs, |this| this.visit_expr(rhs));
+                    let nonzero_res = self.with_nonzero(lhs, |this| this.visit_expr(rhs));
                     // evaluate the res or set to constant bottom
                     if let Some(res) = nonzero_res {
                         res
                     } else {
                         let builder = ExprBuilder::new(Span::dummy_span());
-                        *e = builder.bot_lit(&ty);
+                        *e = builder.zero_lit(&ty);
                         Ok(())
                     }
                 }
+                BinOpKind::And => {
+                    self.visit_expr(lhs)?;
+                    let nonbot_res: Option<Result<(), LimitError>> =
+                        self.with_nonbot(lhs, |_| Ok(()));
+                    if nonbot_res.is_none() {
+                        // lhs is bottom -> entire result is bottom
+                        let builder = ExprBuilder::new(Span::dummy_span());
+                        *e = builder.bot_lit(&ty);
+                        return Ok(());
+                    }
+
+                    let non_top_res: Option<Result<(), LimitError>> =
+                        self.with_nontop(lhs, |_| Ok(()));
+                    if non_top_res.is_none() {
+                        // lhs is top → result = rhs
+                        *e = rhs.clone();
+                        return self.visit_expr(e);
+                    }
+
+                    // Visit rhs normally
+                    self.visit_expr(rhs)
+                }
+
                 BinOpKind::Impl | BinOpKind::Compare
                     if matches!(ty, TyKind::Bool | TyKind::EUReal) =>
                 {

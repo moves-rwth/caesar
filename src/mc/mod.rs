@@ -454,6 +454,9 @@ impl<'a> ExprTranslator<'a> {
                 LitKind::UInt(val) => Ok(Expression::from(
                     TryInto::<u64>::try_into(val).map_err(|_| unsupported_expr_err())?,
                 )),
+                 LitKind::Int(val) => Ok(Expression::from(
+                    TryInto::<u64>::try_into(val).map_err(|_| unsupported_expr_err())?,
+                )),
                 LitKind::Bool(val) => Ok(Expression::from(*val)),
                 LitKind::Frac(frac) => Ok(Expression::from(BinaryExpression {
                     op: BinaryOp::Divide,

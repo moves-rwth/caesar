@@ -110,6 +110,45 @@ impl TyCtx {
         new_ident
     }
 
+    pub fn print_var_range(&self, ident: Ident) {
+    match self.get(ident) {
+        None => {
+            println!("No declaration found for {}", ident.name);
+        }
+        Some(decl) => {
+            match &*decl {
+                DeclKind::VarDecl(vref) => {
+                     let v = &vref.borrow();
+
+                    match &v.range {
+                        Some(range) => {
+                            println!(
+                                "Variable {} has range [{} , {}]",
+                                v.name.name,
+                                range.lower,
+                                range.upper
+                            );
+                        }
+                        None => {
+                            println!("Variable {} has no range", v.name.name);
+                        }
+                    }
+                }
+
+                // All other decl types have no range
+                other => {
+                    println!(
+                        "Identifier {} refers to a {:?}, which has no range",
+                        ident.name,
+                        other.kind_name() // optional helper below
+                    );
+                }
+            }
+        }
+    }
+}
+
+
     pub fn get(&self, ident: Ident) -> Option<Rc<DeclKind>> {
         self.declarations.borrow().get(&ident).cloned()
     }
@@ -151,6 +190,7 @@ impl TyCtx {
         match lit {
             LitKind::Str(_) => TyKind::String,
             LitKind::UInt(_) => TyKind::UInt,
+            LitKind::Int(_) => TyKind::Int,
             LitKind::Frac(_) => TyKind::UReal,
             LitKind::Infinity => TyKind::EUReal,
             LitKind::Bool(_) => TyKind::Bool,

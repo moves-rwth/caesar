@@ -1,8 +1,8 @@
 //! Abstract representation of expressions.
 
+use num::Signed;
+use num::{BigInt, BigRational, BigUint, One, Zero};
 use std::{fmt, str::FromStr};
-
-use num::{BigRational, BigUint, One, Zero};
 
 use crate::{
     pretty::{parens_group, pretty_list, Doc, SimplePretty},
@@ -372,6 +372,8 @@ pub enum LitKind {
     Str(Symbol),
     /// An unsigned integer literal (`123`).
     UInt(BigUint),
+    /// A signed integer literal (`123`).
+    Int(BigInt),
     /// A number literal represented by a fraction.
     Frac(BigRational),
     /// Infinity,
@@ -392,8 +394,33 @@ impl LitKind {
     pub fn is_bot(&self) -> bool {
         match self {
             LitKind::UInt(num) => num.is_zero(),
+            LitKind::Int(num) => num.is_zero(),
             LitKind::Frac(frac) => frac.is_zero(),
             LitKind::Bool(b) => !b,
+            _ => false,
+        }
+    }
+    pub fn is_zero(&self) -> bool {
+        match self {
+            LitKind::UInt(num) => num.is_zero(),
+            LitKind::Int(num) => num.is_zero(),
+            LitKind::Frac(frac) => frac.is_zero(),
+            _ => false,
+        }
+    }
+     pub fn is_one(&self) -> bool {
+        match self {
+            LitKind::UInt(num) => num.is_one(),
+            LitKind::Int(num) => num.is_one(),
+            LitKind::Frac(frac) => frac.is_one(),
+            _ => false,
+        }
+    }
+    pub fn is_negative(&self) -> bool {
+        match self {
+            LitKind::UInt(_) => false,
+            LitKind::Int(num) => num.is_negative(),
+            LitKind::Frac(frac) => frac.is_negative(),
             _ => false,
         }
     }
@@ -412,6 +439,7 @@ impl fmt::Display for LitKind {
         match self {
             LitKind::Str(symbol) => f.write_fmt(format_args!("\"{symbol}\"")),
             LitKind::UInt(num) => num.fmt(f),
+            LitKind::Int(num) => num.fmt(f),
             LitKind::Frac(frac) => frac.fmt(f),
             LitKind::Infinity => f.write_str("∞"),
             LitKind::Bool(b) => b.fmt(f),
@@ -637,7 +665,22 @@ impl ExprBuilder {
     pub fn frac_lit(&self, value: BigRational) -> Expr {
         Shared::new(ExprData {
             kind: ExprKind::Lit(Spanned::new(self.span, LitKind::Frac(value))),
-            ty: Some(TyKind::EUReal),
+            ty: Some(TyKind::UReal),
+            span: self.span,
+        })
+    }
+
+    pub fn frac_lit_not_extended(&self, value: BigRational) -> Expr {
+        Shared::new(ExprData {
+            kind: ExprKind::Lit(Spanned::new(self.span, LitKind::Frac(value))),
+            ty: Some(TyKind::UReal),
+            span: self.span,
+        })
+    }
+    pub fn signed_frac_lit(&self, value: BigRational) -> Expr {
+        Shared::new(ExprData {
+            kind: ExprKind::Lit(Spanned::new(self.span, LitKind::Frac(value))),
+            ty: Some(TyKind::Real),
             span: self.span,
         })
     }
