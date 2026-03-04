@@ -27,6 +27,22 @@ import TOCInline from '@theme/TOCInline';
 
 ## Peer-Reviewed Papers
 
+### FM '26: Highly Incremental: A Simple Programmatic Approach for Many Objectives
+
+The paper _"Highly Incremental: A Simple Programmatic Approach for Many Objectives"_ by Philipp Schröer and Joost-Pieter Katoen will be published presented at [_FM 2026)_](https://conf.researchr.org/home/fm-2026) in Tokyo, Japan.
+
+An **extended version with a detailed appendix of proofs and case studies** is available on arXiv: [_"Highly Incremental: A Simple Programmatic Approach for Many Objectives (Extended Version)"_](https://arxiv.org/abs/2603.02405).
+
+The paper present a one-fits-all programmatic approach to reason about a plethora of objectives on probabilistic programs.
+The first ingredient is to add a reward-statement to the language.
+One then defines a program transformation applying a monotone function to the cumulative reward of the program.
+The key idea is that this transformation uses incremental differences in the reward.
+This simple, elegant approach enables to express e.g., higher moments, threshold probabilities of rewards, the expected excess over a budget, and moment-generating functions.
+All these objectives can now be analyzed using a single existing approach: probabilistic wp-reasoning and is applicable to verification with Caesar.
+
+See also our [blog post about the paper](/blog/2026/03/04/highly-incremental) for more details and examples.
+
+
 ### POPL '26: Verifying Almost-Sure Termination for Randomized Distributed Algorithms
 
 The paper [_"Verifying Almost-Sure Termination for Randomized Distributed Algorithms"_](https://doi.org/10.1145/3776691) was presented at the [POPL 2026](https://popl26.sigplan.org/).
