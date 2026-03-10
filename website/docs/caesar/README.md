@@ -4,7 +4,7 @@ sidebar_position: 6
 
 # The Caesar Tool
 
-The `caesar` binary contains all of Caesar's functionality: verifying HeyVL files, running the [LSP server](./vscode-and-lsp.md), and [translation support for model checking](../model-checking.md).
+The `caesar` binary contains all of Caesar's functionality: verifying HeyVL files, [checking entailments](./entailment.md), running the [LSP server](./vscode-and-lsp.md), and [translation support for model checking](../model-checking.md).
 
 **Print help:**
 The command-line help information is much more detailed than this document.
@@ -45,6 +45,11 @@ Set a memory limit of 16000 megabytes with `--mem 16000`.
 * With the `--print-smt` flag, Caesar prints the SMT-LIB query for each verification task. You can also use `--smt-dir DIR` with a directory `DIR` to have Caesar write the SMT-LIB queries to files in `DIR`.
   * If [`raco read`](https://docs.racket-lang.org/raco/read.html) is installed, Caesar will auto-format the SMT-LIB code with it. This is very useful as Z3's default formatting is really confusing sometimes.
 * With the `--probe` flag, [Caesar will print information from Z3 probes](./debugging.md#z3-probes) to standard error.
+
+## Subcommand `caesar entailment`
+
+The `caesar entailment` subcommand checks whether one `coproc`'s verification condition entails one `proc`'s verification condition.
+See [Entailment Checking](./entailment.md) for more information.
 
 ## More Topics
 

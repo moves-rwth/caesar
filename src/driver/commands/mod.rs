@@ -89,7 +89,7 @@ impl CaesarCli {
 pub enum CaesarCommand {
     /// Verify HeyVL files with Caesar.
     Verify(VerifyCommand),
-    /// Check an entailment with Caesar.
+    /// Check refinement via entailment between `coproc`/`proc` pairs.
     Entailment(VerifyCommand),
     /// Model checking via JANI, can run Storm directly.
     #[clap(visible_alias = "to-jani")]
