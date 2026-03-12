@@ -23,7 +23,7 @@ Below is an overview of HeyVL's statements with links to the respective document
 |-----------------------|-------------------------|
 | [Blocks](#blocks)                | [Assert and Assume](#assert-and-assume)       |
 | [Variable Declarations](#variable-declarations) | [Havoc](#havoc)                   |
-| [Assignments and Procedure Calls](#assignments)           | [Reward](#reward)                  |
+| [Assignments and Procedure Calls](#assignments)           | [Reward and Weigh](#reward-and-weigh)                  |
 | [Boolean Choices](#boolean-choices)           | [Nondeterministic Choices](#nondeterministic-choices)|
 | [While Loops](#while-loops)                      |          |
 
@@ -122,7 +122,7 @@ For verification, **while loops need to have [proof rule annotations](../proof-r
 If a while loop does not have a proof rule annotation, Caesar cannot verify the program and will show an error.
 
 The proof rule annotations also implicitly specify whether the loop has least or greatest fixpoint semantics.
-This choice can be made explicit with the [calculus annotations](../proof-rules/calculi.md) on procedures, which we recommend you use.
+This choice can be made explicit with the [calculus annotations](../proof-rules/approximations.md#calculus-annotations) on procedures, which we recommend you use.
 
 With the **[model checking translation](../model-checking.md), proof rule annotations are not necessary**.
 It allows usage of a *probabilistic model checker* such as [Storm](https://www.stormchecker.org/) for a subset of HeyVL programs.
@@ -156,7 +156,7 @@ assume 0
 ```
 
 
-### Reward
+### Reward and Weigh
 
 The `reward` statement accepts an expression and adds it to the current verification condition.
 For example,
@@ -167,10 +167,20 @@ has the following semantics: `vc[reward 2 * x](f) = f + (2 * x)`.
 
 `tick` is another name that Caesar accepts for `reward`.
 
+The `weigh` statement accepts an expression and multiplies it with the current verification condition.
+For example,
+```heyvl
+weigh 2 * x
+```
+has the following semantics: `vc[weigh 2 * x](f) = f * (2 * x)`.
+
 
 ### Nondeterministic Choices
 
-HeyVL supports two kinds of binary nondeterministic choices: The "demonic" one (`if ⊓`) and the "angelic" one (`if ⊔`).
+HeyVL supports three kinds of binary nondeterministic choices:
+the "demonic" one (`if ⊓`),
+the "angelic" one (`if ⊔`),
+and the additive one (`if +`).
 ```heyvl
 if ⊓ {
     ...
@@ -180,7 +190,7 @@ if ⊓ {
 ```
 
 You can also use Latex-style syntax instead of Unicode.
-Caesar supports `\cap` and `\cup` instead of `⊓` and `⊔`, respectively.
+Caesar supports `\cap` and `\cup` instead of `⊓` and `⊔`, respectively, and `\oplus` (or `⊕`) instead of `+`.
 (We're looking for better syntax for these statements. If you have an idea, [please start a discussion](https://github.com/moves-rwth/caesar/discussions).)
 
 

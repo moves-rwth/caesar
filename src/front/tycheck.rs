@@ -558,8 +558,10 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
             StmtKind::Negate(_) => {}
             StmtKind::Validate(_) => {}
             StmtKind::Tick(ref mut expr) => self.try_cast(s.span, self.tcx.spec_ty(), expr)?,
+            StmtKind::Weigh(ref mut expr) => self.try_cast(s.span, self.tcx.spec_ty(), expr)?,
             StmtKind::Demonic(_, _) => {}
             StmtKind::Angelic(_, _) => {}
+            StmtKind::Additive(_, _) => {}
             StmtKind::If(ref mut cond, _, _) => self.try_cast(s.span, &TyKind::Bool, cond)?,
             StmtKind::While(ref mut cond, _) => self.try_cast(s.span, &TyKind::Bool, cond)?,
             StmtKind::Annotation(_, ref ident, ref mut args, _) => {

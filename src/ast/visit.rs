@@ -254,11 +254,18 @@ pub fn walk_stmt<V: VisitorMut>(visitor: &mut V, s: &mut Stmt) -> Result<(), V::
         StmtKind::Tick(ref mut expr) => {
             visitor.visit_expr(expr)?;
         }
+        StmtKind::Weigh(ref mut expr) => {
+            visitor.visit_expr(expr)?;
+        }
         StmtKind::Demonic(ref mut block1, ref mut block2) => {
             visitor.visit_block(block1)?;
             visitor.visit_block(block2)?;
         }
         StmtKind::Angelic(ref mut block1, ref mut block2) => {
+            visitor.visit_block(block1)?;
+            visitor.visit_block(block2)?;
+        }
+        StmtKind::Additive(ref mut block1, ref mut block2) => {
             visitor.visit_block(block1)?;
             visitor.visit_block(block2)?;
         }

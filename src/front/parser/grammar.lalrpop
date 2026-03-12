@@ -120,6 +120,7 @@ ExprKindCompare: ExprKind = {
 
 SymCap: () = { "⊓", "\\cap" }
 SymCup: () = { "⊔", "\\cup" }
+SymOplus: () = { "+", "⊕", "\\oplus" }
 SymRightarrow: () = { "→", "==>" }
 SymLeftarrow: () = { "←", "<==" }
 
@@ -207,10 +208,12 @@ StmtKind: StmtKind = {
     "cocompare" <expr: Expr> => StmtKind::Compare(Direction::Up, expr),
     "reward" <expr: Expr> => StmtKind::Tick(expr),
     "tick" <expr: Expr> => StmtKind::Tick(expr),
+    "weigh" <expr: Expr> => StmtKind::Weigh(expr),
     "negate" => StmtKind::Negate(Direction::Down),
     "conegate" => StmtKind::Negate(Direction::Up),
     "validate" => StmtKind::Validate(Direction::Down),
     "covalidate" => StmtKind::Validate(Direction::Up),
+    "if" SymOplus <block1: Block> "else" <block2: Block> => StmtKind::Additive(block1, block2),
     "if" SymCap <block1: Block> "else" <block2: Block> => StmtKind::Demonic(block1, block2),
     "if" SymCup <block1: Block> "else" <block2: Block> => StmtKind::Angelic(block1, block2),
     "if" <cond: Expr> <block1: Block> "else" <block2: Block> => StmtKind::If(cond, block1, block2),
