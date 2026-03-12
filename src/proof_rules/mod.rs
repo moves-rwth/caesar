@@ -73,24 +73,19 @@ pub enum FixpointSemanticsKind {
     GreatestFixedPoint,
 }
 
-/// Determine the loop semantics type based on the annotation, calculus, and direction
-///  The semantics are determined by the provided calculus if available; otherwise,
-///  they are inferred from the annotation and direction.
-///
-/// The semantics are primarily determined by the calculus type:
-///  - `CalculusType::Wp` and `CalculusType::Ert` use least fixed point semantics,
-///  - `CalculusType::Wlp` uses greatest fixed point semantics.
-///
-/// If no calculus is provided, the semantics are inferred from the annotation's
-/// default (sound) behavior based on the direction.
+/// Determine the loop semantics type based on the annotation, calculus,
+/// direction, and annotation arguments. The semantics are determined by the
+/// provided calculus if available; otherwise, they are inferred from the
+/// annotation and direction.
 pub fn infer_fixpoint_semantics_kind(
     encoding: &dyn Encoding,
     calculus: Option<Calculus>,
     direction: Direction,
+    args: &[Expr],
 ) -> FixpointSemanticsKind {
     match calculus {
         Some(calculus) => calculus.calculus_type.to_fixed_point_semantics_kind(),
-        None => encoding.default_fixpoint_semantics(direction),
+        None => encoding.default_fixpoint_semantics(direction, args),
     }
 }
 
@@ -114,7 +109,8 @@ pub trait Encoding: fmt::Debug {
         args: &mut [Expr],
     ) -> Result<(), TycheckError>;
 
-    /// Transform the annotated loop into a sequence of statements and declarations.
+    /// Transform the annotated loop into a sequence of statements and
+    /// declarations.
     fn transform(
         &self,
         tyctx: &TyCtx,
@@ -123,20 +119,27 @@ pub trait Encoding: fmt::Debug {
         enc_env: EncodingEnvironment,
     ) -> Result<GeneratedEncoding, AnnotationError>;
 
-    /// Check if the given calculus annotation is compatible with the encoding annotation.
-    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool;
-
-    /// Select an approximation kind based on the fixpoint semantics and inner approximation kind used.
+    /// Determine the approximation kind given the fixpoint semantics, inner
+    /// approximation, and calculus. Rules that only make sense with a specific
+    /// calculus (e.g. `@past` requires `@ert`) should return
+    /// [ApproximationKind::UNKNOWN] when given an incompatible calculus.
     fn get_approximation(
         &self,
         fixpoint_semantics: FixpointSemanticsKind,
         inner_approximation_kind: ApproximationKind,
+        calculus: Option<Calculus>,
     ) -> ApproximationKind;
 
-    /// Get the sound fixpoint semantics kind for this encoding annotation based on the direction.
+    /// Get the sound fixpoint semantics kind for this encoding annotation based
+    /// on the direction and provided arguments.
     ///
-    /// This function is used when there is no calculus annotation present on the procedure.
-    fn default_fixpoint_semantics(&self, direction: Direction) -> FixpointSemanticsKind;
+    /// This function is used when there is no calculus annotation present on
+    /// the procedure.
+    fn default_fixpoint_semantics(
+        &self,
+        direction: Direction,
+        args: &[Expr],
+    ) -> FixpointSemanticsKind;
 
     /// Indicates if the encoding annotation is required to be the last statement of a procedure.
     fn is_terminator(&self) -> bool;

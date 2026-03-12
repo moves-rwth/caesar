@@ -437,7 +437,10 @@ impl Server for LspServer {
             .or_default()
             .verify_statuses;
 
-        statuses.update_status(name, VerifyStatus::from_prove_result(&result.prove_result));
+        statuses.update_status(
+            name,
+            VerifyStatus::from_prove_result(&result.prove_result, proc_soundness),
+        );
 
         // If every procedure in the file has been verified, we can set the file status type to Done.
         if statuses

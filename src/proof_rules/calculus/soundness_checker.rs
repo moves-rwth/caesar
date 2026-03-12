@@ -1,14 +1,16 @@
 use std::{
     collections::HashMap,
     fmt,
-    ops::{BitAnd, BitOr, DerefMut},
+    ops::{BitAnd, DerefMut},
     vec,
 };
 
+use ariadne::ReportKind;
 use itertools::Itertools;
+use z3rro::prover::ProveResult;
 
 use crate::{
-    ast::{Block, DeclKind, Direction, Label, ProcDecl, Span, Stmt, StmtKind},
+    ast::{Block, DeclKind, Diagnostic, Direction, Label, ProcDecl, Span, Stmt, StmtKind},
     driver::{
         front::{Module, SourceUnit},
         item::SourceUnitName,
@@ -42,78 +44,40 @@ pub struct ApproximationRecord {
 
 pub type ApproximationList = Vec<ApproximationRecord>;
 
-/// Compute the infimum of approximation kinds in the given approximation list.
-///
-/// This is done by folding the list with the `BitAnd` operation defined for `ApproximationKind`.
-///
-/// ---
-///
-/// Examples:
-///
-/// If `approximations` is empty, the default value is `ApproximationKind::EXACT` as an empty list means no approximations were made.
-/// ```
-/// let approximations = vec![];
-/// assert_eq!(infimum_of_approximation_list(&approximations), ApproximationKind::EXACT);
-/// ```
-///
-///
-/// If it contains only one entry, that entry's kind is returned.
-///
-/// ```
-/// let approximations = vec![
-///     ApproximationRecord { span: Span::dummy_span(), stmt_kind: StmtKindName::Stmt, kind: ApproximationKind::OVER },
-/// ];
-/// assert_eq!(infimum_of_approximation_list(&approximations), ApproximationKind::OVER);
-/// ```
-///
-/// If it contains two or more entries, the infimum of all their kinds is returned.
-///
-/// ```
-/// let approximations = vec![
-///     ApproximationRecord { span: Span::dummy_span(), stmt_kind: StmtKindName::Stmt, kind: ApproximationKind::OVER },
-///     ApproximationRecord { span: Span::dummy_span(), stmt_kind: StmtKindName::Loop, kind: ApproximationKind::UNDER },
-/// ];
-/// assert_eq!(infimum_of_approximation_list(&approximations), ApproximationKind::UNKNOWN);
-pub fn infimum_of_approximation_list(approximations: &ApproximationList) -> ApproximationKind {
-    approximations
-        .iter()
-        .fold(ApproximationKind::EXACT, |acc, approx_entry| {
-            acc & approx_entry.kind
-        })
+#[derive(Debug, Clone)]
+pub struct ProcSoundness {
+    direction: Direction,
+    approx: ApproximationKind,
+    pub sound_proofs: bool,
+    pub sound_refutations: bool,
+    approximations: ApproximationList,
+    pub calculus: Option<Calculus>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct ProcSoundness {
-    sound_proofs: bool,
-    sound_refutations: bool,
-    approximations: ApproximationList,
-    calculus: Option<Calculus>,
+impl Default for ProcSoundness {
+    /// Returns a soundness with no approximations and no calculus, which is exact and thus sound for both proofs and refutations.
+    fn default() -> Self {
+        Self::new(Direction::Down, vec![], None)
+    }
 }
 
 impl ProcSoundness {
-    /// Create a new ProcSoundness instance by analyzing the given approximations and calculus in the given direction.
+    /// Compute soundness from approximations, calculus, and direction.
     pub fn new(
         direction: Direction,
         approximations: ApproximationList,
         calculus: Option<Calculus>,
     ) -> Self {
-        // If the approximation list is empty, it means no approximations were made, therefore the infimum is EXACT
-        let approx = infimum_of_approximation_list(&approximations);
+        let approx = ApproximationKind::infimum(&approximations);
+        // Down (proc): sound proofs need under-approximation; sound refutations need over-approximation.
+        // Up (coproc): the roles of under/over are swapped.
         let (sound_proofs, sound_refutations) = match direction {
-            Direction::Down => match approx {
-                ApproximationKind::EXACT => (true, true), // Both proofs and refutations are sound
-                ApproximationKind::UNDER => (true, false), // Only proofs are guaranteed to be sound
-                ApproximationKind::OVER => (false, true), // Only refutations are guaranteed to be sound
-                ApproximationKind::UNKNOWN => (false, false), // Neither proofs nor refutations are sound
-            },
-            Direction::Up => match approx {
-                ApproximationKind::EXACT => (true, true), // Both proofs and refutations are sound
-                ApproximationKind::UNDER => (false, true), // Only refutations are guaranteed to be sound
-                ApproximationKind::OVER => (true, false),  // Only proofs are guaranteed to be sound
-                ApproximationKind::UNKNOWN => (false, false), // Neither proofs nor refutations are sound
-            },
+            Direction::Down => (approx.under, approx.over),
+            Direction::Up => (approx.over, approx.under),
         };
         Self {
+            direction,
+            approx,
             sound_proofs,
             sound_refutations,
             approximations,
@@ -121,106 +85,74 @@ impl ProcSoundness {
         }
     }
 
-    /// Get whether proofs for this procedure are sound.
-    pub fn sound_proofs(&self) -> bool {
-        self.sound_proofs
-    }
-
-    /// Get whether refutations for this procedure are sound.
-    pub fn sound_refutations(&self) -> bool {
-        self.sound_refutations
-    }
-
-    /// Generate diagnostic labels for all approximating statements in the procedure.
-    pub fn diagnostic_labels(&self) -> Vec<Label> {
-        self.approximations
-            .iter()
-            .map(|approx| {
-                let mut label = Label::new(approx.span).with_message(format!(
-                    "This statement is an {} of the real program behavior",
-                    approx.kind
-                ));
-
-                if let Some(calculus) = self.calculus {
-                    match approx.kind {
-                        ApproximationKind::OVER => {
-                            label = label.with_message(format!(
-                                "For this {} S, {} is over-approximated i.e., vc[S] ≥ {}[S]",
-                                approx.stmt_kind, calculus, calculus
-                            ))
-                        }
-                        ApproximationKind::UNDER => {
-                            label = label.with_message(format!(
-                                "For this {} S, {} is under-approximated i.e., vc[S] ≤ {}[S]",
-                                approx.stmt_kind, calculus, calculus
-                            ));
-                        }
-                        _ => {}
-                    }
-                }
-                label
-            })
-            .collect_vec()
-    }
-
     /// Generate a diagnostic note explaining the overall approximation of the procedure.
-    pub fn diagnostic_note(&self) -> Option<String> {
-        let is_both_over_and_under = self
-            .approximations
-            .iter()
-            .any(|approx| approx.kind == ApproximationKind::OVER)
-            && self
-                .approximations
-                .iter()
-                .any(|approx| approx.kind == ApproximationKind::UNDER);
-
-        if let Some(calculus) = self.calculus {
-            match self.overall_approximation() {
-                ApproximationKind::OVER => Some(format!(
-                    "the {} of the program is over-approximated, i.e., vc[program] ≥ {}[program]",
-                    calculus, calculus
-                )),
-                ApproximationKind::UNDER => Some(format!(
-                    "the {} of the program is under-approximated, i.e., vc[program] ≤ {}[program]",
-                    calculus, calculus
-                )),
-                ApproximationKind::UNKNOWN => {
-                    if is_both_over_and_under {
-                        Some(format!(
-                            "the {} of the program is both over- and under-approximated in different parts of the program, therefore the approximation relationship for the whole program is unknown.",
-                            calculus,
-                        ))
-                    } else {
-                        Some(format!(
-                            "the approximation relationship of the vc and the {} of the program is unknown.",
-                            calculus,
-                        ))
-                    }
-                }
-                _ => None,
-            }
+    fn diagnostic_note(&self) -> Option<String> {
+        if !self.sound_proofs {
+            Some(format!(
+                "{} conflicts with {} direction, leading to unsound proof",
+                self.approx,
+                self.direction.map("proc", "coproc")
+            ))
         } else {
             None
         }
     }
 
-    fn overall_approximation(&self) -> ApproximationKind {
-        infimum_of_approximation_list(&self.approximations)
+    /// Generate diagnostic labels for all approximating statements in the procedure.
+    fn diagnostic_labels(&self) -> Vec<Label> {
+        self.approximations
+            .iter()
+            .filter(|approx| approx.kind != ApproximationKind::EXACT)
+            .map(|approx| {
+                let msg = match (self.calculus, approx.kind) {
+                    (Some(c), ApproximationKind::OVER) => format!(
+                        "For this {} S, {c} is over-approximated i.e., vc[S] ≥ {c}[S]",
+                        approx.stmt_kind
+                    ),
+                    (Some(c), ApproximationKind::UNDER) => format!(
+                        "For this {} S, {c} is under-approximated i.e., vc[S] ≤ {c}[S]",
+                        approx.stmt_kind
+                    ),
+                    _ => format!(
+                        "This statement is an {} of the real program behavior",
+                        approx.kind
+                    ),
+                };
+                Label::new(approx.span).with_message(msg)
+            })
+            .collect_vec()
+    }
+
+    pub fn soundness_diagnostic(
+        &self,
+        span: Span,
+        prove_result: &ProveResult,
+    ) -> Option<Diagnostic> {
+        match prove_result {
+            ProveResult::Proof if !self.sound_proofs => {
+                let diag =
+                    Diagnostic::new(ReportKind::Error, span).with_message("Unsound verification");
+                let diag = if let Some(note) = self.diagnostic_note() {
+                    diag.with_note(note)
+                } else {
+                    diag
+                };
+                Some(diag.with_labels(self.diagnostic_labels()))
+            }
+            _ => None,
+        }
     }
 }
 
-/// Represents the kind of approximation that the vc semantics introduce for the original program semantics.
+/// The approximation relationship between vc semantics and original program semantics.
 ///
-/// Approximations can be introduced by encoding annotations on loops or by negations in the program.
+/// The two boolean fields `under` and `over` track whether the vc under- and/or over-approximates
+/// the original semantics. See the constants [`EXACT`][Self::EXACT], [`UNDER`][Self::UNDER],
+/// [`OVER`][Self::OVER], and [`UNKNOWN`][Self::UNKNOWN] for the four possible combinations.
 ///
-/// - If the the field `under` is true, it means that the vc semantics under-approximates the original program semantics, i.e. vc\[S\] ≤ semantics\[S\].
-/// - If the field `over` is true, it means that the vc semantics over-approximates the original program semantics, i.e. vc\[S\] ≥ semantics\[S\].
-/// - If both fields are true, it means that the vc semantics both under- and over-approximates the original program semantics, therefore it exactly matches the original program semantics, i.e. (vc\[S\] ≤ semantics\[S\]) and (vc\[S\] ≥ semantics\[S\]) hence (vc\[S\] = semantics\[S\]).
-/// - If both fields are false, it means that the vc semantics neither under- nor over-approximates the original program semantics, therefore the approximation is unknown. i.e. !(vc\[S\] ≤ semantics\[S\]) and !(vc\[S\] ≥ semantics\[S\]).
-///
-/// The original program semantics is based on the calculus annotation or the default fixpoint semantics for loops based on the direction and the encoding used.
-///
-/// See also [`infer_fixpoint_semantics_kind`] for more details on how the semantics kind is inferred.
+/// Approximations arise from encoding annotations on loops or from negations in the program.
+/// The reference semantics is determined by the calculus annotation, or inferred from loop direction
+/// and encoding (see [`infer_fixpoint_semantics_kind`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ApproximationKind {
     /// True if the vc semantics under-approximates the original program semantics.
@@ -241,37 +173,30 @@ impl BitAnd for ApproximationKind {
     }
 }
 
-impl BitOr for ApproximationKind {
-    type Output = ApproximationKind;
-
-    // This corresponds to supremum in the lattice of approximations
-    fn bitor(self, rhs: Self) -> Self::Output {
-        ApproximationKind {
-            under: self.under || rhs.under,
-            over: self.over || rhs.over,
-        }
-    }
-}
-
 impl ApproximationKind {
-    /// vc is both under- and over-approximating the original program semantics.
+    /// Greatest lower bound of a list of approximation kinds. Returns [`EXACT`][Self::EXACT] for an empty list.
+    pub fn infimum(approximations: &[ApproximationRecord]) -> Self {
+        approximations
+            .iter()
+            .fold(Self::EXACT, |acc, entry| acc & entry.kind)
+    }
+
+    /// vc exactly matches the original semantics (both under- and over-approximating).
     pub const EXACT: Self = Self {
         under: true,
         over: true,
     };
-    /// vc under-approximates the original program semantics.
+    /// vc under-approximates the original semantics (vc[S] ≤ semantics[S]).
     pub const UNDER: Self = Self {
         under: true,
         over: false,
     };
-    /// vc over-approximates the original program semantics.
+    /// vc over-approximates the original semantics (vc[S] ≥ semantics[S]).
     pub const OVER: Self = Self {
         under: false,
         over: true,
     };
-    /// vc neither under- nor over-approximates the original program semantics.
-    ///
-    /// This means !(vc[S] ≤ semantics[S]) and !(vc[S] ≥ semantics[S]).
+    /// vc neither under- nor over-approximates the original semantics.
     pub const UNKNOWN: Self = Self {
         under: false,
         over: false,
@@ -336,7 +261,6 @@ fn track_approximation_in_statement(
     tcx: &mut TyCtx,
 ) -> ApproximationList {
     match &s.node {
-        // Composite statements are handled recursively to collect approximations from sub-statements
         StmtKind::Seq(stmts) => stmts
             .iter()
             .flat_map(|stmt| track_approximation_in_statement(stmt, direction, calculus, tcx))
@@ -350,22 +274,16 @@ fn track_approximation_in_statement(
             ));
             acc
         }
-        // A loop itself do not introduce an approximation, but an encoding annotation on top of it may do so.
-        // Therefore, we only track the approximation inside the loop body recursively in this case.
-        // This means that the approximation kind of a while loop is the approximation kind of the loop body.
-        // While loops can not be used without an encoding annotation therefore this inner approximation is never directly recorded.
-        // Instead this will be used by the annotation case below.
+        // While loops don't introduce approximations themselves — any approximation comes from the
+        // encoding annotation wrapping them. Recurse so the annotation case picks up inner approximations.
         StmtKind::While(_, ref block) => {
             track_approximation_in_block(block, direction, calculus, tcx)
         }
-        // Encoding annotations may cause approximations
-        // This approximation is based on the direction, calculus and the approximation in the loop body
-        StmtKind::Annotation(_, ident, _, inner_stmt) => {
-            // This inner statement is the While case above
+        // Encoding annotations introduce approximations based on direction, calculus, and the loop body's approximation.
+        StmtKind::Annotation(_, ident, args, inner_stmt) => {
             let mut inner_approximation_list =
                 track_approximation_in_statement(inner_stmt, direction, calculus, tcx);
 
-            // If the annotation is an encoding annotation
             if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
                 tcx.get(*ident).unwrap().as_ref()
             {
@@ -374,12 +292,14 @@ fn track_approximation_in_statement(
                     std::borrow::Borrow::borrow(anno_ref),
                     calculus,
                     direction,
+                    args,
                 );
 
-                let inner_approximation = infimum_of_approximation_list(&inner_approximation_list);
+                let inner_approximation = ApproximationKind::infimum(&inner_approximation_list);
 
                 // Ask the respective annotation what the resulting approximation(s) will be
-                let approximation = anno_ref.get_approximation(semantics_type, inner_approximation);
+                let approximation =
+                    anno_ref.get_approximation(semantics_type, inner_approximation, calculus);
                 inner_approximation_list.push(ApproximationRecord {
                     span: s.span,
                     stmt_kind: StmtKindName::Loop,
@@ -394,7 +314,7 @@ fn track_approximation_in_statement(
             stmt_kind: StmtKindName::Stmt,
             kind: ApproximationKind::UNKNOWN,
         }],
-        // All other statements do not change the approximation kind, which means they have the EXACT approximation kind
+        // All other statements are exact (no entry needed).
         _ => vec![],
     }
 }
@@ -403,16 +323,12 @@ fn track_approximation_in_statement(
 ///
 /// Returns `None` if the procedure has no body.
 pub fn soundness_blame_of_proc(decl: &ProcDecl, tcx: &mut TyCtx) -> Option<ProcSoundness> {
-    if let Some(block) = decl.body.borrow_mut().as_mut() {
-        // Get the calculus of the procedure
-        let calculus = get_proc_calculus(decl, tcx).ok().flatten();
-        let direction = decl.direction;
-
-        let approx_list = track_approximation_in_block(block, direction, calculus, tcx);
-
-        return Some(ProcSoundness::new(direction, approx_list, calculus));
-    }
-    None
+    let body = decl.body.borrow();
+    let block = body.as_ref()?;
+    let calculus = get_proc_calculus(decl, tcx).ok().flatten();
+    let direction = decl.direction;
+    let approx_list = track_approximation_in_block(block, direction, calculus, tcx);
+    Some(ProcSoundness::new(direction, approx_list, calculus))
 }
 
 /// Compute the [`ProcSoundness`] of a raw block (without a procedure declaration).
@@ -420,6 +336,28 @@ pub fn soundness_blame_of_proc(decl: &ProcDecl, tcx: &mut TyCtx) -> Option<ProcS
 /// This assumes no calculus annotation and uses the default fixpoint semantics for loops based on the direction and the encoding used.
 pub fn soundness_blame_of_raw(block: &Block, tcx: &mut TyCtx) -> ProcSoundness {
     let approx_list = track_approximation_in_block(block, Direction::Down, None, tcx);
-    // Insert the soundness into the map
     ProcSoundness::new(Direction::Down, approx_list, None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::Span;
+
+    fn r(kind: ApproximationKind) -> ApproximationRecord {
+        ApproximationRecord {
+            span: Span::dummy_span(),
+            stmt_kind: StmtKindName::Loop,
+            kind,
+        }
+    }
+
+    #[test]
+    fn test_infimum() {
+        use ApproximationKind as A;
+        assert_eq!(A::infimum(&[]), A::EXACT);
+        assert_eq!(A::infimum(&[r(A::OVER)]), A::OVER);
+        assert_eq!(A::infimum(&[r(A::OVER), r(A::UNDER)]), A::UNKNOWN);
+        assert_eq!(A::infimum(&[r(A::EXACT), r(A::OVER)]), A::OVER);
+    }
 }

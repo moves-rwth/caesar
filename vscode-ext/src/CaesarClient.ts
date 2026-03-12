@@ -34,6 +34,7 @@ export enum VerifyResult {
     Todo = "todo",
     Ongoing = "ongoing",
     Verified = "verified",
+    Refuted = "refuted",
     Failed = "failed",
     Unknown = "unknown",
     Timeout = "timeout",

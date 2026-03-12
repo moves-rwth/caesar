@@ -100,7 +100,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         }
     }
 
-    pub fn local_idents<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
+    pub fn local_idents<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a + use<'a, 'ctx> {
         self.locals.local_iter().map(|(ident, _)| *ident)
     }
 

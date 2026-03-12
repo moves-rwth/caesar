@@ -17,9 +17,8 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{
-        tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
-    },
+    intrinsic::annotations::{tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus},
+    opt::constfold::is_one_lit,
     proof_rules::{calculus::ApproximationKind, FixpointSemanticsKind},
     tyctx::TyCtx,
 };
@@ -83,18 +82,11 @@ impl Encoding for UnrollAnnotation {
         resolve.visit_exprs(args)
     }
 
-    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
-        matches!(
-            (&calculus.calculus_type, direction),
-            (CalculusType::Wp | CalculusType::Ert, Direction::Down)
-                | (CalculusType::Wlp, Direction::Up)
-        )
-    }
-
     fn get_approximation(
         &self,
         fixpoint_semantics: FixpointSemanticsKind,
         inner_approximation_kind: ApproximationKind,
+        _calculus: Option<Calculus>,
     ) -> ApproximationKind {
         let approx = match fixpoint_semantics {
             FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::UNDER,
@@ -103,7 +95,22 @@ impl Encoding for UnrollAnnotation {
         approx & inner_approximation_kind
     }
 
-    fn default_fixpoint_semantics(&self, direction: Direction) -> FixpointSemanticsKind {
+    fn default_fixpoint_semantics(
+        &self,
+        direction: Direction,
+        args: &[Expr],
+    ) -> FixpointSemanticsKind {
+        if let [_, terminator] = args {
+            if is_bot_lit(terminator) {
+                return FixpointSemanticsKind::LeastFixedPoint;
+            }
+            if is_top_lit(terminator) || is_one_lit(terminator) {
+                return FixpointSemanticsKind::GreatestFixedPoint;
+            }
+        } else {
+            unreachable!();
+        }
+
         match direction {
             Direction::Up => FixpointSemanticsKind::GreatestFixedPoint,
             Direction::Down => FixpointSemanticsKind::LeastFixedPoint,

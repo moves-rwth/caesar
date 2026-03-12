@@ -1,0 +1,184 @@
+.quickGuide {
+  margin: 1.05rem 0 1.35rem;
+  padding: 0.9rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 12px;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--ifm-color-primary-contrast-background) 35%, var(--ifm-background-surface-color)),
+    var(--ifm-background-surface-color) 50%
+  );
+}
+
+.quickGuideHead {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.quickGuideKicker {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ifm-color-primary-darkest);
+}
+
+.quickGuideHint {
+  font-size: 0.9rem;
+  color: var(--ifm-color-content-secondary);
+}
+
+.quickGuideGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.quickCard {
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  background: var(--ifm-background-surface-color);
+  overflow: hidden;
+}
+
+.quickCard :global(code) {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-size: inherit !important;
+  vertical-align: inherit !important;
+}
+
+.quickCardTop {
+  padding: 0.7rem 0.8rem 0.58rem;
+  border-left: 4px solid transparent;
+}
+
+.quickCardTop.quickCardVerify {
+  border-left-color: var(--ifm-color-success);
+  background: color-mix(in srgb, var(--ifm-color-success-contrast-background) 48%, var(--ifm-background-surface-color));
+}
+
+.quickCardTop.quickCardRefute {
+  border-left-color: color-mix(in srgb, var(--ifm-color-danger) 55%, var(--ifm-color-emphasis-400));
+  background: color-mix(in srgb, var(--ifm-color-danger-contrast-background) 28%, var(--ifm-background-surface-color));
+}
+
+.quickCardMain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.24;
+  color: var(--ifm-color-emphasis-900);
+}
+
+.quickCardHint {
+  font-size: 0.84rem;
+  font-style: italic;
+  font-weight: 500;
+  color: var(--ifm-color-content-secondary);
+}
+
+.quickCardAction {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ifm-color-content-secondary);
+}
+
+.quickCardLower {
+  padding: 0.5rem 0.8rem 0.68rem 0.56rem;
+  border-left: 4px solid transparent;
+  border-top: 1px solid color-mix(in srgb, var(--ifm-color-emphasis-300) 75%, transparent);
+  display: grid;
+  grid-template-columns: 0.95rem minmax(0, 1fr);
+  column-gap: 0.32rem;
+  align-items: start;
+}
+
+.quickCardLower.quickCardVerify {
+  border-left-color: color-mix(in srgb, var(--ifm-color-success) 28%, var(--ifm-color-emphasis-300));
+}
+
+.quickCardLower.quickCardRefute {
+  border-left-color: color-mix(in srgb, var(--ifm-color-danger) 24%, var(--ifm-color-emphasis-300));
+}
+
+.quickCardLowerArrow {
+  display: inline-flex;
+  width: 0.95rem;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 0.08rem;
+  font-size: 0.8rem;
+  line-height: 1.1;
+  color: var(--ifm-color-content-secondary);
+  opacity: 0.88;
+}
+
+.quickCardLowerContent {
+  min-width: 0;
+}
+
+.quickCardLowerContent .quickCardAction {
+  margin: 0 0 0.36rem;
+  line-height: 1.1;
+}
+
+.quickCardLowerUnder {
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--ifm-color-emphasis-200) 14%, transparent));
+}
+
+.quickCardLowerOver {
+  background: linear-gradient(0deg, transparent, color-mix(in srgb, var(--ifm-color-emphasis-200) 14%, transparent));
+}
+
+.quickCardRules {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 0.45rem;
+  row-gap: 0.3rem;
+  font-size: 0.76rem;
+  line-height: 1.3;
+  color: var(--ifm-color-content-secondary);
+}
+
+.quickCardRules strong {
+  color: var(--ifm-color-emphasis-900);
+}
+
+.quickRulePrefix::after {
+  content: ":";
+  color: var(--ifm-color-content-secondary);
+}
+
+.quickRuleBody {
+  min-width: 0;
+}
+
+.quickTagUnder,
+.quickTagOver {
+  font-size: 0.86rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.quickTagLink {
+  text-decoration: none;
+}
+
+@media (max-width: 996px) {
+  .quickGuideGrid {
+    grid-template-columns: 1fr;
+  }
+}

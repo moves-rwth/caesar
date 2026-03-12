@@ -73,7 +73,9 @@ pub enum VerifyStatus {
     Ongoing,
     /// The verification was successful.
     Verified,
-    /// The verification yielded a counterexample.
+    /// The verification failed with a counterexample.
+    Refuted,
+    /// The verification failed with an error.
     Failed,
     /// The SMT solver returned an unknown result.
     Unknown,
@@ -82,11 +84,14 @@ pub enum VerifyStatus {
 }
 
 impl VerifyStatus {
-    pub fn from_prove_result(result: &ProveResult) -> Self {
+    pub fn from_prove_result(result: &ProveResult, proc_soundness: &ProcSoundness) -> Self {
         match &result {
-            ProveResult::Proof => VerifyStatus::Verified,
-            ProveResult::Counterexample => VerifyStatus::Failed,
+            ProveResult::Proof if proc_soundness.sound_proofs => VerifyStatus::Verified,
+            ProveResult::Counterexample if proc_soundness.sound_refutations => {
+                VerifyStatus::Refuted
+            }
             ProveResult::Unknown(_) => VerifyStatus::Unknown,
+            _ => VerifyStatus::Failed,
         }
     }
 
@@ -100,10 +105,13 @@ impl VerifyStatus {
         match (self, other) {
             (VerifyStatus::Failed, _) | (_, VerifyStatus::Failed) => VerifyStatus::Failed,
             (VerifyStatus::Verified, VerifyStatus::Verified) => VerifyStatus::Verified,
+            (VerifyStatus::Refuted, VerifyStatus::Refuted) => VerifyStatus::Refuted,
             (VerifyStatus::Unknown, _) | (_, VerifyStatus::Unknown) => VerifyStatus::Unknown,
             (VerifyStatus::Timeout, _) | (_, VerifyStatus::Timeout) => VerifyStatus::Timeout,
             (VerifyStatus::Ongoing, _) | (_, VerifyStatus::Ongoing) => VerifyStatus::Ongoing,
             (VerifyStatus::Todo, _) | (_, VerifyStatus::Todo) => VerifyStatus::Todo,
+            (VerifyStatus::Verified, VerifyStatus::Refuted)
+            | (VerifyStatus::Refuted, VerifyStatus::Verified) => VerifyStatus::Unknown, // this should never happen, but if it does, we want to be conservative and report unknown
         }
     }
 }

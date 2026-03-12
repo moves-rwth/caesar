@@ -132,7 +132,7 @@ For more information on how triggers/patterns work in general, see the [Z3 User 
 Caesar's expression syntax is based on [the expressive assertion language for probabilistic verification by Batz et al](https://dl.acm.org/doi/10.1145/3434320).
 In theory, *expressiveness* means that for many programs and properties, we know that we can express *all* pre-expectations and invariants in the expression syntax when a post-expectation is written in that syntax.
 
-Formally, we have that the [weakest pre-expectation calculus](../proof-rules/calculi.md) `wp` is *relatively complete* with respect to this language, which means that `wp[P](post)` is effectively constructible for all programs `P` and expectations `post` in their syntax.
+Formally, we have that the [weakest pre-expectation calculus](../proof-rules/approximations#calculus-annotations) `wp` is *relatively complete* with respect to this language, which means that `wp[P](post)` is effectively constructible for all programs `P` and expectations `post` in their syntax.
 
 Their syntax includes enough constructs to specify many interesting properties, such as termination probabilities or the distribution over final states, even including stuff like harmonic numbers.
 See [the paper's Section 12 for more details](https://dl.acm.org/doi/pdf/10.1145/3434320#page=26).

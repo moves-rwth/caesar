@@ -18,6 +18,15 @@ use crate::{
     vc::subst::apply_subst,
 };
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum PrettyModelDetail {
+    /// Pretty-print everything in the model.
+    Full,
+    /// Exclude things that have a span (i.e. slice lines, user-declared
+    /// variables).
+    ExcludeSpanned,
+}
+
 /// Pretty-print a model.
 pub fn pretty_model<'smt, 'ctx>(
     files: &Files,
@@ -25,15 +34,21 @@ pub fn pretty_model<'smt, 'ctx>(
     vc_expr: &QuantVcProveTask,
     translate: &mut TranslateExprs<'smt, 'ctx>,
     model: &InstrumentedModel<'ctx>,
+    detail: PrettyModelDetail,
 ) -> Doc {
     let mut res: Vec<Doc> = vec![];
 
-    // Print the values of the global variables in the model.
-    pretty_globals(translate, model, files, &mut res);
+    let slice_lines = if detail == PrettyModelDetail::Full {
+        // Print the values of the global variables in the model.
+        pretty_globals(translate, model, files, &mut res);
 
-    let slice_lines = pretty_slice(files, slice_model);
+        pretty_slice(files, slice_model)
+    } else {
+        None
+    };
 
-    // Print the unaccessed definitions.
+    // Print the unaccessed definitions. We need to do this *after* accessing
+    // globals and slice variables, otherwise they would be included.
     if let Some(unaccessed) = pretty_unaccessed(model) {
         res.push(unaccessed);
     }
@@ -44,7 +59,8 @@ pub fn pretty_model<'smt, 'ctx>(
 
     res.push(pretty_vc_value(vc_expr, translate, model, slice_model));
 
-    Doc::intersperse(res, Doc::line_().append(Doc::line_())).append(Doc::line_())
+    let two_newlines = Doc::line_().append(Doc::line_());
+    Doc::intersperse(res, two_newlines)
 }
 
 pub fn pretty_vc_value<'smt, 'ctx>(

@@ -108,7 +108,7 @@ A *counter-example* from Caesar to verification will only be a counter-example f
 
 :::tip
 
-Use the [calculus annotations](./calculi.md) `@wp`, `@wlp`, `@ert` to have Caesar check you apply the `unroll` proof correctly to *verify* a specification.
+Use the [calculus annotations](./approximations#calculus-annotations) `@wp`, `@wlp`, `@ert` to have Caesar check you apply the `unroll` proof correctly to *verify* a specification.
 
 :::
 
@@ -150,7 +150,7 @@ For example, the example program above verifies if you change `k = 11`; however 
 
 :::info
 
-At the moment, the [calculus annotations](./calculi.md) `@wlp`, `@wp`, `@ert` do not support the use of `@unroll` for refutations.
+At the moment, the [calculus annotations](./approximations#calculus-annotations) `@wlp`, `@wp`, `@ert` do not support the use of `@unroll` for refutations.
 They currently require soundness for verification only, therefore they currently can not be used to check the soundness of a refutation.
 
 :::

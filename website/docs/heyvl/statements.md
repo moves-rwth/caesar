@@ -122,7 +122,7 @@ For verification, **while loops need to have [proof rule annotations](../proof-r
 If a while loop does not have a proof rule annotation, Caesar cannot verify the program and will show an error.
 
 The proof rule annotations also implicitly specify whether the loop has least or greatest fixpoint semantics.
-This choice can be made explicit with the [calculus annotations](../proof-rules/calculi.md) on procedures, which we recommend you use.
+This choice can be made explicit with the [calculus annotations](../proof-rules/approximations#calculus-annotations) on procedures, which we recommend you use.
 
 With the **[model checking translation](../model-checking.md), proof rule annotations are not necessary**.
 It allows usage of a *probabilistic model checker* such as [Storm](https://www.stormchecker.org/) for a subset of HeyVL programs.

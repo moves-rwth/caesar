@@ -36,6 +36,7 @@ use crate::smt::funcs::fuel::{
     FuelEncodingOptions, FuelMonoFunctionEncoder, FuelParamFunctionEncoder,
 };
 use crate::smt::funcs::{FunctionEncoder, RecFunFunctionEncoder};
+use crate::smt::pretty_model::PrettyModelDetail;
 use crate::smt::{DepConfig, SmtCtx};
 use crate::tyctx::TyCtx;
 use crate::{
@@ -48,9 +49,7 @@ use crate::{
         solver::{SliceMinimality, SliceSolveOptions, SliceSolver, UnknownHandling},
     },
     smt::{
-        pretty_model::{
-            pretty_model, pretty_slice, pretty_unaccessed, pretty_var_value, pretty_vc_value,
-        },
+        pretty_model::{pretty_model, pretty_slice, pretty_var_value},
         translate_exprs::TranslateExprs,
     },
     version::write_detailed_command_info,
@@ -503,53 +502,83 @@ pub struct SmtVcProveResult<'ctx> {
 }
 
 impl<'ctx> SmtVcProveResult<'ctx> {
+    fn render_doc(doc: Doc) -> String {
+        let mut w = Vec::new();
+        doc.render(120, &mut w).unwrap();
+        String::from_utf8(w).unwrap()
+    }
+
+    fn result_text(&self, proc_soundness: &ProcSoundness) -> String {
+        match &self.prove_result {
+            ProveResult::Proof => {
+                if proc_soundness.sound_proofs {
+                    "Verified".to_string()
+                } else {
+                    "Unsound verification".to_string()
+                }
+            }
+            ProveResult::Counterexample => {
+                if proc_soundness.sound_refutations {
+                    "Counter-example to property found".to_string()
+                } else {
+                    "Counter-example to verification found".to_string()
+                }
+            }
+            ProveResult::Unknown(reason) => format!("Unknown result: SMT solver returned {reason}"),
+        }
+    }
+
     /// Print the result of the query to stdout.
     pub fn print_prove_result<'smt>(
         &mut self,
         server: &mut dyn Server,
         translate: &mut TranslateExprs<'smt, 'ctx>,
         name: &SourceUnitName,
-    ) {
+        proc_soundness: &ProcSoundness,
+    ) -> Result<(), CaesarError> {
         let files = server.get_files_internal().lock().unwrap();
+        let result_text = format!("{}: {}", name, self.result_text(proc_soundness));
         match &mut self.prove_result {
             ProveResult::Proof => {
-                println!("{name}: Verified.");
+                println!("{}", result_text);
                 if let Some(slice_model) = &self.slice_model {
-                    let mut w = Vec::new();
                     let doc = pretty_slice(&files, slice_model);
                     if let Some(doc) = doc {
-                        let doc = doc.nest(4).append(Doc::line_());
-                        doc.render(120, &mut w).unwrap();
-                        println!("    {}", String::from_utf8(w).unwrap());
+                        println!("    {}", Self::render_doc(doc.nest(4).append(Doc::line_())));
                     }
                 }
             }
             ProveResult::Counterexample => {
                 let model = self.model.as_ref().unwrap();
-                println!("{name}: Counter-example to verification found!");
-                let mut w = Vec::new();
+                println!("{}", result_text);
                 let doc = pretty_model(
                     &files,
                     self.slice_model.as_ref().unwrap(),
                     &self.quant_vc,
                     translate,
                     model,
-                );
-                doc.nest(4).render(120, &mut w).unwrap();
-                println!("    {}", String::from_utf8(w).unwrap());
+                    PrettyModelDetail::Full,
+                )
+                .append(Doc::line_());
+                println!("    {}", Self::render_doc(doc.nest(4)));
             }
-            ProveResult::Unknown(reason) => {
-                println!("{name}: Unknown result! (reason: {reason})");
+            ProveResult::Unknown(_) => {
+                println!("{}", result_text);
                 if let Some(slice_model) = &self.slice_model {
                     let doc = pretty_slice(&files, slice_model);
                     if let Some(doc) = doc {
-                        let mut w = Vec::new();
-                        doc.nest(4).render(120, &mut w).unwrap();
-                        println!("    {}", String::from_utf8(w).unwrap());
+                        println!("    {}", Self::render_doc(doc.nest(4)));
                     }
                 }
             }
         }
+        drop(files);
+
+        if let Some(diag) = proc_soundness.soundness_diagnostic(name.span(), &self.prove_result) {
+            server.add_diagnostic(diag)?;
+        }
+
+        Ok(())
     }
 
     /// Emit diagnostics for this check result.
@@ -570,88 +599,63 @@ impl<'ctx> SmtVcProveResult<'ctx> {
             }
         }
 
-        let approximation_labels = proc_soundness.diagnostic_labels();
-        let approx_note = proc_soundness.diagnostic_note();
-
         match &mut self.prove_result {
             ProveResult::Proof => {
-                if !proc_soundness.sound_proofs() {
-                    let msg = if let Some(note) = approx_note {
-                        format!("The verification result might be unsound because {}", note)
-                    } else {
-                        "The verification result might be unsound.".to_string()
-                    };
-
-                    let diag = Diagnostic::new(ReportKind::Warning, span)
-                        .with_message(msg)
-                        .with_labels(approximation_labels);
-
+                if let Some(diag) = proc_soundness.soundness_diagnostic(span, &self.prove_result) {
                     server.add_diagnostic(diag)?;
                 }
             }
             ProveResult::Counterexample => {
                 let model = self.model.as_ref().unwrap();
-                let mut labels = vec![];
-                let files = server.get_files_internal().lock().unwrap();
-                // Print the values of the global variables in the model.
-                let global_decls = translate
+
+                // access values before the rest of model printing so that
+                // unaccessed variables do not include the locals
+                let labels: Vec<Label> = translate
                     .local_idents()
                     .sorted_by_key(|ident| ident.span.start)
                     .map(|ident| translate.ctx.tcx().get(ident).unwrap())
                     .filter(|decl| decl.kind_name() != DeclKindName::Var(VarKind::Slice))
-                    .collect_vec();
-                for decl_kind in global_decls {
-                    if let DeclKind::VarDecl(decl_ref) = &*decl_kind {
-                        let var_decl = decl_ref.borrow();
-                        let ident = var_decl.name;
-                        let value = pretty_var_value(translate, ident, model);
-                        labels.push(Label::new(ident.span).with_message(format!(
-                            "in the cex, {} variable {} is {}",
-                            var_decl.kind,
-                            var_decl.original_name(),
-                            value
-                        )));
-                    }
-                }
-                drop(files);
+                    .filter_map(|decl_kind| {
+                        if let DeclKind::VarDecl(decl_ref) = &*decl_kind {
+                            let var_decl = decl_ref.borrow();
+                            let ident = var_decl.name;
+                            let value = pretty_var_value(translate, ident, model);
+                            Some(Label::new(ident.span).with_message(format!(
+                                "in the cex, {} variable {} is {}",
+                                var_decl.kind,
+                                var_decl.original_name(),
+                                value
+                            )))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
 
-                let mut res: Vec<Doc> = vec![Doc::text("Counter-example to verification found!")];
-
-                // Print the unaccessed definitions.
-                if let Some(unaccessed) = pretty_unaccessed(model) {
-                    res.push(unaccessed);
-                }
-
-                res.push(pretty_vc_value(
+                let files = server.get_files_internal().lock().unwrap();
+                let doc = pretty_model(
+                    &files,
+                    self.slice_model.as_ref().unwrap(),
                     &self.quant_vc,
                     translate,
                     model,
-                    self.slice_model.as_ref().unwrap(),
-                ));
-
-                let mut w = Vec::new();
-                Doc::intersperse(res, Doc::line_().append(Doc::line_()))
-                    .render(120, &mut w)
-                    .unwrap();
-                let text = String::from_utf8(w).unwrap();
+                    PrettyModelDetail::ExcludeSpanned,
+                );
+                drop(files);
 
                 let diagnostic = Diagnostic::new(ReportKind::Error, span)
-                    .with_message(text)
+                    .with_message(Self::render_doc(
+                        Doc::text(self.result_text(proc_soundness))
+                            .append(Doc::line_().append(Doc::line_()))
+                            .append(doc),
+                    ))
                     .with_labels(labels);
-
-                let diagnostic = if proc_soundness.sound_refutations() {
-                    diagnostic
-                } else {
-                    diagnostic
-                        .with_note("This counter-example might be spurious and might not apply to the real program.")
-                        .with_labels(approximation_labels)
-                };
                 server.add_diagnostic(diagnostic)?;
             }
-            ProveResult::Unknown(reason) => {
+            ProveResult::Unknown(_) => {
                 server.add_diagnostic(
                     Diagnostic::new(ReportKind::Error, span)
-                        .with_message(format!("Unknown result: SMT solver returned {reason}"))
+                        .with_message(self.result_text(proc_soundness))
                         .with_note(
                             "For many queries, the query to the SMT solver is inherently undecidable. \
                              There are various tricks to help the SMT solver, which can be found in the Caesar documentation:

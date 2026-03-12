@@ -1,0 +1,110 @@
+.figureCard {
+  margin: 1rem 0;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: var(--ifm-background-surface-color);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  text-align: center;
+}
+
+.figureCard figcaption {
+  margin-top: 0.7rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-emphasis-800);
+  font-size: 0.88rem;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.figureCard figcaption::before {
+  content: "Figure";
+  margin-right: 0.4rem;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.figureCard :global(.theme-mermaid-container),
+.figureCard :global(.theme-mermaid) {
+  width: 100%;
+}
+
+.figureCard :global(svg) {
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+  max-width: none !important;
+}
+
+.latticeFigure,
+.decisionFigure {
+  float: right;
+  margin: 0 0 1rem 1.5rem;
+}
+
+.latticeFigure {
+  width: 100%;
+  max-width: 220px;
+}
+
+.decisionFigure {
+  width: 440px;
+}
+
+.exampleBox {
+  margin: 0.9rem 0 1.2rem;
+  padding: 0.85rem 1rem 0.95rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 10px;
+  background: color-mix(
+    in srgb,
+    var(--ifm-background-surface-color) 98%,
+    var(--ifm-color-primary) 2%
+  );
+}
+
+.exampleBoxTitle {
+  margin: 0 0 0.6rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ifm-color-emphasis-800);
+}
+
+.fullSpectrumCode {
+  --docusaurus-highlighted-code-line-bg: rgba(20, 108, 89, 0.12);
+}
+
+.fullSpectrumCode :global(.theme-code-block) {
+  margin: 0.6rem auto 0;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.hoverHint {
+  border-bottom: 1px dotted var(--ifm-color-emphasis-700);
+  cursor: help;
+  text-decoration: none;
+}
+
+[data-theme='dark'] .fullSpectrumCode {
+  --docusaurus-highlighted-code-line-bg: rgba(79, 221, 191, 0.16);
+}
+
+@media (max-width: 996px) {
+  .decisionFigure,
+  .latticeFigure {
+    float: none;
+    margin: 0 auto 1rem;
+    max-width: 100%;
+  }
+
+  .decisionFigure {
+    width: 100%;
+  }
+}

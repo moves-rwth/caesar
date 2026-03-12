@@ -22,6 +22,7 @@ They are not verified by Caesar, but can be called inside other procedures.
 The following procedure named `maybe_increment` increments the value of the input parameter `init_x` by one with probability 50% and leaves it unchanged with 50% probability, returning the result in output parameter `x`.
 
 ```heyvl
+@wp
 proc maybe_increment(init_x: UInt) -> (x: UInt)
     pre init_x + 0.5
     post x
@@ -41,17 +42,18 @@ $$
 
 Let us decompose the example into its parts:
 
- 1. **Keyword `proc`**: We verify that $\mathtt{init\_x} + 0.5 \leq \mathbb{E}(\mathtt{x})$ holds, i.e. the expected value of `x` after executing `maybe_increment` is at least `init_x + 0.5`.
+ 1. **Calculus Annotation `@wp` (optional)**: Fixes the calculus for this (co)proc; you can also use `@wlp` or `@ert` (see [Calculus Annotations](#calculus-annotations)).
+ 2. **Keyword `proc`**: We verify that $\mathtt{init\_x} + 0.5 \leq \mathbb{E}(\mathtt{x})$ holds, i.e. the expected value of `x` after executing `maybe_increment` is at least `init_x + 0.5`.
     - If we used the `coproc` keyword instead, we would verify $\mathtt{init\_x} + 0.5 \geq \mathbb{E}(\mathtt{x})$ (*upper* instead of *lower* bounds).
- 2. We have one **input parameter** `init_x` of type [`UInt`](../stdlib/numbers.md#uint).
+ 3. We have one **input parameter** `init_x` of type [`UInt`](../stdlib/numbers.md#uint).
     - Input parameters may not be modified in the program.
- 3. We have one **output parameter** `x` of type [`UInt`](../stdlib/numbers.md#uint).
+ 4. We have one **output parameter** `x` of type [`UInt`](../stdlib/numbers.md#uint).
     - There may be multiple parameters (input and output), which can be separated by commas (e.g. `init_x: UInt, init_y: UInt`).
- 4. The `pre` declares the **pre-expectation** `init_x + 0.5`. It is evaluated in the *initial state* (when calling the proc). This is why it is called "pre" (= before running the proc).
+ 5. The `pre` declares the **pre-expectation** `init_x + 0.5`. It is evaluated in the *initial state* (when calling the proc). This is why it is called "pre" (= before running the proc).
     - The `pre` is an expression of type [`EUReal`](../stdlib/numbers.md#eureal) over the input parameters.
- 5. The `post` is the **post-expectation** `x` and evaluated in the final states of the proc (post = after running the proc). We always compare its expected value against the pre.
+ 6. The `post` is the **post-expectation** `x` and evaluated in the final states of the proc (post = after running the proc). We always compare its expected value against the pre.
     - The `post` is an expression of type [`EUReal`](../stdlib/numbers.md#eureal) over the input and output parameters.
- 6. The **body of the proc** assigns `init_x` to `x`. We then do a [probabilistic coin flip](../stdlib/distributions.md#symbolic-with-probabilities) and assign `true` to `prob_choice` with probability `0.5` (and `false` with probability `0.5`). It determines the expected value ($\mathbb{E}$) we look at.
+ 7. The **body of the proc** assigns `init_x` to `x`. We then do a [probabilistic coin flip](../stdlib/distributions.md#symbolic-with-probabilities) and assign `true` to `prob_choice` with probability `0.5` (and `false` with probability `0.5`). It determines the expected value ($\mathbb{E}$) we look at.
     - See [documentation on statements](./statements.md) for more information.
     - [The body is optional](#procs-without-body).
 
@@ -216,6 +218,16 @@ The specification is optional; if it's not provided, Caesar will add a default s
 
 The defaults correspond to the empty conjunction ($\bigwedge \emptyset = \mathrm{true}$) and empty disjunction ($\bigvee \emptyset = \mathrm{false}$).
 The quantitative setting behaves the same, we have $\inf \emptyset = \infty$ and $\sup \emptyset = 0$.
+
+### Calculus Annotations {#calculus-annotations}
+
+Calculus annotations are optional. You can place `@wp`, `@wlp`, or `@ert` above a `proc`/`coproc` declaration.
+
+The annotation fixes the intended loop/recursion semantics of the (co)proc and enables additional soundness checks for proof-rule usage.
+`@wp` and `@ert` use least fixed-point semantics (nontermination contributes `0`), while `@wlp` uses greatest fixed-point semantics in the one-bounded setting (nontermination contributes `1`).
+This is only relevant when proof rules are involved, i.e. when loops or recursion are present in the program.
+
+See [Soundness of Proof Rules](../proof-rules/approximations#calculus-annotations) for the full details on the soundness guarantees and checks provided by calculus annotations.
 
 ### Procedures Without a Body {#procs-without-body}
 

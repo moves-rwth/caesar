@@ -86,15 +86,18 @@ impl Encoding for PASTAnnotation {
         Ok(())
     }
 
-    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
-        matches!(calculus.calculus_type, CalculusType::Ert) && direction == Direction::Up
-    }
-
     fn get_approximation(
         &self,
         fixpoint_semantics: FixpointSemanticsKind,
         inner_approximation_kind: ApproximationKind,
+        calculus: Option<Calculus>,
     ) -> ApproximationKind {
+        // @past is only sound with @ert; any other explicit calculus yields unknown.
+        if let Some(c) = calculus {
+            if !matches!(c.calculus_type, CalculusType::Ert) {
+                return ApproximationKind::UNKNOWN;
+            }
+        }
         match (fixpoint_semantics, inner_approximation_kind) {
             (FixpointSemanticsKind::LeastFixedPoint, ApproximationKind::EXACT) => {
                 ApproximationKind::EXACT
@@ -103,11 +106,12 @@ impl Encoding for PASTAnnotation {
         }
     }
 
-    fn default_fixpoint_semantics(&self, direction: Direction) -> FixpointSemanticsKind {
-        match direction {
-            Direction::Up => FixpointSemanticsKind::LeastFixedPoint,
-            Direction::Down => FixpointSemanticsKind::GreatestFixedPoint,
-        }
+    fn default_fixpoint_semantics(
+        &self,
+        _direction: Direction,
+        _args: &[Expr],
+    ) -> FixpointSemanticsKind {
+        FixpointSemanticsKind::LeastFixedPoint
     }
 
     fn transform(
