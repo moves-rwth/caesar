@@ -14,6 +14,7 @@
 use std::rc::Rc;
 
 use ariadne::ReportKind;
+use num::One;
 use replace_with::replace_with_or_abort;
 use tracing::{instrument, Level};
 
@@ -90,6 +91,24 @@ impl<'tcx> StmtSliceVisitor<'tcx> {
             selector: SelectionBuilder::new(selection),
             direction: DirectionTracker::new(direction),
             slice_stmts: SliceStmts::default(),
+        }
+    }
+
+    /// Return the effect of reductive statements (which decrease the `vp`),
+    /// based on the current direction.
+    fn reductive_effect(&self) -> SliceEffect {
+        match *self.direction {
+            Direction::Down => SliceEffect::Discordant,
+            Direction::Up => SliceEffect::Concordant,
+        }
+    }
+
+    /// Return the effect of extensive statements (which increase the `vp`),
+    /// based on the current direction.
+    fn extensive_effect(&self) -> SliceEffect {
+        match *self.direction {
+            Direction::Down => SliceEffect::Concordant,
+            Direction::Up => SliceEffect::Discordant,
         }
     }
 
@@ -241,11 +260,7 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 }
             }
             StmtKind::Assume(dir, expr) => {
-                let effect = if *self.direction == *dir {
-                    SliceEffect::Concordant
-                } else {
-                    SliceEffect::Discordant
-                };
+                let effect = self.extensive_effect();
                 if !self.selector.should_slice(effect) {
                     return Ok(());
                 }
@@ -253,11 +268,7 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 self.mk_top_toggle(expr, *dir, slice_var)
             }
             StmtKind::Assert(dir, expr) => {
-                let effect = if *self.direction == *dir {
-                    SliceEffect::Discordant
-                } else {
-                    SliceEffect::Concordant
-                };
+                let effect = self.reductive_effect();
                 if !self.selector.should_slice(effect) {
                     return Ok(());
                 }
@@ -265,10 +276,7 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 self.mk_top_toggle(expr, *dir, slice_stmt)
             }
             StmtKind::Tick(expr) if self.selector.should_slice_ticks() => {
-                let effect = match *self.direction {
-                    Direction::Down => SliceEffect::Concordant,
-                    Direction::Up => SliceEffect::Discordant,
-                };
+                let effect = self.extensive_effect();
                 if !self.selector.should_slice(effect) {
                     return Ok(());
                 }
@@ -277,10 +285,23 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 self.mk_top_toggle(expr, Direction::Up, slice_var)
             }
             StmtKind::Weigh(expr) if self.selector.should_slice_ticks() => {
-                let effect = match *self.direction {
-                    Direction::Down => SliceEffect::Concordant,
-                    Direction::Up => SliceEffect::Discordant,
+                // weigh statements are extensive if the weight is >= 1, and
+                // reductive if the weight is <= 1. for weights in between, we
+                // just treat them as ambiguous. we just implement this for
+                // constant weights; for non-constant weights, we treat them as ambiguous.
+                //
+                // note: for weight = 1, we could return both concordant and
+                // discordant effects, but our current modeling doesn't allow
+                // this.
+                let effect = match &expr.kind {
+                    ExprKind::Lit(lit) => match lit.node.as_eureal() {
+                        Some(eureal) if eureal >= One::one() => self.extensive_effect(),
+                        Some(eureal) if eureal <= One::one() => self.reductive_effect(),
+                        _ => SliceEffect::Ambiguous,
+                    },
+                    _ => SliceEffect::Ambiguous,
                 };
+
                 if !self.selector.should_slice(effect) {
                     return Ok(());
                 }
@@ -292,10 +313,7 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
             }
             StmtKind::Demonic(lhs, rhs) => {
                 let dir = *self.direction;
-                let effect = match dir {
-                    Direction::Down => SliceEffect::Discordant,
-                    Direction::Up => SliceEffect::Concordant,
-                };
+                let effect = self.reductive_effect();
                 if !self.selector.should_slice(effect) {
                     return Ok(());
                 }
@@ -344,10 +362,7 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
             }
             StmtKind::Angelic(lhs, rhs) => {
                 let dir = *self.direction;
-                let effect = match dir {
-                    Direction::Down => SliceEffect::Concordant,
-                    Direction::Up => SliceEffect::Discordant,
-                };
+                let effect = self.extensive_effect();
                 if !self.selector.should_slice(effect) {
                     return Ok(());
                 }

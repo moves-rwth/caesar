@@ -2,7 +2,8 @@
 
 use std::{fmt, str::FromStr};
 
-use num::{BigRational, BigUint, One, Zero};
+use num::{BigInt, BigRational, BigUint, One, Zero};
+use z3rro::eureal::ConcreteEUReal;
 
 use crate::{
     pretty::{parens_group, pretty_list, Doc, SimplePretty},
@@ -395,6 +396,20 @@ impl LitKind {
             LitKind::Frac(frac) => frac.is_zero(),
             LitKind::Bool(b) => !b,
             _ => false,
+        }
+    }
+
+    /// If this value can be cast into an extended unsigned real (i.e. `UInt`,
+    /// `Frac`, or `Infinity`), return the corresponding value. Otherwise,
+    /// return `None`.
+    pub fn as_eureal(&self) -> Option<ConcreteEUReal> {
+        match self {
+            LitKind::UInt(value) => Some(ConcreteEUReal::Real(BigRational::from_integer(
+                BigInt::from(value.clone()),
+            ))),
+            LitKind::Frac(frac) => Some(ConcreteEUReal::Real(frac.clone())),
+            LitKind::Infinity => Some(ConcreteEUReal::Infinity),
+            _ => None,
         }
     }
 }
