@@ -11,7 +11,7 @@ use crate::{
         DeclKind, DeclRef, Diagnostic, DomainDecl, DomainSpec, Expr, ExprKind, FuncDecl, Ident,
         Label, ProcDecl, Span, Stmt, StmtKind, Symbol, TyKind, VarDecl, VarKind,
     },
-    scope_map::ScopeMap,
+    scope_map::{ScopeEntry, ScopeMap},
     tyctx::TyCtx,
 };
 
@@ -215,18 +215,24 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
                 self.with_subscope(|this| this.visit_block(block))
             }
             StmtKind::Annotation(_, ref mut ident, ref mut args, ref mut inner_stmt) => {
-                self.visit_ident(ident)?;
+                // Resolve the annotation ident to the declaration
+                // Here we only look through annotation declarations therefore other declarations do not shadow annotations
+                let intrin = self.scope_map.find_map(&ident.name, |entry| match entry {
+                    ScopeEntry::Value(v) => self.tcx.get(*v).and_then(|decl| match decl.as_ref() {
+                        DeclKind::AnnotationDecl(intrin) => Some(intrin.clone()),
+                        _ => None,
+                    }),
+                    ScopeEntry::Deleted => None,
+                });
 
-                match self.tcx.get(*ident).as_deref() {
-                    None => {} // Declaration not found
-                    Some(DeclKind::AnnotationDecl(intrin)) => {
-                        let intrin = intrin.clone(); // clone so we can mutably borrow self
+                match intrin {
+                    Some(intrin) => {
+                        *ident = intrin.name(); // Resolve to the declaration ident
                         intrin.resolve(self, s.span, args)?;
+                        self.with_subscope(|this| this.visit_stmt(inner_stmt))
                     }
-                    _ => {} // Not an annotation declaration
+                    _ => Err(ResolveError::NotFound(*ident)),
                 }
-
-                self.with_subscope(|this| this.visit_stmt(inner_stmt))
             }
             StmtKind::Label(ident) => self.declare(DeclKind::LabelDecl(*ident)),
             _ => walk_stmt(self, s),
@@ -306,4 +312,47 @@ fn resolve_builtin_ty(ident: Ident) -> Option<TyKind> {
         _ => return None,
     };
     Some(kind)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::driver::commands::verify::verify_test;
+
+    #[test]
+    fn test_issue_101_invariant_annotation_not_shadowed_by_local_name() {
+        let source = r#"
+        coproc main() -> () {
+            var invariant: EUReal = 0
+            @invariant(invariant)
+            while true {
+                invariant = invariant + 1
+            }
+        }
+        "#;
+        let res = verify_test(source).0;
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_issue_102_invariant_annotation_with_undeclared_function_reports_undeclared() {
+        let source = r#"
+        domain Invariants {
+            func invariant(x: Bool): EUReal = 0
+        }
+
+        coproc main() -> () {
+            var declared: Bool = true
+            @invariant(undeclared(declared))
+            while true {
+                declared = true
+            }
+        }
+        "#;
+        let res = verify_test(source).0;
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .to_string()
+            .contains("Name `undeclared` is not declared"));
+    }
 }

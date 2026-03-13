@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 /// An entry in the map of at each scope level. Either there is a value, or we
 /// explicitly remember that the entry has been deleted on the current level.
 #[derive(Debug)]
-enum ScopeEntry<V> {
+pub enum ScopeEntry<V> {
     Value(V),
     Deleted,
 }
@@ -105,23 +105,43 @@ where
         }
     }
 
+    /// Iterate over entries with key `key` from inner to outer scope and return
+    /// the first mapped result that is [`Some`].
+    pub fn find_map<Q, T>(
+        &self,
+        key: &Q,
+        mut f: impl FnMut(&ScopeEntry<V>) -> Option<T>,
+    ) -> Option<T>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        debug_assert!(!self.scopes.is_empty());
+        for map in self.scopes.iter().rev() {
+            if let Some(entry) = map.get(key) {
+                if let Some(res) = f(entry) {
+                    return Some(res);
+                }
+            }
+        }
+        None
+    }
+
     /// Retrieve an element from the map.
     pub fn get<Q>(&self, key: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
         Q: Hash + Eq,
     {
-        debug_assert!(!self.scopes.is_empty());
-        let entry = self
-            .scopes
-            .iter()
-            .rev()
-            .flat_map(|map| map.get(key))
-            .next()?;
-        match entry {
-            ScopeEntry::Value(v) => Some(v),
-            ScopeEntry::Deleted => None,
+        for map in self.scopes.iter().rev() {
+            if let Some(entry) = map.get(key) {
+                return match entry {
+                    ScopeEntry::Value(v) => Some(v),
+                    ScopeEntry::Deleted => None,
+                };
+            }
         }
+        None
     }
 
     /// Does this map contain the given key?
