@@ -28,6 +28,7 @@ use crate::{
         item::{Item, SourceUnitName},
         smt_proof::SmtVcProveResult,
     },
+    proof_rules::calculus::ProcSoundness,
     servers::{FileStatus, FileStatusType},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
@@ -427,15 +428,19 @@ impl Server for LspServer {
         name: &SourceUnitName,
         result: &mut SmtVcProveResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
+        proc_soundness: &ProcSoundness,
     ) -> Result<(), ServerError> {
-        result.emit_diagnostics(name.span(), self, translate)?;
+        result.emit_diagnostics(name.span(), self, translate, proc_soundness)?;
         let statuses = &mut self
             .file_statuses
             .entry(name.span().file)
             .or_default()
             .verify_statuses;
 
-        statuses.update_status(name, VerifyStatus::from_prove_result(&result.prove_result));
+        statuses.update_status(
+            name,
+            VerifyStatus::from_prove_result(&result.prove_result, proc_soundness),
+        );
 
         // If every procedure in the file has been verified, we can set the file status type to Done.
         if statuses

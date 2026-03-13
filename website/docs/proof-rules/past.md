@@ -5,7 +5,7 @@ sidebar_position: 6
 # Positive Almost-Sure Termination
 
 _Positive almost-sure termination_ (PAST for short) means that a program [terminates almost-surely](ast) and the expected runtime to termination is finite.
-In terms of the [expected runtime calculus](calculi), this means that `ert[C](0) < ∞` holds for a program `C`.
+In terms of the [expected runtime calculus](./approximations#calculus-annotations), this means that `ert[C](0) < ∞` holds for a program `C`.
 
 In Caesar, there are several ways to prove PAST:
 

@@ -18,9 +18,8 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{
-        tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
-    },
+    intrinsic::annotations::{tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus},
+    proof_rules::{calculus::ApproximationKind, FixpointSemanticsKind},
     slicing::{wrap_with_error_message, wrap_with_success_message},
     tyctx::TyCtx,
 };
@@ -85,12 +84,28 @@ impl Encoding for InvariantAnnotation {
         resolve.visit_exprs(args)
     }
 
-    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
-        matches!(
-            (&calculus.calculus_type, direction),
-            (CalculusType::Wp | CalculusType::Ert, Direction::Up)
-                | (CalculusType::Wlp, Direction::Down)
-        )
+    fn get_approximation(
+        &self,
+        fixpoint_semantics: FixpointSemanticsKind,
+        inner_approximation_kind: ApproximationKind,
+        _calculus: Option<Calculus>,
+    ) -> ApproximationKind {
+        let approx = match fixpoint_semantics {
+            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::OVER,
+            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::UNDER,
+        };
+        approx & inner_approximation_kind
+    }
+
+    fn default_fixpoint_semantics(
+        &self,
+        direction: Direction,
+        _args: &[Expr],
+    ) -> FixpointSemanticsKind {
+        match direction {
+            Direction::Up => FixpointSemanticsKind::LeastFixedPoint,
+            Direction::Down => FixpointSemanticsKind::GreatestFixedPoint,
+        }
     }
 
     fn transform(
@@ -169,12 +184,28 @@ impl Encoding for KIndAnnotation {
         Ok(())
     }
 
-    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
-        matches!(
-            (&calculus.calculus_type, direction),
-            (CalculusType::Wp | CalculusType::Ert, Direction::Up)
-                | (CalculusType::Wlp, Direction::Down)
-        )
+    fn get_approximation(
+        &self,
+        fixpoint_semantics: FixpointSemanticsKind,
+        inner_approximation_kind: ApproximationKind,
+        _calculus: Option<Calculus>,
+    ) -> ApproximationKind {
+        let approx = match fixpoint_semantics {
+            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::OVER,
+            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::UNDER,
+        };
+        approx & inner_approximation_kind
+    }
+
+    fn default_fixpoint_semantics(
+        &self,
+        direction: Direction,
+        _args: &[Expr],
+    ) -> FixpointSemanticsKind {
+        match direction {
+            Direction::Up => FixpointSemanticsKind::LeastFixedPoint,
+            Direction::Down => FixpointSemanticsKind::GreatestFixedPoint,
+        }
     }
 
     fn transform(

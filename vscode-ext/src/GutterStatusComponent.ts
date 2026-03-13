@@ -6,10 +6,9 @@ import { DocumentMap, Verifier } from "./Verifier";
 import { ConfigurationConstants } from "./constants";
 import { TextDocumentIdentifier } from "vscode-languageclient";
 
-
+const GUTTER_ICONS_PATH = "images/gutter-icons";
 const FRAME_COUNT = 2; // Number of frames in the animation
 const FRAME_INTERVAL = 300; // Interval between frames in milliseconds
-const ANIMATION_PATH = "images/gutterAnimation/"; // Path to the animation frames
 const THEME_SENSITIVE = false;
 const ANIMATION_NAME = "laurel"; // Name of the animation
 const ANIMATION_EXT = "svg"; // Extension of the animation frames
@@ -23,6 +22,7 @@ export class GutterStatusComponent {
     private gutterAnimator: GutterAnimator;
 
     private verifyDecType: vscode.TextEditorDecorationType;
+    private refutedDecType: vscode.TextEditorDecorationType;
     private failedDecType: vscode.TextEditorDecorationType;
     private unknownDecType: vscode.TextEditorDecorationType;
     private timeoutDecType: vscode.TextEditorDecorationType;
@@ -30,10 +30,11 @@ export class GutterStatusComponent {
     constructor(verifier: Verifier) {
 
         // Load the fixed decoration types
-        this.verifyDecType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath('images/verified.png') });
-        this.failedDecType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath('images/failed.png') });
-        this.unknownDecType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath('images/unknown.png') });
-        this.timeoutDecType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath('images/timeout.png') });
+        this.verifyDecType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath(`${GUTTER_ICONS_PATH}/verified.svg`) });
+        this.refutedDecType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath(`${GUTTER_ICONS_PATH}/refuted.svg`) });
+        this.failedDecType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath(`${GUTTER_ICONS_PATH}/error.svg`) });
+        this.unknownDecType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath(`${GUTTER_ICONS_PATH}/unknown.svg`) });
+        this.timeoutDecType = vscode.window.createTextEditorDecorationType({ gutterIconSize: "contain", gutterIconPath: verifier.context.asAbsolutePath(`${GUTTER_ICONS_PATH}/timeout.svg`) });
 
         // render if enabled
         this.enabled = GutterInformationViewConfig.get(ConfigurationConstants.showGutterIcons);
@@ -49,8 +50,7 @@ export class GutterStatusComponent {
         if (THEME_SENSITIVE) {
             // Load the animation frames
             for (const theme of ["light", "dark"]) {
-                const frameDecs = createFrameDecorations(`${ANIMATION_PATH}/${ANIMATION_NAME}-${theme}-`, ANIMATION_EXT, FRAME_COUNT, verifier);
-
+                const frameDecs = createFrameDecorations(`${GUTTER_ICONS_PATH}/${ANIMATION_NAME}-${theme}-`, ANIMATION_EXT, FRAME_COUNT, verifier);
                 this.gutterAnimator.loadAnimationFrames(`${ANIMATION_NAME}-${theme}`, frameDecs);
 
                 // Set the initial animation
@@ -58,7 +58,7 @@ export class GutterStatusComponent {
             }
         }
         else {
-            const frameDecs = createFrameDecorations(`${ANIMATION_PATH}/${ANIMATION_NAME}-`, ANIMATION_EXT, FRAME_COUNT, verifier);
+            const frameDecs = createFrameDecorations(`${GUTTER_ICONS_PATH}/${ANIMATION_NAME}-`, ANIMATION_EXT, FRAME_COUNT, verifier);
             this.gutterAnimator.loadAnimationFrames(ANIMATION_NAME, frameDecs);
 
             // Set the initial animation
@@ -132,6 +132,7 @@ export class GutterStatusComponent {
                 }
 
                 const verifiedProcs: vscode.DecorationOptions[] = [];
+                const refutedProcs: vscode.DecorationOptions[] = [];
                 const failedProcs: vscode.DecorationOptions[] = [];
                 const unknownProcs: vscode.DecorationOptions[] = [];
 
@@ -160,6 +161,9 @@ export class GutterStatusComponent {
                             case VerifyResult.Failed:
                                 failedProcs.push({ range: gutterRange });
                                 break;
+                            case VerifyResult.Refuted:
+                                refutedProcs.push({ range: gutterRange });
+                                break;
                             case VerifyResult.Unknown:
                                 unknownProcs.push({ range: gutterRange });
                                 break;
@@ -171,6 +175,7 @@ export class GutterStatusComponent {
                 loadingEditorRangeMap.set(editor, todoProcs);
 
                 editor.setDecorations(this.verifyDecType, verifiedProcs);
+                editor.setDecorations(this.refutedDecType, refutedProcs);
                 editor.setDecorations(this.failedDecType, failedProcs);
                 editor.setDecorations(this.unknownDecType, unknownProcs);
 
@@ -187,7 +192,7 @@ class GutterAnimator {
     private intervalSpeed: number;
 
     private editorRangeMap = new Map<vscode.TextEditor, vscode.Range[]>();
-    private animationTypes = new Map<string, vscode.TextEditorDecorationType[]>();
+    private framesByAnimation = new Map<string, vscode.TextEditorDecorationType[]>();
     private currentAnimationName = "";
 
 
@@ -196,18 +201,18 @@ class GutterAnimator {
     }
 
     loadAnimationFrames(name: string, frameDecorations: vscode.TextEditorDecorationType[]) {
-        this.animationTypes.set(name, frameDecorations);
+        this.framesByAnimation.set(name, frameDecorations);
     }
 
-    getCurrentAnimationFrames(): vscode.TextEditorDecorationType[] {
-        return this.animationTypes.get(this.currentAnimationName) || [];
+    get currentAnimationFrames(): vscode.TextEditorDecorationType[] {
+        return this.framesByAnimation.get(this.currentAnimationName) || [];
     }
 
     startAnimation() {
         if (this.interval === undefined) {
             this.frame = 0;
             this.interval = setInterval(() => {
-                this.frame = (this.frame + 1) % this.getCurrentAnimationFrames().length;
+                this.frame = (this.frame + 1) % this.currentAnimationFrames.length;
                 this.render();
             }, this.intervalSpeed);
         }
@@ -228,7 +233,7 @@ class GutterAnimator {
     }
 
     clearAnimation() {
-        for (const [_frame, decType] of this.getCurrentAnimationFrames().entries()) {
+        for (const [_frame, decType] of this.currentAnimationFrames.entries()) {
             for (const [editor, _ranges] of this.editorRangeMap) {
                 editor.setDecorations(decType, []);
             }
@@ -258,7 +263,7 @@ class GutterAnimator {
             return;
         }
         // for each decoration type in the map
-        for (const [frame, decType] of this.getCurrentAnimationFrames().entries()) {
+        for (const [frame, decType] of this.currentAnimationFrames.entries()) {
             for (const [editor, ranges] of this.editorRangeMap) {
                 // if the frame is the current frame, set the decoration
                 // else clear the decoration

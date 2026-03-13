@@ -53,7 +53,7 @@ You can either use Caesar's [automatic *Storm* backend](#caesars-storm-backend) 
 
 Caesar will assign arbitrary initial values to *output parameters* and assumes that they are never read before they are written to.
 To disable this or learn more, read the section on [initial values of output parameters](#initial-values-of-output-parameters).
-In addition, note that we always [use least-fixed point semantics for loops in the JANI translation](#loop-semantics), therefore [`wlp` semantics](./proof-rules/calculi.md) is not supported.
+In addition, note that we always [use least-fixed point semantics for loops in the JANI translation](#loop-semantics), therefore [`wlp` semantics](./proof-rules/approximations#calculus-annotations) is not supported.
 
 The generated Markov chain model is *finite-state* and has a single initial state (no input parameters).
 You'll usually want to maintain these restrictions when using a model checker.
@@ -289,16 +289,16 @@ This behavior can be disabled with the `--jani-uninit-outputs` option so that ou
 
 In the JANI translation, while loops are always assumed to have **least fixed-point semantics** when model-checking.[^2]
 That means we just accumulate total expected rewards over all terminating executions in the Markov chain.
-This corresponds to [wp/ert](./proof-rules/calculi.md) semantics.
+This corresponds to [wp/ert](./proof-rules/approximations#calculus-annotations) semantics.
 
 :::
 
 Notice that in `proc`s, this is different from the default behavior of Caesar's [proof rules such as induction](./proof-rules/induction.md).
 They would assume greatest fixed-point (wlp) semantics in `proc`s.
-We recommend always adding the [`@wp` or `@ert` annotations](./proof-rules/calculi.md) to your `proc`/`coproc`.
+We recommend always adding the [`@wp` or `@ert` annotations](./proof-rules/approximations#calculus-annotations) to your `proc`/`coproc`.
 They instruct Caesar to enforce that sound proof rules for least fixed-point semantics are being used.
 
-If you want [one-bounded wlp semantics](./proof-rules/calculi.md) (greatest fixed-points), then you can use the generated property `diverge_prob` to obtain the probability of divergence.
+If you want [one-bounded wlp semantics](./proof-rules/approximations#calculus-annotations) (greatest fixed-points), then you can use the generated property `diverge_prob` to obtain the probability of divergence.
 Then the result should be the sum of the `reward` and `diverge_prob` properties (Storm: `-jprop reward,diverge_prob`).[^3]
 
 If you want *unbounded* greatest fixed-point semantics, then you can use the generated property `can_diverge` to check whether there is a diverging path.

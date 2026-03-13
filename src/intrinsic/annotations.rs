@@ -12,8 +12,7 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    proof_rules::calculus::RecursiveProcBlame,
-    proof_rules::Encoding,
+    proof_rules::{calculus::RecursiveProcBlame, Encoding, FixpointSemanticsKind},
     slicing::selection::SliceAnnotation,
     tyctx::TyCtx,
 };
@@ -52,12 +51,6 @@ pub enum AnnotationError {
 pub enum AnnotationUnsoundnessError {
     NotTerminator {
         span: Span,
-        enc_name: Ident,
-    },
-    CalculusEncodingMismatch {
-        direction: Direction,
-        span: Span,
-        calculus_name: Ident,
         enc_name: Ident,
     },
     CalculusCallMismatch {
@@ -125,16 +118,6 @@ impl AnnotationUnsoundnessError {
                         "There must not be any statements after this annotated statement (and the annotated statement must not be nested in a block).",
                     ))
             }
-            AnnotationUnsoundnessError::CalculusEncodingMismatch{direction, span, calculus_name, enc_name } => {
-                Diagnostic::new(ReportKind::Error, span)
-                    .with_message(format!(
-                        "In {}s, the `{}` calculus does not support the `{}` proof rule.",
-                        direction.prefix("proc"), calculus_name.name, enc_name.name
-                    ))
-                    .with_label(Label::new(span).with_message(
-                        "The calculus, proof rule, and direction are incompatible.",
-                    ))
-            }
             AnnotationUnsoundnessError::CalculusCallMismatch{span,context_calculus,call_calculus} => {
                 Diagnostic::new(ReportKind::Error, span)
                     .with_message(format!(
@@ -175,11 +158,27 @@ pub struct Calculus {
     pub calculus_type: CalculusType,
 }
 
+impl std::fmt::Display for Calculus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CalculusType {
     Wp,
     Wlp,
     Ert,
+}
+
+impl std::fmt::Display for CalculusType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CalculusType::Wp => write!(f, "wp"),
+            CalculusType::Wlp => write!(f, "wlp"),
+            CalculusType::Ert => write!(f, "ert"),
+        }
+    }
 }
 
 impl CalculusType {
@@ -190,6 +189,13 @@ impl CalculusType {
                 | (CalculusType::Wp, Direction::Up)
                 | (CalculusType::Ert, Direction::Up)
         )
+    }
+
+    pub fn to_fixed_point_semantics_kind(self) -> FixpointSemanticsKind {
+        match self {
+            CalculusType::Wp | CalculusType::Ert => FixpointSemanticsKind::LeastFixedPoint,
+            CalculusType::Wlp => FixpointSemanticsKind::GreatestFixedPoint,
+        }
     }
 }
 

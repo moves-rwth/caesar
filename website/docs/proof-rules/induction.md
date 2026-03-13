@@ -86,7 +86,7 @@ We recommend reading the [*Latticed k-induction* paper](https://link.springer.co
 
 :::tip
 
-Use the [calculus annotations](./calculi.md) `@wp`, `@wlp`, `@ert` to have Caesar check that the applied proof rules are sound with respect to the semantics of the chosen calculus.
+Use the [calculus annotations](./approximations#calculus-annotations) `@wp`, `@wlp`, `@ert` to have Caesar check that the applied proof rules are sound with respect to the semantics of the chosen calculus.
 Then you don't have to worry about this section yourself.
 
 :::

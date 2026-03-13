@@ -22,6 +22,7 @@ use crate::{
         quant_proof::lower_quant_prove_task,
         smt_proof::{run_smt_prove_task, set_global_z3_params},
     },
+    proof_rules::calculus::get_soundness_map,
     resource_limits::{await_with_resource_limits, LimitError, LimitsRef},
     servers::{Server, SharedServer},
 };
@@ -186,6 +187,8 @@ fn verify_files_main(
     // based on the provided calculus annotations
     module.check_calculus_rules(&mut tcx)?;
 
+    let soundness_map = get_soundness_map(&mut module, &mut tcx);
+
     // Desugar encodings from source units.
     module.apply_encodings(&mut tcx, server)?;
 
@@ -215,7 +218,14 @@ fn verify_files_main(
         .items
         .into_iter()
         .flat_map(|item| {
-            item.flat_map(|unit| CoreVerifyTask::from_source_unit(unit, &mut depgraph))
+            let soundness_blame = soundness_map.get(item.name()).cloned().unwrap_or_default();
+            item.flat_map(|unit| {
+                let core_verify_task = CoreVerifyTask::from_source_unit(unit, &mut depgraph);
+                core_verify_task.map(|mut task| {
+                    task.proc_soundness = soundness_blame.clone();
+                    task
+                })
+            })
         })
         .collect();
 
@@ -254,6 +264,8 @@ fn verify_files_main(
         // (depending on options).
         let vc_is_valid = lower_quant_prove_task(options, &limits_ref, &mut tcx, name, vc_expr)?;
 
+        let soundness_blame = &verify_unit.proc_soundness;
+
         // Running the SMT prove task: translating to Z3, running the solver.
         let result = run_smt_prove_task(
             options,
@@ -264,6 +276,7 @@ fn verify_files_main(
             server,
             slice_vars,
             vc_is_valid,
+            soundness_blame,
         )?;
 
         // Handle reasons to stop the verifier.

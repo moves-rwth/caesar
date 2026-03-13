@@ -160,7 +160,7 @@ fn is_zero_lit(e: &Expr) -> bool {
     }
 }
 
-fn is_one_lit(e: &Expr) -> bool {
+pub fn is_one_lit(e: &Expr) -> bool {
     match &deref_cast(e).kind {
         ExprKind::Lit(lit) => match &lit.node {
             LitKind::UInt(v) => v.is_one(),

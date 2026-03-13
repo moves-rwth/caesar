@@ -7,11 +7,11 @@ sidebar_position: 3
 # Loop Unrolling and Bounded Model Checking
 
 *Loop unrolling* replaces a `while` loop by a fixed number of iterations `k` and a `terminator` expectation to be used if more than `k` iterations run.
-For example, it *under-approximates* least fixed-point semantics (`wp` and `ert`, `k = 0`):
+For example, it *under-approximates* least fixed-point semantics (`wp` and `ert`, using terminator `0`):
 $$
     \mathrm{vc}\llbracket \texttt{@unroll(k, 0) while G \{ B \}} \rrbracket \sqsubseteq \mathrm{wp}\llbracket \texttt{while G \{ B \}} \rrbracket
 $$
-This simple proof rule does not require invariants, just a choice of how many loop iterations to be done.
+This simple proof rule does not require invariants, just a choice of how many loop iterations to perform.
 
 There are three main applications of loop unrolling:
 1. [**Approximating loop semantics**](#approximation): Approximating the expected value of loops to gain insight into the unbounded semantics.
@@ -44,8 +44,8 @@ By [Kleene's fixed-point theorem](https://en.wikipedia.org/wiki/Kleene_fixed-poi
 
 Loop unrolling can be used to *approximate* expected value semantics of a loop to gain insight into the actual semantics.
 
-The idea is to have Caesar to *calculate* the expected value of the loop after a fixed number of iterations.
-As the unrolling approaches the true semantics as `k` increases, we can use this to e.g. guess the expected value after an unbounded number of iterations.
+The idea is to have Caesar *calculate* the expected value of the loop after a fixed number of iterations.
+As `k` increases, the unrolling approaches the true semantics, so we can use this to e.g. guess the expected value after an unbounded number of iterations.
 This might help to find e.g. an [inductive invariant](./induction.md) for the loop.
 In contrast to the applications of [verification](#verification) and [refutation](#bounded-model-checking), unrolling for approximations does not require a `pre`, but just a `post` expectation.
 
@@ -82,7 +82,7 @@ We can guess (and it is true) that the expected value will eventually converge t
 ## Verification with Loop Unrolling {#verification}
 
 Loop unrolling can be used to *prove* specifications of loops.
-We modified the above example to show a *lower bound* of `0.75` on the probability value of termination in at most 3 unrollings of the loop.
+We modified the above example to show a *lower bound* of `0.75` on the probability of termination in at most 3 unrollings of the loop.
 
 ```heyvl
 @wp proc geo1_unroll() -> (c: UInt)
@@ -108,7 +108,7 @@ A *counter-example* from Caesar to verification will only be a counter-example f
 
 :::tip
 
-Use the [calculus annotations](./calculi.md) `@wp`, `@wlp`, `@ert` to have Caesar check you apply the `unroll` proof correctly to *verify* a specification.
+Use the [calculus annotations](./approximations#calculus-annotations) `@wp`, `@wlp`, `@ert` to have Caesar check you apply the `unroll` proof correctly to *verify* a specification.
 
 :::
 
@@ -120,7 +120,7 @@ This is in contrast to e.g. the [induction proof rule](./induction.md), which re
 When used for refutations, this technique is often called *bounded model checking* (BMC).
 
 In the following example, we use loop unrolling to refute an upper bound (`coproc`) of *least fixed-point semantics* (`wp`).
-Because we want to approximate least fixpoint semantics, we use `0` as our `terminator` (c.f. [*Usage*](#usage)).
+Because we want to approximate least fixed-point semantics, we use `0` as our `terminator` (c.f. [*Usage*](#usage)).
 
 ```heyvl
 coproc geo1_bmc(init_c: UInt) -> (c: UInt)
@@ -137,21 +137,23 @@ coproc geo1_bmc(init_c: UInt) -> (c: UInt)
 }
 ```
 
-Trying to verify `geo1_unroll` will yield a counter-example to verification.
+Trying to verify `geo1_bmc` will yield a counter-example to the property.
 It is a *true counter-example* to `init_c + 0.99` being an upper bound for the original program.
 
 The following combinations are sound for *refutations*.
 More details can be found in the [*Soundness* section](#soundness).
  * For `wlp`, use `@unroll(k, 1)` in a `proc` to refute a lower bound on the greatest fixed-point semantics.
- * For `wp`, use `@unroll(k, 0)` in a `coproc` to refute an upper bound on the least fixed-point semantics.
+ * For `wp` and `ert`, use `@unroll(k, 0)` in a `coproc` to refute an upper bound on the least fixed-point semantics.
 
 If the program *verifies* in the above cases, we do not know whether the specification holds for the original semantics.
-For example, the example program above verifies if you change `k = 11`; however this gives you no guarantee that the original program `geo1_unroll` satisfies the specification.
+For example, the example program above verifies if you change `k = 11`; however this gives you no guarantee that the original program `geo1_bmc` satisfies the specification.
 
-:::info
+:::tip
 
-At the moment, the [calculus annotations](./calculi.md) `@wlp`, `@wp`, `@ert` do not support the use of `@unroll` for refutations.
-They currently require soundness for verification only, therefore they currently can not be used to check the soundness of a refutation.
+The [calculus annotations](./approximations#calculus-annotations) `@wlp`, `@wp`, `@ert` are supported for refutations as well.
+Caesar uses them to classify the result:
+ * _"Counter-example to property found"_ means the refutation is sound for the original semantics.
+ * _"Counter-example to verification found"_ means only the verification condition was refuted.
 
 :::
 
@@ -165,20 +167,20 @@ By Kleene's fixed-point theorem, the following soundness conditions hold:
  * $\mathrm{vc}\llbracket \texttt{@unroll(k, 0) while G \{ B \}} \rrbracket \sqsubseteq \mathrm{ert}\llbracket \texttt{while G \{ B \}} \rrbracket$
 
 For [the application of verification](#verification), this means:
- * `proc` verifies using `@unroll(k, 1)` $\implies$ specification also holds for the original `wlp` semantics.
- * `coproc` verifies using `@unroll(k, 0)` $\implies$ specification also holds for the original `wp` semantics.
- * `coproc` verifies using `@unroll(k, 0)` $\implies$ specification also holds for the original `ert` semantics.
+ * `coproc` verifies using `@unroll(k, 1)` $\implies$ specification also holds for the original `wlp` semantics.
+ * `proc` verifies using `@unroll(k, 0)` $\implies$ specification also holds for the original `wp` semantics.
+ * `proc` verifies using `@unroll(k, 0)` $\implies$ specification also holds for the original `ert` semantics.
 
 For [the application of refutation (bounded model checking)](#bounded-model-checking), this means:
- * `coproc` refutes using `@unroll(k, 1)` $\implies$ specification does not hold for the original `wlp` semantics.
- * `proc` refutes using `@unroll(k, 0)` $\implies$ specification does not hold for the original `wp` semantics.
- * `proc` refutes using `@unroll(k, 0)` $\implies$ specification does not hold for the original `ert` semantics.
+ * `proc` refutes using `@unroll(k, 1)` $\implies$ specification does not hold for the original `wlp` semantics.
+ * `coproc` refutes using `@unroll(k, 0)` $\implies$ specification does not hold for the original `wp` semantics.
+ * `coproc` refutes using `@unroll(k, 0)` $\implies$ specification does not hold for the original `ert` semantics.
 
 ## Semantics
 
-An annotated loop `@unroll(k, terminator) while G { B }`, is replaced its $k$-step unfolding.
+An annotated loop `@unroll(k, terminator) while G { B }` is replaced by its $k$-step unfolding.
 Below, we show `k = 3` unfoldings.
-The `terminator` is encoded by a `assert 0; assume 0` at the end of the `k = 3` loop iterations.
+The `terminator` is encoded by an `assert 0; assume 0` at the end of the `k = 3` loop iterations.
 
 ```heyvl
 if cont {
@@ -200,7 +202,7 @@ $$
 
 ## Completeness
 
-Loop unrolling is *not compelete* for *proving* specifications.
+Loop unrolling is *not complete* for *proving* specifications.
 This is because there are programs for which the actual semantics of the loop is not captured by the unrolling.
 A simple example is a loop that counts down a counter variable `c` in each iteration.
 Any unrolling of size `k` will not capture the semantics of the loop if `c` is larger than `k`.

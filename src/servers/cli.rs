@@ -16,6 +16,7 @@ use crate::{
         item::{Item, SourceUnitName},
         smt_proof::SmtVcProveResult,
     },
+    proof_rules::calculus::ProcSoundness,
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
 };
@@ -112,8 +113,9 @@ impl Server for CliServer {
         name: &SourceUnitName,
         result: &mut SmtVcProveResult<'ctx>,
         translate: &mut TranslateExprs<'smt, 'ctx>,
+        proc_soundness: &ProcSoundness,
     ) -> Result<(), ServerError> {
-        result.print_prove_result(self, translate, name);
+        result.print_prove_result(self, translate, name, proc_soundness)?;
         Ok(())
     }
 

@@ -18,9 +18,8 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{
-        tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
-    },
+    intrinsic::annotations::{tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus},
+    proof_rules::{calculus::ApproximationKind, FixpointSemanticsKind},
     tyctx::TyCtx,
 };
 
@@ -101,12 +100,28 @@ impl Encoding for OmegaInvAnnotation {
         Ok(())
     }
 
-    fn is_calculus_allowed(&self, calculus: Calculus, direction: Direction) -> bool {
-        matches!(
-            (&calculus.calculus_type, direction),
-            (CalculusType::Wp | CalculusType::Ert, Direction::Down)
-                | (CalculusType::Wlp, Direction::Up)
-        )
+    fn get_approximation(
+        &self,
+        fixpoint_semantics: FixpointSemanticsKind,
+        inner_approximation_kind: ApproximationKind,
+        _calculus: Option<Calculus>,
+    ) -> ApproximationKind {
+        let approx = match fixpoint_semantics {
+            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::UNDER,
+            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::OVER,
+        };
+        approx & inner_approximation_kind
+    }
+
+    fn default_fixpoint_semantics(
+        &self,
+        direction: Direction,
+        _args: &[Expr],
+    ) -> FixpointSemanticsKind {
+        match direction {
+            Direction::Up => FixpointSemanticsKind::GreatestFixedPoint,
+            Direction::Down => FixpointSemanticsKind::LeastFixedPoint,
+        }
     }
 
     fn transform(

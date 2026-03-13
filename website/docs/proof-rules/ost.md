@@ -177,5 +177,5 @@ Currently, this is only checked by Caesar for `past_invariant` and `cdb`.
 :::
 
 [^1]: We present the conditions from the paper's Theorem 37 (b), as used by the built-in encoding to ensure uniform integrability of the subinvariant. Currently, using the paper's alternative conditions (a) or (c) requires a manual encoding.
-[^modified-ert]: Our `PAST_I` condition effectively encodes an `ert`-superinvariant, where `ert` is a modified [expected runtime calculus](calculi) which counts the number of loop iterations of `while G { Body }` and does not count any nested loop iterations in `Body`.
+[^modified-ert]: Our `PAST_I` condition effectively encodes an `ert`-superinvariant, where `ert` is a modified [expected runtime calculus](./approximations#calculus-annotations) which counts the number of loop iterations of `while G { Body }` and does not count any nested loop iterations in `Body`.
 [^inv-iter-finite]: In the paper, the condition to check is $\Phi_{\mathtt{f}}(\mathtt{I}) < \infty$. With the additional constraint that `I` harmonizes with `f`, we instead check the simpler but equivalent condition that $\Phi_{\mathtt{I}}(\mathtt{I}) < \infty$ holds.

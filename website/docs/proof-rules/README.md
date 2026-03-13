@@ -8,7 +8,7 @@ Caesar supports a number of proof rule encodings out of the box.
 The proof rules are used via annotations on while loops.
 All while loops used in HeyVL must have a proof rule annotation so that they can be verified with loop-free verification pre-expectation reasoning.
 
-To help you use proof rules correctly, Caesar supports [calculus annotations](./calculi.md) on procedures.
+To help you use proof rules correctly, Caesar supports [calculus annotations](./approximations#calculus-annotations) on procedures.
 These annotations specify a desired reasoning calculus and limit the proof rules for loops to ensure that only sound proof rules for the respective calculi are used.
 
 If you have read our [OOPSLA '23 publication](../publications.md#oopsla-23): these proof rules were implemented in our [`pgcl2heyvl`](../pgcl.md) tool to reason about pGCL programs, but are now implemented directly in Caesar.
