@@ -147,7 +147,11 @@ fn translate_stmt(
             stmt: Box::new(stmt.clone()),
             can_eliminate: automaton.spec_part.direction == *dir,
         }),
-        StmtKind::Compare(_, _) | StmtKind::Negate(_) | StmtKind::Validate(_) => {
+        StmtKind::Compare(_, _)
+        | StmtKind::Negate(_)
+        | StmtKind::Validate(_)
+        | StmtKind::Weigh(_)
+        | StmtKind::Additive(_, _) => {
             Err(JaniConversionError::UnsupportedStmt(Box::new(stmt.clone())))
         }
         StmtKind::Tick(expr) => translate_assign(

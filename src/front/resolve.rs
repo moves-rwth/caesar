@@ -205,6 +205,10 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
                 self.with_subscope(|this| this.visit_block(lhs))?;
                 self.with_subscope(|this| this.visit_block(rhs))
             }
+            StmtKind::Additive(ref mut lhs, ref mut rhs) => {
+                self.with_subscope(|this| this.visit_block(lhs))?;
+                self.with_subscope(|this| this.visit_block(rhs))
+            }
             StmtKind::If(ref mut cond, ref mut lhs, ref mut rhs) => {
                 self.visit_expr(cond)?;
                 self.with_subscope(|this| this.visit_block(lhs))?;

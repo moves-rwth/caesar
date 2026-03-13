@@ -4,7 +4,7 @@ use std::{
     ops::{Add, Mul, Sub},
 };
 
-use num::{BigRational, Zero};
+use num::{BigRational, One, Zero};
 use z3::{ast::Real, Context};
 
 use crate::{util::PrettyRational, UReal};
@@ -44,6 +44,16 @@ impl Display for ConcreteEUReal {
             }
             ConcreteEUReal::Infinity => f.write_str("∞"),
         }
+    }
+}
+
+impl One for ConcreteEUReal {
+    fn is_one(&self) -> bool {
+        matches!(self, ConcreteEUReal::Real(r) if r.is_one())
+    }
+
+    fn one() -> Self {
+        ConcreteEUReal::Real(BigRational::one())
     }
 }
 

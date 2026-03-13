@@ -338,6 +338,7 @@ impl<'tcx> VisitorMut for EncodingVisitor<'tcx> {
             StmtKind::If(_, _, _)
             | StmtKind::Angelic(_, _)
             | StmtKind::Demonic(_, _)
+            | StmtKind::Additive(_, _)
             | StmtKind::Seq(_) => {
                 if let Some(anno_name) = self.terminator_annotation {
                     return Err(EncodingVisitorError::UnsoundnessError(

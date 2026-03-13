@@ -155,6 +155,7 @@ impl<'tcx> Vcgen<'tcx> {
                 builder.unary(un_op, spec_ty.clone(), builder.unary(un_op, spec_ty, post))
             }
             StmtKind::Tick(expr) => builder.binary(BinOpKind::Add, spec_ty, expr.clone(), post),
+            StmtKind::Weigh(expr) => builder.binary(BinOpKind::Mul, spec_ty, expr.clone(), post),
             StmtKind::Demonic(block1, block2) => {
                 let post1 = self.vcgen_block(block1, post.clone())?;
                 let post2 = self.vcgen_block(block2, post)?;
@@ -164,6 +165,11 @@ impl<'tcx> Vcgen<'tcx> {
                 let post1 = self.vcgen_block(block1, post.clone())?;
                 let post2 = self.vcgen_block(block2, post)?;
                 builder.binary(BinOpKind::Sup, spec_ty, post1, post2)
+            }
+            StmtKind::Additive(block1, block2) => {
+                let post1 = self.vcgen_block(block1, post.clone())?;
+                let post2 = self.vcgen_block(block2, post)?;
+                builder.binary(BinOpKind::Add, spec_ty, post1, post2)
             }
             StmtKind::If(cond, block1, block2) => {
                 let post1 = self.vcgen_block(block1, post.clone())?;

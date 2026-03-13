@@ -47,10 +47,14 @@ pub enum StmtKind {
     Validate(Direction),
     /// A tick statement.
     Tick(Expr),
+    /// A weigh statement.
+    Weigh(Expr),
     /// A demonic nondeterministic choice.
     Demonic(Block, Block),
     /// An angelic nondeterministic choice.
     Angelic(Block, Block),
+    /// An additive nondeterministic choice.
+    Additive(Block, Block),
     /// An `if` block.
     If(Expr, Block, Block),
     /// A `while` loop.
@@ -122,8 +126,12 @@ impl SimplePretty for StmtKind {
             StmtKind::Negate(dir) => dir.pretty_direction_prefix().append(Doc::text("negate")),
             StmtKind::Validate(dir) => dir.pretty_direction_prefix().append(Doc::text("validate")),
             StmtKind::Tick(expr) => Doc::text("tick").append(Doc::space()).append(expr.pretty()),
+            StmtKind::Weigh(expr) => Doc::text("weigh")
+                .append(Doc::space())
+                .append(expr.pretty()),
             StmtKind::Demonic(lhs, rhs) => pretty_branch(Doc::text("⊓"), lhs, rhs),
             StmtKind::Angelic(lhs, rhs) => pretty_branch(Doc::text("⊔"), lhs, rhs),
+            StmtKind::Additive(lhs, rhs) => pretty_branch(Doc::text("+"), lhs, rhs),
             StmtKind::If(cond, lhs, rhs) => pretty_branch(cond.pretty(), lhs, rhs),
             StmtKind::While(cond, body) => pretty_loop(cond.pretty(), body),
             StmtKind::Annotation(_, ident, inputs, stmt) => Doc::text("@")
