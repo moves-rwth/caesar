@@ -15,9 +15,9 @@
 
 <link rel="search" type="application/opensearchdescription+xml" title="Caesar Verifier" href="/opensearch.xml">
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.13.24/dist/katex.min.css" integrity="sha384-odtC+0UGzzFL/6PNoE8rX/SPcQDXBJ+uRepguP4QkPCm2LBxH3FA3y+fKSiJ+AmM" crossorigin="anonymous"><link rel="stylesheet" href="/assets/css/styles.95a2b29a.css">
-<script src="/assets/js/runtime~main.197bfe1c.js" defer="defer"></script>
-<script src="/assets/js/main.915dbd77.js" defer="defer"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.13.24/dist/katex.min.css" integrity="sha384-odtC+0UGzzFL/6PNoE8rX/SPcQDXBJ+uRepguP4QkPCm2LBxH3FA3y+fKSiJ+AmM" crossorigin="anonymous"><link rel="stylesheet" href="/assets/css/styles.427bdaf4.css">
+<script src="/assets/js/runtime~main.a0192dad.js" defer="defer"></script>
+<script src="/assets/js/main.42fbb143.js" defer="defer"></script>
 </head>
 <body class="navigation-with-keyboard">
 <svg style="display: none;"><defs>
@@ -45,7 +45,7 @@ These also enable model checking of software, but are unrelated to this project.
 <p>You can either use Caesar&#x27;s <a href="#caesars-storm-backend" class="">automatic <em>Storm</em> backend</a> or <a href="#generating-jani-manually" class="">generate JANI manually</a> to use them however you wish.</p>
 <p>Caesar will assign arbitrary initial values to <em>output parameters</em> and assumes that they are never read before they are written to.
 To disable this or learn more, read the section on <a href="#initial-values-of-output-parameters" class="">initial values of output parameters</a>.
-In addition, note that we always <a href="#loop-semantics" class="">use least-fixed point semantics for loops in the JANI translation</a>, therefore <a class="" href="/docs/proof-rules/calculi"><code>wlp</code> semantics</a> is not supported.</p>
+In addition, note that we always <a href="#loop-semantics" class="">use least-fixed point semantics for loops in the JANI translation</a>, therefore <a class="" href="/docs/proof-rules/approximations#calculus-annotations"><code>wlp</code> semantics</a> is not supported.</p>
 <p>The generated Markov chain model is <em>finite-state</em> and has a single initial state (no input parameters).
 You&#x27;ll usually want to maintain these restrictions when using a model checker.
 Read more about <a href="#parametric-and-infinite-state-models" class="">infinite-state and parametric models</a> below.</p>
@@ -159,7 +159,7 @@ Nondeterministic choices and assertions are also supported, as well as Boolean <
 <li class=""><a class="" href="/docs/stdlib/distributions">Sampling from distributions</a>,</li>
 <li class=""><a class="" href="/docs/heyvl/statements#boolean-choices">If-then-else statements</a>,</li>
 <li class="">While loops (with least-fixed point semantics — <a href="#loop-semantics" class="">see below for semantics details</a>),</li>
-<li class=""><a class="" href="/docs/heyvl/statements#reward"><code>reward</code> statements</a>,</li>
+<li class=""><a class="" href="/docs/heyvl/statements#reward-and-weigh"><code>reward</code> statements</a>,</li>
 <li class="">In <code>proc</code>s:<!-- -->
 <ul>
 <li class=""><a class="" href="/docs/heyvl/statements#assert-and-assume"><code>assert</code> statements</a>,</li>
@@ -186,12 +186,12 @@ However, if uninitialized output variables are read, then the choice is observab
 <h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="loop-semantics">Loop Semantics<a href="#loop-semantics" class="hash-link" aria-label="Direct link to Loop Semantics" title="Direct link to Loop Semantics" translate="no">​</a></h4>
 <div class="theme-admonition theme-admonition-warning admonition_xJq3 alert alert--warning"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8.893 1.5c-.183-.31-.52-.5-.887-.5s-.703.19-.886.5L.138 13.499a.98.98 0 0 0 0 1.001c.193.31.53.501.886.501h13.964c.367 0 .704-.19.877-.5a1.03 1.03 0 0 0 .01-1.002L8.893 1.5zm.133 11.497H6.987v-2.003h2.039v2.003zm0-3.004H6.987V5.987h2.039v4.006z"></path></svg></span>warning</div><div class="admonitionContent_BuS1"><p>In the JANI translation, while loops are always assumed to have <strong>least fixed-point semantics</strong> when model-checking.<sup><a href="#user-content-fn-2" id="user-content-fnref-2" data-footnote-ref="true" aria-describedby="footnote-label" class="anchorTargetStickyNavbar_Vzrq">3</a></sup>
 That means we just accumulate total expected rewards over all terminating executions in the Markov chain.
-This corresponds to <a class="" href="/docs/proof-rules/calculi">wp/ert</a> semantics.</p></div></div>
+This corresponds to <a class="" href="/docs/proof-rules/approximations#calculus-annotations">wp/ert</a> semantics.</p></div></div>
 <p>Notice that in <code>proc</code>s, this is different from the default behavior of Caesar&#x27;s <a class="" href="/docs/proof-rules/induction">proof rules such as induction</a>.
 They would assume greatest fixed-point (wlp) semantics in <code>proc</code>s.
-We recommend always adding the <a class="" href="/docs/proof-rules/calculi"><code>@wp</code> or <code>@ert</code> annotations</a> to your <code>proc</code>/<code>coproc</code>.
+We recommend always adding the <a class="" href="/docs/proof-rules/approximations#calculus-annotations"><code>@wp</code> or <code>@ert</code> annotations</a> to your <code>proc</code>/<code>coproc</code>.
 They instruct Caesar to enforce that sound proof rules for least fixed-point semantics are being used.</p>
-<p>If you want <a class="" href="/docs/proof-rules/calculi">one-bounded wlp semantics</a> (greatest fixed-points), then you can use the generated property <code>diverge_prob</code> to obtain the probability of divergence.
+<p>If you want <a class="" href="/docs/proof-rules/approximations#calculus-annotations">one-bounded wlp semantics</a> (greatest fixed-points), then you can use the generated property <code>diverge_prob</code> to obtain the probability of divergence.
 Then the result should be the sum of the <code>reward</code> and <code>diverge_prob</code> properties (Storm: <code>-jprop reward,diverge_prob</code>).<sup><a href="#user-content-fn-3" id="user-content-fnref-3" data-footnote-ref="true" aria-describedby="footnote-label" class="anchorTargetStickyNavbar_Vzrq">4</a></sup></p>
 <p>If you want <em>unbounded</em> greatest fixed-point semantics, then you can use the generated property <code>can_diverge</code> to check whether there is a diverging path.
 Then the result is <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">∞</mi></mrow><annotation encoding="application/x-tex">\infty</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em"></span><span class="mord">∞</span></span></span></span> if <code>can_diverge</code> is <code>true</code>, otherwise the result is <code>reward</code>.<sup><a href="#user-content-fn-4" id="user-content-fnref-4" data-footnote-ref="true" aria-describedby="footnote-label" class="anchorTargetStickyNavbar_Vzrq">5</a></sup>
