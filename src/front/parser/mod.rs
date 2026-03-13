@@ -23,21 +23,11 @@ type GrammarParseError<'input> =
 
 #[derive(Debug)]
 pub enum ParseError {
-    InvalidToken {
-        span: Span,
-    },
-    UnrecognizedEof {
-        span: Span,
-        expected: Vec<String>,
-    },
-    UnrecognizedToken {
-        span: Span,
-        expected: Vec<String>,
-    },
-    ExtraToken {
-        span: Span,
-    },
-    ChangedPrecedence(precedence_update::ExprMismatch),
+    InvalidToken { span: Span },
+    UnrecognizedEof { span: Span, expected: Vec<String> },
+    UnrecognizedToken { span: Span, expected: Vec<String> },
+    ExtraToken { span: Span },
+    ChangedPrecedence(Box<precedence_update::ExprMismatch>),
 }
 
 impl ParseError {
@@ -95,17 +85,19 @@ impl ParseError {
             ParseError::ExtraToken { span } => Diagnostic::new(ReportKind::Error, *span)
                 .with_message("Extra token")
                 .with_label(Label::new(*span).with_message("here")),
-            ParseError::ChangedPrecedence(data) => Diagnostic::new(ReportKind::Error, data.subexpr.span)
-                .with_message("Expression is ambiguous after Caesar's parser changes")
-                .with_label(
-                    Label::new(data.subexpr.span)
-                        .with_message("add explicit parentheses to disambiguate"),
-                )
-                .with_note(format!(
-                    "Old parser: {}\nNew parser: {}\nAdd parentheses to keep the intended meaning.",
-                    strip_outer_parens_once(&data.subexpr.old_expr),
-                    strip_outer_parens_once(&data.subexpr.new_expr)
-                )),
+            ParseError::ChangedPrecedence(data) => {
+                Diagnostic::new(ReportKind::Error, data.subexpr.span)
+                    .with_message("Expression is ambiguous after Caesar's parser changes")
+                    .with_label(
+                        Label::new(data.subexpr.span)
+                            .with_message("add explicit parentheses to disambiguate"),
+                    )
+                    .with_note(format!(
+                "Old parser: {}\nNew parser: {}\nAdd parentheses to keep the intended meaning.",
+                strip_outer_parens_once(&data.subexpr.old_expr),
+                strip_outer_parens_once(&data.subexpr.new_expr)
+            ))
+            }
         }
     }
 }
@@ -120,7 +112,7 @@ pub fn parse_decls(file_id: FileId, source: &str) -> Result<Vec<DeclKind>, Parse
         .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))?;
 
     if let Some(mismatch) = precedence_update::decls_mismatch(file_id, &clean_source, &decls) {
-        return Err(ParseError::ChangedPrecedence(mismatch));
+        return Err(ParseError::ChangedPrecedence(Box::new(mismatch)));
     }
 
     Ok(decls)
@@ -136,7 +128,7 @@ pub fn parse_raw(file_id: FileId, source: &str) -> Result<Block, ParseError> {
         .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))?;
 
     if let Some(mismatch) = precedence_update::block_mismatch(file_id, &clean_source, &block) {
-        return Err(ParseError::ChangedPrecedence(mismatch));
+        return Err(ParseError::ChangedPrecedence(Box::new(mismatch)));
     }
 
     Ok(block)
@@ -151,7 +143,7 @@ pub fn parse_expr(file_id: FileId, source: &str) -> Result<crate::ast::Expr, Par
         .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))?;
 
     if let Some(mismatch) = precedence_update::expr_mismatch(file_id, source, &expr) {
-        return Err(ParseError::ChangedPrecedence(mismatch));
+        return Err(ParseError::ChangedPrecedence(Box::new(mismatch)));
     }
 
     Ok(expr)
@@ -166,7 +158,7 @@ pub fn parse_bare_decl(file: &StoredFile) -> Result<DeclKind, ParseError> {
         .map_err(|err| ParseError::from_grammar_parse_error(file.id, err))?;
 
     if let Some(mismatch) = precedence_update::decl_mismatch(file.id, &file.source, &decl) {
-        return Err(ParseError::ChangedPrecedence(mismatch));
+        return Err(ParseError::ChangedPrecedence(Box::new(mismatch)));
     }
 
     Ok(decl)

@@ -165,8 +165,8 @@ fn prove_slice_skip(transform_tcx: &mut TransformTestCtx, stmt: &Stmt) -> Result
 
         prove_equiv(
             transform_tcx,
-            &[stmt.clone()],
-            &[stmt_sliced.clone()],
+            std::slice::from_ref(stmt),
+            std::slice::from_ref(&stmt_sliced),
             &[slice_variable],
         )?;
 
@@ -203,21 +203,21 @@ fn prove_slice_branch(transform_tcx: &mut TransformTestCtx, stmt: &Stmt) -> Resu
         prove_equiv(
             transform_tcx,
             &hey_const(&transform_tcx.exp2, &transform_tcx.tcx),
-            &[stmt_sliced.clone()],
+            std::slice::from_ref(&stmt_sliced),
             &with_context(vec![not_slice_lhs.clone()]),
         )?;
 
         prove_equiv(
             transform_tcx,
             &hey_const(&transform_tcx.exp1, &transform_tcx.tcx),
-            &[stmt_sliced.clone()],
+            std::slice::from_ref(&stmt_sliced),
             &with_context(vec![not_slice_rhs.clone()]),
         )?;
 
         prove_equiv(
             transform_tcx,
-            &[stmt.clone()],
-            &[stmt_sliced.clone()],
+            std::slice::from_ref(stmt),
+            std::slice::from_ref(&stmt_sliced),
             &with_context(vec![not_slice_lhs, not_slice_rhs]),
         )?;
     }
