@@ -6,6 +6,7 @@ mod precedence_update;
 use std::mem;
 
 use ariadne::ReportKind;
+use clap::ValueEnum;
 use tracing::instrument;
 
 use crate::ast::{
@@ -21,6 +22,14 @@ lalrpop_util::lalrpop_mod!(
 type GrammarParseError<'input> =
     lalrpop_util::ParseError<usize, grammar::Token<'input>, &'static str>;
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ParserMode {
+    New,
+    Old,
+    #[default]
+    Both,
+}
+
 #[derive(Debug)]
 pub enum ParseError {
     InvalidToken { span: Span },
@@ -32,8 +41,15 @@ pub enum ParseError {
 
 impl ParseError {
     fn from_grammar_parse_error(file_id: FileId, err: GrammarParseError<'_>) -> ParseError {
+        Self::from_lalrpop_parse_error(file_id, err)
+    }
+
+    pub(crate) fn from_lalrpop_parse_error<Token>(
+        file_id: FileId,
+        err: lalrpop_util::ParseError<usize, Token, &'static str>,
+    ) -> ParseError {
         match err {
-            GrammarParseError::InvalidToken { location } => ParseError::InvalidToken {
+            lalrpop_util::ParseError::InvalidToken { location } => ParseError::InvalidToken {
                 span: Span::new(
                     file_id,
                     location,
@@ -41,7 +57,7 @@ impl ParseError {
                     crate::ast::SpanVariant::Parser,
                 ),
             },
-            GrammarParseError::UnrecognizedEof { location, expected } => {
+            lalrpop_util::ParseError::UnrecognizedEof { location, expected } => {
                 ParseError::UnrecognizedEof {
                     span: Span::new(
                         file_id,
@@ -52,16 +68,16 @@ impl ParseError {
                     expected,
                 }
             }
-            GrammarParseError::UnrecognizedToken { token, expected } => {
+            lalrpop_util::ParseError::UnrecognizedToken { token, expected } => {
                 ParseError::UnrecognizedToken {
                     span: Span::new(file_id, token.0, token.2, SpanVariant::Parser),
                     expected,
                 }
             }
-            GrammarParseError::ExtraToken { token } => ParseError::ExtraToken {
+            lalrpop_util::ParseError::ExtraToken { token } => ParseError::ExtraToken {
                 span: Span::new(file_id, token.0, token.2, SpanVariant::Parser),
             },
-            GrammarParseError::User { error: _ } => unreachable!(),
+            lalrpop_util::ParseError::User { error: _ } => unreachable!(),
         }
     }
 
@@ -105,63 +121,128 @@ impl ParseError {
 /// Parse a source code file into a list of declarations.
 #[instrument(skip(source))]
 pub fn parse_decls(file_id: FileId, source: &str) -> Result<Vec<DeclKind>, ParseError> {
+    parse_decls_with_mode(file_id, source, ParserMode::Both)
+}
+
+pub fn parse_decls_with_mode(
+    file_id: FileId,
+    source: &str,
+    parser_mode: ParserMode,
+) -> Result<Vec<DeclKind>, ParseError> {
     let clean_source = remove_comments(source);
-    let parser = grammar::DeclsParser::new();
-    let decls = parser
-        .parse(file_id, &clean_source)
-        .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))?;
-
-    if let Some(mismatch) = precedence_update::decls_mismatch(file_id, &clean_source, &decls) {
-        return Err(ParseError::ChangedPrecedence(Box::new(mismatch)));
-    }
-
-    Ok(decls)
+    parse_by_mode(
+        parser_mode,
+        || parse_new_decls(file_id, &clean_source),
+        || precedence_update::parse_old_decls(file_id, &clean_source),
+        |decls| precedence_update::decls_mismatch(file_id, &clean_source, decls),
+    )
 }
 
 /// Parse a source code file into a block of HeyVL statements.
 #[instrument]
 pub fn parse_raw(file_id: FileId, source: &str) -> Result<Block, ParseError> {
+    parse_raw_with_mode(file_id, source, ParserMode::Both)
+}
+
+pub fn parse_raw_with_mode(
+    file_id: FileId,
+    source: &str,
+    parser_mode: ParserMode,
+) -> Result<Block, ParseError> {
     let clean_source = remove_comments(source);
-    let parser = grammar::SpannedStmtsParser::new();
-    let block = parser
-        .parse(file_id, &clean_source)
-        .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))?;
-
-    if let Some(mismatch) = precedence_update::block_mismatch(file_id, &clean_source, &block) {
-        return Err(ParseError::ChangedPrecedence(Box::new(mismatch)));
-    }
-
-    Ok(block)
+    parse_by_mode(
+        parser_mode,
+        || parse_new_raw(file_id, &clean_source),
+        || precedence_update::parse_old_block(file_id, &clean_source),
+        |block| precedence_update::block_mismatch(file_id, &clean_source, block),
+    )
 }
 
 /// Parse an expression. This function DOES NOT handle comments!
 #[cfg(test)]
 pub fn parse_expr(file_id: FileId, source: &str) -> Result<crate::ast::Expr, ParseError> {
-    let parser = grammar::ExprParser::new();
-    let expr = parser
-        .parse(file_id, source)
-        .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))?;
+    parse_expr_with_mode(file_id, source, ParserMode::Both)
+}
 
-    if let Some(mismatch) = precedence_update::expr_mismatch(file_id, source, &expr) {
-        return Err(ParseError::ChangedPrecedence(Box::new(mismatch)));
-    }
-
-    Ok(expr)
+/// Parse an expression with a specific parser mode. This function DOES NOT
+/// handle comments!
+#[cfg(test)]
+pub fn parse_expr_with_mode(
+    file_id: FileId,
+    source: &str,
+    parser_mode: ParserMode,
+) -> Result<crate::ast::Expr, ParseError> {
+    parse_by_mode(
+        parser_mode,
+        || parse_new_expr(file_id, source),
+        || precedence_update::parse_old_expr(file_id, source),
+        |expr| precedence_update::expr_mismatch(file_id, source, expr),
+    )
 }
 
 /// Parse a single literal. This function DOES NOT handle comments!
 #[instrument]
 pub fn parse_bare_decl(file: &StoredFile) -> Result<DeclKind, ParseError> {
-    let parser = grammar::DeclParser::new();
-    let decl = parser
-        .parse(file.id, &file.source)
-        .map_err(|err| ParseError::from_grammar_parse_error(file.id, err))?;
+    parse_bare_decl_with_mode(file, ParserMode::Both)
+}
 
-    if let Some(mismatch) = precedence_update::decl_mismatch(file.id, &file.source, &decl) {
-        return Err(ParseError::ChangedPrecedence(Box::new(mismatch)));
+/// Parse a single declaration with a specific parser mode. This function DOES
+/// NOT handle comments!
+#[instrument]
+pub fn parse_bare_decl_with_mode(
+    file: &StoredFile,
+    parser_mode: ParserMode,
+) -> Result<DeclKind, ParseError> {
+    parse_by_mode(
+        parser_mode,
+        || parse_new_decl(file.id, &file.source),
+        || precedence_update::parse_old_decl(file.id, &file.source),
+        |decl| precedence_update::decl_mismatch(file.id, &file.source, decl),
+    )
+}
+
+fn parse_by_mode<T>(
+    parser_mode: ParserMode,
+    parse_new: impl FnOnce() -> Result<T, ParseError>,
+    parse_old: impl FnOnce() -> Result<T, ParseError>,
+    changed_precedence: impl FnOnce(&T) -> Option<precedence_update::ExprMismatch>,
+) -> Result<T, ParseError> {
+    match parser_mode {
+        ParserMode::New => parse_new(),
+        ParserMode::Old => parse_old(),
+        ParserMode::Both => {
+            let parsed = parse_new()?;
+            if let Some(mismatch) = changed_precedence(&parsed) {
+                return Err(ParseError::ChangedPrecedence(Box::new(mismatch)));
+            }
+            Ok(parsed)
+        }
     }
+}
 
-    Ok(decl)
+fn parse_new_decls(file_id: FileId, source: &str) -> Result<Vec<DeclKind>, ParseError> {
+    grammar::DeclsParser::new()
+        .parse(file_id, source)
+        .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))
+}
+
+fn parse_new_raw(file_id: FileId, source: &str) -> Result<Block, ParseError> {
+    grammar::SpannedStmtsParser::new()
+        .parse(file_id, source)
+        .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))
+}
+
+#[cfg(test)]
+fn parse_new_expr(file_id: FileId, source: &str) -> Result<crate::ast::Expr, ParseError> {
+    grammar::ExprParser::new()
+        .parse(file_id, source)
+        .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))
+}
+
+fn parse_new_decl(file_id: FileId, source: &str) -> Result<DeclKind, ParseError> {
+    grammar::DeclParser::new()
+        .parse(file_id, source)
+        .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))
 }
 
 /// Parse a literal. Used for the [`std::str::FromStr`] implementation of
@@ -265,11 +346,12 @@ mod test {
     use ariadne::Config;
 
     use crate::{
-        ast::{Files, SourceFilePath},
+        ast::{FileId, Files, SourceFilePath},
         front::parser::ParseError,
+        pretty::pretty_string,
     };
 
-    use super::{parse_raw, remove_comments};
+    use super::{parse_expr_with_mode, parse_raw, remove_comments, ParserMode};
 
     #[test]
     fn test_remove_comments() {
@@ -317,6 +399,21 @@ mod test {
                 );
             }
             res => panic!("unexpected {res:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parser_mode_switching() {
+        let source = "n - i + x";
+        let old_expr = parse_expr_with_mode(FileId::DUMMY, source, ParserMode::Old).unwrap();
+        let new_expr = parse_expr_with_mode(FileId::DUMMY, source, ParserMode::New).unwrap();
+
+        assert_eq!(pretty_string(&old_expr), "(n - (i + x))");
+        assert_eq!(pretty_string(&new_expr), "((n - i) + x)");
+
+        match parse_expr_with_mode(FileId::DUMMY, source, ParserMode::Both) {
+            Err(ParseError::ChangedPrecedence(_)) => {}
+            res => panic!("expected changed-precedence error, got {res:?}"),
         }
     }
 }

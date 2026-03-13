@@ -14,6 +14,30 @@ lalrpop_util::lalrpop_mod!(
     "/src/front/parser/precedence_update/grammar_old.rs"
 );
 
+pub(super) fn parse_old_decls(
+    file_id: FileId,
+    source: &str,
+) -> Result<Vec<DeclKind>, super::ParseError> {
+    let parser = grammar_old::DeclsParser::new();
+    parser
+        .parse(file_id, source)
+        .map_err(|err| super::ParseError::from_lalrpop_parse_error(file_id, err))
+}
+
+pub(super) fn parse_old_block(file_id: FileId, source: &str) -> Result<Block, super::ParseError> {
+    let parser = grammar_old::SpannedStmtsParser::new();
+    parser
+        .parse(file_id, source)
+        .map_err(|err| super::ParseError::from_lalrpop_parse_error(file_id, err))
+}
+
+pub(super) fn parse_old_decl(file_id: FileId, source: &str) -> Result<DeclKind, super::ParseError> {
+    let parser = grammar_old::DeclParser::new();
+    parser
+        .parse(file_id, source)
+        .map_err(|err| super::ParseError::from_lalrpop_parse_error(file_id, err))
+}
+
 #[derive(Debug, Clone)]
 pub struct ExprMismatch {
     #[allow(dead_code)]
@@ -98,6 +122,14 @@ pub(crate) fn expr_mismatch(
         top_old_expr: pretty_string(&old_expr),
         subexpr,
     })
+}
+
+#[cfg(test)]
+pub(super) fn parse_old_expr(file_id: FileId, source: &str) -> Result<Expr, super::ParseError> {
+    let parser = grammar_old::ExprParser::new();
+    parser
+        .parse(file_id, source)
+        .map_err(|err| super::ParseError::from_lalrpop_parse_error(file_id, err))
 }
 
 #[cfg(test)]

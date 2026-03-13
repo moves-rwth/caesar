@@ -2,7 +2,10 @@ use std::{path::PathBuf, time::Duration};
 
 use clap::{Args, ValueEnum};
 
-use crate::{resource_limits::MemorySize, smt::funcs::axiomatic::AxiomInstantiation};
+use crate::{
+    front::parser::ParserMode, resource_limits::MemorySize,
+    smt::funcs::axiomatic::AxiomInstantiation,
+};
 
 #[derive(Debug, Default, Args)]
 #[command(next_help_heading = "Input Options")]
@@ -14,6 +17,15 @@ pub struct InputOptions {
     /// Raw verification of just HeyVL statements without any declarations.
     #[arg(short, long)]
     pub raw: bool,
+
+    /// Select which parser behavior to use: the new parser, the old parser, or both.
+    ///
+    /// The default `both` mode parses with the new parser and errors if the old parser
+    /// would parse a subexpression differently.
+    ///
+    /// This compatibility option is temporary and will be removed in a future release.
+    #[arg(long = "parser", value_enum, default_value_t = ParserMode::Both)]
+    pub parser_mode: ParserMode,
 
     /// Treat warnings as errors.
     #[arg(long)]
