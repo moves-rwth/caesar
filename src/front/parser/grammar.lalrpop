@@ -65,37 +65,40 @@ ExprNode<Rule>: Expr = {
 
 pub Expr = ExprNode<ExprKindOp>;
 
-QuantOp: QuantOp = {
-    <span: Span<"inf">> => Spanned::new(span, QuantOpKind::Inf),
-    <span: Span<"sup">> => Spanned::new(span, QuantOpKind::Sup),
-    <span: Span<"exists">> => Spanned::new(span, QuantOpKind::Exists),
-    <span: Span<"forall">> => Spanned::new(span, QuantOpKind::Forall),
-}
-
-QuantVar: QuantVar = {
-    <l: @L> <name: Ident> ":" <ty: Ty> <r: @R>
-        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty, kind: VarKind::Quant, init: None, span: span(file, l, r), created_from: None }))
-}
-
-QuantAnn: QuantAnn = {
-    <l: @L> "@trigger" "(" <exprs: Comma<Expr>> ")" <r: @R> => {
-        let mut ann = QuantAnn::default();
-        ann.triggers.push(Trigger::new(span(file, l, r), exprs));
-        ann
-    }
-}
-
 SymCap: () = { "⊓", "\\cap" }
 SymCup: () = { "⊔", "\\cup" }
 SymOplus: () = { "+", "⊕", "\\oplus" }
 SymRightarrow: () = { "→", "==>" }
 SymLeftarrow: () = { "←", "<==" }
+SymInfty: () = { "∞", "\\infty" }
+
+pub LitKind: LitKind = {
+    <s:r#""[^"]*""#> => LitKind::Str(Symbol::intern(&s[1..s.len()-1])),
+    <num: r"[0-9]+"> => LitKind::UInt(BigUint::from_str(num).unwrap()),
+    <num: r"[0-9]+\.[0-9]+"> => LitKind::Frac(parse_decimal(num).unwrap()),
+    SymInfty => LitKind::Infinity,
+    "true" => LitKind::Bool(true),
+    "false" => LitKind::Bool(false),
+}
+
+ExprKindAtomic: ExprKind = {
+    "let" "(" <ident: Ident> "," <val: Expr> "," <expr: Expr> ")" => ExprKind::Subst(ident, val, expr),
+    "ite" "(" <cond: Expr> "," <a: Expr> "," <b: Expr> ")" => ExprKind::Ite(cond, a, b),
+    <span: Span<"!">> <expr: ExprNode<ExprKindAtomic>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Not), expr),
+    <span: Span<"~">> <expr: ExprNode<ExprKindAtomic>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Non), expr),
+    <span: Span<"?">> <expr: ExprNode<ExprKindAtomic>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Embed), expr),
+    <ident: Ident> "(" <args: Comma<Expr>> ")" => ExprKind::Call(ident, args),
+    <l: @L> "[" <expr: Expr> "]" <r: @R> => ExprKind::Unary(Spanned::new(span(file, l, r), UnOpKind::Iverson), expr),
+    <l: @L> "(" <expr: Expr> ")" <r: @R> => ExprKind::Unary(Spanned::new(span(file, l, r), UnOpKind::Parens), expr),
+    <l: @L> <lit: LitKind> <r: @R> => ExprKind::Lit(spanned(file, l, r, lit)),
+    <ident: Ident> => ExprKind::Var(ident),
+}
 
 ExprKindOp: ExprKind = {
-    // level 0 (tightest): prefix/atomic forms from ExprKindPrefix
+    // level 0 (tightest): atomic forms from ExprKindAtomic
     //   let(...), ite(...), !, ~, ?, calls, [..], (..), literals, variables
     #[precedence(level="0")]
-    ExprKindPrefix,
+    ExprKindAtomic,
 
     // level 1: multiplicative operators (*, /, %)
     #[precedence(level="1")]
@@ -160,28 +163,24 @@ ExprKindOp: ExprKind = {
     },
 }
 
-ExprKindPrefix: ExprKind = {
-    "let" "(" <ident: Ident> "," <val: Expr> "," <expr: Expr> ")" => ExprKind::Subst(ident, val, expr),
-    "ite" "(" <cond: Expr> "," <a: Expr> "," <b: Expr> ")" => ExprKind::Ite(cond, a, b),
-    <span: Span<"!">> <expr: ExprNode<ExprKindPrefix>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Not), expr),
-    <span: Span<"~">> <expr: ExprNode<ExprKindPrefix>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Non), expr),
-    <span: Span<"?">> <expr: ExprNode<ExprKindPrefix>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Embed), expr),
-    <ident: Ident> "(" <args: Comma<Expr>> ")" => ExprKind::Call(ident, args),
-    <l: @L> "[" <expr: Expr> "]" <r: @R> => ExprKind::Unary(Spanned::new(span(file, l, r), UnOpKind::Iverson), expr),
-    <l: @L> "(" <expr: Expr> ")" <r: @R> => ExprKind::Unary(Spanned::new(span(file, l, r), UnOpKind::Parens), expr),
-    <l: @L> <lit: LitKind> <r: @R> => ExprKind::Lit(spanned(file, l, r, lit)),
-    <ident: Ident> => ExprKind::Var(ident),
+QuantOp: QuantOp = {
+    <span: Span<"inf">> => Spanned::new(span, QuantOpKind::Inf),
+    <span: Span<"sup">> => Spanned::new(span, QuantOpKind::Sup),
+    <span: Span<"exists">> => Spanned::new(span, QuantOpKind::Exists),
+    <span: Span<"forall">> => Spanned::new(span, QuantOpKind::Forall),
 }
 
-SymInfty: () = { "∞", "\\infty" }
+QuantVar: QuantVar = {
+    <l: @L> <name: Ident> ":" <ty: Ty> <r: @R>
+        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty, kind: VarKind::Quant, init: None, span: span(file, l, r), created_from: None }))
+}
 
-pub LitKind: LitKind = {
-    <s:r#""[^"]*""#> => LitKind::Str(Symbol::intern(&s[1..s.len()-1])),
-    <num: r"[0-9]+"> => LitKind::UInt(BigUint::from_str(num).unwrap()),
-    <num: r"[0-9]+\.[0-9]+"> => LitKind::Frac(parse_decimal(num).unwrap()),
-    SymInfty => LitKind::Infinity,
-    "true" => LitKind::Bool(true),
-    "false" => LitKind::Bool(false),
+QuantAnn: QuantAnn = {
+    <l: @L> "@trigger" "(" <exprs: Comma<Expr>> ")" <r: @R> => {
+        let mut ann = QuantAnn::default();
+        ann.triggers.push(Trigger::new(span(file, l, r), exprs));
+        ann
+    }
 }
 
 // ---------------------------------------
