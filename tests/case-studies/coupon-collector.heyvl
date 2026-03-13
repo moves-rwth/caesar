@@ -4,7 +4,7 @@ domain Sums {
 
     // The sum of elements given in the list of at indices [start,start+len],
     // i.e. \sum\limits_{i=start}^{start+len-1} elements[i].
-    func sum(elements: []UReal, start: UInt, len: UInt): UReal = ite(len>0, select(elements, start+len - 1) + sum(elements, start, len-1), 0)
+    func sum(elements: []UReal, start: UInt, len: UInt): UReal = ite(len>0, select(elements, start + (len - 1)) + sum(elements, start, len-1), 0)
 
     // This is a helper function to specify the pre-expectation of the unif assignment in inner_loop.
     // It returns a list of unspecified length with identical elements `N/x`.

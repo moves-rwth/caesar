@@ -6,7 +6,7 @@ domain Sum {
 
 proc gauss(n: UInt) -> ()
     pre ?(true)
-    post ?(sum(n) == n*(n+1)/2)
+    post ?(sum(n) == (n*(n+1))/2)
 {
     if n == 0 {
     } else {

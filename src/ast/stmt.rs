@@ -204,9 +204,9 @@ mod test {
 
     #[test]
     fn format_expr() {
-        let source = &"assume x + y * 17 / 1; coassert x ==> 18";
+        let source = &"assume x + y * 17; coassert x ==> 18";
         let stmts = parser::parse_raw(FileId::DUMMY, source).unwrap();
         let text = pretty_string(&stmts);
-        assert_eq!(text, "assume (x + (y * (17 / 1)))\ncoassert (x → 18)");
+        assert_eq!(text, "assume (x + (y * 17))\ncoassert (x → 18)");
     }
 }

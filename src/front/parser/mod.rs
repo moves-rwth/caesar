@@ -1,6 +1,7 @@
 //! The parser takes a string and creates an AST from it.
 
 pub(crate) mod parser_util;
+mod precedence_update;
 
 use std::mem;
 
@@ -22,10 +23,21 @@ type GrammarParseError<'input> =
 
 #[derive(Debug)]
 pub enum ParseError {
-    InvalidToken { span: Span },
-    UnrecognizedEof { span: Span, expected: Vec<String> },
-    UnrecognizedToken { span: Span, expected: Vec<String> },
-    ExtraToken { span: Span },
+    InvalidToken {
+        span: Span,
+    },
+    UnrecognizedEof {
+        span: Span,
+        expected: Vec<String>,
+    },
+    UnrecognizedToken {
+        span: Span,
+        expected: Vec<String>,
+    },
+    ExtraToken {
+        span: Span,
+    },
+    ChangedPrecedence(precedence_update::ExprMismatch),
 }
 
 impl ParseError {
@@ -83,6 +95,17 @@ impl ParseError {
             ParseError::ExtraToken { span } => Diagnostic::new(ReportKind::Error, *span)
                 .with_message("Extra token")
                 .with_label(Label::new(*span).with_message("here")),
+            ParseError::ChangedPrecedence(data) => Diagnostic::new(ReportKind::Error, data.subexpr.span)
+                .with_message("Expression is ambiguous after Caesar's parser changes")
+                .with_label(
+                    Label::new(data.subexpr.span)
+                        .with_message("add explicit parentheses to disambiguate"),
+                )
+                .with_note(format!(
+                    "Old parser: {}\nNew parser: {}\nAdd parentheses to keep the intended meaning.",
+                    strip_outer_parens_once(&data.subexpr.old_expr),
+                    strip_outer_parens_once(&data.subexpr.new_expr)
+                )),
         }
     }
 }
@@ -92,9 +115,15 @@ impl ParseError {
 pub fn parse_decls(file_id: FileId, source: &str) -> Result<Vec<DeclKind>, ParseError> {
     let clean_source = remove_comments(source);
     let parser = grammar::DeclsParser::new();
-    parser
+    let decls = parser
         .parse(file_id, &clean_source)
-        .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))
+        .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))?;
+
+    if let Some(mismatch) = precedence_update::decls_mismatch(file_id, &clean_source, &decls) {
+        return Err(ParseError::ChangedPrecedence(mismatch));
+    }
+
+    Ok(decls)
 }
 
 /// Parse a source code file into a block of HeyVL statements.
@@ -102,27 +131,45 @@ pub fn parse_decls(file_id: FileId, source: &str) -> Result<Vec<DeclKind>, Parse
 pub fn parse_raw(file_id: FileId, source: &str) -> Result<Block, ParseError> {
     let clean_source = remove_comments(source);
     let parser = grammar::SpannedStmtsParser::new();
-    parser
+    let block = parser
         .parse(file_id, &clean_source)
-        .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))
+        .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))?;
+
+    if let Some(mismatch) = precedence_update::block_mismatch(file_id, &clean_source, &block) {
+        return Err(ParseError::ChangedPrecedence(mismatch));
+    }
+
+    Ok(block)
 }
 
 /// Parse an expression. This function DOES NOT handle comments!
 #[cfg(test)]
 pub fn parse_expr(file_id: FileId, source: &str) -> Result<crate::ast::Expr, ParseError> {
     let parser = grammar::ExprParser::new();
-    parser
+    let expr = parser
         .parse(file_id, source)
-        .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))
+        .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))?;
+
+    if let Some(mismatch) = precedence_update::expr_mismatch(file_id, source, &expr) {
+        return Err(ParseError::ChangedPrecedence(mismatch));
+    }
+
+    Ok(expr)
 }
 
 /// Parse a single literal. This function DOES NOT handle comments!
 #[instrument]
 pub fn parse_bare_decl(file: &StoredFile) -> Result<DeclKind, ParseError> {
     let parser = grammar::DeclParser::new();
-    parser
+    let decl = parser
         .parse(file.id, &file.source)
-        .map_err(|err| ParseError::from_grammar_parse_error(file.id, err))
+        .map_err(|err| ParseError::from_grammar_parse_error(file.id, err))?;
+
+    if let Some(mismatch) = precedence_update::decl_mismatch(file.id, &file.source, &decl) {
+        return Err(ParseError::ChangedPrecedence(mismatch));
+    }
+
+    Ok(decl)
 }
 
 /// Parse a literal. Used for the [`std::str::FromStr`] implementation of
@@ -209,6 +256,16 @@ fn fmt_expected(expected: &[String]) -> String {
         buf.push_str(e);
     }
     buf
+}
+
+/// Formatting hack for precedence diagnostics: drop one outer `( … )` pair
+/// if present, to reduce visual noise in the note output.
+fn strip_outer_parens_once(expr: &str) -> &str {
+    if expr.len() >= 2 && expr.starts_with('(') && expr.ends_with(')') {
+        &expr[1..expr.len() - 1]
+    } else {
+        expr
+    }
 }
 
 #[cfg(test)]
