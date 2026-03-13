@@ -260,7 +260,11 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 }
             }
             StmtKind::Assume(dir, expr) => {
-                let effect = self.extensive_effect();
+                let effect = if *self.direction == *dir {
+                    SliceEffect::Concordant
+                } else {
+                    SliceEffect::Discordant
+                };
                 if !self.selector.should_slice(effect) {
                     return Ok(());
                 }
@@ -268,7 +272,11 @@ impl<'tcx> VisitorMut for StmtSliceVisitor<'tcx> {
                 self.mk_top_toggle(expr, *dir, slice_var)
             }
             StmtKind::Assert(dir, expr) => {
-                let effect = self.reductive_effect();
+                let effect = if *self.direction == *dir {
+                    SliceEffect::Discordant
+                } else {
+                    SliceEffect::Concordant
+                };
                 if !self.selector.should_slice(effect) {
                     return Ok(());
                 }
