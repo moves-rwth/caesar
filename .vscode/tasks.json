@@ -4,6 +4,36 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "Docs: dev server",
+			"type": "shell",
+			"command": "yarn",
+			"args": [
+				"start"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/website"
+			},
+			"isBackground": true,
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "^(__never_match__):(.*)$",
+					"file": 1,
+					"message": 2
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".",
+					"endsPattern": "Docusaurus website is running at:"
+				}
+			},
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			}
+		},
+		{
 			"label": "VSCode Extension: bundle watch",
 			"type": "shell",
 			"command": "yarn",
@@ -24,13 +54,10 @@
 				"background": {
 					"activeOnStart": true,
 					"beginsPattern": ".",
-					"endsPattern": "\\[watch\\] build finished, watching for changes\\.\\.\\."
+					"endsPattern": "build finished, watching for changes"
 				}
 			},
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			},
+			"group": "build",
 			"presentation": {
 				"reveal": "never",
 				"panel": "dedicated",
