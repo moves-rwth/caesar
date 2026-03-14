@@ -9,6 +9,5 @@
     "typescript.tsc.autoDetect": "off",
     "eslint.workingDirectories": [
         "./vscode-ext"
-    ],
-    "eslint.useFlatConfig": true
+    ]
 }

@@ -45,8 +45,9 @@ export default tseslint.config(
     }, {
     ignores: [
         "eslint.config.mjs",
-        ".vscode-text.mjs",
-        "out/",
-        ".vscode-test.mjs"
+        "esbuild.js",
+        "dist/",
+        ".vscode-test.mjs",
+        "out/"
     ]
 });

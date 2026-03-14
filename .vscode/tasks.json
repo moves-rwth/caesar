@@ -4,18 +4,37 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "VSCode Extension: npm watch",
-			"path": "vscode-ext",
-			"type": "npm",
-			"script": "watch",
-			"problemMatcher": "$tsc-watch",
+			"label": "VSCode Extension: bundle watch",
+			"type": "shell",
+			"command": "yarn",
+			"args": [
+				"run",
+				"bundle:watch"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/vscode-ext"
+			},
 			"isBackground": true,
-			"presentation": {
-				"reveal": "never"
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "^(__never_match__):(.*)$",
+					"file": 1,
+					"message": 2
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".",
+					"endsPattern": "\\[watch\\] build finished, watching for changes\\.\\.\\."
+				}
 			},
 			"group": {
 				"kind": "build",
-				"isDefault": false,
+				"isDefault": true
+			},
+			"presentation": {
+				"reveal": "never",
+				"panel": "dedicated",
+				"clear": true
 			}
 		}
 	]

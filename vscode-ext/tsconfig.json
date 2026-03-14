@@ -3,6 +3,7 @@
 		"module": "CommonJS",
 		"target": "es6",
 		"outDir": "out",
+		"esModuleInterop": true,
 		"lib": [
 			"ES2022"
 		],

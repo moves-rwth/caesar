@@ -4,4 +4,5 @@ target
 benchmark-results.csv
 vscode-ext/node_modules/
 vscode-ext/out/
+vscode-ext/dist/
 node_modules/
