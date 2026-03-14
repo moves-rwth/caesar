@@ -47,14 +47,14 @@ jobs:
         run: yarn package --out caesar-${{ inputs.version }}.vsix
 
       - name: Publish the extension (Visual Studio Marketplace)
-        uses: HaaLeo/publish-vscode-extension@v1
+        uses: HaaLeo/publish-vscode-extension@v2
         with:
           registryUrl: https://marketplace.visualstudio.com
           pat: ${{ secrets.VSCE_PAT }}
           extensionFile: ${{env.EXTENSION_DIRECTORY}}/caesar-${{ inputs.version }}.vsix
 
       - name: Publish the extension (Open VSX Registry)
-        uses: HaaLeo/publish-vscode-extension@v1
+        uses: HaaLeo/publish-vscode-extension@v2
         with:
           registryUrl: https://open-vsx.org
           pat: ${{ secrets.OPEN_VSX_PAT }}
