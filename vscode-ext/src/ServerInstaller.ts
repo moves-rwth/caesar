@@ -268,7 +268,7 @@ export class ServerInstaller {
             }
         } catch (error: any) {
             this.verifier.logger.error(`Installer: failed to fetch releases or process assets.`, error);
-            throw new Error(`Failed to fetch releases or process assets: ${error}`);
+            throw new Error(`Failed to fetch releases or process assets: ${error}`, { cause: error });
         }
         return null;
     }

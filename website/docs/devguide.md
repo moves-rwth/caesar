@@ -49,10 +49,11 @@ The [`vscode-ext/vsc-extension-quickstart.md`](https://github.com/moves-rwth/cae
 
 Here, we use `yarn` for package management.
  * `yarn install` to install the necessary dependencies.
- * `yarn compile` to compile the extension and run the linter.
+ * `yarn compile` to compile the extension.
  * `yarn watch` to start a TypeScript compiler server that recompiles when changes are made.
  * `yarn lint` to run the linter.
- * `yarn vscode:prepublish` compiles as well.
+ * `yarn run verify` to run both compilation and linting.
+ * `yarn vscode:prepublish` runs the same checks used before packaging the extension.
 
 ## pgcl2heyvl
 

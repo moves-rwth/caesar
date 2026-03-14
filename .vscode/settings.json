@@ -10,5 +10,5 @@
     "eslint.workingDirectories": [
         "./vscode-ext"
     ],
-    "eslint.experimental.useFlatConfig": true
+    "eslint.useFlatConfig": true
 }
