@@ -35,14 +35,16 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: yarn
+          cache-dependency-path: vscode-ext/yarn.lock
     
-      - name: Install NPM dependencies
+      - name: Install Yarn dependencies
         working-directory: ${{ env.EXTENSION_DIRECTORY }}
-        run: npm ci
+        run: yarn install --frozen-lockfile
   
       - name: Package the extension
         working-directory: ${{ env.EXTENSION_DIRECTORY }}
-        run: npm run package -- --out caesar-${{ inputs.version }}.vsix
+        run: yarn package --out caesar-${{ inputs.version }}.vsix
 
       - name: Publish the extension (Visual Studio Marketplace)
         uses: HaaLeo/publish-vscode-extension@v1

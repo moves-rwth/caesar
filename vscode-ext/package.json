@@ -307,10 +307,10 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "yarn compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "pretest": "yarn compile && yarn lint",
     "lint": "eslint .",
     "test": "vscode-test",
     "package": "vsce package"
@@ -319,7 +319,7 @@
     "@eslint/js": "^9.2.0",
     "@types/adm-zip": "^0.5.5",
     "@types/mocha": "^10.0.6",
-    "@types/node": "18.x",
+    "@types/node": "^22.13.0",
     "@types/semver": "^7.5.8",
     "@types/tar": "^6.1.13",
     "@types/vscode": "^1.87.0",
