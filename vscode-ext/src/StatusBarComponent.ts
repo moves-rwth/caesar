@@ -136,8 +136,8 @@ export class StatusBarComponent {
 
             const status_counts = new Map<VerifyResult, number>(document_status?.status_counts ?? []);
             // const _verified = status_counts.get(VerifyResult.Verified) ?? 0;
-            const failed = status_counts.get(VerifyResult.Failed) ?? 0;
-            const unknown = status_counts.get(VerifyResult.Unknown) ?? 0 + (status_counts.get(VerifyResult.Timeout) ?? 0);
+            const failed = (status_counts.get(VerifyResult.Failed) ?? 0) + (status_counts.get(VerifyResult.Refuted) ?? 0);
+            const unknown = (status_counts.get(VerifyResult.Unknown) ?? 0) + (status_counts.get(VerifyResult.Timeout) ?? 0);
 
             tooltipString.appendMarkdown(`${vscode.workspace.asRelativePath(vscode.Uri.parse(document_id.uri).path)}: $(error) ${failed} $(question) ${unknown}` + "\n\n --- \n");
         }
