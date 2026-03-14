@@ -23,26 +23,30 @@ jobs:
    
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.git_ref }}
   
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: yarn
+          cache-dependency-path: vscode-ext/yarn.lock
     
-      - name: Install NPM dependencies
+      - name: Install Yarn dependencies
         working-directory: ${{ env.EXTENSION_DIRECTORY }}
-        run: npm install
+        run: yarn install --frozen-lockfile
       
-      - name: Set npm flags (for pre-release)
+      - name: Set package flags (for pre-release)
         if: ${{ inputs.is_prerelease }}
         shell: bash
         run: |
-          echo "NPM_EXTRA_FLAGS=--pre-release" >> $GITHUB_ENV
+          echo "PACKAGE_EXTRA_FLAGS=--pre-release" >> $GITHUB_ENV
   
       - name: Package the extension
         working-directory: ${{ env.EXTENSION_DIRECTORY }}
-        run: npm run package -- --out caesar-${{ inputs.version }}.vsix $NPM_EXTRA_FLAGS
+        run: yarn package --out caesar-${{ inputs.version }}.vsix $PACKAGE_EXTRA_FLAGS
 
       - name: Upload Release Files
         uses: softprops/action-gh-release@v2

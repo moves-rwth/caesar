@@ -4,8 +4,16 @@ src/**
 .gitignore
 .yarnrc
 vsc-extension-quickstart.md
+eslint.config.mjs
+esbuild.js
+*.vsix
+**/.DS_Store
+**/*.afdesign
+node_modules/**
+out/**
 **/tsconfig.json
 **/.eslintrc.json
 **/*.map
+!dist/**/*.map
 **/*.ts
 **/.vscode-test.*

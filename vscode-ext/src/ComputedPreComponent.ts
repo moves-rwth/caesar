@@ -106,7 +106,6 @@ export class ComputedPreComponent {
 
                         // how many lines are empty above the span?
                         let freeLines = 0;
-                        // eslint-disable-next-line no-constant-condition
                         while (true) {
                             const checkLine = line - freeLines - 1;
                             if (freeLines === expls.length || checkLine < 0 || editor.document.lineAt(checkLine).text.trim() !== '') {

@@ -273,10 +273,10 @@ export class CaesarClient {
                 try {
                     const cargoTomlPath = path.join(serverDirectory, "Cargo.toml");
                     await fs.access(cargoTomlPath, fs.constants.R_OK);
-                } catch (_error) {
+                } catch (error) {
                     this.logger.error("Client: source path does not have a Cargo.toml.");
                     void vscode.window.showErrorMessage("Caesar: Cargo.toml file is not found in the path. Please check the path in the settings.");
-                    throw new Error("Cargo.toml file is not found in the path");
+                    throw new Error("Cargo.toml file is not found in the path", { cause: error });
                 }
                 serverExecutable = "cargo";
                 args.push('run', '--', 'lsp');

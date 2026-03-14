@@ -11,7 +11,7 @@ use crate::pretty::pretty_string;
 lalrpop_util::lalrpop_mod!(
     #[cfg_attr(rustfmt, rustfmt_skip)]
     grammar_old,
-    "/src/front/parser/precedence_update/grammar_old.rs"
+    "/precedence_update/grammar_old.rs"
 );
 
 pub(super) fn parse_old_decls(

@@ -28,14 +28,16 @@ export default tseslint.config(
             "@typescript-eslint/no-unused-vars": [
                 "error",
                 {
-                    "destructuredArrayIgnorePattern": "^_"
+                    "argsIgnorePattern": "^_",
+                    "caughtErrorsIgnorePattern": "^_",
+                    "destructuredArrayIgnorePattern": "^_",
+                    "varsIgnorePattern": "^_"
                 }
             ],
-            "@typescript-eslint/semi": "warn",
             "curly": "warn",
             "eqeqeq": "warn",
             "no-throw-literal": "warn",
-            "semi": "off",
+            "semi": "warn",
             "@typescript-eslint/no-floating-promises": "error",
             "@typescript-eslint/no-explicit-any": "off",
             "@typescript-eslint/no-unsafe-assignment": "off"
@@ -43,8 +45,9 @@ export default tseslint.config(
     }, {
     ignores: [
         "eslint.config.mjs",
-        ".vscode-text.mjs",
-        "out/",
-        ".vscode-test.mjs"
+        "esbuild.js",
+        "dist/",
+        ".vscode-test.mjs",
+        "out/"
     ]
 });

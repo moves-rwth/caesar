@@ -23,7 +23,7 @@
   "engines": {
     "vscode": "^1.87.0"
   },
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
@@ -307,38 +307,41 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "yarn run verify && yarn run bundle:production",
     "compile": "tsc -p ./",
+    "bundle": "node esbuild.js",
+    "bundle:watch": "node esbuild.js --watch",
+    "bundle:production": "node esbuild.js --production",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "verify": "yarn compile && yarn lint",
+    "pretest": "yarn run verify && yarn run bundle",
     "lint": "eslint .",
     "test": "vscode-test",
     "package": "vsce package"
   },
   "devDependencies": {
-    "@eslint/js": "^9.2.0",
-    "@types/adm-zip": "^0.5.5",
-    "@types/mocha": "^10.0.6",
-    "@types/node": "18.x",
-    "@types/semver": "^7.5.8",
-    "@types/tar": "^6.1.13",
+    "@eslint/js": "^10.0.1",
+    "@types/adm-zip": "^0.5.7",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.19.15",
+    "@types/semver": "^7.7.1",
     "@types/vscode": "^1.87.0",
-    "@typescript-eslint/eslint-plugin": "^7.0.2",
-    "@typescript-eslint/parser": "^7.0.2",
-    "@vscode/test-cli": "^0.0.6",
-    "@vscode/test-electron": "^2.3.9",
-    "@vscode/vsce": "^2.26.1",
-    "eslint": "^8.56.0",
-    "typescript": "^5.3.3",
-    "typescript-eslint": "^7.9.0"
+    "@typescript-eslint/eslint-plugin": "^8.57.0",
+    "@typescript-eslint/parser": "^8.57.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.27.4",
+    "eslint": "^10.0.3",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.57.0"
   },
   "dependencies": {
-    "@octokit/rest": "^20.1.1",
+    "@octokit/rest": "^20.1.2",
     "adm-zip": "github:cthackers/adm-zip#d3f5d7b71c48a1d0bec71362df308c3167c542d7",
     "got": "^11.8.6",
-    "octokit": "^4.1.3",
-    "semver": "^7.6.2",
-    "tar": "^7.4",
+    "semver": "^7.7.4",
+    "tar": "^7.5.11",
     "vscode-languageclient": "^9.0.1"
   }
 }

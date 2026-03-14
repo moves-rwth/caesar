@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as  tar from 'tar';
 import { ExtensionContext, Progress, ProgressLocation, Uri, commands, env, window } from 'vscode';
 import { Octokit } from '@octokit/rest';
-import * as AdmZip from 'adm-zip';
+import AdmZip from "adm-zip";
 import got from 'got';
 import { InstallerConfig } from './Config';
 import { Verifier } from './Verifier';
@@ -268,7 +268,7 @@ export class ServerInstaller {
             }
         } catch (error: any) {
             this.verifier.logger.error(`Installer: failed to fetch releases or process assets.`, error);
-            throw new Error(`Failed to fetch releases or process assets: ${error}`);
+            throw new Error(`Failed to fetch releases or process assets: ${error}`, { cause: error });
         }
         return null;
     }

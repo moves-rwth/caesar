@@ -4,18 +4,64 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "VSCode Extension: npm watch",
-			"path": "vscode-ext",
-			"type": "npm",
-			"script": "watch",
-			"problemMatcher": "$tsc-watch",
-			"isBackground": true,
-			"presentation": {
-				"reveal": "never"
+			"label": "Docs: dev server",
+			"type": "shell",
+			"command": "yarn",
+			"args": [
+				"start"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/website"
 			},
-			"group": {
-				"kind": "build",
-				"isDefault": false,
+			"isBackground": true,
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "^(__never_match__):(.*)$",
+					"file": 1,
+					"message": 2
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".",
+					"endsPattern": "Docusaurus website is running at:"
+				}
+			},
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			}
+		},
+		{
+			"label": "VSCode Extension: bundle watch",
+			"type": "shell",
+			"command": "yarn",
+			"args": [
+				"run",
+				"bundle:watch"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/vscode-ext"
+			},
+			"isBackground": true,
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "^(__never_match__):(.*)$",
+					"file": 1,
+					"message": 2
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".",
+					"endsPattern": "build finished, watching for changes"
+				}
+			},
+			"group": "build",
+			"presentation": {
+				"reveal": "never",
+				"panel": "dedicated",
+				"clear": true
 			}
 		}
 	]
