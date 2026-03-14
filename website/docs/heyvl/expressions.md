@@ -56,9 +56,49 @@ The syntax of expressions (`Expr`) consists of the following parts:
 
 Types (`Type`) are types from Caesar's [standard library](../stdlib/) and user-defined types from [domains](domains.md).
 
-The above list is presented roughly in order of operator precedence.
-Note that we plan to change some operator precedences, so when in doubt, use more parentheses to guarantee the correct interpretation.
+## Operator Precedence and Associativity
 
+From tightest (top) to loosest (bottom):
+
+| Level | Operators / Forms | Associativity |
+| --- | --- | --- |
+| 0 | `let`, `ite`, calls, literals, variables, parentheses, `[e]`, `!`, `~`, `?` | n/a |
+| 1 | `*`, `/`, `%` | left |
+| 2 | `+`, `-` | left |
+| 3 | `⊓` (`\cap`), `⊔` (`\cup`) | left |
+| 4 | `<`, `<=`, `>=`, `>` | non-associative |
+| 5 | `==`, `!=` | non-associative |
+| 6 | `&&` | left |
+| 7 | `\|\|` | left |
+| 8 | `→` (`==>`), `←` (`<==`), `↘`, `↖` | right |
+| 9 | `inf`, `sup`, `exists`, `forall` | binder (loosest) |
+
+:::info Transition Period
+Operator precedence was changed with [Caesar 4.0](/blog/2026/03/14/caesar-4-0).
+Compared to older Caesar versions:
+
+ * `+`, `-`, `*`, `/`, `%`, and `&&` now parse left-associatively (instead of right-associatively).
+ * `↘`/`↖` moved to the looser implication level with `→`/`←` (instead of binding tighter than `&&`/`||`).
+ * `<`, `<=`, `>`, `>=`, `==`, and `!=` are now non-associative.
+
+For migration safety, Caesar rejects expressions whose meaning would differ between old and new precedence unless you add explicit parentheses (e.g. `n - i + x` or `3 / 5 * x`).
+During migration, you can choose parser behavior explicitly via `--parser new|old|both` (default: `both`), but this compatibility option is temporary and will be removed in a future release.
+
+Examples of changed parses:
+
+ * `n - i + x` parses as `(n - i) + x` (not `n - (i + x)`).
+ * `3 / 5 * x` parses as `(3 / 5) * x` (not `3 / (5 * x)`).
+ * `a ==> b && c` parses as `a ==> (b && c)` (not `(a ==> b) && c`).
+
+Examples that are rejected unless parenthesized:
+
+ * `a < b < c` (relational operators are non-associative).
+ * `a == b == c` (`==` is non-associative).
+ * `a != b != c` (`!=` is non-associative).
+
+:::
+
+When in doubt, use explicit parentheses to avoid ambiguity.
 The most precise grammar specification can be found in Caesar's source code ([`src/front/parser/grammar.lalrpop`](https://github.com/moves-rwth/caesar/blob/main/src/front/parser/grammar.lalrpop)).
 
 
