@@ -9,31 +9,30 @@ jobs:
     name: Test Suite
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Install packages
         shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake llvm-dev libclang-dev clang lld
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --workspace
+      - run: cargo test --workspace --locked
 
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with: 
           components: rustfmt
-      - run: rustup component add rustfmt
       - run: cargo fmt --all -- --check
 
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Install packages
         shell: bash
         run: |
@@ -42,4 +41,4 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with: 
           components: clippy
-      - run: cargo clippy --workspace -- -D warnings
+      - run: cargo clippy --workspace --locked -- -D warnings

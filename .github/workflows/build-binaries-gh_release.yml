@@ -58,7 +58,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
           ref: ${{ inputs.git_ref }}
 
@@ -113,7 +113,7 @@ jobs:
         echo "BIN=$bin" >> $GITHUB_ENV
 
     - name: Strip release binary (macos)
-      if: matrix.os == 'macos-latest'
+      if: contains(matrix.os, 'macos')
       shell: bash
       run: strip "$BIN"
 

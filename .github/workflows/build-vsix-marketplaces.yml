@@ -27,16 +27,18 @@ jobs:
    
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.git_ref }}
   
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
     
       - name: Install NPM dependencies
         working-directory: ${{ env.EXTENSION_DIRECTORY }}
-        run: npm install
+        run: npm ci
   
       - name: Package the extension
         working-directory: ${{ env.EXTENSION_DIRECTORY }}
