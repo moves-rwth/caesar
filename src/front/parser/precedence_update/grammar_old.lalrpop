@@ -54,7 +54,7 @@ Ty: TyKind = {
 // ---------------------------------------
 // Expressions
 
-ExprNode<Rule>: Expr = {
+ExprTier<Rule>: Expr = {
     <l: @L> <kind: Rule> <r: @R> =>
         Shared::new(ExprData {
             kind,
@@ -63,103 +63,19 @@ ExprNode<Rule>: Expr = {
         })
 };
 
-pub Expr = ExprNode<ExprKindOp>;
+ExprKindStart = ExprKindQuant;
 
-SymCap: () = { "⊓", "\\cap" }
-SymCup: () = { "⊔", "\\cup" }
-SymOplus: () = { "+", "⊕", "\\oplus" }
-SymRightarrow: () = { "→", "==>" }
-SymLeftarrow: () = { "←", "<==" }
-SymInfty: () = { "∞", "\\infty" }
+pub Expr = ExprTier<ExprKindStart>;
 
-pub LitKind: LitKind = {
-    <s:r#""[^"]*""#> => LitKind::Str(Symbol::intern(&s[1..s.len()-1])),
-    <num: r"[0-9]+"> => LitKind::UInt(BigUint::from_str(num).unwrap()),
-    <num: r"[0-9]+\.[0-9]+"> => LitKind::Frac(parse_decimal(num).unwrap()),
-    SymInfty => LitKind::Infinity,
-    "true" => LitKind::Bool(true),
-    "false" => LitKind::Bool(false),
-}
-
-ExprKindAtomic: ExprKind = {
-    "let" "(" <ident: Ident> "," <val: Expr> "," <expr: Expr> ")" => ExprKind::Subst(ident, val, expr),
-    "ite" "(" <cond: Expr> "," <a: Expr> "," <b: Expr> ")" => ExprKind::Ite(cond, a, b),
-    <span: Span<"!">> <expr: ExprNode<ExprKindAtomic>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Not), expr),
-    <span: Span<"~">> <expr: ExprNode<ExprKindAtomic>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Non), expr),
-    <span: Span<"?">> <expr: ExprNode<ExprKindAtomic>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Embed), expr),
-    <ident: Ident> "(" <args: Comma<Expr>> ")" => ExprKind::Call(ident, args),
-    <l: @L> "[" <expr: Expr> "]" <r: @R> => ExprKind::Unary(Spanned::new(span(file, l, r), UnOpKind::Iverson), expr),
-    <l: @L> "(" <expr: Expr> ")" <r: @R> => ExprKind::Unary(Spanned::new(span(file, l, r), UnOpKind::Parens), expr),
-    <l: @L> <lit: LitKind> <r: @R> => ExprKind::Lit(spanned(file, l, r, lit)),
-    <ident: Ident> => ExprKind::Var(ident),
-}
-
-ExprKindOp: ExprKind = {
-    // level 0 (tightest): atomic forms from ExprKindAtomic
-    //   let(...), ite(...), !, ~, ?, calls, [..], (..), literals, variables
-    #[precedence(level="0")]
-    ExprKindAtomic,
-
-    // level 1: multiplicative operators (*, /, %)
-    #[precedence(level="1")]
-    #[assoc(side="left")]
-    <l: ExprNode<ExprKindOp>> <span: Span<"*">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Mul), l, r),
-    <l: ExprNode<ExprKindOp>> <span: Span<"/">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Div), l, r),
-    <l: ExprNode<ExprKindOp>> <span: Span<"%">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Mod), l, r),
-
-    // level 2: additive operators (+, -)
-    #[precedence(level="2")]
-    #[assoc(side="left")]
-    <l: ExprNode<ExprKindOp>> <span: Span<"+">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Add), l, r),
-    <l: ExprNode<ExprKindOp>> <span: Span<"-">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Sub), l, r),
-
-    // level 3: lattice operators (⊓/\cap, ⊔/\cup)
-    #[precedence(level="3")]
-    #[assoc(side="left")]
-    <l: ExprNode<ExprKindOp>> <span: Span<SymCap>> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Inf), l, r),
-    <l: ExprNode<ExprKindOp>> <span: Span<SymCup>> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Sup), l, r),
-
-    // level 4: relational operators (<, <=, >=, >)
-    #[precedence(level="4")]
-    #[assoc(side="none")]
-    <l: ExprNode<ExprKindOp>> <span: Span<"<">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Lt), l, r),
-    <l: ExprNode<ExprKindOp>> <span: Span<"<=">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Le), l, r),
-    <l: ExprNode<ExprKindOp>> <span: Span<">=">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Ge), l, r),
-    <l: ExprNode<ExprKindOp>> <span: Span<">">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Gt), l, r),
-
-    // level 5: equality operators (==, !=)
-    #[precedence(level="5")]
-    #[assoc(side="none")]
-    <l: ExprNode<ExprKindOp>> <span: Span<"==">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Eq), l, r),
-    <l: ExprNode<ExprKindOp>> <span: Span<"!=">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Ne), l, r),
-
-    // level 6: conjunction (&&)
-    #[precedence(level="6")]
-    #[assoc(side="left")]
-    <l: ExprNode<ExprKindOp>> <span: Span<"&&">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::And), l, r),
-
-    // level 7: disjunction (||)
-    #[precedence(level="7")]
-    #[assoc(side="left")]
-    <l: ExprNode<ExprKindOp>> <span: Span<"||">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Or), l, r),
-
-    // level 8: implication/compare family (→/==>, ←/<==, ↘, ↖)
-    #[precedence(level="8")]
-    #[assoc(side="right")]
-    <l: ExprNode<ExprKindOp>> <span: Span<SymRightarrow>> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Impl), l, r),
-    <l: ExprNode<ExprKindOp>> <span: Span<SymLeftarrow>> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::CoImpl), l, r),
-    <l: ExprNode<ExprKindOp>> <span: Span<"↘">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Compare), l, r),
-    <l: ExprNode<ExprKindOp>> <span: Span<"↖">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::CoCompare), l, r),
-
-    // level 9 (loosest): quantifiers (inf, sup, exists, forall)
-    #[precedence(level="9")]
-    <quant: QuantOp> <vars: CommaPlus<QuantVar>> <anns: QuantAnn*> "." <expr: ExprNode<ExprKindOp>> => {
+ExprKindQuant: ExprKind = {
+    <quant: QuantOp> <vars: CommaPlus<QuantVar>> <anns: QuantAnn*> "." <expr: ExprTier<ExprKindQuant>> => {
         let mut all_anns = QuantAnn::default();
         for ann in anns {
             all_anns.add(ann);
         }
         ExprKind::Quant(quant, vars, all_anns, expr)
     },
+    ExprKindOr
 }
 
 QuantOp: QuantOp = {
@@ -180,6 +96,83 @@ QuantAnn: QuantAnn = {
         ann.triggers.push(Trigger::new(span(file, l, r), exprs));
         ann
     }
+}
+
+ExprKindOr: ExprKind = {
+    <l: ExprTier<ExprKindOr>> <span: Span<"||">> <r: ExprTier<ExprKindAnd>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Or), l, r),
+    ExprKindAnd,
+}
+
+ExprKindAnd: ExprKind = {
+    <l: ExprTier<ExprKindCompare>> <span: Span<"&&">> <r: ExprTier<ExprKindAnd>> => ExprKind::Binary(Spanned::new(span, BinOpKind::And), l, r),
+    ExprKindCompare,
+}
+
+ExprKindCompare: ExprKind = {
+    <l: ExprTier<ExprKindLattice>> <span: Span<"==">> <r: ExprTier<ExprKindCompare>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Eq), l, r),
+    <l: ExprTier<ExprKindLattice>> <span: Span<"<">> <r: ExprTier<ExprKindCompare>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Lt), l, r),
+    <l: ExprTier<ExprKindLattice>> <span: Span<"<=">> <r: ExprTier<ExprKindCompare>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Le), l, r),
+    <l: ExprTier<ExprKindLattice>> <span: Span<"!=">> <r: ExprTier<ExprKindCompare>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Ne), l, r),
+    <l: ExprTier<ExprKindLattice>> <span: Span<">=">> <r: ExprTier<ExprKindCompare>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Ge), l, r),
+    <l: ExprTier<ExprKindLattice>> <span: Span<">">> <r: ExprTier<ExprKindCompare>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Gt), l, r),
+    ExprKindLattice,
+}
+
+SymCap: () = { "⊓", "\\cap" }
+SymCup: () = { "⊔", "\\cup" }
+SymOplus: () = { "+", "⊕", "\\oplus" }
+SymRightarrow: () = { "→", "==>" }
+SymLeftarrow: () = { "←", "<==" }
+
+ExprKindLattice: ExprKind = {
+    <l: ExprTier<ExprKindSummand>> <span: Span<SymCap>> <r: ExprTier<ExprKindLattice>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Inf), l, r),
+    <l: ExprTier<ExprKindSummand>> <span: Span<SymCup>> <r: ExprTier<ExprKindLattice>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Sup), l, r),
+    <l: ExprTier<ExprKindSummand>> <span: Span<SymRightarrow>> <r: ExprTier<ExprKindLattice>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Impl), l, r),
+    <l: ExprTier<ExprKindSummand>> <span: Span<SymLeftarrow>> <r: ExprTier<ExprKindLattice>> => ExprKind::Binary(Spanned::new(span, BinOpKind::CoImpl), l, r),
+    <l: ExprTier<ExprKindSummand>> <span: Span<"↘">> <r: ExprTier<ExprKindLattice>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Compare), l, r),
+    <l: ExprTier<ExprKindSummand>> <span: Span<"↖">> <r: ExprTier<ExprKindLattice>> => ExprKind::Binary(Spanned::new(span, BinOpKind::CoCompare), l, r),
+    ExprKindSummand,
+}
+
+ExprKindSummand: ExprKind = {
+    <l: ExprTier<ExprKindFactor>> <span: Span<"+">> <r: ExprTier<ExprKindSummand>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Add), l, r),
+    <l: ExprTier<ExprKindFactor>> <span: Span<"-">> <r: ExprTier<ExprKindSummand>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Sub), l, r),
+    ExprKindFactor,
+}
+
+ExprKindFactor: ExprKind = {
+    <l: ExprTier<ExprKindTerm>> <span: Span<"*">> <r: ExprTier<ExprKindFactor>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Mul), l, r),
+    <l: ExprTier<ExprKindTerm>> <span: Span<"/">> <r: ExprTier<ExprKindFactor>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Div), l, r),
+    <l: ExprTier<ExprKindTerm>> <span: Span<"%">> <r: ExprTier<ExprKindFactor>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Mod), l, r),
+    ExprKindTerm,
+}
+
+ExprKindTerm: ExprKind = {
+    "let" "(" <ident: Ident> "," <val: Expr> "," <expr: Expr> ")" => ExprKind::Subst(ident, val, expr),
+    "ite" "(" <cond: Expr> "," <a: Expr> "," <b: Expr> ")" => ExprKind::Ite(cond, a, b),
+    <call: ExprCall> => call,
+    <span: Span<"!">> <expr: ExprTier<ExprKindTerm>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Not), expr),
+    <span: Span<"~">> <expr: ExprTier<ExprKindTerm>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Non), expr),
+    <span: Span<"?">> <expr: ExprTier<ExprKindTerm>> => ExprKind::Unary(Spanned::new(span, UnOpKind::Embed), expr),
+    <l: @L> "[" <expr: Expr> "]" <r: @R> => ExprKind::Unary(Spanned::new(span(file, l, r), UnOpKind::Iverson), expr),
+    <l: @L> "(" <expr: Expr> ")" <r: @R> => ExprKind::Unary(Spanned::new(span(file, l, r), UnOpKind::Parens), expr),
+    <l: @L> <lit: LitKind> <r: @R> => ExprKind::Lit(spanned(file, l, r, lit)),
+    <ident: Ident> => ExprKind::Var(ident),
+}
+
+ExprCall: ExprKind = {
+    <ident: Ident> "(" <args: Comma<Expr>> ")" => ExprKind::Call(ident, args),
+}
+
+SymInfty: () = { "∞", "\\infty" }
+
+pub LitKind: LitKind = {
+    <s:r#""[^"]*""#> => LitKind::Str(Symbol::intern(&s[1..s.len()-1])),
+    <num: r"[0-9]+"> => LitKind::UInt(BigUint::from_str(num).unwrap()),
+    <num: r"[0-9]+\.[0-9]+"> => LitKind::Frac(parse_decimal(num).unwrap()),
+    SymInfty => LitKind::Infinity,
+    "true" => LitKind::Bool(true),
+    "false" => LitKind::Bool(false),
 }
 
 // ---------------------------------------
@@ -204,14 +197,7 @@ StmtKind: StmtKind = {
     <l: @L> "var" <ident: Ident> ":" <ty: Ty> <r: @R>
         => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: None, span: span(file, l, r), created_from: None })),
     <lhs: CommaPlus<Ident>> "=" <rhs: Expr> => StmtKind::Assign(lhs, rhs),
-    <l: @L> <ident: Ident> "(" <args: Comma<Expr>> ")" <r: @R> => {
-        let call = Shared::new(ExprData {
-            kind: ExprKind::Call(ident, args),
-            ty: None,
-            span: span(file, l, r),
-        });
-        StmtKind::Assign(vec![], call)
-    },
+    <call: ExprTier<ExprCall>> => StmtKind::Assign(vec![], call),
     "havoc" <vars: CommaPlus<Ident>> => StmtKind::Havoc(Direction::Down, vars),
     "cohavoc" <vars: CommaPlus<Ident>> => StmtKind::Havoc(Direction::Up, vars),
     "assert" <expr: Expr> => StmtKind::Assert(Direction::Down, expr),

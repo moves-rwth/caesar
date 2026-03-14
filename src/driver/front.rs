@@ -26,7 +26,7 @@ use crate::{
         item::{Item, SourceUnitName},
     },
     front::{
-        parser::{self, ParseError},
+        parser::{self, ParseError, ParserMode},
         resolve::Resolve,
         tycheck::Tycheck,
     },
@@ -61,7 +61,7 @@ pub fn parse_and_tycheck(
     for file_id in user_files {
         let file = server.get_file(*file_id).unwrap();
         let new_units = module
-            .parse(&file, input_options.raw)
+            .parse(&file, input_options.raw, input_options.parser_mode)
             .map_err(|parse_err| parse_err.diagnostic())?;
 
         // Print the result of parsing if requested
@@ -120,17 +120,28 @@ impl Module {
         &mut self,
         file: &StoredFile,
         raw: bool,
+        parser_mode: ParserMode,
     ) -> Result<&mut [Item<SourceUnit>], ParseError> {
         if raw {
-            let block = info_span!("parse", path=%file.path.to_string_lossy(), raw=raw)
-                .in_scope(|| parser::parse_raw(file.id, &file.source))?;
+            let block =
+                info_span!("parse", path=%file.path.to_string_lossy(), raw=raw).in_scope(|| {
+                    if parser_mode == ParserMode::Both {
+                        parser::parse_raw(file.id, &file.source)
+                    } else {
+                        parser::parse_raw_with_mode(file.id, &file.source, parser_mode)
+                    }
+                })?;
             let name = SourceUnitName::new(&file.path, None, block.span);
             let item = Item::new(name, SourceUnit::Raw(block));
             Ok(self.extend(std::iter::once(item)))
         } else {
             let decls =
                 info_span!("parse", path=%file.path.to_string_lossy(), raw=raw).in_scope(|| {
-                    let decls = parser::parse_decls(file.id, &file.source)?;
+                    let decls = if parser_mode == ParserMode::Both {
+                        parser::parse_decls(file.id, &file.source)?
+                    } else {
+                        parser::parse_decls_with_mode(file.id, &file.source, parser_mode)?
+                    };
                     trace!(n = decls.len(), "source units parsed");
                     Ok(decls)
                 })?;

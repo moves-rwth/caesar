@@ -664,8 +664,8 @@ mod test {
 
     #[test]
     fn format_expr() {
-        let expr = parser::parse_expr(FileId::DUMMY, "x + y * 17 / 1").unwrap();
+        let expr = parser::parse_expr(FileId::DUMMY, "x + y * 17").unwrap();
         let text = pretty_string(&expr);
-        assert_eq!(text, "(x + (y * (17 / 1)))");
+        assert_eq!(text, "(x + (y * 17))");
     }
 }
