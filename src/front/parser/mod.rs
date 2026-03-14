@@ -16,7 +16,7 @@ use crate::ast::{
 lalrpop_util::lalrpop_mod!(
     #[cfg_attr(rustfmt, rustfmt_skip)]
     grammar,
-    "/src/front/parser/grammar.rs"
+    "/grammar.rs"
 );
 
 type GrammarParseError<'input> =
