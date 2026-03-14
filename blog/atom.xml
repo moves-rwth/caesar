@@ -2,11 +2,104 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://www.caesarverifier.org/blog</id>
     <title>Caesar Verifier Blog</title>
-    <updated>2026-03-04T00:00:00.000Z</updated>
+    <updated>2026-03-14T00:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://www.caesarverifier.org/blog"/>
     <subtitle>Caesar Verifier Blog</subtitle>
     <icon>https://www.caesarverifier.org/img/laurel-square.svg</icon>
+    <entry>
+        <title type="html"><![CDATA[Caesar 4.0: Expression Parsing Changes, Soundness Diagnostics, and More]]></title>
+        <id>https://www.caesarverifier.org/blog/2026/03/14/caesar-4-0</id>
+        <link href="https://www.caesarverifier.org/blog/2026/03/14/caesar-4-0"/>
+        <updated>2026-03-14T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[Caesar 4.0 improves expression parsing, adds explicit soundness guarantees for refutations in CLI/LSP feedback, introduces new weigh and additive choice (if +) statements, and experimental entailment checking.]]></summary>
+        <content type="html"><![CDATA[<p>Caesar 4.0 improves expression parsing, adds explicit soundness guarantees for refutations in CLI/LSP feedback, introduces new <code>weigh</code> and additive choice (<code>if +</code>) statements, and experimental entailment checking.</p>
+<div class="theme-admonition theme-admonition-warning admonition_xJq3 alert alert--warning"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8.893 1.5c-.183-.31-.52-.5-.887-.5s-.703.19-.886.5L.138 13.499a.98.98 0 0 0 0 1.001c.193.31.53.501.886.501h13.964c.367 0 .704-.19.877-.5a1.03 1.03 0 0 0 .01-1.002L8.893 1.5zm.133 11.497H6.987v-2.003h2.039v2.003zm0-3.004H6.987V5.987h2.039v4.006z"></path></svg></span>Breaking Change</div><div class="admonitionContent_BuS1"><p>Expression parsing precedence and associativity changed in Caesar 4.0.
+Some expressions now parse differently, and Caesar may reject previously accepted expressions until you add explicit parentheses.
+See <a class="" href="https://www.caesarverifier.org/blog/2026/03/14/caesar-4-0#expression-parsing-changes">Expression Parsing Changes</a> below.</p></div></div>
+<p><strong>Overview:</strong></p>
+<ol>
+<li class=""><a class="" href="https://www.caesarverifier.org/blog/2026/03/14/caesar-4-0#expression-parsing-changes">Expression Parsing Changes</a></li>
+<li class=""><a class="" href="https://www.caesarverifier.org/blog/2026/03/14/caesar-4-0#soundness-checks">Soundness Checks and Better Diagnostics</a></li>
+<li class=""><a class="" href="https://www.caesarverifier.org/blog/2026/03/14/caesar-4-0#new-heyvl-statements">New HeyVL Statements: <code>weigh</code> and Additive Choice</a></li>
+<li class=""><a class="" href="https://www.caesarverifier.org/blog/2026/03/14/caesar-4-0#entailment-checking">Experimental Entailment Checking</a></li>
+<li class=""><a class="" href="https://www.caesarverifier.org/blog/2026/03/14/caesar-4-0#other-improvements">Other Improvements</a></li>
+</ol>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="expression-parsing-changes">Expression Parsing Changes<a href="https://www.caesarverifier.org/blog/2026/03/14/caesar-4-0#expression-parsing-changes" class="hash-link" aria-label="Direct link to Expression Parsing Changes" title="Direct link to Expression Parsing Changes" translate="no">​</a></h2>
+<p>We updated expression parsing to follow a clearer, more conventional precedence order and to fix surprising parses reported by users (see <a href="https://github.com/moves-rwth/caesar/issues/112" target="_blank" rel="noopener noreferrer" class="">#112</a>).</p>
+<p>What changed compared to the old parser:</p>
+<ul>
+<li class=""><code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>%</code>, and <code>&amp;&amp;</code> now parse left-associatively (instead of right-associatively).</li>
+<li class=""><code>↘</code>/<code>↖</code> moved to the looser implication level with <code>→</code>/<code>←</code> (instead of binding tighter than <code>&amp;&amp;</code>/<code>||</code>).</li>
+<li class=""><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>, and <code>!=</code> are now non-associative (<code>==</code> stays left-associative).</li>
+</ul>
+<p>Examples of resulting behavior changes:</p>
+<ul>
+<li class=""><code>n - i + x</code> now parses as <code>(n - i) + x</code> (before: <code>n - (i + x)</code>).</li>
+<li class=""><code>3 / 5 * x</code> now parses as <code>(3 / 5) * x</code> (before: <code>3 / (5 * x)</code>).</li>
+<li class=""><code>a ==&gt; b &amp;&amp; c</code> now parses as <code>a ==&gt; (b &amp;&amp; c)</code> (before: <code>(a ==&gt; b) &amp;&amp; c</code>).</li>
+<li class="">Chains like <code>a &lt; b &lt; c</code> and <code>a != b != c</code> are now rejected unless parenthesized explicitly.</li>
+</ul>
+<div class="theme-admonition theme-admonition-warning admonition_xJq3 alert alert--warning"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8.893 1.5c-.183-.31-.52-.5-.887-.5s-.703.19-.886.5L.138 13.499a.98.98 0 0 0 0 1.001c.193.31.53.501.886.501h13.964c.367 0 .704-.19.877-.5a1.03 1.03 0 0 0 .01-1.002L8.893 1.5zm.133 11.497H6.987v-2.003h2.039v2.003zm0-3.004H6.987V5.987h2.039v4.006z"></path></svg></span>Transition Period</div><div class="admonitionContent_BuS1"><p>For a transition period, Caesar rejects expressions whose meaning changed under the new precedence and requires explicit parentheses.
+For example: <code>n - i + x</code> and <code>3 / 5 * x</code>.</p><p>You can use <code>--parser new|old|both</code> (default: <code>both</code>) to choose parser behavior explicitly; this option is temporary and will be removed in a future release.</p></div></div>
+<p>For the full precedence/associativity table, see <a class="" href="https://www.caesarverifier.org/docs/heyvl/expressions#operator-precedence-and-associativity">expressions documentation</a>.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="soundness-checks">Soundness Checks and Better Diagnostics<a href="https://www.caesarverifier.org/blog/2026/03/14/caesar-4-0#soundness-checks" class="hash-link" aria-label="Direct link to Soundness Checks and Better Diagnostics" title="Direct link to Soundness Checks and Better Diagnostics" translate="no">​</a></h2>
+<p>Caesar 4.0 extends proof-rule soundness tracking to <strong>both proofs and refutations</strong> (fixes <a href="https://github.com/moves-rwth/caesar/issues/75" target="_blank" rel="noopener noreferrer" class="">#75</a>).
+Previously, Caesar mainly guarded soundness of successful verifications; now it also checks when a reported counterexample is guaranteed to be a real counterexample to the original program.</p>
+<p>Caesar now distinguishes four outcome classes (besides solver <code>unknown</code>/timeouts):</p>
+<ul>
+<li class=""><strong>Verified</strong>: a sound proof of the property.</li>
+<li class=""><strong>Unsound verification</strong>: verification succeeded, but the proof is not guaranteed sound.</li>
+<li class=""><strong>Counter-example to property found</strong>: a sound refutation.</li>
+<li class=""><strong>Counter-example to verification found</strong>: a counterexample to the encoded verification task that may be spurious for the original program.</li>
+</ul>
+<p>In VSCode/LSP reporting, sound refutations are now shown explicitly as refutations, rather than as generic counterexamples.</p>
+<p>This is based on tracked approximation kinds (<code>Exact</code>, <code>Over</code>, <code>Under</code>, <code>Unknown</code>) together with <code>proc</code>/<code>coproc</code> direction.
+For example, in <code>proc</code> checks (lower bounds), refutations are sound with <code>Over</code>/<code>Exact</code> approximations; dually, in <code>coproc</code> checks (upper bounds), refutations are sound with <code>Under</code>/<code>Exact</code> approximations.</p>
+<p>Diagnostics in both CLI and LSP were updated accordingly, including clearer messages about whether results are guaranteed or may be spurious.</p>
+<p>Read more on the newly written documentation for <a class="" href="https://www.caesarverifier.org/docs/proof-rules/approximations"><em>Soundness of Proof Rules</em></a>.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="new-heyvl-statements">New HeyVL Statements: <code>weigh</code> and Additive Choice<a href="https://www.caesarverifier.org/blog/2026/03/14/caesar-4-0#new-heyvl-statements" class="hash-link" aria-label="Direct link to new-heyvl-statements" title="Direct link to new-heyvl-statements" translate="no">​</a></h2>
+<p>Caesar now supports the <code>weigh</code> statement and additive nondeterministic choices (<code>if +</code>) as first-class language constructs.
+For example:</p>
+<div class="language-heyvl codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#403f53;--prism-background-color:#FBFBFB"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-heyvl codeBlock_bY9V thin-scrollbar" style="color:#403f53;background-color:#FBFBFB"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#403f53"><span class="token keyword" style="color:rgb(12, 150, 155)">weigh</span><span class="token plain"> </span><span class="token number" style="color:rgb(170, 9, 130)">2</span><span class="token plain"> </span><span class="token operator" style="color:rgb(12, 150, 155)">*</span><span class="token plain"> x</span><br></span><span class="token-line" style="color:#403f53"><span class="token plain"></span><span class="token keyword" style="color:rgb(12, 150, 155)">if</span><span class="token plain"> </span><span class="token operator" style="color:rgb(12, 150, 155)">+</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(153, 76, 195)">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#403f53"><span class="token plain">    x </span><span class="token operator" style="color:rgb(12, 150, 155)">=</span><span class="token plain"> x </span><span class="token operator" style="color:rgb(12, 150, 155)">+</span><span class="token plain"> </span><span class="token number" style="color:rgb(170, 9, 130)">1</span><span class="token plain"></span><br></span><span class="token-line" style="color:#403f53"><span class="token plain"></span><span class="token punctuation" style="color:rgb(153, 76, 195)">}</span><span class="token plain"> </span><span class="token keyword" style="color:rgb(12, 150, 155)">else</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(153, 76, 195)">{</span><span class="token plain"></span><br></span><span class="token-line" style="color:#403f53"><span class="token plain">    x </span><span class="token operator" style="color:rgb(12, 150, 155)">=</span><span class="token plain"> x </span><span class="token operator" style="color:rgb(12, 150, 155)">+</span><span class="token plain"> </span><span class="token number" style="color:rgb(170, 9, 130)">2</span><span class="token plain"></span><br></span><span class="token-line" style="color:#403f53"><span class="token plain"></span><span class="token punctuation" style="color:rgb(153, 76, 195)">}</span><br></span></code></pre></div></div>
+<p>These statements still operate on the domain of extended non-negative reals.
+More information in the <a class="" href="https://www.caesarverifier.org/docs/heyvl/statements#reward-and-weigh"><code>weigh</code> documentation</a> and <a class="" href="https://www.caesarverifier.org/docs/heyvl/statements#nondeterministic-choices">nondeterministic choices documentation</a> sections.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="entailment-checking">Experimental Entailment Checking<a href="https://www.caesarverifier.org/blog/2026/03/14/caesar-4-0#entailment-checking" class="hash-link" aria-label="Direct link to Experimental Entailment Checking" title="Direct link to Experimental Entailment Checking" translate="no">​</a></h2>
+<p>Caesar now includes experimental support for entailment checking via:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#403f53;--prism-background-color:#FBFBFB"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#403f53;background-color:#FBFBFB"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#403f53"><span class="token plain">caesar entailment your-file.heyvl</span><br></span></code></pre></div></div>
+<p>This mode checks entailment between generated verification conditions for matching <code>coproc</code>/<code>proc</code> declarations.
+The release also fixes issues uncovered during early refactoring of this workflow.</p>
+<p>For details, see the <a class="" href="https://www.caesarverifier.org/docs/caesar/entailment">entailment documentation</a>.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="other-improvements">Other Improvements<a href="https://www.caesarverifier.org/blog/2026/03/14/caesar-4-0#other-improvements" class="hash-link" aria-label="Direct link to Other Improvements" title="Direct link to Other Improvements" translate="no">​</a></h2>
+<p>This release also includes targeted fixes and quality-of-life improvements:</p>
+<p><strong>Proof rules and typing</strong></p>
+<ul>
+<li class="">Invariant annotation resolution is now robust against shadowing, and undeclared symbols in invariants are diagnosed correctly (fixes <a href="https://github.com/moves-rwth/caesar/issues/67" target="_blank" rel="noopener noreferrer" class="">#67</a>, <a href="https://github.com/moves-rwth/caesar/issues/101" target="_blank" rel="noopener noreferrer" class="">#101</a>, <a href="https://github.com/moves-rwth/caesar/issues/102" target="_blank" rel="noopener noreferrer" class="">#102</a>).</li>
+<li class="">Type errors are clearer for invalid <code>havoc</code> usage (cf. <a href="https://github.com/moves-rwth/caesar/issues/93" target="_blank" rel="noopener noreferrer" class="">#93</a>).</li>
+<li class="">PAST rule fixes for missing/wrong casts and wrong condition (fixes <a href="https://github.com/moves-rwth/caesar/issues/94" target="_blank" rel="noopener noreferrer" class="">#94</a>; <a href="https://github.com/moves-rwth/caesar/commit/7b0c10568a8aaf4aba0aec3da5935cc7394ed2b7" target="_blank" rel="noopener noreferrer" class="">commit <code>7b0c105</code></a>, <a href="https://github.com/moves-rwth/caesar/commit/65859c3618edcbf714a990b980c45ed74c92321c" target="_blank" rel="noopener noreferrer" class="">commit <code>65859c3</code></a>, <a href="https://github.com/moves-rwth/caesar/commit/4854de126fc97e2e551780a6d943c6cab92c9429" target="_blank" rel="noopener noreferrer" class="">commit <code>4854de1</code></a>).</li>
+</ul>
+<p><strong>Quantifier elimination</strong></p>
+<ul>
+<li class="">Fixes for unsound rewrite of multiplication (fixes <a href="https://github.com/moves-rwth/caesar/issues/105" target="_blank" rel="noopener noreferrer" class="">#105</a>) and correct handling of <code>sup</code> under <code>~</code> (<a href="https://github.com/moves-rwth/caesar/commit/ca39bc61f789f14838545a5eb0080a249081bb85" target="_blank" rel="noopener noreferrer" class="">commit <code>ca39bc6</code></a>).<!-- -->
+<ul>
+<li class="">In particular, Caesar no longer rewrites <code>a * (inf y. ψ)</code> to <code>inf y. (a * ψ)</code> when <code>a</code> may evaluate to <code>∞</code> (e.g. <code>∞ * (inf y. ([y &gt; 0] * y + [y = 0] * 1))</code>).</li>
+</ul>
+</li>
+</ul>
+<p><strong>Tooling and robustness</strong></p>
+<ul>
+<li class="">LSP/VSCode status reporting now distinguishes sound refutations from generic counterexamples.</li>
+<li class="">Status bar updates are now correct in error states (fixes <a href="https://github.com/moves-rwth/caesar/issues/85" target="_blank" rel="noopener noreferrer" class="">#85</a>).</li>
+<li class="">VSCode gutter result icons now use SVGs, replacing the previous low-resolution PNGs.</li>
+<li class="">Added CLI alias support to disable quantifier instantiation via <code>--no-qi</code>.</li>
+<li class=""><code>UInt</code> literals now use big integers, improving robustness for large numeric constants.</li>
+</ul>]]></content>
+        <author>
+            <name>Philipp Schroer</name>
+            <uri>https://moves.rwth-aachen.de/people/philipp-schroer/</uri>
+        </author>
+        <category label="releases" term="releases"/>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Highly Incremental: A Simple Programmatic Approach for Many Objectives]]></title>
         <id>https://www.caesarverifier.org/blog/2026/03/04/highly-incremental</id>
