@@ -89,7 +89,6 @@ fn test_expr_precedence_matrix() {
         ("3 / 5 * x", "(3 / (5 * x))", "((3 / 5) * x)"),
         ("1 - p + p * X", "(1 - (p + (p * X)))", "((1 - p) + (p * X))"),
         ("1 + 1 - p + p * X", "(1 + (1 - (p + (p * X))))", "(((1 + 1) - p) + (p * X))"),
-        ("a == b == c", "(a == (b == c))", "((a == b) == c)"),
         ("a < b == c", "(a < (b == c))", "((a < b) == c)"),
         ("a < b != c", "(a < (b != c))", "((a < b) != c)"),
         ("a <= b == c < d", "(a <= (b == (c < d)))", "((a <= b) == (c < d))"),
@@ -144,8 +143,8 @@ fn test_expr_precedence_mismatch_reports_full_add_sub_subexpression() {
 }
 
 #[test]
-fn test_nonassoc_relational_and_ne_chains_are_parse_errors() {
-    let invalid = ["a < b < c", "a <= b >= c", "a != b != c"];
+fn test_nonassoc_relational_and_equality_chains_are_parse_errors() {
+    let invalid = ["a < b < c", "a <= b >= c", "a == b == c", "a != b != c"];
 
     for input in invalid {
         match parse_expr(FileId::DUMMY, input) {

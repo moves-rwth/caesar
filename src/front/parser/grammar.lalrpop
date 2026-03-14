@@ -129,9 +129,8 @@ ExprKindOp: ExprKind = {
 
     // level 5: equality operators (==, !=)
     #[precedence(level="5")]
-    #[assoc(side="left")]
-    <l: ExprNode<ExprKindOp>> <span: Span<"==">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Eq), l, r),
     #[assoc(side="none")]
+    <l: ExprNode<ExprKindOp>> <span: Span<"==">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Eq), l, r),
     <l: ExprNode<ExprKindOp>> <span: Span<"!=">> <r: ExprNode<ExprKindOp>> => ExprKind::Binary(Spanned::new(span, BinOpKind::Ne), l, r),
 
     // level 6: conjunction (&&)

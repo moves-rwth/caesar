@@ -103,7 +103,7 @@ impl ParseError {
                 .with_label(Label::new(*span).with_message("here")),
             ParseError::ChangedPrecedence(data) => {
                 Diagnostic::new(ReportKind::Error, data.subexpr.span)
-                    .with_message("Expression is ambiguous after Caesar's parser changes")
+                    .with_message("Expression is ambiguous after Caesar 4.0 parser changes")
                     .with_label(
                         Label::new(data.subexpr.span)
                             .with_message("add explicit parentheses to disambiguate"),
