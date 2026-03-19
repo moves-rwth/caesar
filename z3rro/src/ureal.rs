@@ -8,13 +8,12 @@ use z3::{
 
 use super::{
     orders::{SmtOrdering, SmtPartialOrd},
-    scope::SmtFresh,
+    scope::{SmtFresh, SmtScope, SmtSkolem},
     SmtBranch, SmtEq,
 };
 use crate::lit::{LitFactory, LitWrap};
 use crate::{
     model::{InstrumentedModel, SmtEval, SmtEvalError},
-    scope::SmtAlloc,
     Factory, SmtFactory, SmtInvariant, UInt,
 };
 
@@ -64,14 +63,14 @@ impl<'ctx> SmtInvariant<'ctx> for UReal<'ctx> {
 }
 
 impl<'ctx> SmtFresh<'ctx> for UReal<'ctx> {
-    fn allocate<'a>(
-        factory: &Factory<'ctx, Self>,
-        alloc: &mut SmtAlloc<'ctx, 'a>,
-        prefix: &str,
-    ) -> Self {
-        let int = Real::fresh_const(factory, prefix);
-        alloc.register_var(&int);
-        UReal(int)
+    fn allocate(factory: &Factory<'ctx, Self>, scope: &mut SmtScope<'ctx>, prefix: &str) -> Self {
+        UReal(Real::allocate(factory, scope, prefix))
+    }
+}
+
+impl<'ctx> SmtSkolem<'ctx> for UReal<'ctx> {
+    fn allocate_skolem(factory: &Factory<'ctx, Self>, args: &SmtScope<'ctx>, prefix: &str) -> Self {
+        UReal(Real::allocate_skolem(factory, args, prefix))
     }
 }
 

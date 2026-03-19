@@ -14,10 +14,10 @@ use ref_cast::RefCast;
 use z3::ast::{Ast, Bool, Int, Real};
 
 use super::{
-    scope::{SmtFresh, SmtScope},
+    scope::{SmtFresh, SmtScope, SmtSkolem},
     SmtBranch,
 };
-use crate::{quantifiers::QuantifierMeta, scope::SmtAlloc, Factory, SmtFactory, SmtInvariant};
+use crate::{quantifiers::QuantifierMeta, Factory, SmtFactory, SmtInvariant};
 
 /// The different ordering relations. It's like [`std::cmp::Ordering`], but with
 /// more options to allow for more specialization.
@@ -193,56 +193,132 @@ pub trait SmtGodel<'ctx>: SmtLattice<'ctx> + SmtBranch<'ctx> {
     }
 }
 
+/// The variables relevant while encoding one extremum.
+///
+/// `quantified` are the variables introduced by the extremum itself.
+/// `skolem_args` are the already-bound outer variables that the extremum
+/// witness may depend on.
+#[derive(Clone)]
+pub struct SmtExtremumVars<'ctx> {
+    pub quantified: SmtScope<'ctx>,
+    pub skolem_args: SmtScope<'ctx>,
+}
+
 /// SMT encoding for a complete lattice.
 ///
 /// Although all functions have a default implementation, it is an unchecked
 /// invariant that all subsets of this type have an infimum and supremum. If
 /// that's not the case, any generated implementation will be unsound.
-pub trait SmtCompleteLattice<'ctx>: SmtFresh<'ctx> + SmtLattice<'ctx> {
-    /// Return an expression representing the infimum of `self`, quantifying
-    /// over the variables specified in `bounds`. Additional variables to
-    /// specify the infimum may be added to the outer scope `ctx`.
+pub trait SmtCompleteLattice<'ctx>: SmtSkolem<'ctx> + SmtLattice<'ctx> {
+    /// Encode `inf q. self(args, q)` using:
+    /// - `forall args, q. extremum(args) <= self(args, q)`
+    /// - `forall args, candidate. (forall q. candidate <= self(args, q)) -> candidate <= extremum(args)`
     fn infimum(
         &self,
-        inf_vars: SmtScope<'ctx>,
+        vars: SmtExtremumVars<'ctx>,
         meta: QuantifierMeta<'ctx>,
-        ctx: &mut SmtScope<'ctx>,
+        constraints: &mut SmtScope<'ctx>,
     ) -> Self {
         let factory = self.factory();
+        let SmtExtremumVars {
+            quantified: q_scope,
+            skolem_args: args_scope,
+        } = vars;
+        let mut pointwise_glb_scope = args_scope.clone();
 
-        // the resulting infimum is created in the outer context
-        let inf = Self::fresh(&factory, ctx, "extremum");
+        // `extremum(args)`
+        let extremum = Self::fresh_skolem(&factory, &args_scope, "extremum");
+        if let Some(invariant) = extremum.smt_invariant() {
+            // `forall args. inv(extremum(args))`
+            constraints.add_constraint(&extremum_invariant_axiom(&args_scope, &meta, &invariant));
+        }
 
-        // infimum is a lower bound to all self
-        let inf_is_lower_bound =
-            &inf_vars.forall(&meta.variant(Cow::Borrowed("is_bound")), &inf.smt_le(self));
-        ctx.add_constraint(inf_is_lower_bound);
+        // `forall args, q. extremum(args) <= self(args, q)`
+        constraints.add_constraint(&extremum_lower_bound_axiom(
+            &args_scope,
+            &q_scope,
+            &meta,
+            &extremum,
+            self,
+        ));
 
-        // `other_lb` is another lower bound to self...
-        let mut inf_vars_and_other = inf_vars.clone();
-        let other_lb = Self::fresh(&factory, &mut inf_vars_and_other, "bound");
-        let other_is_lb = inf_vars.forall(
-            &meta.variant(Cow::Borrowed("is_other_bound")),
-            &other_lb.smt_le(self),
-        );
-        // infimum is the greatest lower bound, i.e. `other_lb <= inf`
-        let inf_glb = other_is_lb.implies(&other_lb.smt_le(&inf));
-        ctx.add_constraint(
-            &inf_vars_and_other.forall(&meta.variant(Cow::Borrowed("is_extremum")), &inf_glb),
-        );
+        // Pointwise lower-bound candidate.
+        let pointwise_candidate = Self::fresh(&factory, &mut pointwise_glb_scope, "bound");
+        // `forall args, candidate. (forall q. candidate <= self(args, q)) -> candidate <= extremum(args)`
+        constraints.add_constraint(&extremum_glb_axiom(
+            &pointwise_glb_scope,
+            &q_scope,
+            &meta,
+            &pointwise_candidate,
+            self,
+            &extremum,
+        ));
 
-        inf
+        extremum
     }
 
-    /// Dual of [`SmtCompleteLattice::infimum`].
+    /// Return a term representing `sup q. self(args, q)`.
+    ///
+    /// This is encoded by dualizing [`SmtCompleteLattice::infimum`]:
+    /// - `forall args, q. self(args, q) <= sup(args)`
+    /// - `forall args, other. (forall q. self(args, q) <= other) -> sup(args) <= other`
     fn supremum(
         &self,
-        sup_vars: SmtScope<'ctx>,
+        vars: SmtExtremumVars<'ctx>,
         meta: QuantifierMeta<'ctx>,
-        ctx: &mut SmtScope<'ctx>,
+        constraints: &mut SmtScope<'ctx>,
     ) -> Self {
-        Opp::with_opp(self, |a| a.infimum(sup_vars, meta, ctx))
+        Opp::with_opp(self, |a| a.infimum(vars, meta, constraints))
     }
+}
+
+/// `forall args. inv(extremum(args))`.
+fn extremum_invariant_axiom<'ctx>(
+    args_scope: &SmtScope<'ctx>,
+    meta: &QuantifierMeta<'ctx>,
+    invariant: &Bool<'ctx>,
+) -> Bool<'ctx> {
+    args_scope.forall(
+        &meta.variant(Cow::Borrowed("extremum_invariant")),
+        invariant,
+    )
+}
+
+/// `forall args, q. extremum(args) <= body(args, q)`.
+fn extremum_lower_bound_axiom<'ctx, T: SmtPartialOrd<'ctx>>(
+    args_scope: &SmtScope<'ctx>,
+    q_scope: &SmtScope<'ctx>,
+    meta: &QuantifierMeta<'ctx>,
+    extremum: &T,
+    body: &T,
+) -> Bool<'ctx> {
+    let for_all_q = q_scope.forall(
+        &meta.variant(Cow::Borrowed("extremum_lower_bound_inner")),
+        &extremum.smt_le(body),
+    );
+    args_scope.forall(
+        &meta.variant(Cow::Borrowed("extremum_lower_bound_outer")),
+        &for_all_q,
+    )
+}
+
+/// `forall args, candidate. (forall q. candidate <= body(args, q)) -> candidate <= extremum(args)`.
+fn extremum_glb_axiom<'ctx, T: SmtPartialOrd<'ctx>>(
+    pointwise_glb_scope: &SmtScope<'ctx>,
+    q_scope: &SmtScope<'ctx>,
+    meta: &QuantifierMeta<'ctx>,
+    pointwise_candidate: &T,
+    body: &T,
+    extremum: &T,
+) -> Bool<'ctx> {
+    let candidate_is_lower_bound = q_scope.forall(
+        &meta.variant(Cow::Borrowed("extremum_glb_inner")),
+        &pointwise_candidate.smt_le(body),
+    );
+    pointwise_glb_scope.forall(
+        &meta.variant(Cow::Borrowed("extremum_glb_outer")),
+        &candidate_is_lower_bound.implies(&pointwise_candidate.smt_le(extremum)),
+    )
 }
 
 impl<'ctx> SmtCompleteLattice<'ctx> for Bool<'ctx> {}
@@ -282,12 +358,14 @@ impl<'ctx, L: SmtInvariant<'ctx>> SmtInvariant<'ctx> for Opp<L> {
 }
 
 impl<'ctx, L: SmtFresh<'ctx>> SmtFresh<'ctx> for Opp<L> {
-    fn allocate<'a>(
-        factory: &Factory<'ctx, Self>,
-        alloc: &mut SmtAlloc<'ctx, 'a>,
-        prefix: &str,
-    ) -> Self {
-        Opp(L::allocate(factory, alloc, prefix))
+    fn allocate(factory: &Factory<'ctx, Self>, scope: &mut SmtScope<'ctx>, prefix: &str) -> Self {
+        Opp(L::allocate(factory, scope, prefix))
+    }
+}
+
+impl<'ctx, L: SmtSkolem<'ctx>> SmtSkolem<'ctx> for Opp<L> {
+    fn allocate_skolem(factory: &Factory<'ctx, Self>, args: &SmtScope<'ctx>, prefix: &str) -> Self {
+        Opp(L::allocate_skolem(factory, args, prefix))
     }
 }
 
@@ -327,11 +405,32 @@ impl<'ctx, L: SmtCompleteLattice<'ctx>> SmtCompleteLattice<'ctx> for Opp<L> {}
 
 #[cfg(test)]
 mod test {
-    use z3::ast::{Ast, Int};
+    use z3::ast::{Ast, Bool, Int};
 
-    use crate::{quantifiers::QuantifierMeta, scope::SmtFresh, test::test_prove};
+    use crate::{
+        quantifiers::QuantifierMeta,
+        scope::{SmtFresh, SmtScope},
+        test::test_prove,
+    };
 
-    use super::SmtCompleteLattice;
+    use super::{SmtCompleteLattice, SmtExtremumVars};
+
+    fn inf<'ctx>(
+        expr: &Bool<'ctx>,
+        quantified: SmtScope<'ctx>,
+        skolem_args: SmtScope<'ctx>,
+        qid: &'static str,
+        scope: &mut SmtScope<'ctx>,
+    ) -> Bool<'ctx> {
+        expr.infimum(
+            SmtExtremumVars {
+                quantified,
+                skolem_args,
+            },
+            QuantifierMeta::new(qid),
+            scope,
+        )
+    }
 
     /// This is a smoke test to check that the infimum over Bools actually
     /// computes the least value for the quantified expression.
@@ -343,8 +442,46 @@ mod test {
             let x = Int::fresh(&ctx, scope, "x");
             let x_is_5 = x._eq(&Int::from_u64(ctx, 5));
             let meta = QuantifierMeta::new("test_inf");
-            let inf = x_is_5.infimum(scope.clone(), meta, scope);
+            let inf = x_is_5.infimum(
+                SmtExtremumVars {
+                    quantified: scope.clone(),
+                    skolem_args: SmtScope::new(),
+                },
+                meta,
+                scope,
+            );
             inf.not()
+        });
+    }
+
+    #[test]
+    fn test_nested_extremum_depends_on_outer_quantifier() {
+        test_prove(|ctx, scope| {
+            let z = Bool::fresh(&ctx, scope, "z");
+
+            let mut xs = SmtScope::new();
+            let x = Bool::fresh(&ctx, &mut xs, "x");
+
+            let mut ys = SmtScope::new();
+            let y = Bool::fresh(&ctx, &mut ys, "y");
+
+            let body = z.implies(&x._eq(&z).implies(&y.not().implies(&x)));
+
+            // inf x. inf y. (z -> (x = z -> (!y -> x)))
+            let nested = inf(
+                &inf(&body, ys.clone(), xs.clone(), "inner", scope),
+                xs.clone(),
+                SmtScope::new(),
+                "outer",
+                scope,
+            );
+
+            let mut xys = xs;
+            xys.append(&ys);
+            // inf x, y. (z -> (x = z -> (!y -> x)))
+            let joint = inf(&body, xys, SmtScope::new(), "joint", scope);
+
+            nested.iff(&joint)
         });
     }
 }

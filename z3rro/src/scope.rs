@@ -2,11 +2,14 @@
 //! quantifiers. Types that implement [`SmtFresh::fresh`] support the creation
 //! of fresh instances in a surrounding scope.
 
-use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use z3::{
     ast::{Ast, Bool, Datatype, Dynamic, Int, Real},
-    Context,
+    Context, FuncDecl, Sort, Symbol,
 };
 
 use crate::{
@@ -78,7 +81,11 @@ impl<'ctx> SmtScope<'ctx> {
         } else {
             Cow::Owned(Bool::and(ctx, &[&self.all_constraints(ctx), body]))
         };
-        mk_quantifier(meta, QuantifierType::Exists, &self.bounds_dyn(), &body)
+        if self.bounds.is_empty() {
+            body.into_owned()
+        } else {
+            mk_quantifier(meta, QuantifierType::Exists, &self.bounds_dyn(), &body)
+        }
     }
 
     /// Create a new universal quantifier around `body`, quantifying over all
@@ -90,7 +97,11 @@ impl<'ctx> SmtScope<'ctx> {
         } else {
             Cow::Owned(self.all_constraints(ctx).implies(body))
         };
-        mk_quantifier(meta, QuantifierType::Forall, &self.bounds_dyn(), &body)
+        if self.bounds.is_empty() {
+            body.into_owned()
+        } else {
+            mk_quantifier(meta, QuantifierType::Forall, &self.bounds_dyn(), &body)
+        }
     }
 
     pub fn get_bounds(&self) -> impl Iterator<Item = &Dynamic<'ctx>> {
@@ -143,37 +154,19 @@ impl<'ctx> SmtScope<'ctx> {
     }
 }
 
-/// Restricted interface to [`SmtScope`] provided to [`SmtFresh::allocate`].
-pub struct SmtAlloc<'ctx, 'a>(&'a mut SmtScope<'ctx>);
-
-impl<'ctx> SmtAlloc<'ctx, '_> {
-    /// Register a new variable in this allocator.
-    pub fn register_var(&mut self, bound: &impl Ast<'ctx>) {
-        self.0.add_bound(bound);
-    }
-}
-
 /// This is the central trait to create new variables in our framework. The
 /// [`SmtFresh::fresh`] function creates a new instance of this type and adds
 /// the required Z3 variables and constraints to the given [`SmtScope`].
-///
-/// Implementors of this trait should only implement [`SmtFresh::allocate`] and
-/// users should only use [`SmtFresh::fresh`].
 pub trait SmtFresh<'ctx>: Sized + SmtFactory<'ctx> + SmtInvariant<'ctx> {
     /// Create a new instance of this type and prefix the created Z3 variable(s)
-    /// with `prefix`. All created Z3 variables must be registered with the
-    /// allocator so that quantification works correctly.
-    fn allocate<'a>(
-        factory: &Factory<'ctx, Self>,
-        alloc: &mut SmtAlloc<'ctx, 'a>,
-        prefix: &str,
-    ) -> Self;
+    /// with `prefix` and register any quantified variables in `scope`.
+    fn allocate(factory: &Factory<'ctx, Self>, scope: &mut SmtScope<'ctx>, prefix: &str) -> Self;
 
     /// Creates a new instance of this type with variables prefixed with
     /// `prefix`. Variables and the types' invariant (see [`SmtInvariant`]) are
     /// added to the [`SmtScope`].
     fn fresh(factory: &Factory<'ctx, Self>, scope: &mut SmtScope<'ctx>, prefix: &str) -> Self {
-        let value = Self::allocate(factory, &mut SmtAlloc(scope), prefix);
+        let value = Self::allocate(factory, scope, prefix);
         if let Some(invariant) = value.smt_invariant() {
             scope.add_constraint(&invariant);
         }
@@ -181,46 +174,101 @@ pub trait SmtFresh<'ctx>: Sized + SmtFactory<'ctx> + SmtInvariant<'ctx> {
     }
 }
 
+/// Types that support Skolemized values over already-bound outer variables.
+pub trait SmtSkolem<'ctx>: SmtFresh<'ctx> {
+    /// Create a fresh value which may depend on `args`.
+    fn allocate_skolem(factory: &Factory<'ctx, Self>, args: &SmtScope<'ctx>, prefix: &str) -> Self;
+
+    /// Create a fresh value which may depend on `args`.
+    fn fresh_skolem(factory: &Factory<'ctx, Self>, args: &SmtScope<'ctx>, prefix: &str) -> Self {
+        Self::allocate_skolem(factory, args, prefix)
+    }
+}
+
+fn fresh_symbol(prefix: &str) -> Symbol {
+    static NEXT_FRESH_SYMBOL: AtomicUsize = AtomicUsize::new(0);
+    let id = NEXT_FRESH_SYMBOL.fetch_add(1, Ordering::Relaxed);
+    Symbol::String(format!("{prefix}!{id}"))
+}
+
+/// Build a fresh value for the given range, using a Skolem function when the
+/// value is allowed to depend on already-bound variables.
+fn fresh_skolem_application<'ctx>(
+    ctx: &'ctx Context,
+    args: &SmtScope<'ctx>,
+    range: &Sort<'ctx>,
+    prefix: &str,
+) -> Dynamic<'ctx> {
+    let bounds: Vec<_> = args.get_bounds().cloned().collect();
+    if bounds.is_empty() {
+        return Dynamic::fresh_const(ctx, prefix, range);
+    }
+
+    let domain: Vec<_> = bounds.iter().map(Dynamic::get_sort).collect();
+    let domain_refs: Vec<_> = domain.iter().collect();
+    let args: Vec<_> = bounds.iter().map(|bound| bound as &dyn Ast<'ctx>).collect();
+    let decl = FuncDecl::new(ctx, fresh_symbol(prefix), &domain_refs, range);
+    decl.apply(&args)
+}
+
 macro_rules! z3_simple_fresh {
-    ($ty:ident) => {
+    ($ty:ident, $sort:expr, $cast:ident) => {
         impl<'ctx> SmtFresh<'ctx> for $ty<'ctx> {
-            fn allocate<'a>(
+            fn allocate(
                 factory: &Factory<'ctx, Self>,
-                alloc: &mut SmtAlloc<'ctx, 'a>,
+                scope: &mut SmtScope<'ctx>,
                 prefix: &str,
             ) -> Self {
-                let res = $ty::fresh_const(factory, prefix);
-                alloc.register_var(&res);
-                res
+                let value = $ty::fresh_const(factory, prefix);
+                scope.add_bound(&value);
+                value
+            }
+        }
+
+        impl<'ctx> SmtSkolem<'ctx> for $ty<'ctx> {
+            fn allocate_skolem(
+                factory: &Factory<'ctx, Self>,
+                args: &SmtScope<'ctx>,
+                prefix: &str,
+            ) -> Self {
+                fresh_skolem_application(factory, args, &$sort(factory), prefix)
+                    .$cast()
+                    .unwrap()
             }
         }
     };
 }
 
-z3_simple_fresh!(Bool);
-z3_simple_fresh!(Int);
-z3_simple_fresh!(Real);
+z3_simple_fresh!(Bool, Sort::bool, as_bool);
+z3_simple_fresh!(Int, Sort::int, as_int);
+z3_simple_fresh!(Real, Sort::real, as_real);
 
 impl<'ctx> SmtFresh<'ctx> for Dynamic<'ctx> {
-    fn allocate<'a>(
-        factory: &Factory<'ctx, Self>,
-        alloc: &mut SmtAlloc<'ctx, 'a>,
-        prefix: &str,
-    ) -> Self {
-        let res = Dynamic::fresh_const(factory.0, prefix, &factory.1);
-        alloc.register_var(&res);
-        res
+    fn allocate(factory: &Factory<'ctx, Self>, scope: &mut SmtScope<'ctx>, prefix: &str) -> Self {
+        let value = Dynamic::fresh_const(factory.0, prefix, &factory.1);
+        scope.add_bound(&value);
+        value
+    }
+}
+
+impl<'ctx> SmtSkolem<'ctx> for Dynamic<'ctx> {
+    fn allocate_skolem(factory: &Factory<'ctx, Self>, args: &SmtScope<'ctx>, prefix: &str) -> Self {
+        fresh_skolem_application(factory.0, args, &factory.1, prefix)
     }
 }
 
 impl<'ctx> SmtFresh<'ctx> for Datatype<'ctx> {
-    fn allocate<'a>(
-        factory: &Factory<'ctx, Self>,
-        alloc: &mut SmtAlloc<'ctx, 'a>,
-        prefix: &str,
-    ) -> Self {
-        let res = Datatype::fresh_const(factory.0, prefix, &factory.1);
-        alloc.register_var(&res);
-        res
+    fn allocate(factory: &Factory<'ctx, Self>, scope: &mut SmtScope<'ctx>, prefix: &str) -> Self {
+        let value = Datatype::fresh_const(factory.0, prefix, &factory.1);
+        scope.add_bound(&value);
+        value
+    }
+}
+
+impl<'ctx> SmtSkolem<'ctx> for Datatype<'ctx> {
+    fn allocate_skolem(factory: &Factory<'ctx, Self>, args: &SmtScope<'ctx>, prefix: &str) -> Self {
+        fresh_skolem_application(factory.0, args, &factory.1, prefix)
+            .as_datatype()
+            .unwrap()
     }
 }

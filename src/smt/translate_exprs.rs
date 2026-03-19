@@ -25,8 +25,8 @@ use crate::ast::{ExprData, RefEqShared};
 use z3rro::{
     eureal::EUReal,
     orders::{
-        smt_bool_embed, smt_max, smt_min, SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering,
-        SmtPartialOrd,
+        smt_bool_embed, smt_max, smt_min, SmtCompleteLattice, SmtExtremumVars, SmtGodel,
+        SmtLattice, SmtOrdering, SmtPartialOrd,
     },
     quantifiers::QuantifierMeta,
     scope::SmtScope,
@@ -41,6 +41,7 @@ pub struct TranslateExprs<'smt, 'ctx> {
     pub ctx: &'smt SmtCtx<'ctx>,
     limits_stack: Vec<SmtScope<'ctx>>,
     locals: ScopeMap<Ident, ScopeSymbolic<'ctx>>,
+    quantifier_stack: Vec<SmtScope<'ctx>>,
     cache: TranslateCache<'ctx>,
     literal_exprs: LiteralExprSet,
 }
@@ -51,6 +52,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ctx,
             limits_stack: vec![SmtScope::new()],
             locals: ScopeMap::new(),
+            quantifier_stack: Vec::new(),
             cache: TranslateCache::new(),
             literal_exprs: LiteralExprSet::default(),
         }
@@ -74,6 +76,36 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         let mut scope = self.limits_stack.last().unwrap().clone();
         scope.extend(self.locals.local_iter().map(|(_ident, local)| &local.scope));
         scope
+    }
+
+    /// Merge the scopes of all currently active outer quantifiers.
+    /// These become the arguments of Skolemized extremum witnesses.
+    fn skolem_arg_scope(&self) -> SmtScope<'ctx> {
+        let mut scope = SmtScope::new();
+        scope.extend(self.quantifier_stack.iter());
+        scope
+    }
+
+    fn global_scope_mut(&mut self) -> &mut SmtScope<'ctx> {
+        self.limits_stack.first_mut().unwrap()
+    }
+
+    /// Create the scope for the variables bound by the current quantifier only.
+    fn with_current_quantifier_bounds<R>(
+        &mut self,
+        quant_vars: &[QuantVar],
+        f: impl FnOnce(&mut Self, SmtScope<'ctx>) -> R,
+    ) -> R {
+        self.push();
+        for quant_var in quant_vars {
+            self.fresh(quant_var.name());
+        }
+        let bounds = self.mk_scope(quant_vars);
+        self.quantifier_stack.push(bounds.clone());
+        let res = f(self, bounds);
+        self.quantifier_stack.pop().unwrap();
+        self.pop();
+        res
     }
 
     /// Defines what expressions should be considered literal from now. Literal
@@ -204,11 +236,15 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 panic!("illegal cast to {:?} from {:?}", &expr.ty, &operand.ty)
             }
             ExprKind::Quant(quant_op, quant_vars, ann, operand) => {
-                let operand = self.t_bool(operand);
-                let scope = self.mk_scope(quant_vars);
+                let (scope, operand, patterns) =
+                    self.with_current_quantifier_bounds(quant_vars, |this, scope| {
+                        let operand = this.t_bool(operand);
+                        let patterns = this.t_triggers(&ann.triggers);
+                        (scope, operand, patterns)
+                    });
                 let qid = format!("span{:?}", quant_op.span);
                 let mut meta = QuantifierMeta::new(qid);
-                meta.set_patterns(self.t_triggers(&ann.triggers));
+                meta.set_patterns(patterns);
                 let quant = match quant_op.node {
                     QuantOpKind::Forall | QuantOpKind::Inf => scope.forall(&meta, &operand),
                     QuantOpKind::Exists | QuantOpKind::Sup => scope.exists(&meta, &operand),
@@ -545,9 +581,17 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 }
             }
             ExprKind::Quant(quant_op, quant_vars, ann, operand) => {
-                let operand = self.t_eureal(operand);
-                let scope = self.mk_scope(quant_vars);
-                let patterns: Vec<_> = self.t_triggers(&ann.triggers);
+                let skolem_args = self.skolem_arg_scope();
+                let (quantified, operand, patterns) =
+                    self.with_current_quantifier_bounds(quant_vars, |this, scope| {
+                        let operand = this.t_eureal(operand);
+                        let patterns = this.t_triggers(&ann.triggers);
+                        (scope, operand, patterns)
+                    });
+                let vars = SmtExtremumVars {
+                    quantified,
+                    skolem_args,
+                };
                 let qid = format!("span{:?}", quant_op.span);
 
                 let mut meta = QuantifierMeta::new(qid);
@@ -556,10 +600,9 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 // infimum/supremum encoding, otherwise they never work
                 meta.mbqi = true;
 
-                let outer_scope = &mut self.limits_stack.last_mut().unwrap();
                 match quant_op.node {
-                    QuantOpKind::Inf => operand.infimum(scope, meta, outer_scope),
-                    QuantOpKind::Sup => operand.supremum(scope, meta, outer_scope),
+                    QuantOpKind::Inf => operand.infimum(vars, meta, self.global_scope_mut()),
+                    QuantOpKind::Sup => operand.supremum(vars, meta, self.global_scope_mut()),
                     QuantOpKind::Forall | QuantOpKind::Exists => panic!("illegal quantopkind"),
                 }
             }

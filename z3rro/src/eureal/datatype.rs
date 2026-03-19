@@ -20,7 +20,7 @@ use crate::{
     orders::{
         smt_max, smt_min, SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering, SmtPartialOrd,
     },
-    scope::{SmtAlloc, SmtFresh},
+    scope::{SmtFresh, SmtScope, SmtSkolem},
     uint::UInt,
     Factory, LitFactory, LitWrap, SmtBranch, SmtEq, SmtFactory, SmtInvariant, UReal,
 };
@@ -188,16 +188,19 @@ impl<'ctx> SmtInvariant<'ctx> for EUReal<'ctx> {
 }
 
 impl<'ctx> SmtFresh<'ctx> for EUReal<'ctx> {
-    fn allocate<'a>(
-        factory: &Factory<'ctx, Self>,
-        alloc: &mut SmtAlloc<'ctx, 'a>,
-        prefix: &str,
-    ) -> Self {
-        let value = Datatype::fresh_const(factory.ctx, prefix, &factory.sort);
-        alloc.register_var(&value);
+    fn allocate(factory: &Factory<'ctx, Self>, scope: &mut SmtScope<'ctx>, prefix: &str) -> Self {
         EUReal {
             factory: factory.clone(),
-            value,
+            value: Datatype::allocate(&(factory.ctx, factory.sort.clone()), scope, prefix),
+        }
+    }
+}
+
+impl<'ctx> SmtSkolem<'ctx> for EUReal<'ctx> {
+    fn allocate_skolem(factory: &Factory<'ctx, Self>, args: &SmtScope<'ctx>, prefix: &str) -> Self {
+        EUReal {
+            factory: factory.clone(),
+            value: Datatype::allocate_skolem(&(factory.ctx, factory.sort.clone()), args, prefix),
         }
     }
 }

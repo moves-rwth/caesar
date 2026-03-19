@@ -8,13 +8,12 @@ use z3::{
 
 use crate::{
     model::{InstrumentedModel, SmtEval, SmtEvalError},
-    scope::SmtAlloc,
     Factory, LitFactory, LitWrap, SmtFactory, SmtInvariant,
 };
 
 use super::{
     orders::{SmtOrdering, SmtPartialOrd},
-    scope::SmtFresh,
+    scope::{SmtFresh, SmtScope},
     SmtBranch, SmtEq,
 };
 
@@ -64,14 +63,8 @@ impl<'ctx> SmtInvariant<'ctx> for UInt<'ctx> {
 }
 
 impl<'ctx> SmtFresh<'ctx> for UInt<'ctx> {
-    fn allocate<'a>(
-        factory: &Factory<'ctx, Self>,
-        alloc: &mut SmtAlloc<'ctx, 'a>,
-        prefix: &str,
-    ) -> Self {
-        let int = Int::fresh_const(factory, prefix);
-        alloc.register_var(&int);
-        UInt(int)
+    fn allocate(factory: &Factory<'ctx, Self>, scope: &mut SmtScope<'ctx>, prefix: &str) -> Self {
+        UInt(Int::allocate(factory, scope, prefix))
     }
 }
 

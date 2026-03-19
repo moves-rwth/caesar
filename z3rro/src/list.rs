@@ -10,7 +10,7 @@ use z3::{
 use crate::{
     orders::SmtPartialOrd,
     quantifiers::QuantifierMeta,
-    scope::{SmtAlloc, SmtFresh, SmtScope},
+    scope::{SmtFresh, SmtScope},
     Factory, SmtBranch, SmtEq, SmtFactory, SmtInvariant, UInt,
 };
 
@@ -156,15 +156,11 @@ impl<'ctx> SmtInvariant<'ctx> for List<'ctx> {
 }
 
 impl<'ctx> SmtFresh<'ctx> for List<'ctx> {
-    fn allocate<'a>(
-        factory: &Factory<'ctx, Self>,
-        alloc: &mut SmtAlloc<'ctx, 'a>,
-        prefix: &str,
-    ) -> Self {
+    fn allocate(factory: &Factory<'ctx, Self>, scope: &mut SmtScope<'ctx>, prefix: &str) -> Self {
         let datatype_factory = (factory.ctx, factory.sort.clone());
         List {
             factory: factory.clone(),
-            value: Datatype::allocate(&datatype_factory, alloc, prefix),
+            value: Datatype::allocate(&datatype_factory, scope, prefix),
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::scope::{SmtAlloc, SmtFresh};
+use crate::scope::{SmtFresh, SmtScope};
 use crate::{Factory, SmtFactory, SmtInvariant};
 use std::rc::Rc;
 use z3::ast::{Ast, Bool, Dynamic};
@@ -139,15 +139,11 @@ impl<'ctx> SmtInvariant<'ctx> for Fuel<'ctx> {
 }
 
 impl<'ctx> SmtFresh<'ctx> for Fuel<'ctx> {
-    fn allocate<'a>(
-        factory: &Factory<'ctx, Self>,
-        alloc: &mut SmtAlloc<'ctx, 'a>,
-        prefix: &str,
-    ) -> Self {
+    fn allocate(factory: &Factory<'ctx, Self>, scope: &mut SmtScope<'ctx>, prefix: &str) -> Self {
         let datatype_factory = (factory.ctx, factory.sort.clone());
         Fuel {
             factory: factory.clone(),
-            value: Dynamic::allocate(&datatype_factory, alloc, prefix),
+            value: Dynamic::allocate(&datatype_factory, scope, prefix),
         }
     }
 }

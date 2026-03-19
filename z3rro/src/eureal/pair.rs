@@ -7,7 +7,7 @@ use std::ops::{Add, Mul, Sub};
 use z3::{ast::Bool, Context};
 
 use crate::model::{InstrumentedModel, SmtEval, SmtEvalError};
-use crate::{scope::SmtAlloc, Factory, SmtEq, SmtFactory, SmtInvariant, UReal};
+use crate::{Factory, SmtEq, SmtFactory, SmtInvariant, UReal};
 
 use super::ConcreteEUReal;
 use crate::lit::{LitFactory, LitWrap};
@@ -15,7 +15,7 @@ use crate::{
     orders::{
         smt_max, smt_min, SmtCompleteLattice, SmtGodel, SmtLattice, SmtOrdering, SmtPartialOrd,
     },
-    scope::SmtFresh,
+    scope::{SmtFresh, SmtScope, SmtSkolem},
     uint::UInt,
     SmtBranch,
 };
@@ -100,18 +100,21 @@ impl<'ctx> SmtInvariant<'ctx> for EUReal<'ctx> {
 }
 
 impl<'ctx> SmtFresh<'ctx> for EUReal<'ctx> {
-    fn allocate<'a>(
-        factory: &Factory<'ctx, Self>,
-        alloc: &mut SmtAlloc<'ctx, 'a>,
-        prefix: &str,
-    ) -> Self {
-        let is_infinite = Bool::fresh_const(factory.ctx, prefix);
-        alloc.register_var(&is_infinite);
-        let number = UReal::allocate(&factory.ctx, alloc, prefix);
+    fn allocate(factory: &Factory<'ctx, Self>, scope: &mut SmtScope<'ctx>, prefix: &str) -> Self {
         EUReal {
             factory: factory.clone(),
-            is_infinite,
-            number,
+            is_infinite: Bool::allocate(&factory.ctx, scope, prefix),
+            number: UReal::allocate(&factory.ctx, scope, prefix),
+        }
+    }
+}
+
+impl<'ctx> SmtSkolem<'ctx> for EUReal<'ctx> {
+    fn allocate_skolem(factory: &Factory<'ctx, Self>, args: &SmtScope<'ctx>, prefix: &str) -> Self {
+        EUReal {
+            factory: factory.clone(),
+            is_infinite: Bool::allocate_skolem(&factory.ctx, args, prefix),
+            number: UReal::allocate_skolem(&factory.ctx, args, prefix),
         }
     }
 }
