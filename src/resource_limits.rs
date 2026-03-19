@@ -2,19 +2,16 @@
 
 use std::{
     future::{pending, Future},
-    sync::{
-        atomic::{AtomicU8, Ordering},
-        Arc,
-    },
+    sync::{Arc, Mutex},
+    thread,
     time::{Duration, Instant},
 };
 
+use crossbeam_channel::{bounded, Receiver, Sender};
+use crossbeam_utils::atomic::AtomicCell;
 use memory_stats::memory_stats;
 use thiserror::Error;
-use tokio::{
-    select,
-    time::{error::Elapsed, interval, timeout, MissedTickBehavior},
-};
+use tokio::time::{error::Elapsed, interval, timeout, MissedTickBehavior};
 use tracing::error;
 
 /// A memory size in bytes, with constructors to handle units.
@@ -39,70 +36,62 @@ const CHECK_MEM_USAGE_INTERVAL: Duration = Duration::from_millis(20);
 pub const HARD_TIMEOUT_SLACK: Duration = Duration::from_millis(500);
 
 /// A timeout or an out-of-memory condition.
-#[derive(Debug, Clone, Copy, Error)]
+#[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
+#[repr(u8)]
 pub enum LimitError {
     #[error("timeout")]
     Timeout,
     #[error("out of memory")]
     Oom,
+    #[error("interrupted")]
+    Interrupted,
 }
 
-/// Wait for the future  returned by `fut`. Returns [`LimitError::Timeout`] if
-/// the future took too long to complete. If the memory limit was exceeded,
-/// return [`LimitError::Oom`]. Otherwise, return the result wrapped in
-/// [`Result::Ok`].
+/// Run `fut` with timeout and memory monitoring.
 ///
-/// The `fut` is given a [`LimitsRef`] which it is supposed to check
-/// periodically. After the given duration plus [`HARD_TIMEOUT_SLACK`], the
-/// future will return a [`LimitError::Timeout`] in case `fut` did not catch the
-/// timeout itself.
-///
-/// Note that the memory limit is checked for the whole process by a background
-/// thread. Therefore, the memory limit is not specific to the given future.
+/// `fut` gets a [`LimitsRef`] and is expected to check it periodically.
+/// If it does not stop in time, the outer hard timeout returns
+/// [`LimitError::Timeout`].
 pub async fn await_with_resource_limits<T, F>(
-    duration: Option<Duration>,
-    mem_limit: Option<MemorySize>,
+    limits_ref: LimitsRef,
     fut: impl FnOnce(LimitsRef) -> F,
 ) -> Result<T, LimitError>
 where
     T: Unpin,
     F: Future<Output = T>,
 {
-    if let Some(duration) = duration {
-        let limits_ref = LimitsRef::new(Some(Instant::now() + duration), mem_limit);
+    limits_ref.check_limits()?;
+    let fut = fut(limits_ref.clone());
+    let res = match limits_ref.time_left() {
+        Some(duration) => {
+            let hard_duration = duration + HARD_TIMEOUT_SLACK;
+            with_memory_limit(limits_ref.memory_limit(), async {
+                timeout(hard_duration, fut)
+                    .await
+                    .map_err(|_: Elapsed| LimitError::Timeout)
+            })
+            .await
+        }
+        None => with_memory_limit(limits_ref.memory_limit(), async { Ok(fut.await) }).await,
+    };
+    if let Err(err) = res {
+        limits_ref.set_error(err);
+    }
+    res
+}
 
-        let hard_duration = duration + HARD_TIMEOUT_SLACK;
-        let fut = timeout(hard_duration, fut(limits_ref.clone()));
-        let res = if let Some(mem_mbs) = mem_limit {
-            select! {
-                _ = wait_for_oom(mem_mbs) => {
-                    Err(LimitError::Oom)
-                }
-                res = fut => {
-                    res.map_err(|_: Elapsed| LimitError::Timeout)
-                }
-            }
-        } else {
-            fut.await.map_err(|_: Elapsed| LimitError::Timeout)
-        };
-        if let Err(err) = res {
-            limits_ref.set_error(err);
-        }
-        res
-    } else if let Some(mem_mbs) = mem_limit {
-        let limits_ref = LimitsRef::new(None, mem_limit);
-        select! {
-            _ = wait_for_oom(mem_mbs) => {
-                limits_ref.set_error(LimitError::Oom);
-                Err(LimitError::Oom)
-            }
-            res = fut(limits_ref.clone()) => {
-                Ok(res)
+async fn with_memory_limit<T>(
+    mem_limit: Option<MemorySize>,
+    fut: impl Future<Output = Result<T, LimitError>>,
+) -> Result<T, LimitError> {
+    match mem_limit {
+        Some(mem_limit) => {
+            tokio::select! {
+                _ = wait_for_oom(mem_limit) => Err(LimitError::Oom),
+                res = fut => res,
             }
         }
-    } else {
-        let limits_ref = LimitsRef::new(None, mem_limit);
-        Ok(fut(limits_ref).await)
+        None => fut.await,
     }
 }
 
@@ -136,55 +125,142 @@ async fn wait_for_oom(mem_limit: MemorySize) {
     }
 }
 
-/// An object to pass around that allows to check whether the resource limits
-/// were exceeded and the task needs to be stopped as a consequence.
+/// Shared view of the current resource limits.
 #[derive(Debug, Clone)]
 pub struct LimitsRef(Arc<LimitsRefData>);
 
 #[derive(Debug)]
 struct LimitsRefData {
-    done: AtomicU8,
+    state: AtomicCell<Result<(), LimitError>>,
+    subscribers: Mutex<Vec<Sender<LimitError>>>,
     timeout: Option<Instant>,
     memory: Option<MemorySize>,
+}
+
+const _: () = assert!(AtomicCell::<Result<(), LimitError>>::is_lock_free());
+
+impl LimitsRefData {
+    fn error(&self) -> Option<LimitError> {
+        self.state.load().err()
+    }
+
+    fn subscribe(&self) -> (Sender<LimitError>, Receiver<LimitError>) {
+        let (sender, receiver) = bounded(1);
+        let mut subscribers = self.subscribers.lock().unwrap();
+        if let Some(err) = self.error() {
+            let _ = sender.send(err);
+        } else {
+            subscribers.push(sender.clone());
+        }
+        (sender, receiver)
+    }
+
+    fn unsubscribe(&self, sender: &Sender<LimitError>) {
+        let mut subscribers = self.subscribers.lock().unwrap();
+        subscribers.retain(|entry| !entry.same_channel(sender));
+    }
+
+    fn set_error(&self, err: LimitError) -> LimitError {
+        let prev = self.state.compare_exchange(Ok(()), Err(err));
+        if prev.is_ok() {
+            let mut subscribers = self.subscribers.lock().unwrap();
+            // sending and cleanup
+            subscribers.retain(|sender| sender.send(err).is_ok());
+            err
+        } else {
+            self.error().unwrap()
+        }
+    }
+
+    #[cfg(test)]
+    fn subscriber_count(&self) -> usize {
+        self.subscribers.lock().unwrap().len()
+    }
 }
 
 impl LimitsRef {
     pub fn new(timeout: Option<Instant>, memory: Option<MemorySize>) -> Self {
         LimitsRef(Arc::new(LimitsRefData {
-            done: AtomicU8::new(0),
+            state: AtomicCell::new(Ok(())),
+            subscribers: Mutex::new(Vec::new()),
             timeout,
             memory,
         }))
     }
 
-    /// Check whether the monitoring thread has indicated a timeout or an OOM.
+    /// Check whether work should stop.
     pub fn check_limits(&self) -> Result<(), LimitError> {
-        // Timeout flag is set to 1 by `await_with_resource_limits`, only if the hard timeout is reached.
-        match self.0.done.load(Ordering::Relaxed) {
-            0 => {
-                // Normal timeout might be reached even though the hard timeout is not reached yet.
-                // Check for timeout by checking the remaining time
-                if let Some(timeout) = self.0.timeout {
-                    if Instant::now() >= timeout {
-                        self.set_error(LimitError::Timeout);
-                        return Err(LimitError::Timeout);
+        // The hard-timeout path records `Timeout` in the stop token.
+        if let Some(err) = self.0.error() {
+            return Err(err);
+        }
+        if let Some(timeout) = self.0.timeout {
+            if Instant::now() >= timeout {
+                return Err(self.0.set_error(LimitError::Timeout));
+            }
+        }
+        Ok(())
+    }
+
+    /// Return the stop reason, defaulting to `Interrupted`.
+    pub fn interrupted_error(&self) -> LimitError {
+        self.check_limits().err().unwrap_or(LimitError::Interrupted)
+    }
+
+    /// Cancel the current work explicitly.
+    pub fn cancel(&self) {
+        self.set_error(LimitError::Interrupted);
+    }
+
+    /// Subscribe to published stop events.
+    #[cfg(test)]
+    pub fn subscribe_to_stop(&self) -> Receiver<LimitError> {
+        let (_, receiver) = self.0.subscribe();
+        receiver
+    }
+
+    /// Spawn a scoped watcher that runs `on_stop` unless the returned sender
+    /// is notified first.
+    pub fn spawn_until_stopped_or_done<'scope, 'env>(
+        &'scope self,
+        scope: &'scope thread::Scope<'scope, 'env>,
+        on_stop: impl FnOnce() + Send + 'scope,
+    ) -> Sender<()> {
+        let (done_sender, done_receiver) = bounded(1);
+        let (stop_sender, stop_receiver) = self.0.subscribe();
+        scope.spawn(move || {
+            if self.check_limits().is_err() {
+                self.0.unsubscribe(&stop_sender);
+                on_stop();
+                return;
+            }
+
+            crossbeam_channel::select! {
+                recv(done_receiver) -> _ => {
+                    self.0.unsubscribe(&stop_sender);
+                }
+                recv(stop_receiver) -> _ => {
+                    self.0.unsubscribe(&stop_sender);
+                    if self.check_limits().is_err() {
+                        on_stop();
                     }
                 }
-                Ok(())
             }
-            1 => Err(LimitError::Timeout),
-            2 => Err(LimitError::Oom),
-            _ => unreachable!(),
-        }
+        });
+        done_sender
     }
 
-    /// Returns the time left or `None` if there was no timeout. Will return
-    /// zero if the timeout has elapsed.
+    /// Return the remaining timeout, or `None` if there is none.
     pub fn time_left(&self) -> Option<Duration> {
-        Some(self.0.timeout?.duration_since(Instant::now()))
+        let timeout = self.0.timeout?;
+        Some(
+            timeout
+                .checked_duration_since(Instant::now())
+                .unwrap_or_default(),
+        )
     }
 
-    /// Returns the stored memory limit.
+    /// Return the configured memory limit.
     pub fn memory_limit(&self) -> Option<MemorySize> {
         self.0.memory
     }
@@ -192,13 +268,53 @@ impl LimitsRef {
     /// Sets an error. Will only store the first error, any subsequent errors
     /// are discarded.
     fn set_error(&self, err: LimitError) {
-        let new = match err {
-            LimitError::Timeout => 1,
-            LimitError::Oom => 2,
-        };
-        let _ = self
-            .0
-            .done
-            .compare_exchange(0, new, Ordering::Acquire, Ordering::Relaxed);
+        let _ = self.0.set_error(err);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        sync::{Arc, Barrier, Mutex},
+        thread,
+    };
+
+    use super::{LimitError, LimitsRef};
+
+    #[test]
+    fn cancel_notifies_subscribers() {
+        let limits_ref = LimitsRef::new(None, None);
+        let barrier = Arc::new(Barrier::new(2));
+        let stop_receiver = limits_ref.subscribe_to_stop();
+
+        thread::scope(|scope| {
+            let spawned_barrier = barrier.clone();
+            scope.spawn(move || {
+                spawned_barrier.wait();
+                stop_receiver.recv().unwrap()
+            });
+
+            barrier.wait();
+            limits_ref.cancel();
+        });
+
+        assert_eq!(limits_ref.check_limits(), Err(LimitError::Interrupted));
+    }
+
+    #[test]
+    fn done_does_not_trigger_stop_handler() {
+        let limits_ref = LimitsRef::new(None, None);
+        let stopped = Arc::new(Mutex::new(false));
+
+        thread::scope(|scope| {
+            let stopped = stopped.clone();
+            let done_sender = limits_ref.spawn_until_stopped_or_done(scope, move || {
+                *stopped.lock().unwrap() = true;
+            });
+            let _ = done_sender.send(());
+        });
+
+        assert!(!*stopped.lock().unwrap());
+        assert_eq!(limits_ref.0.subscriber_count(), 0);
     }
 }

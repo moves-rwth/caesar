@@ -1,4 +1,9 @@
-import { LanguageClientOptions, ResponseError, VersionedTextDocumentIdentifier } from "vscode-languageclient";
+import {
+    LanguageClientOptions,
+    LSPErrorCodes,
+    ResponseError,
+    VersionedTextDocumentIdentifier,
+} from "vscode-languageclient";
 import { Executable, LanguageClient, ServerOptions } from "vscode-languageclient/node";
 import { ExtensionContext, TextDocument } from "vscode";
 import * as vscode from "vscode";
@@ -424,6 +429,9 @@ export class CaesarClient {
         } catch (error) {
             this.logger.error("Client: verification had an error:", document.uri, error);
             if (!(error instanceof ResponseError)) { throw error; }
+            if (error.code === LSPErrorCodes.RequestCancelled) {
+                return;
+            }
             this.notifyStatusUpdate(ServerStatus.Error);
         }
     }

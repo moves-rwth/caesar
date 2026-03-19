@@ -170,7 +170,7 @@ async fn verify_entailment(
         // Handle reasons to stop the verifier.
         match result {
             ProveResult::Unknown(ReasonUnknown::Interrupted) => {
-                return Err(CaesarError::Interrupted)
+                return Err(limits_ref.interrupted_error().into())
             }
             ProveResult::Unknown(ReasonUnknown::Timeout) => return Err(LimitError::Timeout.into()),
             _ => {}

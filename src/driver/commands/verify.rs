@@ -1,4 +1,4 @@
-use std::{ops::DerefMut, process::ExitCode, sync::Arc};
+use std::{ops::DerefMut, process::ExitCode, sync::Arc, time::Instant};
 
 use clap::Args;
 use z3rro::{prover::ProveResult, util::ReasonUnknown};
@@ -72,9 +72,19 @@ pub async fn verify_files(
     server: &SharedServer,
     user_files: Vec<FileId>,
 ) -> Result<bool, CaesarError> {
+    verify_files_with_limits(options, server, user_files, make_limits_ref(options)).await
+}
+
+pub async fn verify_files_with_limits(
+    options: &Arc<VerifyCommand>,
+    server: &SharedServer,
+    user_files: Vec<FileId>,
+    limits_ref: LimitsRef,
+) -> Result<bool, CaesarError> {
     let handle = |limits_ref: LimitsRef| {
         let options = options.clone();
         let server = server.clone();
+        let user_files = user_files.clone();
         tokio::task::spawn_blocking(move || {
             // execute the verifier with a larger stack size of 50MB. the
             // default stack size might be quite small and we need to do quite a
@@ -87,12 +97,7 @@ pub async fn verify_files(
         })
     };
     // Unpacking lots of Results with `.await??` :-)
-    await_with_resource_limits(
-        Some(options.rlimit_options.timeout()),
-        Some(options.rlimit_options.mem_limit()),
-        handle,
-    )
-    .await??
+    await_with_resource_limits(limits_ref, handle).await??
 }
 
 /// Synchronously verify the given source code. This is used for tests. The
@@ -282,7 +287,7 @@ fn verify_files_main(
         // Handle reasons to stop the verifier.
         match result {
             ProveResult::Unknown(ReasonUnknown::Interrupted) => {
-                return Err(CaesarError::Interrupted)
+                return Err(limits_ref.interrupted_error().into())
             }
             ProveResult::Unknown(ReasonUnknown::Timeout) => return Err(LimitError::Timeout.into()),
             _ => {}
@@ -306,4 +311,11 @@ fn verify_files_main(
     }
 
     Ok(num_failures == 0)
+}
+
+fn make_limits_ref(options: &VerifyCommand) -> LimitsRef {
+    LimitsRef::new(
+        Some(Instant::now() + options.rlimit_options.timeout()),
+        Some(options.rlimit_options.mem_limit()),
+    )
 }

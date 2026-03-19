@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{thread, time::Duration};
 
 use indexmap::IndexSet;
 use itertools::Itertools;
@@ -15,7 +15,6 @@ use z3rro::{
 
 use crate::{
     ast::{ExprBuilder, Span},
-    driver::error::CaesarError,
     resource_limits::{LimitError, LimitsRef},
     slicing::{
         model::{SliceMode, SliceModel},
@@ -196,7 +195,7 @@ impl<'ctx> SliceSolver<'ctx> {
         &mut self,
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
-    ) -> Result<Option<SliceModel>, CaesarError> {
+    ) -> Result<Option<SliceModel>, LimitError> {
         assert_eq!(self.prover.level(), 2);
         self.prover.pop();
         self.prover.pop();
@@ -218,7 +217,7 @@ impl<'ctx> SliceSolver<'ctx> {
             options,
             limits_ref,
         )?;
-        if exists_forall_solver.check_sat() == SatResult::Sat {
+        if check_sat_interruptibly(&mut exists_forall_solver, limits_ref)? == SatResult::Sat {
             let model = exists_forall_solver.get_model().unwrap();
             let slice_model =
                 SliceModel::from_model(SliceMode::Verify, &self.slice_stmts, selection, &model);
@@ -233,7 +232,7 @@ impl<'ctx> SliceSolver<'ctx> {
     pub fn slice_verifying_unsat_core(
         &mut self,
         limits_ref: &LimitsRef,
-    ) -> Result<Option<SliceModel>, CaesarError> {
+    ) -> Result<Option<SliceModel>, LimitError> {
         assert_eq!(self.prover.level(), 2);
         self.prover.pop();
         self.prover.pop();
@@ -248,7 +247,11 @@ impl<'ctx> SliceSolver<'ctx> {
 
         self.prover.add_assumption(&self.slice_stmts.constraints);
         self.prover.add_assumption(&inactive_formula);
-        let res = self.prover.check_proof_assuming(&active_toggle_values);
+        let res = check_proof_assuming_interruptibly(
+            &mut self.prover,
+            limits_ref,
+            &active_toggle_values,
+        )?;
 
         let mut slice_searcher = SliceModelSearch::new(active_toggle_values.clone());
         if let ProveResult::Proof = res {
@@ -272,7 +275,7 @@ impl<'ctx> SliceSolver<'ctx> {
         &mut self,
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
-    ) -> Result<Option<SliceModel>, CaesarError> {
+    ) -> Result<Option<SliceModel>, LimitError> {
         assert_eq!(self.prover.level(), 2);
         self.prover.pop();
         self.prover.pop();
@@ -333,7 +336,7 @@ impl<'ctx> SliceSolver<'ctx> {
         &mut self,
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
-    ) -> Result<(ProveResult, Option<(InstrumentedModel<'ctx>, SliceModel)>), CaesarError> {
+    ) -> Result<(ProveResult, Option<(InstrumentedModel<'ctx>, SliceModel)>), LimitError> {
         if !self.prover.has_provables() {
             return Ok((ProveResult::Proof, None));
         }
@@ -351,7 +354,7 @@ impl<'ctx> SliceSolver<'ctx> {
         self.prover.push();
 
         slice_sat_binary_search(&mut self.prover, &active_toggle_values, options, limits_ref)?;
-        let res = self.prover.check_proof();
+        let res = check_proof_interruptibly(&mut self.prover, limits_ref)?;
         let model = if let Some(model) = self.prover.get_model() {
             assert!(matches!(
                 res,
@@ -458,7 +461,7 @@ fn slice_sat_binary_search<'ctx>(
     active_slice_vars: &[Bool<'ctx>],
     options: &SliceSolveOptions,
     limits_ref: &LimitsRef,
-) -> Result<(), CaesarError> {
+) -> Result<(), LimitError> {
     assert_eq!(prover.level(), 2);
 
     let slice_vars: Vec<(&Bool<'ctx>, i32)> =
@@ -506,13 +509,9 @@ fn slice_sat_binary_search<'ctx>(
         if let Some(timeout) = limits_ref.time_left() {
             prover.set_timeout(timeout);
         }
-        let res = prover.check_sat();
+        let res = check_sat_interruptibly(prover, limits_ref)?;
 
         entered.record("res", tracing::field::debug(res));
-
-        if prover.get_reason_unknown() == Some(ReasonUnknown::Interrupted) {
-            return Err(CaesarError::Interrupted);
-        }
 
         let mut done = false;
         if let Some(model) = prover.get_model() {
@@ -571,7 +570,7 @@ fn slice_sat_binary_search<'ctx>(
             if let Some(timeout) = limits_ref.time_left() {
                 prover.set_timeout(timeout);
             }
-            let res = prover.check_sat();
+            let res = check_sat_interruptibly(prover, limits_ref)?;
             if minimize.min_accept().is_some() {
                 assert!(res == SatResult::Sat || res == SatResult::Unknown);
             } else if minimize.max_reject().is_some() {
@@ -601,15 +600,18 @@ pub fn slice_unsat_search<'ctx>(
     while let Some(seed) = exploration.next_set() {
         limits_ref.check_limits()?;
 
-        match check_proof_seed(&all_variables, prover, limits_ref, &seed) {
+        match check_proof_seed(&all_variables, prover, limits_ref, &seed)? {
             ProveResult::Proof => {
                 // now start the shrinking, then block up
-                let res = exploration.shrink_block_unsat(seed, |seed| {
-                    match check_proof_seed(&all_variables, prover, limits_ref, seed) {
-                        ProveResult::Proof => Some(unsat_core_to_seed(prover, &all_variables)),
-                        ProveResult::Counterexample | ProveResult::Unknown(_) => None,
-                    }
+                let res = exploration.shrink_block_unsat(seed, |seed| -> Result<_, LimitError> {
+                    Ok(
+                        match check_proof_seed(&all_variables, prover, limits_ref, seed)? {
+                            ProveResult::Proof => Some(unsat_core_to_seed(prover, &all_variables)),
+                            ProveResult::Counterexample | ProveResult::Unknown(_) => None,
+                        },
+                    )
                 });
+                let res = res?;
 
                 let res_vec: Vec<_> = res.iter().cloned().collect();
                 slice_searcher.found_active(res_vec);
@@ -622,12 +624,12 @@ pub fn slice_unsat_search<'ctx>(
             }
             ProveResult::Counterexample => {
                 // grow the counterexample and then block down
-                exploration.grow_block_sat(seed, |seed| {
-                    match check_proof_seed(&all_variables, prover, limits_ref, seed) {
-                        ProveResult::Counterexample => true,
-                        ProveResult::Proof | ProveResult::Unknown(_) => false,
-                    }
-                });
+                exploration.grow_block_sat(seed, |seed| -> Result<_, LimitError> {
+                    Ok(matches!(
+                        check_proof_seed(&all_variables, prover, limits_ref, seed)?,
+                        ProveResult::Counterexample
+                    ))
+                })?;
             }
             ProveResult::Unknown(_) => {
                 exploration.block_this(&seed);
@@ -655,7 +657,7 @@ fn check_proof_seed<'ctx>(
     prover: &mut Prover<'ctx>,
     limits_ref: &LimitsRef,
     seed: &IndexSet<Bool<'ctx>>,
-) -> ProveResult {
+) -> Result<ProveResult, LimitError> {
     let mut timeout = Duration::from_millis(100);
     if let Some(time_left) = limits_ref.time_left() {
         timeout = timeout.min(time_left);
@@ -672,7 +674,7 @@ fn check_proof_seed<'ctx>(
     let all_assumptions = all_on_assumptions.chain(all_off_assumptions).collect_vec();
 
     // prover.push();
-    prover.check_proof_assuming(&all_assumptions)
+    check_proof_assuming_interruptibly(prover, limits_ref, &all_assumptions)
     // prover.pop();
 }
 
@@ -682,4 +684,63 @@ fn unsat_core_to_seed<'ctx>(
 ) -> IndexSet<Bool<'ctx>> {
     let unsat_core: IndexSet<Bool<'ctx>> = prover.get_unsat_core().into_iter().collect();
     all_variables.intersection(&unsat_core).cloned().collect()
+}
+
+fn check_sat_interruptibly<'ctx>(
+    prover: &mut Prover<'ctx>,
+    limits_ref: &LimitsRef,
+) -> Result<SatResult, LimitError> {
+    let result = run_prover_interruptibly(prover, limits_ref, Prover::check_sat);
+    if matches!(result, SatResult::Unknown)
+        && prover.get_reason_unknown() == Some(ReasonUnknown::Interrupted)
+    {
+        Err(limits_ref.interrupted_error())
+    } else {
+        Ok(result)
+    }
+}
+
+fn check_proof_interruptibly<'ctx>(
+    prover: &mut Prover<'ctx>,
+    limits_ref: &LimitsRef,
+) -> Result<ProveResult, LimitError> {
+    let result = run_prover_interruptibly(prover, limits_ref, Prover::check_proof);
+    if matches!(result, ProveResult::Unknown(ReasonUnknown::Interrupted)) {
+        Err(limits_ref.interrupted_error())
+    } else {
+        Ok(result)
+    }
+}
+
+fn check_proof_assuming_interruptibly<'ctx>(
+    prover: &mut Prover<'ctx>,
+    limits_ref: &LimitsRef,
+    assumptions: &[Bool<'ctx>],
+) -> Result<ProveResult, LimitError> {
+    let result = run_prover_interruptibly(prover, limits_ref, |prover| {
+        prover.check_proof_assuming(assumptions)
+    });
+    if matches!(result, ProveResult::Unknown(ReasonUnknown::Interrupted)) {
+        Err(limits_ref.interrupted_error())
+    } else {
+        Ok(result)
+    }
+}
+
+fn run_prover_interruptibly<'ctx, T>(
+    prover: &mut Prover<'ctx>,
+    limits_ref: &LimitsRef,
+    check: impl FnOnce(&mut Prover<'ctx>) -> T,
+) -> T {
+    let handle = prover.get_context().handle();
+
+    thread::scope(|scope| {
+        let done_sender = limits_ref.spawn_until_stopped_or_done(scope, move || {
+            handle.interrupt();
+        });
+
+        let result = check(prover);
+        let _ = done_sender.send(());
+        result
+    })
 }

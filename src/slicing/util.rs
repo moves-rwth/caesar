@@ -317,14 +317,16 @@ impl<'ctx> SubsetExploration<'ctx> {
     /// We could also try to *add* reductive variables here, but we do not to
     /// keep it simple.
     #[instrument(level = "trace", skip_all, fields(all_true.len = all_true.len(), ret.len))]
-    pub fn shrink_block_unsat(
+    pub fn shrink_block_unsat<E>(
         &mut self,
         all_true: IndexSet<Bool<'ctx>>,
-        mut get_shrunk_core: impl FnMut(&IndexSet<Bool<'ctx>>) -> Option<IndexSet<Bool<'ctx>>>,
-    ) -> IndexSet<Bool<'ctx>> {
+        mut get_shrunk_core: impl FnMut(
+            &IndexSet<Bool<'ctx>>,
+        ) -> Result<Option<IndexSet<Bool<'ctx>>>, E>,
+    ) -> Result<IndexSet<Bool<'ctx>>, E> {
         let mut current = all_true.clone();
 
-        if let Some(shrunk_set) = get_shrunk_core(&current) {
+        if let Some(shrunk_set) = get_shrunk_core(&current)? {
             debug_assert!(shrunk_set.is_subset(&current));
 
             // check if we removed an extensive statement, then we don't use
@@ -348,7 +350,7 @@ impl<'ctx> SubsetExploration<'ctx> {
             if !current.shift_remove(var) {
                 continue;
             }
-            if let Some(shrunk_set) = get_shrunk_core(&current) {
+            if let Some(shrunk_set) = get_shrunk_core(&current)? {
                 debug_assert!(shrunk_set.is_subset(&current));
 
                 // check if we removed an extensive statement, then we don't use
@@ -373,7 +375,7 @@ impl<'ctx> SubsetExploration<'ctx> {
         }
         self.block_unsat(&current);
         tracing::Span::current().record("ret.len", current.len());
-        current
+        Ok(current)
     }
 
     /// *Grow and block* a set of models knowing that the following model is
@@ -393,21 +395,21 @@ impl<'ctx> SubsetExploration<'ctx> {
     /// We could also try to *remove* reductive variables here, but we do not to
     /// keep it simple.
     #[instrument(level = "trace", skip_all, fields(all_true.len = all_true.len(), ret.len))]
-    pub fn grow_block_sat(
+    pub fn grow_block_sat<E>(
         &mut self,
         all_true: IndexSet<Bool<'ctx>>,
-        mut check_grow: impl FnMut(&IndexSet<Bool<'ctx>>) -> bool,
-    ) -> IndexSet<Bool<'ctx>> {
+        mut check_grow: impl FnMut(&IndexSet<Bool<'ctx>>) -> Result<bool, E>,
+    ) -> Result<IndexSet<Bool<'ctx>>, E> {
         let mut current = all_true.clone();
         for var in self.extensive.difference(&all_true) {
             current.insert(var.clone());
-            if !check_grow(&current) {
+            if !check_grow(&current)? {
                 // undo addition on unsat
                 current.shift_remove(var);
             }
         }
         self.block_sat(&current);
         tracing::Span::current().record("ret.len", current.len());
-        current
+        Ok(current)
     }
 }

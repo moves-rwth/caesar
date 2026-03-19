@@ -79,7 +79,7 @@ pub enum VerifyStatus {
     Failed,
     /// The SMT solver returned an unknown result.
     Unknown,
-    /// The verification task was cancelled.
+    /// The verification task timed out.
     Timeout,
 }
 

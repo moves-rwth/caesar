@@ -541,7 +541,8 @@ impl<'ctx> SmtVcProveResult<'ctx> {
         name: &SourceUnitName,
         proc_soundness: &ProcSoundness,
     ) -> Result<(), CaesarError> {
-        let files = server.get_files_internal().lock().unwrap();
+        let files_handle = server.get_files_internal();
+        let files = files_handle.lock().unwrap();
         let result_text = format!("{}: {}", name, self.result_text(proc_soundness));
         match &mut self.prove_result {
             ProveResult::Proof => {
@@ -637,7 +638,8 @@ impl<'ctx> SmtVcProveResult<'ctx> {
                     })
                     .collect();
 
-                let files = server.get_files_internal().lock().unwrap();
+                let files_handle = server.get_files_internal();
+                let files = files_handle.lock().unwrap();
                 let doc = pretty_model(
                     &files,
                     self.slice_model.as_ref().unwrap(),

@@ -1,16 +1,14 @@
 use std::{
     collections::HashMap,
-    future::Future,
+    mem,
     ops::Deref,
-    pin::Pin,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 use ariadne::ReportKind;
-use crossbeam_channel::Sender;
-
 use itertools::Itertools;
-use lsp_server::{Connection, IoThreads, Message, Request, Response};
+use lsp_server::{Connection, ErrorCode, IoThreads, Message, Request, RequestId, Response};
 use lsp_types::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
     InitializeParams, ServerCapabilities, TextDocumentItem, TextDocumentSyncCapability,
@@ -22,24 +20,33 @@ use serde_json::{json, Value};
 use crate::{
     ast::{DeclKind, Diagnostic, FileId, Files, SourceFilePath, StoredFile},
     driver::{
-        commands::verify::VerifyCommand,
+        commands::verify::{verify_files_with_limits, VerifyCommand},
         error::CaesarError,
         front::SourceUnit,
         item::{Item, SourceUnitName},
         smt_proof::SmtVcProveResult,
     },
     proof_rules::calculus::ProcSoundness,
+    resource_limits::{LimitError, LimitsRef, MemorySize},
     servers::{FileStatus, FileStatusType},
     smt::translate_exprs::TranslateExprs,
     vc::explain::VcExplanation,
     version::caesar_semver_version,
 };
 
-use super::{unless_fatal_error, Server, ServerError, VerifyStatus};
+use super::{unless_fatal_error, Server, ServerError, SharedServer, VerifyStatus};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct VerifyRequest {
     text_document: VersionedTextDocumentIdentifier,
+}
+
+impl VerifyRequest {
+    fn extract(request: Request) -> Result<(lsp_server::RequestId, Self), CaesarError> {
+        request
+            .extract::<Self>("custom/verify")
+            .map_err(|e| CaesarError::ServerError(e.into()))
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -60,6 +67,8 @@ struct ComputedPreUpdate {
 /// A connection to an LSP client.
 pub struct LspServer {
     werr: bool,
+    request_timeout: std::time::Duration,
+    request_mem_limit: MemorySize,
     project_root: Option<VersionedTextDocumentIdentifier>,
     files: Arc<Mutex<Files>>,
     connection: Connection,
@@ -75,6 +84,8 @@ impl LspServer {
         let (connection, io_threads) = Connection::stdio();
         let connection = LspServer {
             werr: options.input_options.werr,
+            request_timeout: options.rlimit_options.timeout(),
+            request_mem_limit: options.rlimit_options.mem_limit(),
             project_root: None,
             files: Default::default(),
             connection,
@@ -157,7 +168,7 @@ impl LspServer {
                         )
                     })
                     .id;
-                self.clear_file_information(&file_id)?;
+                self.clear_reported_file_state(file_id)?;
                 Ok(None)
             }
             _ => Ok(Some(notification)),
@@ -315,14 +326,70 @@ impl LspServer {
         Ok(())
     }
 
-    fn clear_file_information(&mut self, file_id: &FileId) -> Result<(), ServerError> {
+    fn clear_reported_file_state(&mut self, file_id: FileId) -> Result<(), ServerError> {
         self.file_statuses
-            .entry(*file_id)
+            .entry(file_id)
             .and_modify(|status| status.clear());
 
         self.publish_diagnostics()?;
         self.publish_document_statuses()?;
         Ok(())
+    }
+
+    fn lsp_file_id(&self, document: VersionedTextDocumentIdentifier) -> FileId {
+        let path = SourceFilePath::Lsp(document);
+        self.files
+            .lock()
+            .unwrap()
+            .find(&path)
+            .unwrap_or_else(|| panic!("Could not find file id for document {:?}", path))
+            .id
+    }
+
+    fn reset_verify_state_for_document(
+        &mut self,
+        document: VersionedTextDocumentIdentifier,
+    ) -> Result<FileId, ServerError> {
+        self.project_root = Some(document.clone());
+        let file_id = self.lsp_file_id(document);
+        self.clear_reported_file_state(file_id)?;
+        Ok(file_id)
+    }
+
+    fn handle_verify_result(
+        &mut self,
+        id: RequestId,
+        file_id: FileId,
+        result: Result<(), CaesarError>,
+    ) -> Result<Response, CaesarError> {
+        // Convert verifier results into LSP-visible state.
+        match result {
+            Ok(()) => Ok(Response::new_ok(id, Value::Null)),
+            Err(CaesarError::LimitError(LimitError::Interrupted)) => Ok(Response::new_err(
+                id,
+                ErrorCode::RequestCanceled as i32,
+                "verification canceled".to_owned(),
+            )),
+            Err(CaesarError::Diagnostic(diagnostic)) => {
+                self.add_diagnostic(diagnostic)?;
+                self.set_file_status_type(&file_id, FileStatusType::Invalid)?;
+                Ok(Response::new_ok(id, Value::Null))
+            }
+            Err(CaesarError::LimitError(LimitError::Timeout | LimitError::Oom)) => {
+                self.handle_timeout_for_results()
+                    .map_err(CaesarError::ServerError)?;
+                self.set_file_status_type(&file_id, FileStatusType::Timeout)?;
+                Ok(Response::new_ok(id, Value::Null))
+            }
+            Err(err) => Ok(Response::new_err(id, 0, format!("{err}"))),
+        }
+    }
+
+    fn make_limits_ref(&self) -> LimitsRef {
+        LimitsRef::new(
+            Some(Instant::now() + self.request_timeout),
+            Some(self.request_mem_limit),
+        )
     }
 }
 
@@ -458,31 +525,118 @@ impl Server for LspServer {
     }
 }
 
-/// A type alias representing an asynchronous closure that returns a `Result<(), CaesarError>`.
-///
-/// Since async closures are currently unstable in Rust, this type simulates them by using
-/// a pinned boxed future that captures the closure and its lifetime.
-type VerifyFuture<'a> = Pin<Box<dyn Future<Output = Result<(), CaesarError>> + 'a>>;
+struct RunningQueue {
+    active_request: Option<(LimitsRef, tokio::task::JoinHandle<Result<(), CaesarError>>)>,
+    queued: Vec<lsp_server::Notification>,
+}
 
-/// Run the LSP server with the given verify function which is an async closure that returns a verification result modeled by a `Result<(), CaesarError>` type.
+impl RunningQueue {
+    fn is_finished(&self) -> bool {
+        self.active_request
+            .as_ref()
+            .is_some_and(|(_, task)| task.is_finished())
+    }
+
+    /// Process the active request, if any, and then handle the queued
+    /// notifications. If `cancel` is true, the active request will be cancelled
+    /// if it is still running.
+    async fn process(
+        &mut self,
+        server: &Arc<Mutex<LspServer>>,
+        cancel: bool,
+    ) -> Result<(), CaesarError> {
+        if let Some((limits_ref, task)) = self.active_request.take() {
+            if cancel && !task.is_finished() {
+                limits_ref.cancel();
+            }
+
+            match task.await? {
+                Ok(()) => {}
+                Err(CaesarError::LimitError(LimitError::Interrupted)) if cancel => {}
+                Err(err) => return Err(err),
+            }
+        }
+        for notification in mem::take(&mut self.queued) {
+            server
+                .lock()
+                .unwrap()
+                .handle_notification(notification)
+                .map_err(CaesarError::ServerError)?;
+        }
+        Ok(())
+    }
+}
+
+async fn run_verify_request(
+    server: Arc<Mutex<LspServer>>,
+    options: Arc<VerifyCommand>,
+    req: Request,
+    limits_ref: LimitsRef,
+) -> Result<(), CaesarError> {
+    let (id, params) = VerifyRequest::extract(req)?;
+    let file_id = server
+        .lock()
+        .unwrap()
+        .reset_verify_state_for_document(params.text_document)
+        .map_err(CaesarError::ServerError)?;
+
+    let shared_server: SharedServer = server.clone();
+    let result = verify_files_with_limits(&options, &shared_server, vec![file_id], limits_ref)
+        .await
+        .map(|_| ());
+    let response = server
+        .lock()
+        .unwrap()
+        .handle_verify_result(id, file_id, result)?;
+
+    server
+        .lock()
+        .unwrap()
+        .connection
+        .sender
+        .send(Message::Response(response))
+        .map_err(|e| CaesarError::ServerError(e.into()))
+}
+
+/// Run the LSP server.
 pub async fn run_lsp_server(
     server: Arc<Mutex<LspServer>>,
-    mut verify: impl FnMut(&[FileId]) -> VerifyFuture,
+    options: Arc<VerifyCommand>,
 ) -> Result<(), CaesarError> {
-    let (sender, receiver) = {
-        let server_guard = server.lock().unwrap();
-        let sender = server_guard.connection.sender.clone();
-        let receiver = server_guard.connection.receiver.clone();
-        (sender, receiver)
+    let receiver = {
+        let server = server.lock().unwrap();
+        server.connection.receiver.clone()
     };
-    for msg in &receiver {
+    let mut verify_queue = RunningQueue {
+        active_request: None,
+        queued: Vec::new(),
+    };
+
+    while let Ok(msg) = receiver.recv() {
+        if verify_queue.is_finished() {
+            verify_queue.process(&server, false).await?;
+        }
+
         match msg {
             Message::Request(req) => match req.method.as_str() {
                 "custom/verify" => {
-                    handle_verify_request(req, server.clone(), sender.clone(), &mut verify).await?;
+                    verify_queue.process(&server, true).await?;
+                    let limits_ref = server.lock().unwrap().make_limits_ref();
+                    let task = tokio::spawn(run_verify_request(
+                        server.clone(),
+                        options.clone(),
+                        req,
+                        limits_ref.clone(),
+                    ));
+                    verify_queue.active_request = Some((limits_ref, task));
                 }
                 "shutdown" => {
-                    sender
+                    verify_queue.process(&server, true).await?;
+                    server
+                        .lock()
+                        .unwrap()
+                        .connection
+                        .sender
                         .send(Message::Response(Response::new_ok(
                             req.id.clone(),
                             Value::Null,
@@ -493,85 +647,19 @@ pub async fn run_lsp_server(
             },
             Message::Response(_) => todo!(),
             Message::Notification(notification) => {
-                server
-                    .lock()
-                    .unwrap()
-                    .handle_notification(notification)
-                    .map_err(CaesarError::ServerError)?;
+                if verify_queue.active_request.is_some() {
+                    // Apply edits after the running verify finishes.
+                    verify_queue.queued.push(notification);
+                } else {
+                    server
+                        .lock()
+                        .unwrap()
+                        .handle_notification(notification)
+                        .map_err(CaesarError::ServerError)?;
+                }
             }
         }
     }
-    Ok(())
-}
 
-/// Handles the verify request from the client by calling the given verify method and sends the result back.
-///
-/// The lock on the server must be carefully managed to avoid deadlocks, because the verify function also needs to lock the server.
-/// Therefore the server is not locked for the entire duration of the function.
-/// Takes a mutable reference to a verify function which is an async closure.
-async fn handle_verify_request(
-    req: Request,
-    server: Arc<Mutex<LspServer>>,
-    sender: Sender<Message>,
-    verify: &mut impl FnMut(&[FileId]) -> VerifyFuture,
-) -> Result<(), CaesarError> {
-    let (id, params) = req
-        .extract::<VerifyRequest>("custom/verify")
-        .map_err(|e| CaesarError::ServerError(e.into()))?;
-    let file_id = {
-        let mut server_ref = server.lock().unwrap();
-        server_ref.project_root = Some(params.text_document.clone());
-        let files = server_ref.files.lock().unwrap();
-        let file_id = files
-            .find(&SourceFilePath::Lsp(params.text_document.clone()))
-            .unwrap_or_else(|| {
-                panic!(
-                    "Could not find file id for document {:?}",
-                    params.text_document
-                )
-            })
-            .id;
-        drop(files);
-
-        server_ref
-            .clear_file_information(&file_id)
-            .map_err(CaesarError::ServerError)?;
-        file_id
-    };
-
-    let result = verify(&[file_id]).await;
-
-    let response = match result {
-        Ok(()) => Response::new_ok(id.clone(), Value::Null),
-        Err(err) => match err {
-            CaesarError::Diagnostic(diagnostic) => {
-                let mut server_lock = server.lock().unwrap();
-                server_lock.add_diagnostic(diagnostic)?;
-                // If the verification failed with a diagnostic, we can assume
-                // that the file can not be (soundly) verified due to
-                // syntax/type/soundness errors.
-                server_lock.set_file_status_type(&file_id, FileStatusType::Invalid)?;
-                drop(server_lock);
-                Response::new_ok(id.clone(), Value::Null)
-            }
-            CaesarError::Interrupted | CaesarError::LimitError(_) => {
-                let mut server_lock = server.lock().unwrap();
-
-                server_lock
-                    .handle_timeout_for_results()
-                    .map_err(CaesarError::ServerError)?;
-
-                server_lock.set_file_status_type(&file_id, FileStatusType::Timeout)?;
-                drop(server_lock);
-                Response::new_ok(id.clone(), Value::Null)
-            }
-            _ => Response::new_err(id, 0, format!("{err}")),
-        },
-    };
-
-    sender
-        .send(Message::Response(response))
-        .map_err(|e| CaesarError::ServerError(e.into()))?;
-
-    Ok(())
+    verify_queue.process(&server, true).await
 }

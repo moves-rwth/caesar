@@ -33,9 +33,6 @@ pub enum CaesarError {
     /// A panic occurred somewhere.
     #[error("panic: {0}")]
     Panic(#[from] JoinError),
-    /// The verifier was interrupted.
-    #[error("interrupted")]
-    Interrupted,
 }
 
 /// As the last step of the CLI, process a result of Caesar - either success
@@ -74,15 +71,15 @@ pub fn finalize_caesar_result(
             );
             std::process::exit(3); // exit ASAP
         }
+        Err(CaesarError::LimitError(LimitError::Interrupted)) => {
+            tracing::error!("Interrupted");
+            ExitCode::from(130)
+        }
         Err(CaesarError::UserError(err)) => {
             eprintln!("Error: {err}");
             ExitCode::from(1)
         }
         Err(CaesarError::ServerError(err)) => panic!("{}", err),
         Err(CaesarError::Panic(join_error)) => panic!("{}", join_error),
-        Err(CaesarError::Interrupted) => {
-            tracing::error!("Interrupted");
-            ExitCode::from(130) // 130 seems to be a standard exit code for CTRL+C
-        }
     }
 }

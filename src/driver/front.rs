@@ -73,7 +73,8 @@ pub fn parse_and_tycheck(
         }
     }
 
-    let mut files = server.get_files_internal().lock().unwrap();
+    let files = server.get_files_internal();
+    let mut files = files.lock().unwrap();
     let mut tcx = init_tcx(&mut files);
     drop(files);
 
