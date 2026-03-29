@@ -133,7 +133,7 @@ impl<'ctx> List<'ctx> {
 
     /// Return a Bool that asserts the index is in the list's bounds.
     pub fn is_valid_index(&self, index: &UInt<'ctx>) -> Bool<'ctx> {
-        index.smt_le(&self.len())
+        index.smt_cmp(&self.len(), SmtOrdering::Less)
     }
 
     pub fn as_dynamic(&self) -> Dynamic<'ctx> {
