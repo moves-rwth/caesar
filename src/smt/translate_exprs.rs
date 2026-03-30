@@ -10,8 +10,8 @@ use z3::{
 
 use crate::{
     ast::{
-        BinOpKind, DeclKind, Expr, ExprKind, Ident, LitKind, QuantOpKind, QuantVar, Shared,
-        Trigger, TyKind, UnOpKind,
+        util::FreeVariableCollector, BinOpKind, DeclKind, Expr, ExprKind, Ident, LitKind,
+        QuantOpKind, QuantVar, Shared, Trigger, TyKind, UnOpKind,
     },
     scope_map::ScopeMap,
     smt::funcs::fuel::literals::LiteralExprSet,
@@ -140,6 +140,17 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
         self.locals.remove(ident);
     }
 
+    /// Materialize free variables before entering the quantifier-local scope.
+    /// This keeps later occurrences from getting fresh SMT symbols.
+    fn init_quantifier_free_vars(&mut self, operand: &Expr, quant_vars: &[QuantVar]) {
+        let mut operand = operand.clone(); // TODO: unnecessary clone
+        let mut free_vars = FreeVariableCollector::new().collect_and_clear(&mut operand);
+        free_vars.retain(|ident| !quant_vars.iter().any(|var| var.name() == *ident));
+        for ident in free_vars {
+            self.get_local(ident);
+        }
+    }
+
     pub fn t_symbolic(&mut self, expr: &Expr) -> Symbolic<'ctx> {
         match &expr.ty.as_ref().unwrap() {
             TyKind::Bool => Symbolic::Bool(self.t_bool(expr)),
@@ -236,6 +247,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 panic!("illegal cast to {:?} from {:?}", &expr.ty, &operand.ty)
             }
             ExprKind::Quant(quant_op, quant_vars, ann, operand) => {
+                self.init_quantifier_free_vars(operand, quant_vars);
                 let (scope, operand, patterns) =
                     self.with_current_quantifier_bounds(quant_vars, |this, scope| {
                         let operand = this.t_bool(operand);
@@ -581,6 +593,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 }
             }
             ExprKind::Quant(quant_op, quant_vars, ann, operand) => {
+                self.init_quantifier_free_vars(operand, quant_vars);
                 let skolem_args = self.skolem_arg_scope();
                 let (quantified, operand, patterns) =
                     self.with_current_quantifier_bounds(quant_vars, |this, scope| {

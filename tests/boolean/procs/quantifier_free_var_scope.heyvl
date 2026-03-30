@@ -1,0 +1,8 @@
+// RUN: @caesar @file
+
+// Regression test: `value` only appears inside quantifier bodies.
+// It must still map to one stable SMT symbol across pre and post.
+proc quantifier_free_var_scope(value: UInt) -> ()
+    pre ?(forall k: UInt. (k < 1) ==> (value == 0))
+    post ?(forall k: UInt. (k < 1) ==> (value == 0))
+{}
