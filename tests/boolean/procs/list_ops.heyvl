@@ -1,0 +1,157 @@
+// RUN: @caesar @file
+
+// Examples for the built-in list API.
+//
+// The concrete procedures below use only `len`, `select`, and `store`,
+// so they preserve the length of the input list.
+//
+// Operations such as append and concat need a way to construct a fresh,
+// longer list. The current built-in API does not provide such an operation,
+// so those examples are given as specification-only procedures at the end.
+
+// Replace one element and leave all other valid indices unchanged.
+proc update_at(list: []UInt, index: UInt, value: UInt) -> (res: []UInt)
+    pre ?(index < len(list))
+    post ?(len(res) == len(list))
+    post ?(select(res, index) == value)
+    post ?(forall k: UInt. (k < len(list) && k != index) ==> (select(res, k) == select(list, k)))
+{
+    res = store(list, index, value)
+}
+
+// Replace the first element of a non-empty list.
+proc update_first(list: []UInt, value: UInt) -> (res: []UInt)
+    pre ?(0 < len(list))
+    post ?(len(res) == len(list))
+    post ?(select(res, 0) == value)
+    post ?(forall k: UInt. (k < len(list) && k != 0) ==> (select(res, k) == select(list, k)))
+{
+    res = store(list, 0, value)
+}
+
+// Replace the last element of a non-empty list.
+proc set_last(list: []UInt, value: UInt) -> (res: []UInt)
+    pre ?(0 < len(list))
+    post ?(len(res) == len(list))
+    post ?(select(res, len(list) - 1) == value)
+    post ?(
+        forall k: UInt.
+            (k < len(list) && k != (len(list) - 1)) ==> (select(res, k) == select(list, k))
+    )
+{
+    res = store(list, len(list) - 1, value)
+}
+
+// Swap the elements stored at two valid indices.
+proc swap(list: []UInt, i: UInt, j: UInt) -> (res: []UInt)
+    pre ?(i < len(list) && j < len(list))
+    post ?(len(res) == len(list))
+    post ?(select(res, i) == select(list, j))
+    post ?(select(res, j) == select(list, i))
+    post ?(
+        forall k: UInt.
+            (k < len(list) && k != i && k != j) ==> (select(res, k) == select(list, k))
+    )
+{
+    var vi: UInt = select(list, i)
+    var vj: UInt = select(list, j)
+    res = store(store(list, i, vj), j, vi)
+}
+
+// Add one to every element while preserving the length.
+proc map_succ(list: []UInt) -> (res: []UInt)
+    post ?(len(res) == len(list))
+    post ?(forall k: UInt. (k < len(list)) ==> (select(res, k) == select(list, k) + 1))
+{
+    res = list
+    var i: UInt = 0
+    @invariant(?(
+        i <= len(list) &&
+        len(res) == len(list) &&
+        (forall k: UInt.
+            (k < len(list)) ==> (select(res, k) == ite(k < i, select(list, k) + 1, select(list, k))))
+    ))
+    while (i < len(list)) {
+        res = store(res, i, select(list, i) + 1)
+        i = i + 1
+    }
+}
+
+// Replace every element by the same value while preserving the length.
+proc fill(list: []UInt, value: UInt) -> (res: []UInt)
+    post ?(len(res) == len(list))
+    post ?(forall k: UInt. (k < len(list)) ==> (select(res, k) == value))
+{
+    res = list
+    var i: UInt = 0
+    @invariant(?(
+        i <= len(list) &&
+        len(res) == len(list) &&
+        (forall k: UInt.
+            (k < i) ==> (select(res, k) == value))
+    ))
+    while (i < len(list)) {
+        res = store(res, i, value)
+        i = i + 1
+    }
+}
+
+// Reverse a list by rewriting each position with its mirrored element.
+proc reverse(list: []UInt) -> (res: []UInt)
+    post ?(len(res) == len(list))
+    post ?(forall k: UInt. (k < len(list)) ==> (select(res, k) == select(list, (len(list) - 1) - k)))
+{
+    res = list
+    var i: UInt = 0
+    @invariant(?(
+        i <= len(list) &&
+        len(res) == len(list) &&
+        (forall k: UInt.
+            (k < len(list)) ==> (
+                select(res, k) ==
+                ite(k < i, select(list, (len(list) - 1) - k), select(list, k))
+            ))
+    ))
+    while (i < len(list)) {
+        res = store(res, i, select(list, (len(list) - 1) - i))
+        i = i + 1
+    }
+}
+
+// Rotate a non-empty list left by one position.
+proc rotate_left(list: []UInt) -> (res: []UInt)
+    pre ?(0 < len(list))
+    post ?(len(res) == len(list))
+    post ?(forall k: UInt. (k + 1 < len(list)) ==> (select(res, k) == select(list, k + 1)))
+    post ?(select(res, len(list) - 1) == select(list, 0))
+{
+    res = list
+    var i: UInt = 0
+    @invariant(?(
+        i <= len(list) &&
+        len(res) == len(list) &&
+        (forall k: UInt.
+            (k < len(list)) ==> (
+                select(res, k) ==
+                ite(k < i, select(list, ite(k + 1 < len(list), k + 1, 0)), select(list, k))
+            ))
+    ))
+    while (i < len(list)) {
+        res = store(res, i, select(list, ite(i + 1 < len(list), i + 1, 0)))
+        i = i + 1
+    }
+}
+
+// Specification-only operations that change the length of the result.
+
+// Specify append without implementing it concretely.
+proc append(list: []UInt, value: UInt) -> (res: []UInt)
+    post ?(len(res) == len(list) + 1)
+    post ?(select(res, len(list)) == value)
+    post ?(forall k: UInt. (k < len(list)) ==> (select(res, k) == select(list, k)))
+
+// Specify concatenation without implementing it concretely.
+proc concat(left: []UInt, right: []UInt) -> (res: []UInt)
+    post ?(len(res) == len(left) + len(right))
+    post ?(forall k: UInt. (k < len(left)) ==> (select(res, k) == select(left, k)))
+    post ?(forall k: UInt. (k < len(right)) ==> (select(res, len(left) + k) == select(right, k)))
