@@ -20,6 +20,7 @@
 
 #[macro_use]
 pub mod util;
+pub mod array;
 pub mod interpreted;
 pub mod orders;
 pub mod scope;
@@ -33,11 +34,12 @@ pub mod smtlib;
 mod uint;
 pub use uint::UInt;
 mod ureal;
+pub use array::ConcreteArrayValue;
 pub use ureal::UReal;
 pub mod eureal;
 pub use eureal::EUReal;
 mod list;
-pub use list::{List, ListFactory};
+pub use list::{ConcreteList, List, ListFactory};
 mod fuel;
 pub use fuel::{Fuel, FuelFactory};
 mod lit;

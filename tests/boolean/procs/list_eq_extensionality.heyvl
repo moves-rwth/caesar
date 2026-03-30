@@ -1,0 +1,15 @@
+// RUN: @caesar @file
+
+// Regression test for built-in list equality:
+// out-of-bounds array cells must not affect `==`.
+// User code should not rely on `select` outside `i < len(list)`;
+// this test intentionally does so to exercise the backend encoding.
+
+proc empty_lists_are_equal_extensionally(a: []UInt, b: []UInt) -> ()
+    pre ?(
+        (len(a) == 0) &&
+        (len(b) == 0) &&
+        (select(a, 0) != select(b, 0))
+    )
+    post ?(a == b)
+{}

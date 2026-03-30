@@ -159,9 +159,9 @@ impl<'ctx> Symbolic<'ctx> {
                 .eval(model)
                 .map(|v| Box::new(PrettyRational(Cow::Owned(v))) as Box<dyn Display>),
             Symbolic::EUReal(v) => v.eval(model).map(|v| Box::new(v) as Box<dyn Display>),
-            Symbolic::List(_) => Err(SmtEvalError::ParseError), // TODO
-            Symbolic::Fuel(_) => Err(SmtEvalError::ParseError), // TODO
-            Symbolic::Uninterpreted(_) => Err(SmtEvalError::ParseError), // TODO
+            Symbolic::List(v) => v.eval(model).map(|v| Box::new(v) as Box<dyn Display>),
+            Symbolic::Fuel(v) => v.eval(model).map(|v| Box::new(v) as Box<dyn Display>),
+            Symbolic::Uninterpreted(v) => v.eval(model).map(|v| Box::new(v) as Box<dyn Display>),
         }
     }
 }

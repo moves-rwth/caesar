@@ -3,7 +3,7 @@
 use std::{collections::BTreeMap, fmt::Display, rc::Rc};
 
 use itertools::Itertools;
-use z3rro::model::{InstrumentedModel, ModelConsistency, SmtEvalError};
+use z3rro::model::{InstrumentedModel, ModelConsistency, SmtEval, SmtEvalError};
 
 use crate::{
     ast::{
@@ -268,13 +268,13 @@ pub fn pretty_unaccessed(model: &InstrumentedModel<'_>) -> Option<Doc> {
     let mut lines: Vec<Doc> = vec![Doc::text("extra definitions:")];
     for decl in unaccessed {
         let line = if decl.arity() == 0 {
-            let value = model.eval_ast(&decl.apply(&[]), true).unwrap();
-            format!("{}: {}", decl.name(), value)
+            Doc::text(format!("{}: ", decl.name()))
+                .append(pretty_eval_result(decl.apply(&[]).eval(model)))
         } else {
             let interp = model.get_func_interp(&decl).unwrap();
-            format!("{}: {}", decl.name(), interp)
+            Doc::text(format!("{}: {}", decl.name(), interp))
         };
-        lines.push(Doc::text(line));
+        lines.push(line);
     }
     Some(Doc::intersperse(lines, Doc::hardline()).nest(4))
 }

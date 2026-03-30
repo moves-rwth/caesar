@@ -13,6 +13,8 @@ use z3::{
     FuncDecl, FuncInterp, Model,
 };
 
+use crate::{array::ConcreteArrayValue, list::ConcreteList};
+
 /// Whether the model is guaranteed to be consistent with the constraints added
 /// to the solver or not. When the SMT solver returns `SAT`, the model is
 /// consistent (modulo bugs), but when the solver returns `UNKNOWN` we can also
@@ -190,6 +192,25 @@ impl<'ctx> SmtEval<'ctx> for Int<'ctx> {
             .as_i64()
             .ok_or(SmtEvalError::ParseError)?;
         Ok(BigInt::from(value))
+    }
+}
+
+/// Evaluate a raw SMT value for display.
+///
+/// This only recognizes z3rro's built-in list and array encodings and
+/// otherwise falls back to Z3's default rendering.
+impl<'ctx> SmtEval<'ctx> for Dynamic<'ctx> {
+    type Value = String;
+
+    fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
+        let value = model.eval_ast(self, true).ok_or(SmtEvalError::EvalError)?;
+        if let Ok(value) = ConcreteList::from_dynamic(&value) {
+            return Ok(value.to_string());
+        }
+        if let Some(value) = ConcreteArrayValue::from_dynamic(&value) {
+            return Ok(value.to_string());
+        }
+        Ok(value.to_string())
     }
 }
 

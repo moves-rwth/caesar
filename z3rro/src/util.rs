@@ -8,7 +8,10 @@ use std::{
 
 use num::{BigInt, BigRational, Integer, Signed, Zero};
 
-use z3::{Params, Solver};
+use z3::{
+    ast::{Ast, Int},
+    Params, Solver,
+};
 
 /// Build a conjunction of Boolean expressions.
 macro_rules! z3_and {
@@ -153,6 +156,16 @@ pub fn set_solver_timeout(solver: &Solver, duration: Duration) {
     let mut params = Params::new(solver.get_context());
     params.set_u32("timeout", duration.as_millis().try_into().unwrap());
     solver.set_params(&params);
+}
+
+pub fn parse_big_int(value: &Int<'_>) -> Option<BigInt> {
+    let int_value = value.simplify().to_string();
+    BigInt::from_str(&int_value).ok().or_else(|| {
+        let value = int_value.strip_prefix("(- ")?;
+        let value = value.strip_suffix(')')?;
+        let value = BigInt::from_str(value).ok()?;
+        Some(-value)
+    })
 }
 
 /// Pretty-printing wrapper type for [`BigRational`] values. This type's

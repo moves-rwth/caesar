@@ -1,3 +1,4 @@
+use crate::model::{InstrumentedModel, SmtEval, SmtEvalError};
 use crate::scope::{SmtFresh, SmtScope};
 use crate::{Factory, SmtFactory, SmtInvariant};
 use std::rc::Rc;
@@ -145,5 +146,55 @@ impl<'ctx> SmtFresh<'ctx> for Fuel<'ctx> {
             factory: factory.clone(),
             value: Dynamic::allocate(&datatype_factory, scope, prefix),
         }
+    }
+}
+
+impl<'ctx> SmtEval<'ctx> for Fuel<'ctx> {
+    type Value = String;
+
+    fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
+        let succ_name = self.factory.succ.name();
+        let zero_name = self.factory.zero.name();
+        let value = model
+            .eval_ast(&self.value, true)
+            .ok_or(SmtEvalError::EvalError)?;
+
+        let mut succs = 0;
+        let mut tail = value.clone();
+        while tail.num_children() == 1 && tail.decl().name() == succ_name {
+            succs += 1;
+            tail = tail.nth_child(0).ok_or(SmtEvalError::ParseError)?;
+        }
+        if tail.num_children() == 0 && tail.decl().name() == zero_name {
+            return Ok(succs.to_string());
+        }
+
+        Err(SmtEvalError::ParseError)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use z3::{Config, Context, SatResult, Solver};
+
+    use super::FuelFactory;
+    use crate::{
+        model::{InstrumentedModel, ModelConsistency, SmtEval},
+        Fuel,
+    };
+
+    #[test]
+    fn fuel_literal_eval_prints_number() {
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let solver = Solver::new(&ctx);
+        assert_eq!(solver.check(), SatResult::Sat);
+
+        let factory = FuelFactory::new(&ctx);
+        let fuel = Fuel::from_constant(&factory, 2);
+        let model =
+            InstrumentedModel::new(ModelConsistency::Consistent, solver.get_model().unwrap());
+
+        assert_eq!(fuel.eval(&model).unwrap(), "2");
     }
 }
