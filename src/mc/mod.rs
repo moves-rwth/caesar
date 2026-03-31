@@ -403,31 +403,39 @@ impl<'a> ExprTranslator<'a> {
                 left: self.translate(left)?,
                 right: self.translate(right)?,
             })),
-            ExprKind::Binary(bin_op, left, right) => Ok(Expression::from(BinaryExpression {
-                op: match bin_op.node {
-                    BinOpKind::Add => BinaryOp::Plus,
-                    BinOpKind::Sub => BinaryOp::Minus,
-                    BinOpKind::Mul => BinaryOp::Times,
-                    BinOpKind::Div => BinaryOp::Divide,
-                    BinOpKind::Mod => BinaryOp::Modulo,
-                    BinOpKind::And => BinaryOp::And,
-                    BinOpKind::Or => BinaryOp::Or,
-                    BinOpKind::Eq => BinaryOp::Equals,
-                    BinOpKind::Lt => BinaryOp::Less,
-                    BinOpKind::Le => BinaryOp::LessOrEqual,
-                    BinOpKind::Ne => BinaryOp::NotEquals,
-                    BinOpKind::Ge => BinaryOp::GreaterOrEqual,
-                    BinOpKind::Gt => BinaryOp::Greater,
-                    BinOpKind::Inf => BinaryOp::Min,
-                    BinOpKind::Sup => BinaryOp::Max,
-                    BinOpKind::Impl
-                    | BinOpKind::CoImpl
-                    | BinOpKind::Compare
-                    | BinOpKind::CoCompare => Err(unsupported_expr_err())?,
-                },
-                left: self.translate(left)?,
-                right: self.translate(right)?,
-            })),
+            ExprKind::Binary(bin_op, left, right) => {
+                let left = self.translate(left)?;
+                let right = self.translate(right)?;
+                if bin_op.node == BinOpKind::Sub {
+                    self.translate_sub(expr, left, right)
+                } else {
+                    Ok(Expression::from(BinaryExpression {
+                        op: match bin_op.node {
+                            BinOpKind::Add => BinaryOp::Plus,
+                            BinOpKind::Mul => BinaryOp::Times,
+                            BinOpKind::Div => BinaryOp::Divide,
+                            BinOpKind::Mod => BinaryOp::Modulo,
+                            BinOpKind::And => BinaryOp::And,
+                            BinOpKind::Or => BinaryOp::Or,
+                            BinOpKind::Eq => BinaryOp::Equals,
+                            BinOpKind::Lt => BinaryOp::Less,
+                            BinOpKind::Le => BinaryOp::LessOrEqual,
+                            BinOpKind::Ne => BinaryOp::NotEquals,
+                            BinOpKind::Ge => BinaryOp::GreaterOrEqual,
+                            BinOpKind::Gt => BinaryOp::Greater,
+                            BinOpKind::Inf => BinaryOp::Min,
+                            BinOpKind::Sup => BinaryOp::Max,
+                            BinOpKind::Sub
+                            | BinOpKind::Impl
+                            | BinOpKind::CoImpl
+                            | BinOpKind::Compare
+                            | BinOpKind::CoCompare => Err(unsupported_expr_err())?,
+                        },
+                        left,
+                        right,
+                    }))
+                }
+            }
             ExprKind::Unary(un_op, operand) => match un_op.node {
                 // TODO: support other types as well
                 UnOpKind::Not => {
@@ -462,6 +470,38 @@ impl<'a> ExprTranslator<'a> {
                 })),
                 LitKind::Str(_) | LitKind::Infinity => Err(unsupported_expr_err()),
             },
+        }
+    }
+
+    fn translate_sub(
+        &self,
+        expr: &Expr,
+        left: Expression,
+        right: Expression,
+    ) -> Result<Expression, JaniConversionError> {
+        match expr.ty {
+            Some(TyKind::UInt) | Some(TyKind::UReal) | Some(TyKind::EUReal) => {
+                let minus = Expression::from(BinaryExpression {
+                    op: BinaryOp::Minus,
+                    left: left.clone(),
+                    right: right.clone(),
+                });
+                Ok(Expression::from(IteExpression {
+                    cond: Expression::from(BinaryExpression {
+                        op: BinaryOp::GreaterOrEqual,
+                        left,
+                        right,
+                    }),
+                    left: minus,
+                    right: 0.into(),
+                }))
+            }
+            Some(TyKind::Int) | Some(TyKind::Real) => Ok(Expression::from(BinaryExpression {
+                op: BinaryOp::Minus,
+                left,
+                right,
+            })),
+            _ => unreachable!(),
         }
     }
 
