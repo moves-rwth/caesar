@@ -1,5 +1,5 @@
 # ---- Base builder image with rust ----
-FROM --platform=$BUILDPLATFORM rust:latest AS rust-builder
+FROM --platform=$BUILDPLATFORM rust:1-trixie AS rust-builder
 
 # install required dependencies to build z3.rs...
 RUN apt-get update && apt-get install -y cmake llvm-dev libclang-dev clang lld
@@ -46,7 +46,9 @@ RUN cargo build --verbose --release --target ${CAESAR_ARCH}
 RUN cp target/${CAESAR_ARCH}/release/caesar target/release/caesar
 
 # ---- Building the final Docker image ----
-FROM gcr.io/distroless/cc-debian12:latest
+# Keep the runtime Debian release aligned with the builder to avoid
+# glibc/libstdc++ version mismatches in the published image.
+FROM gcr.io/distroless/cc-debian13:latest
 
 COPY --from=builder /root/caesar/target/release/caesar /caesar
 
