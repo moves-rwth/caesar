@@ -13,6 +13,7 @@ use std::{
     fs, io,
     path::PathBuf,
     process::{Command, Output},
+    time::{Duration, Instant},
 };
 
 use glob::glob;
@@ -60,6 +61,13 @@ struct TestFile {
     commands: Vec<TestCommand>,
 }
 
+#[derive(Debug)]
+struct CommandRun {
+    command: String,
+    elapsed: Duration,
+    output: Output,
+}
+
 impl TestFile {
     fn parse(path: PathBuf) -> io::Result<Self> {
         let test_file = fs::read_to_string(&path).unwrap();
@@ -84,7 +92,7 @@ impl TestFile {
     }
 
     fn run(&self) -> Result<(), Failed> {
-        let mut output: Option<(&str, Output)> = None;
+        let mut output: Option<CommandRun> = None;
         let mut xfail = false;
         let mut ignore = false;
         for command in &self.commands {
@@ -96,12 +104,18 @@ impl TestFile {
                     let args = shlex::split(arg).unwrap();
                     let mut command = Command::new(&args[0]);
                     command.args(&args[1..]);
-                    output = Some((arg, command.output().unwrap()));
+                    let start = Instant::now();
+                    let command_output = command.output().unwrap();
+                    output = Some(CommandRun {
+                        command: arg.clone(),
+                        elapsed: start.elapsed(),
+                        output: command_output,
+                    });
                 }
                 TestCommand::Xfail(_args) => {
                     xfail = true;
-                    if let Some((_, output)) = &output {
-                        if output.status.success() {
+                    if let Some(run) = &output {
+                        if run.output.status.success() {
                             return Err("XFAIL command succeeded".into());
                         }
                     } else {
@@ -114,13 +128,15 @@ impl TestFile {
             }
         }
         if !xfail {
-            if let Some((command, output)) = output {
-                if !output.status.success() {
+            if let Some(run) = output {
+                if !run.output.status.success() {
                     return Err(format!(
-                        "Failed RUN: {}.\n\nStdout:\n{}\n\nStderr:\n{}",
-                        command,
-                        String::from_utf8(output.stdout).unwrap(),
-                        String::from_utf8(output.stderr).unwrap()
+                        "Failed RUN: {}.\nExit status: {}.\nElapsed: {:.3}s.\n\nStdout:\n{}\n\nStderr:\n{}",
+                        run.command,
+                        run.output.status,
+                        run.elapsed.as_secs_f64(),
+                        String::from_utf8(run.output.stdout).unwrap(),
+                        String::from_utf8(run.output.stderr).unwrap()
                     )
                     .into());
                 }

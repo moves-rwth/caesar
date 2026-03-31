@@ -1,4 +1,4 @@
-// RUN: @caesar @file
+// RUN: env RUST_LOG=info,z3=error @caesar @file --timing --print-core-procs --print-theorem --z3-probe --z3-stats --z3-qi-profile --z3-mbqi-trace
 
 proc omega(init_x: UInt) -> (x: UInt)
     pre init_x
