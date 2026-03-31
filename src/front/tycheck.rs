@@ -742,7 +742,7 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
                 }
                 UnOpKind::Iverson => {
                     self.try_cast(expr_span, &TyKind::Bool, operand)?;
-                    TyKind::EUReal
+                    TyKind::UInt
                 }
                 UnOpKind::Parens => operand.ty.clone().unwrap(),
             },

@@ -32,6 +32,14 @@ impl Expr {
         };
         replace_with::replace_with(self, default, f)
     }
+
+    /// Follow casts until reaching the underlying non-cast expression.
+    pub fn deref_cast(&self) -> &Expr {
+        match &self.kind {
+            ExprKind::Cast(inner) => inner.deref_cast(),
+            _ => self,
+        }
+    }
 }
 
 impl fmt::Display for Expr {

@@ -111,7 +111,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
     /// However, if `expr` can not be bottom, then return `None` and don't
     /// evaluate the `callback`.
     fn with_nonbot<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
-        match &expr.kind {
+        match &expr.deref_cast().kind {
             ExprKind::Unary(un_op, operand) => match un_op.node {
                 UnOpKind::Embed | UnOpKind::Iverson => {
                     // If an embed or Iverson expression are nonzero, we know
@@ -130,7 +130,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
     /// if `expr` can not be top, then return `None` and don't evaluate the
     /// `callback`.
     fn with_nontop<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
-        match &expr.kind {
+        match &expr.deref_cast().kind {
             ExprKind::Unary(un_op, operand) => {
                 if let UnOpKind::Embed = un_op.node {
                     // If an embed expression is not top, then its Boolean

@@ -369,6 +369,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 _ => panic!("illegal exprkind {:?} of expression {:?}", bin_op, &expr),
             },
             ExprKind::Unary(un_op, operand) => match un_op.node {
+                UnOpKind::Iverson => {
+                    let operand = self.t_bool(operand);
+                    UInt::iverson(&self.ctx.ctx, &operand)
+                }
                 UnOpKind::Parens => self.t_uint(operand),
                 _ => panic!("illegal exprkind"),
             },
@@ -497,6 +501,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 _ => panic!("illegal exprkind {:?} of expression {:?}", bin_op, &expr),
             },
             ExprKind::Unary(un_op, operand) => match un_op.node {
+                UnOpKind::Iverson => {
+                    let operand = self.t_bool(operand);
+                    UReal::iverson(&self.ctx.ctx, &operand)
+                }
                 UnOpKind::Parens => self.t_ureal(operand),
                 _ => panic!("illegal exprkind {:?} of expression {:?}", un_op, &expr),
             },
@@ -504,6 +512,14 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 let operand_ty = operand.ty.as_ref().unwrap();
                 match &operand_ty {
                     TyKind::UInt => {
+                        // fast path for casts of iversons of uints. without it,
+                        // some benchmarks time out!
+                        if let ExprKind::Unary(un_op, iverson_operand) = &operand.kind {
+                            if un_op.node == UnOpKind::Iverson {
+                                let operand = self.t_bool(iverson_operand);
+                                return UReal::iverson(&self.ctx.ctx, &operand);
+                            }
+                        }
                         let operand = self.t_uint(operand);
                         UReal::from_uint(&operand)
                     }
@@ -582,6 +598,14 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 let operand_ty = operand.ty.as_ref().unwrap();
                 match &operand_ty {
                     TyKind::UInt => {
+                        // fast path for casts of iversons. without it, some
+                        // benchmarks time out!
+                        if let ExprKind::Unary(un_op, iverson_operand) = &operand.kind {
+                            if un_op.node == UnOpKind::Iverson {
+                                let operand = self.t_bool(iverson_operand);
+                                return EUReal::iverson(self.ctx.eureal(), &operand);
+                            }
+                        }
                         let operand = self.t_uint(operand);
                         EUReal::from_uint(self.ctx.eureal(), &operand)
                     }

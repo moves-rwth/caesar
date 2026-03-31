@@ -131,10 +131,10 @@ fn test_omega_transform() {
                 var x: UInt
                 {
                     cohavoc n
-                    assert [(n > x)]
+                    assert cast(EUReal, [(n > x)])
                     if ⊓ {
                         validate
-                        assume ([(n > x)])[n -> 0]
+                        assume (cast(EUReal, [(n > x)]))[n -> 0]
                         if (1 <= x) {
                             x = (x - 1)
                             assert cast(EUReal, 0)
@@ -145,10 +145,10 @@ fn test_omega_transform() {
                     } else {
                         havoc n
                         validate
-                        assume ([(n > x)])[n -> (n + 1)]
+                        assume (cast(EUReal, [(n > x)]))[n -> (n + 1)]
                         if (1 <= x) {
                             x = (x - 1)
-                            assert [(n > x)]
+                            assert cast(EUReal, [(n > x)])
                             assume cast(EUReal, 0)
                         } else {
 
@@ -178,7 +178,7 @@ fn test_ost_transform() {
     let mut test_string = String::from(
         r#"
             proc optional_stopping(init_b: UInt, init_a: Bool) -> (b: UInt, a: Bool)
-                pre (cast(EUReal, init_b) + [init_a])
+                pre cast(EUReal, (init_b + [init_a]))
                 post cast(EUReal, b)
             {
                 var prob_choice: Bool
@@ -192,12 +192,12 @@ fn test_ost_transform() {
                 }
             }
             proc optional_stopping_lt_infinity_0(a: Bool) -> () {
-                assert ?(((cast(EUReal, 2) * [a]) < ∞))
+                assert ?((cast(EUReal, (2 * [a])) < ∞))
             }
             coproc optional_stopping_past_0(
                 init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt
             ) -> (prob_choice: Bool, a: Bool, b: UInt, k: UInt)
-                pre ((cast(EUReal, 2) * [a]))[a -> init_a]
+                pre (cast(EUReal, (2 * [a])))[a -> init_a]
                 post cast(EUReal, 0)
             {
                 prob_choice = init_prob_choice
@@ -209,7 +209,7 @@ fn test_ost_transform() {
                     if prob_choice { a = false } else { b = (b + 1) }
                     k = (k + 1)
                     tick cast(EUReal, 1)
-                    coassert (cast(EUReal, 2) * [a])
+                    coassert cast(EUReal, (2 * [a]))
                     coassume ∞
                 } else {
 
@@ -221,18 +221,20 @@ fn test_ost_transform() {
                 pre cast(EUReal, cast(UReal, 1))
                 post ite(
                     (
-                        (((cast(EUReal, b) + [a]))[b -> init_b])[a -> init_a] <= (
-                            cast(EUReal, b) + [a]
+                        ((cast(EUReal, (b + [a])))[b -> init_b])[a -> init_a] <= cast(
+                            EUReal,
+                            (b + [a])
                         )
                     ),
                     (
-                        (cast(EUReal, b) + [a]) - (
-                            ((cast(EUReal, b) + [a]))[b -> init_b]
+                        cast(EUReal, (b + [a])) - (
+                            (cast(EUReal, (b + [a])))[b -> init_b]
                         )[a -> init_a]
                     ),
                     (
-                        (((cast(EUReal, b) + [a]))[b -> init_b])[a -> init_a] - (
-                            cast(EUReal, b) + [a]
+                        ((cast(EUReal, (b + [a])))[b -> init_b])[a -> init_a] - cast(
+                            EUReal,
+                            (b + [a])
                         )
                     )
                 )
@@ -246,7 +248,7 @@ fn test_ost_transform() {
                 k = (k + 1)
             }
             proc optional_stopping_harmonize_I_f_0(a: Bool, b: UInt) -> () {
-                assert ?((! (a) → ((cast(EUReal, b) + [a]) == cast(EUReal, b))))
+                assert ?((! (a) → (cast(EUReal, (b + [a])) == cast(EUReal, b))))
             }
             coproc optional_stopping_loopiter_lt_infty_0(
                 init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt
@@ -264,7 +266,7 @@ fn test_ost_transform() {
                     prob_choice = flip(((cast(UReal, 1) / cast(UReal, 2))))
                     if prob_choice { a = false } else { b = (b + 1) }
                     k = (k + 1)
-                    coassert (cast(EUReal, b) + [a])
+                    coassert cast(EUReal, (b + [a]))
                     coassume ∞
                 } else {
 
@@ -273,7 +275,7 @@ fn test_ost_transform() {
             proc optional_stopping_lower_bound_0(
                 init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt
             ) -> (prob_choice: Bool, a: Bool, b: UInt, k: UInt)
-                pre (((cast(EUReal, b) + [a]))[b -> init_b])[a -> init_a]
+                pre ((cast(EUReal, (b + [a])))[b -> init_b])[a -> init_a]
                 post cast(EUReal, b)
             {
                 prob_choice = init_prob_choice
@@ -284,7 +286,7 @@ fn test_ost_transform() {
                     prob_choice = flip(((cast(UReal, 1) / cast(UReal, 2))))
                     if prob_choice { a = false } else { b = (b + 1) }
                     k = (k + 1)
-                    assert (cast(EUReal, b) + [a])
+                    assert cast(EUReal, (b + [a]))
                     assume cast(EUReal, 0)
                 } else {
 

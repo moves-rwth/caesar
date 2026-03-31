@@ -30,6 +30,18 @@ impl<'ctx> UInt<'ctx> {
         UInt(Int::from_u64(ctx, value))
     }
 
+    pub fn zero(factory: &Factory<'ctx, Self>) -> Self {
+        UInt(Int::from_u64(factory, 0))
+    }
+
+    pub fn one(factory: &Factory<'ctx, Self>) -> Self {
+        UInt(Int::from_u64(factory, 1))
+    }
+
+    pub fn iverson(factory: &Factory<'ctx, Self>, cond: &Bool<'ctx>) -> Self {
+        UInt::branch(cond, &UInt::one(factory), &UInt::zero(factory))
+    }
+
     pub fn unchecked_from_int(value: Int<'ctx>) -> Self {
         UInt(value)
     }

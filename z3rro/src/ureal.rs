@@ -38,6 +38,10 @@ impl<'ctx> UReal<'ctx> {
         UReal(Real::from_real(factory, 1, 1))
     }
 
+    pub fn iverson(factory: &Factory<'ctx, Self>, cond: &Bool<'ctx>) -> Self {
+        UReal::branch(cond, &UReal::one(factory), &UReal::zero(factory))
+    }
+
     pub fn as_real(&self) -> &Real<'ctx> {
         &self.0
     }
