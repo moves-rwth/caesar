@@ -11,7 +11,7 @@ use jani::{
 };
 
 use crate::{
-    ast::{Block, Direction, Expr, ExprBuilder, ExprKind, Ident, Span, Stmt, StmtKind},
+    ast::{Block, Direction, Expr, ExprBuilder, ExprKind, Ident, Stmt, StmtKind},
     intrinsic::distributions::DistributionProc,
     mc::extract_embed,
 };
@@ -88,14 +88,13 @@ fn translate_stmt(
     stmt: &Stmt,
     next: Identifier,
 ) -> Result<Identifier, JaniConversionError> {
-    let span = stmt.span;
     match &stmt.node {
         StmtKind::Seq(block) => translate_stmts(automaton, block, next),
         StmtKind::Var(decl_ref) => {
             let decl = decl_ref.borrow();
             match &decl.init {
                 Some(init) if !is_constant(init) => {
-                    translate_assign(automaton, span, translate_ident(decl.name), init, next)
+                    translate_assign(automaton, translate_ident(decl.name), init, next)
                 }
                 Some(_) => Ok(next),
                 None => Err(JaniConversionError::NondetSelection(decl.span)),
@@ -107,7 +106,7 @@ fn translate_stmt(
             }
             let lhs = lhs[0];
 
-            translate_assign(automaton, span, translate_ident(lhs), rhs, next)
+            translate_assign(automaton, translate_ident(lhs), rhs, next)
         }
         StmtKind::Assert(dir, expr) => {
             if *dir != automaton.spec_part.direction {
@@ -117,7 +116,7 @@ fn translate_stmt(
             if extract_embed(expr).is_some() {
                 translate_bool_assert(automaton, *dir, &next, expr)
             } else {
-                translate_quant_assert(automaton, span, &next, expr)
+                translate_quant_assert(automaton, &next, expr)
             }
         }
         StmtKind::Assume(dir, expr) => {
@@ -154,13 +153,9 @@ fn translate_stmt(
         | StmtKind::Additive(_, _) => {
             Err(JaniConversionError::UnsupportedStmt(Box::new(stmt.clone())))
         }
-        StmtKind::Tick(expr) => translate_assign(
-            automaton,
-            span,
-            automaton.spec_part.var_reward(),
-            expr,
-            next,
-        ),
+        StmtKind::Tick(expr) => {
+            translate_assign(automaton, automaton.spec_part.var_reward(), expr, next)
+        }
         StmtKind::Demonic(lhs, rhs) | StmtKind::Angelic(lhs, rhs) => {
             let direction = if matches!(stmt.node, StmtKind::Demonic(_, _)) {
                 Direction::Down
@@ -238,7 +233,6 @@ pub fn translate_block(
 
 fn translate_assign(
     automaton: &mut OpAutomaton,
-    span: Span,
     lhs: Identifier,
     rhs: &Expr,
     next: Identifier,
@@ -246,64 +240,61 @@ fn translate_assign(
     let start = automaton.next_stmt_location();
 
     if let ExprKind::Call(ident, args) = &rhs.kind {
-        let decl = if let Some(decl) = automaton.distributions.get(ident) {
-            decl
-        } else {
-            return Err(JaniConversionError::UnsupportedCall(span, *ident));
-        };
+        if let Some(decl) = automaton.distributions.get(ident) {
+            let builder = ExprBuilder::new(rhs.span);
+            let dist = (decl.apply)(args, builder);
 
-        let builder = ExprBuilder::new(rhs.span);
-        let dist = (decl.apply)(args, builder);
-
-        let destinations = dist
-            .0
-            .iter()
-            .map(|(prob, value)| {
-                let prob = automaton.expr_translator.translate(prob)?;
-                let value = automaton.expr_translator.translate(value)?;
-                Ok(Destination {
-                    location: next.clone(),
-                    probability: Some(prob.into()),
-                    assignments: vec![Assignment {
-                        reference: lhs.clone(),
-                        value,
-                        index: None,
+            let destinations = dist
+                .0
+                .iter()
+                .map(|(prob, value)| {
+                    let prob = automaton.expr_translator.translate(prob)?;
+                    let value = automaton.expr_translator.translate(value)?;
+                    Ok(Destination {
+                        location: next.clone(),
+                        probability: Some(prob.into()),
+                        assignments: vec![Assignment {
+                            reference: lhs.clone(),
+                            value,
+                            index: None,
+                            comment: None,
+                        }],
                         comment: None,
-                    }],
-                    comment: None,
+                    })
                 })
-            })
-            .collect::<Result<Vec<Destination>, _>>()?;
-        automaton.edges.push(Edge {
-            location: start.clone(),
-            action: None,
-            rate: None,
-            guard: None,
-            destinations,
-            comment: None,
-        });
-    } else {
-        let edge = Edge {
-            location: start.clone(),
-            action: None,
-            rate: None,
-            guard: None,
-            destinations: vec![Destination {
-                location: next,
-                probability: None,
-                assignments: vec![Assignment {
-                    reference: lhs,
-                    value: automaton.expr_translator.translate(rhs)?,
-                    index: None,
-                    comment: None,
-                }],
+                .collect::<Result<Vec<Destination>, _>>()?;
+            automaton.edges.push(Edge {
+                location: start.clone(),
+                action: None,
+                rate: None,
+                guard: None,
+                destinations,
+                comment: None,
+            });
+            return Ok(start);
+        }
+    }
+
+    let edge = Edge {
+        location: start.clone(),
+        action: None,
+        rate: None,
+        guard: None,
+        destinations: vec![Destination {
+            location: next,
+            probability: None,
+            assignments: vec![Assignment {
+                reference: lhs,
+                value: automaton.expr_translator.translate(rhs)?,
+                index: None,
                 comment: None,
             }],
             comment: None,
-        };
+        }],
+        comment: None,
+    };
 
-        automaton.edges.push(edge);
-    }
+    automaton.edges.push(edge);
 
     Ok(start)
 }
@@ -351,7 +342,6 @@ fn translate_bool_assert(
 /// execution with `next`
 fn translate_quant_assert(
     automaton: &mut OpAutomaton,
-    span: Span,
     next: &Identifier,
     expr: &Expr,
 ) -> Result<Identifier, JaniConversionError> {
@@ -364,7 +354,6 @@ fn translate_quant_assert(
     // increase the reward by the expression and go to the error location
     let return_start = translate_assign(
         automaton,
-        span,
         automaton.spec_part.var_reward(),
         expr,
         automaton.spec_part.error_location(),
