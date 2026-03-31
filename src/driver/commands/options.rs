@@ -31,7 +31,7 @@ pub struct InputOptions {
     #[arg(long)]
     pub werr: bool,
 
-    /// Only verify/translate (co)procs that match the given filter.
+    /// Only verify/translate top-level (co)proc declarations that match the given filter.
     /// The filter is a regular expression.
     #[arg(short, long)]
     pub filter: Option<String>,

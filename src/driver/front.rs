@@ -49,8 +49,8 @@ use crate::{
 /// create a new [`TyCtx`] (using [`init_tcx`] with all default built-in
 /// declarations) and will populate a new module with the parsed items.
 ///
-/// If provided, the `--filter` option will be applied and the module's items
-/// will be filtered based on it.
+/// If provided, the `--filter` option will be applied to top-level
+/// verification targets.
 pub fn parse_and_tycheck(
     input_options: &InputOptions,
     debug_options: &DebugOptions,
@@ -189,14 +189,16 @@ impl Module {
         Ok(())
     }
 
-    /// Filter the set of source units based on a regular expression.
+    /// Filter top-level verification targets based on a regular expression.
     ///
     /// Returns an error if the filter is not a valid regular expression.
     pub fn filter(&mut self, filter: &str) -> Result<(), CaesarError> {
         let filter = Regex::new(filter)
             .map_err(|err| CaesarError::UserError(format!("Invalid filter regex: {err}").into()))?;
-        self.items
-            .retain(|source_unit| filter.is_match(&source_unit.name().to_string()));
+        self.items.retain(|source_unit| {
+            !source_unit.is_verification_target()
+                || filter.is_match(&source_unit.name().to_string())
+        });
         Ok(())
     }
 
@@ -312,6 +314,13 @@ pub enum SourceUnit {
 }
 
 impl SourceUnit {
+    fn is_verification_target(&self) -> bool {
+        matches!(
+            self,
+            SourceUnit::Decl(DeclKind::ProcDecl(_)) | SourceUnit::Raw(_)
+        )
+    }
+
     /// Return a new generated source unit (with [`SourceFilePath::Generated`])
     /// for the given declaration and span in an [`Item`].
     pub fn from_generated_decl(decl: DeclKind, span: Span) -> Item<SourceUnit> {
