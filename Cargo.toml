@@ -91,5 +91,5 @@ opt-level = 3
 # we need to have cargo fetch z3.rs from the git repository, otherwise it will
 # not download the git submodule with z3's sources in them.
 [patch.crates-io]
-z3 = { git = 'https://github.com/prove-rs/z3.rs.git', rev = "8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989" }
-z3-sys = { git = 'https://github.com/prove-rs/z3.rs.git', rev = "8ae4720c2a2647bd7dca6a29fdec2fc4b69a5989" }
+z3 = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = "19b19292c393095f54993cc7c93da62a0da07190" }
+z3-sys = { git = 'https://github.com/Philipp15b/z3.rs.git', rev = "19b19292c393095f54993cc7c93da62a0da07190" }
