@@ -58,6 +58,7 @@ enum TestCommand {
 
 #[derive(Debug)]
 struct TestFile {
+    path: PathBuf,
     commands: Vec<TestCommand>,
 }
 
@@ -88,7 +89,7 @@ impl TestFile {
                 }
             })
             .collect();
-        Ok(TestFile { commands })
+        Ok(TestFile { path, commands })
     }
 
     fn run(&self) -> Result<(), Failed> {
@@ -139,6 +140,13 @@ impl TestFile {
                         String::from_utf8(run.output.stderr).unwrap()
                     )
                     .into());
+                }
+                if run.elapsed >= Duration::from_secs(1) {
+                    println!(
+                        "TIMING {} {:.3}s",
+                        get_test_name(&self.path),
+                        run.elapsed.as_secs_f64()
+                    );
                 }
             } else if !ignore {
                 return Err("Test file contains no commands".into());

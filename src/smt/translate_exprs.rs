@@ -362,7 +362,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Binary(bin_op, lhs, rhs) => match bin_op.node {
                 BinOpKind::Add => self.t_uint(lhs) + self.t_uint(rhs),
                 BinOpKind::Sub => self.t_uint(lhs) - self.t_uint(rhs),
-                BinOpKind::Mul => self.t_uint(lhs) * self.t_uint(rhs),
+                BinOpKind::Mul => self.t_uint_mul(lhs, rhs),
                 BinOpKind::Mod => self.t_uint(lhs).modulo(&self.t_uint(rhs)),
                 BinOpKind::Inf => smt_min(&self.t_uint(lhs), &self.t_uint(rhs)),
                 BinOpKind::Sup => smt_max(&self.t_uint(lhs), &self.t_uint(rhs)),
@@ -494,7 +494,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Binary(bin_op, lhs, rhs) => match bin_op.node {
                 BinOpKind::Add => self.t_ureal(lhs) + self.t_ureal(rhs),
                 BinOpKind::Sub => self.t_ureal(lhs) - self.t_ureal(rhs),
-                BinOpKind::Mul => self.t_ureal(lhs) * self.t_ureal(rhs),
+                BinOpKind::Mul => self.t_ureal_mul(lhs, rhs),
                 BinOpKind::Div => self.t_ureal(lhs) / self.t_ureal(rhs),
                 BinOpKind::Inf => smt_min(&self.t_ureal(lhs), &self.t_ureal(rhs)),
                 BinOpKind::Sup => smt_max(&self.t_ureal(lhs), &self.t_ureal(rhs)),
@@ -511,18 +511,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Cast(operand) => {
                 let operand_ty = operand.ty.as_ref().unwrap();
                 match &operand_ty {
-                    TyKind::UInt => {
-                        // fast path for casts of iversons of uints. without it,
-                        // some benchmarks time out!
-                        if let ExprKind::Unary(un_op, iverson_operand) = &operand.kind {
-                            if un_op.node == UnOpKind::Iverson {
-                                let operand = self.t_bool(iverson_operand);
-                                return UReal::iverson(&self.ctx.ctx, &operand);
-                            }
-                        }
-                        let operand = self.t_uint(operand);
-                        UReal::from_uint(&operand)
-                    }
+                    TyKind::UInt => self.t_ureal_from_uint(operand),
                     _ => panic!("illegal cast to {:?} from {:?}", &expr.ty, &operand.ty),
                 }
             }
@@ -565,22 +554,24 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                 let rhs = self.t_eureal(rhs);
                 EUReal::branch(&cond, &lhs, &rhs)
             }
-            ExprKind::Binary(bin_op, lhs, rhs) => {
-                let lhs = self.t_eureal(lhs);
-                let rhs = self.t_eureal(rhs);
-                match bin_op.node {
-                    BinOpKind::Add => lhs + rhs,
-                    BinOpKind::Sub => lhs - rhs,
-                    BinOpKind::Mul => lhs * rhs,
-                    BinOpKind::Inf => lhs.inf(&rhs),
-                    BinOpKind::Sup => lhs.sup(&rhs),
-                    BinOpKind::Impl => lhs.implication(&rhs),
-                    BinOpKind::CoImpl => lhs.coimplication(&rhs),
-                    BinOpKind::Compare => lhs.compare(&rhs),
-                    BinOpKind::CoCompare => lhs.cocompare(&rhs),
-                    _ => panic!("illegal exprkind {:?} of expression {:?}", bin_op, &expr),
+            ExprKind::Binary(bin_op, lhs, rhs) => match bin_op.node {
+                BinOpKind::Mul => self.t_eureal_mul(lhs, rhs),
+                _ => {
+                    let lhs = self.t_eureal(lhs);
+                    let rhs = self.t_eureal(rhs);
+                    match bin_op.node {
+                        BinOpKind::Add => lhs + rhs,
+                        BinOpKind::Sub => lhs - rhs,
+                        BinOpKind::Inf => lhs.inf(&rhs),
+                        BinOpKind::Sup => lhs.sup(&rhs),
+                        BinOpKind::Impl => lhs.implication(&rhs),
+                        BinOpKind::CoImpl => lhs.coimplication(&rhs),
+                        BinOpKind::Compare => lhs.compare(&rhs),
+                        BinOpKind::CoCompare => lhs.cocompare(&rhs),
+                        _ => panic!("illegal exprkind {:?} of expression {:?}", bin_op, &expr),
+                    }
                 }
-            }
+            },
             ExprKind::Unary(un_op, operand) => match un_op.node {
                 UnOpKind::Not => self.t_eureal(operand).negate(),
                 UnOpKind::Non => self.t_eureal(operand).conegate(),
@@ -597,18 +588,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             ExprKind::Cast(operand) => {
                 let operand_ty = operand.ty.as_ref().unwrap();
                 match &operand_ty {
-                    TyKind::UInt => {
-                        // fast path for casts of iversons. without it, some
-                        // benchmarks time out!
-                        if let ExprKind::Unary(un_op, iverson_operand) = &operand.kind {
-                            if un_op.node == UnOpKind::Iverson {
-                                let operand = self.t_bool(iverson_operand);
-                                return EUReal::iverson(self.ctx.eureal(), &operand);
-                            }
-                        }
-                        let operand = self.t_uint(operand);
-                        EUReal::from_uint(self.ctx.eureal(), &operand)
-                    }
+                    TyKind::UInt => self.t_eureal_from_uint(operand),
                     TyKind::UReal => {
                         let operand = self.t_ureal(operand);
                         EUReal::from_ureal(self.ctx.eureal(), &operand)
@@ -657,6 +637,105 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
             }
         };
         self.wrap_if_literal(expr, res)
+    }
+
+    fn iverson_cond<'a>(&self, expr: &'a Expr) -> Option<&'a Expr> {
+        match &expr.deref_cast().kind {
+            ExprKind::Unary(un_op, operand) if un_op.node == UnOpKind::Iverson => Some(operand),
+            _ => None,
+        }
+    }
+
+    fn t_uint_mul(&mut self, lhs: &Expr, rhs: &Expr) -> UInt<'ctx> {
+        if let Some(cond) = self.iverson_cond(lhs) {
+            let cond = self.t_bool(cond);
+            // `[b] * x  ==>  ite(b, x, 0)`
+            return UInt::branch(&cond, &self.t_uint(rhs), &UInt::zero(&self.ctx.ctx));
+        }
+        if let Some(cond) = self.iverson_cond(rhs) {
+            let cond = self.t_bool(cond);
+            // `x * [b]  ==>  ite(b, x, 0)`
+            return UInt::branch(&cond, &self.t_uint(lhs), &UInt::zero(&self.ctx.ctx));
+        }
+        self.t_uint(lhs) * self.t_uint(rhs)
+    }
+
+    fn t_ureal_mul(&mut self, lhs: &Expr, rhs: &Expr) -> UReal<'ctx> {
+        if let Some(cond) = self.iverson_cond(lhs) {
+            let cond = self.t_bool(cond);
+            // `[b] * x  ==>  ite(b, x, 0)`
+            return UReal::branch(&cond, &self.t_ureal(rhs), &UReal::zero(&self.ctx.ctx));
+        }
+        if let Some(cond) = self.iverson_cond(rhs) {
+            let cond = self.t_bool(cond);
+            // `x * [b]  ==>  ite(b, x, 0)`
+            return UReal::branch(&cond, &self.t_ureal(lhs), &UReal::zero(&self.ctx.ctx));
+        }
+        self.t_ureal(lhs) * self.t_ureal(rhs)
+    }
+
+    fn t_eureal_mul(&mut self, lhs: &Expr, rhs: &Expr) -> EUReal<'ctx> {
+        if let Some(cond) = self.iverson_cond(lhs) {
+            let cond = self.t_bool(cond);
+            // `[b] * x  ==>  ite(b, x, 0)`
+            return EUReal::branch(&cond, &self.t_eureal(rhs), &EUReal::zero(self.ctx.eureal()));
+        }
+        if let Some(cond) = self.iverson_cond(rhs) {
+            let cond = self.t_bool(cond);
+            // `x * [b]  ==>  ite(b, x, 0)`
+            return EUReal::branch(&cond, &self.t_eureal(lhs), &EUReal::zero(self.ctx.eureal()));
+        }
+        self.t_eureal(lhs) * self.t_eureal(rhs)
+    }
+
+    fn t_ureal_from_uint(&mut self, expr: &Expr) -> UReal<'ctx> {
+        if let Some(iverson_operand) = self.iverson_cond(expr) {
+            let operand = self.t_bool(iverson_operand);
+            // `cast(UReal, [b])  ==>  [b]`
+            return UReal::iverson(&self.ctx.ctx, &operand);
+        }
+
+        if let ExprKind::Binary(bin_op, lhs, rhs) = &expr.deref_cast().kind {
+            if bin_op.node == BinOpKind::Mul {
+                if let Some(cond) = self.iverson_cond(lhs) {
+                    let cond = self.t_bool(cond);
+                    // `cast(UReal, [b] * x)  ==>  [b] * cast(UReal, x)`
+                    return UReal::iverson(&self.ctx.ctx, &cond) * self.t_ureal_from_uint(rhs);
+                }
+                if let Some(cond) = self.iverson_cond(rhs) {
+                    let cond = self.t_bool(cond);
+                    // `cast(UReal, x * [b])  ==>  cast(UReal, x) * [b]`
+                    return self.t_ureal_from_uint(lhs) * UReal::iverson(&self.ctx.ctx, &cond);
+                }
+            }
+        }
+
+        UReal::from_uint(&self.t_uint(expr))
+    }
+
+    fn t_eureal_from_uint(&mut self, expr: &Expr) -> EUReal<'ctx> {
+        if let Some(iverson_operand) = self.iverson_cond(expr) {
+            let operand = self.t_bool(iverson_operand);
+            // `cast(EUReal, [b])  ==>  [b]`
+            return EUReal::iverson(self.ctx.eureal(), &operand);
+        }
+
+        if let ExprKind::Binary(bin_op, lhs, rhs) = &expr.deref_cast().kind {
+            if bin_op.node == BinOpKind::Mul {
+                if let Some(cond) = self.iverson_cond(lhs) {
+                    let cond = self.t_bool(cond);
+                    // `cast(EUReal, [b] * x)  ==>  [b] * cast(EUReal, x)`
+                    return EUReal::iverson(self.ctx.eureal(), &cond) * self.t_eureal_from_uint(rhs);
+                }
+                if let Some(cond) = self.iverson_cond(rhs) {
+                    let cond = self.t_bool(cond);
+                    // `cast(EUReal, x * [b])  ==>  cast(EUReal, x) * [b]`
+                    return self.t_eureal_from_uint(lhs) * EUReal::iverson(self.ctx.eureal(), &cond);
+                }
+            }
+        }
+
+        EUReal::from_uint(self.ctx.eureal(), &self.t_uint(expr))
     }
 
     pub fn t_uninterpreted(&mut self, expr: &Expr) -> Dynamic<'ctx> {
