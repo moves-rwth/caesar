@@ -27,6 +27,19 @@ import TOCInline from '@theme/TOCInline';
 
 ## Peer-Reviewed Papers
 
+### CAV '26: Caesar: A Deductive Verifier for Probabilistic Programs
+
+The tool paper _"Caesar: A Deductive Verifier for Probabilistic Programs"_ by Philipp Schröer, Kevin Batz, Umut Yiğit Dural, Darion Haase, Benjamin Lucien Kaminski, Joost-Pieter Katoen, and Christoph Matheja was accepted as a tool paper at [CAV 2026](https://conferences.i-cav.org/2026/), to be held in Lisbon, Portugal.
+
+The paper reports on five years of Caesar development and presents Caesar as a deductive verifier for probabilistic programs: from its HeyVL/HeyLo foundations and SMT-based workflow via Z3 to the tooling and verification features that have been added around the core infrastructure.
+Compared to our [OOPSLA '23 paper](#oopsla-23), the tool paper focuses on Caesar as a usable verification tool and covers in particular the [*Caesar Verifier* VSCode extension](/docs/caesar/vscode-and-lsp), support for [limited functions and quantifier handling](/docs/caesar/debugging#function-encodings-and-limited-functions), the [model checking backend](/docs/model-checking), and stronger [soundness checks for proof rules](/docs/proof-rules/approximations#what-is-checked).
+
+See also:
+ * [Blog post about the CAV '26 tool paper](/blog/2026/04/20/caesar-tool-paper-cav),
+ * [VSCode Extension & LSP Support](/docs/caesar/vscode-and-lsp),
+ * [Model Checking Support](/docs/model-checking),
+ * [Soundness of Proof Rules](/docs/proof-rules/approximations).
+
 ### FM '26: Highly Incremental: A Simple Programmatic Approach for Many Objectives
 
 The paper _"Highly Incremental: A Simple Programmatic Approach for Many Objectives"_ by Philipp Schröer and Joost-Pieter Katoen will be published presented at [_FM 2026)_](https://conf.researchr.org/home/fm-2026) in Tokyo, Japan.
