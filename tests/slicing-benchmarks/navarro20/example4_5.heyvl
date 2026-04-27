@@ -1,0 +1,27 @@
+// Example 4.5 from Navarro and Olmedo's 2022 paper
+
+coproc example45() -> (r: EUReal)
+    pre 1/2
+    post [r >= 8]
+{
+    @slice_verify() {
+        var b0: UInt
+        var b1: UInt
+        var b2: UInt
+        var b3: UInt
+
+        var choice: Bool = flip(0.5)
+        if choice { b0 = 0 } else { b0 = 1 }
+
+        choice = flip(0.5)
+        if choice { b1 = 0 } else { b1 = 1 }
+
+        choice = flip(0.5)
+        if choice { b2 = 0 } else { b2 = 1 }
+
+        choice = flip(0.5)
+        if choice { b3 = 0 } else { b3 = 1 }
+
+        r = b0 + 2 * b1 + 4 * b2 + 8 * b3
+    }
+}

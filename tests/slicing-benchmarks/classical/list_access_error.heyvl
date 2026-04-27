@@ -1,0 +1,8 @@
+proc proc_store(list: []UInt, index: UInt, value: UInt) -> (res: []UInt)
+    // pre ?(index < len(list))
+    post ?(forall i: UInt. (i < len(list) && i != index) ==> (select(res, i) == select(list, i)))
+    post ?(select(res, index) == value)
+{
+    assert ?(index < len(list)) // this is identified as an error
+    res = store(list, index, value)
+}

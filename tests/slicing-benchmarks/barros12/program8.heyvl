@@ -1,0 +1,14 @@
+proc program8(a: Int, y: Int, x0: Int, z0: Int) -> (x: Int, z: Int)
+    pre ?(a > 0)
+    post ?(x == y * 2 && z == x + 1)
+{
+    x = x0
+    z = z0
+    @slice_verify {
+        x = x + 2 // sliced
+        if a > 0 {
+            x = y * 2
+        } else {}
+        z = x + 1
+    }
+}

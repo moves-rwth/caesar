@@ -1,0 +1,90 @@
+// Figure 8 from Navarro and Olmedo's 2022 paper
+
+proc figure8() -> (a: Bool, s: Bool, t: Bool, l: Bool, b: Bool, e: Bool, x: Bool, d: Bool)
+    pre 1639/2000000
+    post [t && l]
+{
+    @slice_verify {
+        // i1
+        var choice: Bool = flip(1/100)
+        if choice { a = true } else { a = false }
+
+        // i2
+        choice = flip(1/2)
+        if choice { s = true } else { s = false }
+
+        // i3
+        if a {
+            choice = flip(1/2)
+            if choice { t = true } else { t = false }
+        } else {
+            choice = flip(1/100)
+            if choice { t = true } else { t = false }
+        }
+
+        // i4
+        if s {
+            choice = flip(1/10)
+            if choice { l = true } else { l = false }
+        } else {
+            choice = flip(1/100)
+            if choice { l = true } else { l = false }
+        }
+
+        // i5
+        if s {
+            choice = flip(6/10)
+            if choice { b = true } else { b = false }
+        } else {
+            choice = flip(3/10)
+            if choice { b = true } else { b = false }
+        }
+
+        // i6
+        if t && l {
+            choice = flip(1)
+            if choice { e = true } else { e = false }
+        } else {
+            if t && !l {
+                choice = flip(1)
+                if choice { e = true } else { e = false }
+            } else {
+                if !t && l {
+                    choice = flip(1)
+                    if choice { e = true } else { e = false }
+                } else {
+                    choice = flip(0)
+                    if choice { e = true } else { e = false }
+                }
+            }
+        }
+
+        // i7
+        if e {
+            choice = flip(98/100)
+            if choice { x = true } else { x = false }
+        } else {
+            choice = flip(5/100)
+            if choice { x = true } else { x = false }
+        }
+
+        // i8
+        if e && b {
+            choice = flip(9/10)
+            if choice { d = true } else { d = false }
+        } else {
+            if e && !b {
+                choice = flip(7/10)
+                if choice { d = true } else { d = false }
+            } else {
+                if !e && b {
+                    choice = flip(8/10)
+                    if choice { d = true } else { d = false }
+                } else {
+                    choice = flip(1/10)
+                    if choice { d = true } else { d = false }
+                }
+            }
+        }
+    }
+}

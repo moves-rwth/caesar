@@ -1,0 +1,42 @@
+// Example 5.8 from Navarro and Olmedo's 2022 paper
+
+// TODO: adjust this example to fit more closely to the original example
+// TODO: this does not check for termination, just a lower bound to the successful termination probability
+
+domain Powers {
+    func invpow(n: UInt): UReal
+    axiom zero forall k: UInt. invpow(0) == 1
+    axiom step forall k: UInt, n: UInt. ([n < k] * invpow(k - n) == 0.5 * [n < k] * invpow(k - (n + 1)))
+    axiom notzero forall i: UInt. invpow(i) > 0
+}
+
+proc example58(k: UInt) -> (n: UInt)
+    pre ?(k > 0)
+    pre invpow(k)
+    post [n == k]
+{
+    n = 0
+    var a: Bool = false
+    var b: Bool = true
+    // We changed `n - k` to `k - n` to make the exponent nonnegative
+    @invariant(ite(a != b, [n < k] * invpow(k - n), [n == k]))
+    while a != b {
+
+        n = n + 1
+        var choice: Bool = flip(0.5)
+        if choice {
+            a = true
+        } else {
+            a = false
+        }
+
+        @slice_verify() a = !a
+
+        choice = flip(0.5)
+        if choice {
+            b = false
+        } else {
+            b = true
+        }
+    }
+}

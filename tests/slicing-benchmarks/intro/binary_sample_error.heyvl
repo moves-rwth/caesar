@@ -1,0 +1,27 @@
+// Based on Example 4.5 from Navarro and Olmedo's 2022 paper
+
+coproc binary_sample_error() -> (r: EUReal)
+    pre 1/3
+    post [r >= 2]
+{
+    var b0: UInt
+    var b1: UInt
+    var b2: UInt
+    var b3: UInt
+
+    var choice: Bool = flip(0.5)
+    if \cup {
+        coassume !?(choice); b0 = 0
+    } else {
+        coassume !?(!choice); b0 = 1
+    }
+
+    choice = flip(0.5)
+    if \cup {
+        coassume !?(choice); b1 = 0 // the coassume is sliced
+    } else {
+        coassume !?(!choice); b1 = 1
+    }
+
+    r = b0 + 2 * b1
+}

@@ -1,0 +1,16 @@
+coproc geo_not_inductive(init_x: UInt) -> (x: UInt)
+    pre init_x + 1
+    post x
+{
+    x = init_x
+    var cont: Bool = true
+    @invariant(x + 1)
+    while cont {
+        var prob_choice: Bool = flip(0.5)
+        if prob_choice {
+            cont = false
+        } else {
+            x = x + 1
+        }
+    }
+}

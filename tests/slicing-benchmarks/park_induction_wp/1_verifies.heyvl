@@ -1,0 +1,16 @@
+coproc geo_verifies(init_x: UInt) -> (x: UInt)
+    pre !?(init_x == 0) ⊔ 0.25
+    post [x == 1]
+{
+    x = init_x
+    var cont: Bool = true
+    @invariant(ite(cont, 0.5 * [x == 1] + 0.25 * [x == 0], [x == 1]))
+    while cont {
+        var prob_choice: Bool = flip(0.5)
+        if prob_choice {
+            cont = false
+        } else {
+            x = x + 1
+        }
+    }
+}

@@ -1,0 +1,19 @@
+// On page 31, Navarro et al. claim that the following program cannot be successfully sliced without forwards reasoning. We can.
+proc navarro_page31(init_x: Int, init_y: Int) -> (x: Int, y: Int)
+    pre ?(init_y > 0)
+    post ?(x >= 0)
+{
+    x = init_x
+    y = init_y
+    @slice_verify {
+        if y > 0 {
+            x = 100
+            x = x + 50  // this is sliced
+            x = x - 100 // this is sliced
+        } else {
+            x = x - 150 // this is sliced
+            x = x - 100 // this is sliced
+            x = x + 100 // this is sliced
+        }
+    }
+}

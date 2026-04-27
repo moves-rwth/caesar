@@ -1,0 +1,26 @@
+// benchmarks script extracts bound displayed in table from next line
+// bound 0.938M
+coproc circle_loop(M : UReal) -> (x : UReal, y : UReal, count : UReal)
+    // pi/4 = 0.7853981634
+    pre 0.938*M
+    post count
+{
+    var i : UReal = 1
+    count = 0
+    @invariant(ite(0 <= i && i<=M, 0.938*((M-i) + 1)+count, count))
+    while i <= M {
+
+        // x = unif[0,1]
+        var N : UInt = 4; var j : UInt = unif(0, 3); cohavoc x; coassume ?!(j / N <= x && x <= (j+1) / N)
+        // y = unif[0,1]
+                               j        = unif(0, 3); cohavoc y; coassume ?!(j / N <= y && y <= (j+1) / N)
+
+        if x*x + y*y <= 1 {
+            count = count +2 // changed from 1 to 2 so invariant might not be inductive anymore
+        }else{}
+
+        i = i+1
+
+    }
+
+}

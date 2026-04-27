@@ -1,0 +1,153 @@
+coproc bounded_model_checking(init_toSend: UInt, init_sent: UInt, init_maxFailed: UInt, init_failed: UInt, init_totalFailed: UInt) -> (toSend: UInt, sent: UInt, maxFailed: UInt, failed: UInt, totalFailed: UInt)
+    pre init_totalFailed + 1
+    post totalFailed
+{
+    var prob_choice: Bool
+    toSend = init_toSend
+    sent = init_sent
+    maxFailed = init_maxFailed
+    failed = init_failed
+    totalFailed = init_totalFailed
+    if (failed < maxFailed) && (sent < toSend) {
+        prob_choice = flip(0.9)
+        if prob_choice {
+            failed = 0
+            sent = sent + 1
+        } else {
+            failed = failed + 1
+            totalFailed = totalFailed + 1
+        }
+        if (failed < maxFailed) && (sent < toSend) {
+            prob_choice = flip(0.9)
+            if prob_choice {
+                failed = 0
+                sent = sent + 1
+            } else {
+                failed = failed + 1
+                totalFailed = totalFailed + 1
+            }
+            if (failed < maxFailed) && (sent < toSend) {
+                prob_choice = flip(0.9)
+                if prob_choice {
+                    failed = 0
+                    sent = sent + 1
+                } else {
+                    failed = failed + 1
+                    totalFailed = totalFailed + 1
+                }
+                if (failed < maxFailed) && (sent < toSend) {
+                    prob_choice = flip(0.9)
+                    if prob_choice {
+                        failed = 0
+                        sent = sent + 1
+                    } else {
+                        failed = failed + 1
+                        totalFailed = totalFailed + 1
+                    }
+                    if (failed < maxFailed) && (sent < toSend) {
+                        prob_choice = flip(0.9)
+                        if prob_choice {
+                            failed = 0
+                            sent = sent + 1
+                        } else {
+                            failed = failed + 1
+                            totalFailed = totalFailed + 1
+                        }
+                        if (failed < maxFailed) && (sent < toSend) {
+                            prob_choice = flip(0.9)
+                            if prob_choice {
+                                failed = 0
+                                sent = sent + 1
+                            } else {
+                                failed = failed + 1
+                                totalFailed = totalFailed + 1
+                            }
+                            if (failed < maxFailed) && (sent < toSend) {
+                                prob_choice = flip(0.9)
+                                if prob_choice {
+                                    failed = 0
+                                    sent = sent + 1
+                                } else {
+                                    failed = failed + 1
+                                    totalFailed = totalFailed + 1
+                                }
+                                if (failed < maxFailed) && (sent < toSend) {
+                                    prob_choice = flip(0.9)
+                                    if prob_choice {
+                                        failed = 0
+                                        sent = sent + 1
+                                    } else {
+                                        failed = failed + 1
+                                        totalFailed = totalFailed + 1
+                                    }
+                                    if (failed < maxFailed) && (sent < toSend) {
+                                        prob_choice = flip(0.9)
+                                        if prob_choice {
+                                            failed = 0
+                                            sent = sent + 1
+                                        } else {
+                                            failed = failed + 1
+                                            totalFailed = totalFailed + 1
+                                        }
+                                        if (failed < maxFailed) && (sent < toSend) {
+                                            prob_choice = flip(0.9)
+                                            if prob_choice {
+                                                failed = 0
+                                                sent = sent + 1
+                                            } else {
+                                                failed = failed + 1
+                                                totalFailed = totalFailed + 1
+                                            }
+                                            if (failed < maxFailed) && (sent < toSend) {
+                                                prob_choice = flip(0.9)
+                                                if prob_choice {
+                                                    failed = 0
+                                                    sent = sent + 1
+                                                } else {
+                                                    failed = failed + 1
+                                                    totalFailed = totalFailed + 1
+                                                }
+                                                if (failed < maxFailed) && (sent < toSend) {
+                                                    prob_choice = flip(0.9)
+                                                    if prob_choice {
+                                                        failed = 0
+                                                        sent = sent + 1
+                                                    } else {
+                                                        failed = failed + 1
+                                                        totalFailed = totalFailed + 1
+                                                    }
+                                                    if (failed < maxFailed) && (sent < toSend) {
+                                                        prob_choice = flip(0.9)
+                                                        if prob_choice {
+                                                            failed = 0
+                                                            sent = sent + 1
+                                                        } else {
+                                                            failed = failed + 1
+                                                            totalFailed = totalFailed + 1
+                                                        }
+                                                        if (failed < maxFailed) && (sent < toSend) {
+                                                            prob_choice = flip(0.9)
+                                                            if prob_choice {
+                                                                failed = 0
+                                                                sent = sent + 1
+                                                            } else {
+                                                                failed = failed + 1
+                                                                totalFailed = totalFailed + 1
+                                                            }
+                                                            coassert 0
+                                                            coassume !?(false)
+                                                        } else {}
+                                                    } else {}
+                                                } else {}
+                                            } else {}
+                                        } else {}
+                                    } else {}
+                                } else {}
+                            } else {}
+                        } else {}
+                    } else {}
+                } else {}
+            } else {}
+        } else {}
+    } else {}
+}

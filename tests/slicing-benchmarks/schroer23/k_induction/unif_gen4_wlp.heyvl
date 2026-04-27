@@ -1,0 +1,123 @@
+proc k_induction(init_elow: UInt, init_ehigh: UInt, init_n: UInt, init_v: UInt, init_c: UInt, init_running: UInt, init_i: UInt) -> (elow: UInt, ehigh: UInt, n: UInt, v: UInt, c: UInt, running: UInt, i: UInt)
+    pre [(((((((init_elow + 4) == init_ehigh) && (init_n == ((init_ehigh - init_elow) + 1))) && (init_v == 1)) && (init_c == 0)) && (init_running == 0)) && !(init_i < init_elow)) && (init_i <= init_ehigh)] * (1/5)
+    post [c == i]
+{
+    var prob_choice: Bool
+    elow = init_elow
+    ehigh = init_ehigh
+    n = init_n
+    v = init_v
+    c = init_c
+    running = init_running
+    i = init_i
+    assert [(((((((elow + 4) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * (1/5)
+    havoc c, running, v
+    validate
+    assume [(((((((elow + 4) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * (1/5)
+    if running == 0 {
+        v = 2 * v
+        prob_choice = flip(0.5)
+        if prob_choice {
+            c = (2 * c) + 1
+        } else {
+            c = 2 * c
+        }
+        if !(v < n) {
+            if !(n == c) && !(n < c) {
+                running = 1
+            } else {
+                v = v - n
+                c = c - n
+            }
+        } else {}
+        if !(running == 0) {
+            c = elow + c
+        } else {}
+        coassert [(((((((elow + 4) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * (1/5)
+        if running == 0 {
+            v = 2 * v
+            prob_choice = flip(0.5)
+            if prob_choice {
+                c = (2 * c) + 1
+            } else {
+                c = 2 * c
+            }
+            if !(v < n) {
+                if !(n == c) && !(n < c) {
+                    running = 1
+                } else {
+                    v = v - n
+                    c = c - n
+                }
+            } else {}
+            if !(running == 0) {
+                c = elow + c
+            } else {}
+            coassert [(((((((elow + 4) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * (1/5)
+            if running == 0 {
+                v = 2 * v
+                prob_choice = flip(0.5)
+                if prob_choice {
+                    c = (2 * c) + 1
+                } else {
+                    c = 2 * c
+                }
+                if !(v < n) {
+                    if !(n == c) && !(n < c) {
+                        running = 1
+                    } else {
+                        v = v - n
+                        c = c - n
+                    }
+                } else {}
+                if !(running == 0) {
+                    c = elow + c
+                } else {}
+                coassert [(((((((elow + 4) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * (1/5)
+                if running == 0 {
+                    v = 2 * v
+                    prob_choice = flip(0.5)
+                    if prob_choice {
+                        c = (2 * c) + 1
+                    } else {
+                        c = 2 * c
+                    }
+                    if !(v < n) {
+                        if !(n == c) && !(n < c) {
+                            running = 1
+                        } else {
+                            v = v - n
+                            c = c - n
+                        }
+                    } else {}
+                    if !(running == 0) {
+                        c = elow + c
+                    } else {}
+                    coassert [(((((((elow + 4) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * (1/5)
+                    if running == 0 {
+                        v = 2 * v
+                        prob_choice = flip(0.5)
+                        if prob_choice {
+                            c = (2 * c) + 1
+                        } else {
+                            c = 2 * c
+                        }
+                        if !(v < n) {
+                            if !(n == c) && !(n < c) {
+                                running = 1
+                            } else {
+                                v = v - n
+                                c = c - n
+                            }
+                        } else {}
+                        if !(running == 0) {
+                            c = elow + c
+                        } else {}
+                        assert [(((((((elow + 4) == ehigh) && (n == ((ehigh - elow) + 1))) && (v == 1)) && (c == 0)) && (running == 0)) && !(i < elow)) && (i <= ehigh)] * (1/5)
+                        assume 0
+                    } else {}
+                } else {}
+            } else {}
+        } else {}
+    } else {}
+}

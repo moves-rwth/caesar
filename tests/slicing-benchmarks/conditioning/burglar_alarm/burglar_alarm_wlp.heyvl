@@ -1,0 +1,40 @@
+proc burgler_alarm_wlp() -> (burglary: Bool)
+    pre 0.1
+    post 1
+{
+    var earthquake: Bool = flip(1/10000)
+    burglary = flip(1/1000)
+    var alarm: Bool
+    var phoneWorking: Bool
+    var maryWakes: Bool
+    var called: Bool
+
+    @slice_verify {
+        if earthquake || burglary {
+            alarm = true
+        } else {}
+
+        if earthquake {
+            phoneWorking = flip(7/10)
+        } else {
+            phoneWorking = flip(99/100)
+        }
+
+        if alarm {
+            if (earthquake) {
+                maryWakes = flip(4/5)
+            } else {
+                maryWakes = flip(3/5)
+            }
+        } else {
+            maryWakes = flip(1/5)
+        }
+
+        if maryWakes && phoneWorking {
+            called = true
+        } else {
+        }
+    }
+
+    assert ?(called)
+}

@@ -1,0 +1,16 @@
+proc geo_could_be_if(init_x: UInt) -> (x: UInt)
+    pre init_x
+    post x
+{
+    x = init_x
+    var cont: Bool = true
+    @invariant(x)
+    while cont {
+        var prob_choice: Bool = flip(0.5)
+        if prob_choice {
+            cont = false
+        } else {
+            x = x + 1
+        }
+    }
+}

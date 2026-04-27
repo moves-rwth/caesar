@@ -1,0 +1,14 @@
+// Example 4.3. from Navarro and Olmedo's 2022 paper
+
+proc example43(y: Real) -> (x: Real)
+    pre 0.5 * [y * y <= 0.5]
+    post [x >= 0]
+{
+    x = 1.5 - y * y
+    var choice: Bool = flip(0.5)
+    if choice {
+        @slice_verify x = x - 1
+    } else {
+        @slice_verify x = x - 2
+    }
+}
