@@ -8,9 +8,12 @@ echo "Caesar version: v4.0.0"
 echo
 echo "Quick commands:"
 echo "  artifact/run-smoke.sh"
+echo "  artifact/run-model-checking-smoke.sh"
 echo "  artifact/run-all-benchmarks.sh"
 echo "  caesar verify tests/case-studies/zeroconf.heyvl"
+echo "  caesar mc --run-storm path artifact/model-checking-smoke.heyvl"
 echo "  caesar verify --help"
+echo "  storm --version"
 echo
 echo "Artifact guide:"
 echo "  /root/README.md"

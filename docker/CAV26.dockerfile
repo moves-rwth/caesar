@@ -47,7 +47,10 @@ RUN yarn build
 
 # ---- Runtime image ----
 
-FROM debian:bookworm-slim
+# Storm's GitHub releases currently publish source archives, not standalone
+# Linux binaries. The official Storm Docker image is built from that release
+# source and provides native linux/amd64 and linux/arm64 binaries.
+FROM movesrwth/storm:stable
 
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
@@ -76,6 +79,7 @@ RUN mkdir -p /root/caesar/artifact /root/caesar/target/release \
 COPY artifact/ /root/caesar/artifact/
 
 RUN chmod +x /root/caesar/artifact/run-smoke.sh \
+    /root/caesar/artifact/run-model-checking-smoke.sh \
     /root/caesar/artifact/run-all-benchmarks.sh
 
 COPY docker/CAV26.hello.sh /root/caesar/docker/CAV26.hello.sh
