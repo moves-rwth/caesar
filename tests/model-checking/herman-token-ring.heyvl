@@ -1,0 +1,43 @@
+// RUN: @caesar mc --timeout 30 --jani-dir /tmp/caesar-mc-herman-token-ring @file
+
+// Small bounded Herman-style token-ring model inspired by QComp/PRISM Herman.
+// A token is represented by equality with the predecessor bit.
+@wp
+proc herman_token_ring(rounds: UInt) -> (b0: Bool, b1: Bool, b2: Bool, r: UInt)
+    post [(b0 == b2 && b1 != b0 && b2 != b1)
+        || (b1 == b0 && b2 != b1 && b0 != b2)
+        || (b2 == b1 && b0 != b2 && b1 != b0)]
+{
+    b0 = true
+    b1 = true
+    b2 = true
+    r = 0
+    while r < rounds
+        && !((b0 == b2 && b1 != b0 && b2 != b1)
+            || (b1 == b0 && b2 != b1 && b0 != b2)
+            || (b2 == b1 && b0 != b2 && b1 != b0)) {
+        var old0: Bool = b0
+        var old1: Bool = b1
+        var old2: Bool = b2
+        var flip0: Bool = flip(1/2)
+        var flip1: Bool = flip(1/2)
+        var flip2: Bool = flip(1/2)
+
+        if old0 == old2 && flip0 {
+            b0 = !old0
+        } else {
+            b0 = old0
+        }
+        if old1 == old0 && flip1 {
+            b1 = !old1
+        } else {
+            b1 = old1
+        }
+        if old2 == old1 && flip2 {
+            b2 = !old2
+        } else {
+            b2 = old2
+        }
+        r = r + 1
+    }
+}

@@ -24,19 +24,29 @@ run_and_expect() {
 }
 
 run_and_expect \
-    "Finite Markov chain with exact expected reward." \
-    "2097151/2097152" \
-    caesar mc --run-storm path --storm-exact tests/model-checking/finite-geometric.heyvl
+    "Bounded random-walk reachability probability." \
+    "0.375" \
+    caesar mc --run-storm path --storm-exact --storm-constants bound=4 tests/model-checking/bounded-random-walk.heyvl
 
 run_and_expect \
-    "Parametric infinite-state Markov chain with constants and a state limit." \
-    "0.9990234375" \
-    caesar mc --run-storm path --storm-constants init_c=5 --storm-state-limit 100 tests/model-checking/parametric-geometric.heyvl
+    "Bounded loop expected runtime from the condand benchmark." \
+    "2.5" \
+    caesar mc --run-storm path --storm-exact --jani-skip-quant-pre --storm-constants init_n=2,init_m=2 tests/model-checking/bounded-condand-runtime.heyvl
 
 run_and_expect \
-    "Markov decision process from demonic nondeterminism." \
-    "0" \
-    caesar mc --run-storm path --storm-exact tests/model-checking/demonic-choice.heyvl
+    "Bounded loop expected runtime from the linear01 benchmark." \
+    "19/9" \
+    caesar mc --run-storm path --storm-exact --jani-skip-quant-pre --storm-constants init_x=4 tests/model-checking/bounded-linear-runtime.heyvl
+
+run_and_expect \
+    "Crowds-style bounded anonymity probability." \
+    "0.73728" \
+    caesar mc --run-storm path --storm-exact --storm-constants messages=5,threshold=1 tests/model-checking/crowds-anonymity.heyvl
+
+run_and_expect \
+    "Herman-style bounded token-ring stabilization probability." \
+    "0.9375" \
+    caesar mc --run-storm path --storm-exact --storm-constants rounds=2 tests/model-checking/herman-token-ring.heyvl
 
 run_and_expect \
     "Bayesian-network style noisy-OR model with a fixed observation target." \

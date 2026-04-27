@@ -1,0 +1,21 @@
+// RUN: @caesar mc --timeout 30 --jani-dir /tmp/caesar-mc-bounded-random-walk @file
+
+@wp
+proc bounded_random_walk(bound: UInt) -> (x: UInt, steps: UInt)
+    post [x == 4]
+{
+    x = 2
+    steps = 0
+    while steps < bound && x != 4 {
+        var right: Bool = flip(0.5)
+        if right {
+            x = x + 1
+        } else {
+            if 0 < x {
+                x = x - 1
+            } else {
+            }
+        }
+        steps = steps + 1
+    }
+}

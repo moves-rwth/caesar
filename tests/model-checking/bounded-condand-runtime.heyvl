@@ -1,0 +1,20 @@
+// RUN: @caesar mc --timeout 30 --jani-skip-quant-pre --jani-dir /tmp/caesar-mc-bounded-condand-runtime @file
+
+// Finite-state model-checking variant of tests/loop-rules/induction/condand.heyvl.
+@ert
+coproc bounded_condand(init_n: UInt, init_m: UInt) -> (n: UInt, m: UInt)
+    pre init_m + init_n
+    post 0
+{
+    n = init_n
+    m = init_m
+    while (0 < n) && (0 < m) {
+        var prob_choice: Bool = flip(1/2)
+        if prob_choice {
+            n = n - 1
+        } else {
+            m = m - 1
+        }
+        tick 1
+    }
+}

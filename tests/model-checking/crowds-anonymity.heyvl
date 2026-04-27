@@ -1,0 +1,19 @@
+// RUN: @caesar mc --timeout 30 --jani-dir /tmp/caesar-mc-crowds-anonymity @file
+
+// Small finite-state abstraction inspired by the QComp/PRISM Crowds benchmark:
+// after each delivered message, a corrupt observer may identify the sender.
+@wp
+proc crowds_anonymity(messages: UInt, threshold: UInt) -> (delivered: UInt, observed: UInt)
+    post [observed <= threshold]
+{
+    delivered = 0
+    observed = 0
+    while delivered < messages {
+        var sender_observed: Bool = flip(1/5)
+        if sender_observed {
+            observed = observed + 1
+        } else {
+        }
+        delivered = delivered + 1
+    }
+}
