@@ -45,15 +45,34 @@ RUN corepack enable \
 COPY website/ ./
 RUN yarn build
 
-# ---- Runtime image ----
+# ---- Storm binary/runtime extraction ----
 
 # Storm's GitHub releases currently publish source archives, not standalone
 # Linux binaries. The official Storm Docker image is built from that release
-# source and provides native linux/amd64 and linux/arm64 binaries.
-FROM movesrwth/storm:stable
+# source and provides native linux/amd64 and linux/arm64 binaries. Use it only
+# as a binary source stage so the final artifact does not inherit the full
+# multi-GB Storm image.
+FROM movesrwth/storm:stable AS storm
+
+RUN mkdir -p /storm-root \
+    && mkdir -p /storm-root/usr/local/bin \
+    && mkdir -p /storm-root/usr/local/storm-libs \
+    && mkdir -p /storm-root/opt/gurobi/linux/lib \
+    && cp -L /usr/local/bin/storm /storm-root/usr/local/bin/storm \
+    && cp -a --parents /usr/local/lib/storm /storm-root/ \
+    && cp -L /opt/gurobi/linux/lib/libgurobi130.so /storm-root/opt/gurobi/linux/lib/libgurobi130.so \
+    && ldd /usr/local/bin/storm \
+        | awk '{ print $3 }' \
+        | grep '^/' \
+        | xargs -r -I '{}' cp -L '{}' /storm-root/usr/local/storm-libs/
+
+# ---- Runtime image ----
+
+FROM ubuntu:25.10
 
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
+ENV LD_LIBRARY_PATH=/usr/local/storm-libs:/usr/local/lib/storm:/usr/local/lib/storm/resources:/opt/gurobi/linux/lib
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
@@ -68,6 +87,7 @@ RUN ln -snf /usr/share/zoneinfo/Etc/UTC /etc/localtime \
     && echo "Etc/UTC" > /etc/timezone
 
 COPY . /root/caesar
+COPY --from=storm /storm-root/ /
 COPY --from=builder /result/caesar /usr/local/bin/caesar
 COPY --from=builder /result/scooter /usr/local/bin/scooter
 COPY --from=docs /root/caesar/website/build /root/caesar/website/build
