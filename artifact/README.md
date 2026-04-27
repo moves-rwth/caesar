@@ -22,7 +22,7 @@ Run the model-checking smoke test:
 artifact/run-model-checking-smoke.sh
 ```
 
-Expected result: Caesar runs checked-in examples through Storm: bounded-loop Markov chains, QComp-inspired Crowds and Herman models, a noisy-OR Bayesian-network style model, and a BRP send-packet instance.
+Expected result: Caesar runs checked-in examples through Storm: bounded-loop Markov chains, the Crowds anonymity protocol, Herman's self-stabilizing token-ring protocol, a noisy-OR Bayesian-network style model, and a BRP send-packet instance.
 
 Run all benchmarks:
 
