@@ -15,7 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/caesar
-COPY --exclude=artifact --exclude=docker/CAV26.dockerfile --exclude=docker/CAV26.hello.sh . .
+COPY Cargo.toml Cargo.lock build.rs ./
+COPY src/ src/
+COPY jani/ jani/
+COPY scooter/ scooter/
+COPY z3rro/ z3rro/
 
 RUN printf "[net]\ngit-fetch-with-cli = true\n" >> "$CARGO_HOME/config.toml"
 
@@ -60,12 +64,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN ln -snf /usr/share/zoneinfo/Etc/UTC /etc/localtime \
     && echo "Etc/UTC" > /etc/timezone
 
-COPY --from=builder /root/caesar /root/caesar
+COPY . /root/caesar
 COPY --from=builder /result/caesar /usr/local/bin/caesar
 COPY --from=builder /result/scooter /usr/local/bin/scooter
 COPY --from=docs /root/caesar/website/build /root/caesar/website/build
 
-RUN mkdir -p /root/caesar/artifact \
+RUN mkdir -p /root/caesar/artifact /root/caesar/target/release \
     && ln -sf /usr/local/bin/caesar /root/caesar/target/release/caesar \
     && ln -sf /usr/local/bin/scooter /root/caesar/target/release/scooter
 
