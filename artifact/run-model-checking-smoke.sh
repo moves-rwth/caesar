@@ -38,4 +38,14 @@ run_and_expect \
     "0" \
     caesar mc --run-storm path --storm-exact tests/model-checking/demonic-choice.heyvl
 
+run_and_expect \
+    "Bayesian-network style noisy-OR model with a fixed observation target." \
+    "130307/160000" \
+    caesar mc --run-storm path --storm-exact --jani-skip-quant-pre --storm-constants what_n3=true tests/model-checking/noisy-or-network.heyvl
+
+run_and_expect \
+    "Bounded retransmission send-packet model with fixed packet and retry counts." \
+    "1999999/1000000000000" \
+    caesar mc --run-storm path --storm-exact --jani-skip-quant-pre --storm-constants packets=2,maxTries=3 tests/case-studies/brp-send-packet.heyvl
+
 echo "Model-checking smoke test completed."

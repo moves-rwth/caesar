@@ -22,7 +22,7 @@ Run the model-checking smoke test:
 artifact/run-model-checking-smoke.sh
 ```
 
-Expected result: Caesar runs three checked-in examples from `tests/model-checking/` through Storm: a finite Markov chain, a parametric infinite-state Markov chain with a state limit, and a Markov decision process from demonic nondeterminism.
+Expected result: Caesar runs checked-in examples through Storm: a finite Markov chain, a parametric infinite-state Markov chain with a state limit, a Markov decision process from demonic nondeterminism, a noisy-OR Bayesian-network style model, and a BRP send-packet instance.
 
 Run all benchmarks:
 

@@ -1,0 +1,38 @@
+// RUN: @caesar @file --quantifier-instantiation e-matching
+
+domain Exponentials {
+    func exp(base: UReal, exponent: UInt): UReal =
+        ite(exponent == 0, 1, base * exp(base, exponent - 1))
+
+    axiom expBounded forall base: UReal, exponent: UInt.
+        (base <= 1) ==> (exp(base, exponent) <= 1)
+}
+
+@wp
+coproc brp(packets: UInt, maxTries: UInt)
+    -> (sent: UInt, fail: UInt, totalFail: UInt)
+    pre !?(maxTries > 0)
+    pre 1 - exp(1 - exp(0.01, maxTries), packets)
+    post [fail == maxTries]
+{
+    sent = 0
+    fail = 0
+    totalFail = 0
+
+    @invariant(ite(fail == maxTries,
+        1,
+        ite(sent == packets,
+            0,
+            1 - (1 - exp(0.01, maxTries - fail))
+                * exp(1 - exp(0.01, maxTries), (packets - sent) - 1))))
+    while (sent < packets && fail < maxTries) {
+        var transmit: Bool = flip(0.99)
+        if transmit {
+            sent = sent + 1
+            fail = 0
+        } else {
+            fail = fail + 1
+            totalFail = totalFail + 1
+        }
+    }
+}
