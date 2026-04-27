@@ -6,6 +6,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
+import csv
 
 CRATE_PATH = os.environ.get("CRATE_PATH", os.getcwd())
 CAESAR_PATH = os.environ.get("CAESAR_PATH", "target/debug/caesar")
@@ -149,6 +150,11 @@ def main():
 
     results = []
 
+    csv_path = os.path.join(CRATE_PATH, "benchmark_results.csv")
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["name", "runtime_ms"])
+
     for path in test_files:
         name = get_test_name(path)
 
@@ -166,6 +172,9 @@ def main():
             if command:
                 print(f"  ↳ {command}")
             results.append((name, True, elapsed_ms))
+                writer.writerow([name, f"{elapsed_ms:.3f}"])
+
+
         else:
             print(f"{RED}[FAIL]{RESET} {name}")
             if command:
@@ -173,6 +182,8 @@ def main():
             if error:
                 print(error)
             results.append((name, False, None))
+                writer.writerow([name, "FAILED"])
+
 
     # Summary
     total = len(results)
@@ -184,6 +195,7 @@ def main():
     print(f"{GREEN}Passed:{RESET} {passed}")
     print(f"{RED}Failed:{RESET} {failed}")
 
+    print(f"\nResults written to {csv_path}")
     if failed > 0:
         exit(1)
 
