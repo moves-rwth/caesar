@@ -18,19 +18,17 @@ WORKDIR /root/caesar
 COPY Cargo.toml Cargo.lock build.rs ./
 COPY src/ src/
 COPY jani/ jani/
-COPY scooter/ scooter/
 COPY z3rro/ z3rro/
+
+RUN sed -i '/"scooter"/d' Cargo.toml
 
 RUN printf "[net]\ngit-fetch-with-cli = true\n" >> "$CARGO_HOME/config.toml"
 
-RUN cargo build --release --workspace
+RUN cargo build --release -p caesar
 
 RUN mkdir /result \
     && cp /root/caesar/target/release/caesar /result/caesar \
-    && cp /root/caesar/target/release/scooter /result/scooter \
-    && rm -rf /root/caesar/target \
-    && mkdir -p /root/caesar/target/release \
-    && cp /result/scooter /root/caesar/target/release/scooter
+    && rm -rf /root/caesar/target
 
 # ---- Documentation build ----
 
@@ -77,9 +75,9 @@ ENV LD_LIBRARY_PATH=/usr/local/storm-libs:/usr/local/lib/storm:/usr/local/lib/st
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
-    fish \
     git \
     nano \
+    python3 \
     vim \
     && rm -rf /var/lib/apt/lists/*
 
@@ -89,12 +87,10 @@ RUN ln -snf /usr/share/zoneinfo/Etc/UTC /etc/localtime \
 COPY . /root/caesar
 COPY --from=storm /storm-root/ /
 COPY --from=builder /result/caesar /usr/local/bin/caesar
-COPY --from=builder /result/scooter /usr/local/bin/scooter
 COPY --from=docs /root/caesar/website/build /root/caesar/website/build
 
 RUN mkdir -p /root/caesar/artifact /root/caesar/target/release \
-    && ln -sf /usr/local/bin/caesar /root/caesar/target/release/caesar \
-    && ln -sf /usr/local/bin/scooter /root/caesar/target/release/scooter
+    && ln -sf /usr/local/bin/caesar /root/caesar/target/release/caesar
 
 COPY artifact/ /root/caesar/artifact/
 

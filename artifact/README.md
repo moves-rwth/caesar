@@ -30,7 +30,9 @@ Run all benchmarks:
 artifact/run-all-benchmarks.sh
 ```
 
-The full run reads `benchmarks.txt`, invokes `scooter` with a 60 second timeout and 10000 MB memory limit per benchmark, prints a table, and writes `benchmark-results.csv`.
+The full run executes `python3 benchmarks.py`, which discovers checked-in HeyVL benchmark tests and runs their `RUN` commands with the Caesar binary from the image. The script writes `benchmark-results.txt`.
+
+Many HeyVL test files begin with comments such as `// RUN:`, `// XFAIL:`, or `// IGNORE:`. These are test-runner directives: `RUN` gives the command to execute for that file, `XFAIL` marks an expected failure, and `IGNORE` excludes a file from the automatic benchmark run.
 
 Offline documentation in this container:
 
@@ -41,12 +43,12 @@ Offline documentation in this container:
 
 | Claim | How to test it | Expected result |
 | --- | --- | --- |
-| Caesar and Storm are available in this container. | `caesar --help`, `scooter --help`, and `storm --version` | The Caesar tools print usage information; Storm reports version 1.12.0. |
+| Caesar and Storm are available in this container. | `caesar --help` and `storm --version` | Caesar prints usage information; Storm reports version 1.12.0. |
 | Caesar verifies quantitative HeyVL programs automatically using SMT-generated verification conditions. | `artifact/run-smoke.sh` | `tests/case-studies/zeroconf.heyvl` verifies both procedures. |
 | Caesar can translate executable HeyVL programs to JANI and run probabilistic model checking through Storm. | `artifact/run-model-checking-smoke.sh` | Caesar invokes `storm` via `--run-storm path` on the examples in `tests/model-checking/` and checks the expected results. |
 | Representative tests cover the main verification features discussed in the paper. | Run the commands in **Tests By Feature**. | Each command reports verified procedures and exits successfully. |
 | Program slicing support and slicing benchmarks are included. | `caesar verify --slice-verify tests/slicing-benchmarks/navarro20/example4_3.heyvl` | The representative slicing benchmark verifies with slicing for correctness enabled. |
-| The paper benchmark set is included and executable. | `artifact/run-all-benchmarks.sh` | `scooter` runs every entry in `benchmarks.txt`, prints a result table, and writes `benchmark-results.csv`. |
+| The paper benchmark set is included and executable. | `artifact/run-all-benchmarks.sh` | `benchmarks.py` discovers the checked-in benchmark tests, prints pass/fail results, and writes `benchmark-results.txt`. |
 | Benchmark provenance is documented. | Read **All Benchmarks**. | Each benchmark group is mapped to a source paper, benchmark family, or Caesar case study. |
 | Caesar's documentation is available both online and offline. | Read <https://www.caesarverifier.org/docs/> or inspect `/root/caesar/website/docs/` and `/root/caesar/website/build/`. | The artifact provides Markdown documentation sources and a compiled static HTML copy. |
 
@@ -101,7 +103,6 @@ The benchmark classification follows Section 5.2 and Table 2 of the OOPSLA 2023 
 * `src/smt/` and `z3rro/`: SMT encoding and Z3 interaction.
 * `src/proof_rules/`: built-in proof rules.
 * `src/slicing/`: slicing support.
-* `scooter/`: benchmark driver.
 * `tests/model-checking/`: compact executable HeyVL examples for Caesar's JANI/Storm backend.
 * `tests/` and `pgcl/examples-heyvl/`: HeyVL benchmark files.
 * `tests/slicing-benchmarks/`: slicing benchmark suite.
