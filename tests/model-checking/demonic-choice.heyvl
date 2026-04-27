@@ -1,0 +1,12 @@
+// RUN: @caesar mc --timeout 30 --jani-dir /tmp/caesar-mc-demonic-choice @file
+
+@wp
+proc demonic_choice() -> (x: UInt)
+    post [x == 1]
+{
+    if \cap {
+        x = 0
+    } else {
+        x = 1
+    }
+}

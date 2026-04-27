@@ -11,7 +11,7 @@ echo "  artifact/run-smoke.sh"
 echo "  artifact/run-model-checking-smoke.sh"
 echo "  artifact/run-all-benchmarks.sh"
 echo "  caesar verify tests/case-studies/zeroconf.heyvl"
-echo "  caesar mc --run-storm path artifact/model-checking-smoke.heyvl"
+echo "  caesar mc --run-storm path --storm-exact tests/model-checking/finite-geometric.heyvl"
 echo "  caesar verify --help"
 echo "  storm --version"
 echo

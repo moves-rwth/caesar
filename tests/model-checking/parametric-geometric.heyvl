@@ -1,0 +1,17 @@
+// RUN: @caesar mc --timeout 30 --jani-dir /tmp/caesar-mc-parametric-geometric @file
+
+@wp
+proc parametric_geometric(init_c: UInt) -> (c: UInt, cont: Bool)
+    post [!cont]
+{
+    c = init_c
+    cont = true
+    while cont {
+        var prob_choice: Bool = flip(0.5)
+        if prob_choice {
+            cont = false
+        } else {
+            c = c + 1
+        }
+    }
+}

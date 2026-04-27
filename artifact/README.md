@@ -22,7 +22,7 @@ Run the model-checking smoke test:
 artifact/run-model-checking-smoke.sh
 ```
 
-Expected result: Caesar translates `artifact/model-checking-smoke.heyvl` to JANI, invokes the `storm` binary from `PATH`, and prints the exact expected reward.
+Expected result: Caesar runs three checked-in examples from `tests/model-checking/` through Storm: a finite Markov chain, a parametric infinite-state Markov chain with a state limit, and a Markov decision process from demonic nondeterminism.
 
 Run all benchmarks:
 
@@ -43,7 +43,7 @@ Offline documentation in this container:
 | --- | --- | --- |
 | Caesar and Storm are available in this container. | `caesar --help`, `scooter --help`, and `storm --version` | The Caesar tools print usage information; Storm reports version 1.12.0. |
 | Caesar verifies quantitative HeyVL programs automatically using SMT-generated verification conditions. | `artifact/run-smoke.sh` | `tests/case-studies/zeroconf.heyvl` verifies both procedures. |
-| Caesar can translate executable HeyVL programs to JANI and run probabilistic model checking through Storm. | `artifact/run-model-checking-smoke.sh` | Caesar invokes `storm` via `--run-storm path` and prints the exact expected reward for `artifact/model-checking-smoke.heyvl`. |
+| Caesar can translate executable HeyVL programs to JANI and run probabilistic model checking through Storm. | `artifact/run-model-checking-smoke.sh` | Caesar invokes `storm` via `--run-storm path` on the examples in `tests/model-checking/` and checks the expected results. |
 | Representative tests cover the main verification features discussed in the paper. | Run the commands in **Tests By Feature**. | Each command reports verified procedures and exits successfully. |
 | Program slicing support and slicing benchmarks are included. | `caesar verify --slice-verify tests/slicing-benchmarks/navarro20/example4_3.heyvl` | The representative slicing benchmark verifies with slicing for correctness enabled. |
 | The paper benchmark set is included and executable. | `artifact/run-all-benchmarks.sh` | `scooter` runs every entry in `benchmarks.txt`, prints a result table, and writes `benchmark-results.csv`. |
@@ -60,7 +60,7 @@ Offline documentation in this container:
 | k-induction | `caesar verify pgcl/examples-heyvl/brp2.heyvl` |
 | wp/wlp variants | `caesar verify pgcl/examples-heyvl/unif_gen1.heyvl` and `caesar verify pgcl/examples-heyvl/unif_gen1_wlp.heyvl` |
 | Conditional expectations | `caesar verify tests/loopfree-prob/six-sided-die.heyvl` |
-| Model checking via JANI and Storm | `caesar mc --run-storm path --storm-exact artifact/model-checking-smoke.heyvl` |
+| Model checking via JANI and Storm | `artifact/run-model-checking-smoke.sh` |
 | Expected runtime / ticks | `caesar verify tests/loop-rules/omega_invariants/countdown.heyvl` |
 | Almost-sure termination | `caesar verify tests/loop-rules/ast2018/ast-flipflop_core.heyvl` |
 | Positive almost-sure termination | `caesar verify tests/loop-rules/past2013/past.heyvl` |
@@ -102,7 +102,7 @@ The benchmark classification follows Section 5.2 and Table 2 of the OOPSLA 2023 
 * `src/proof_rules/`: built-in proof rules.
 * `src/slicing/`: slicing support.
 * `scooter/`: benchmark driver.
-* `artifact/model-checking-smoke.heyvl`: compact executable HeyVL example for Caesar's JANI/Storm backend.
+* `tests/model-checking/`: compact executable HeyVL examples for Caesar's JANI/Storm backend.
 * `tests/` and `pgcl/examples-heyvl/`: HeyVL benchmark files.
 * `tests/slicing-benchmarks/`: slicing benchmark suite.
 * `website/docs/`: offline Markdown documentation source.
