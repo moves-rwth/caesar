@@ -1,1 +1,8 @@
-.gitignore
+target
+.idea
+.DS_Store
+benchmark-results.csv
+vscode-ext/node_modules/
+vscode-ext/out/
+node_modules/
+OOPSLA_AEC.md

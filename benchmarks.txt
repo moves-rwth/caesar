@@ -1,4 +1,4 @@
-rabin: tests/domains/rabin.heyvl
+rabin: tests/loop-rules/induction/rabin_hurd2004.heyvl
 unif_gen1_wlp: pgcl/examples-heyvl/unif_gen1_wlp.heyvl
 unif_gen2_wlp: pgcl/examples-heyvl/unif_gen2_wlp.heyvl
 unif_gen3_wlp: pgcl/examples-heyvl/unif_gen3_wlp.heyvl
@@ -6,23 +6,23 @@ unif_gen4_wlp: pgcl/examples-heyvl/unif_gen4_wlp.heyvl
 rabin1_wlp: pgcl/examples-heyvl/rabin1_wlp.heyvl
 rabin2_wlp: pgcl/examples-heyvl/rabin2_wlp.heyvl
 rabin3_wlp: pgcl/examples-heyvl/rabin3_wlp.heyvl
-chain: tests/domains/chain.heyvl
-ohfive: tests/domains/ohfive.heyvl
+chain: tests/loop-rules/induction/chain/chain.heyvl
+ohfive: tests/loop-rules/induction/chain/lossy_list.heyvl
 brp1: pgcl/examples-heyvl/brp1.heyvl
 brp2: pgcl/examples-heyvl/brp2.heyvl
 brp3: pgcl/examples-heyvl/brp3.heyvl
-coupon: tests/coupon-collector.heyvl --no-simplify
+coupon: tests/case-studies/coupon-collector.heyvl --no-simplify
 geo1: pgcl/examples-heyvl/geo1.heyvl
-geo-recursive: tests/geo-recursive.heyvl
+geo-recursive: tests/case-studies/geo-recursive.heyvl
 rabin1: pgcl/examples-heyvl/rabin1.heyvl
 rabin2: pgcl/examples-heyvl/rabin2.heyvl
 unif_gen1_wp: pgcl/examples-heyvl/unif_gen1.heyvl
 unif_gen2_wp: pgcl/examples-heyvl/unif_gen2.heyvl
 unif_gen3_wp: pgcl/examples-heyvl/unif_gen3.heyvl
 unif_gen4_wp: pgcl/examples-heyvl/unif_gen4.heyvl
-zeroconf: tests/zeroconf.heyvl
-ost: tests/loop-rules/optional-stopping-theorem.heyvl
-die: tests/six-sided-die.heyvl
+zeroconf: tests/case-studies/zeroconf.heyvl
+ost: tests/loop-rules/ost2019/aiming-low-example39.heyvl
+die: tests/loopfree-prob/six-sided-die.heyvl
 2drwalk: pgcl/examples-heyvl/2drwalk.heyvl
 bayesian_network: pgcl/examples-heyvl/bayesian_network.heyvl
 C4B_t303: pgcl/examples-heyvl/C4B_t303.heyvl
@@ -35,9 +35,9 @@ prspeed: pgcl/examples-heyvl/prspeed.heyvl
 rdspeed: pgcl/examples-heyvl/rdspeed.heyvl
 rdwalk: pgcl/examples-heyvl/rdwalk.heyvl
 sprdwalk: pgcl/examples-heyvl/sprdwalk.heyvl
-omega: tests/loop-rules/simple-omega-invariant.heyvl
-ast1: tests/loop-rules/ast-rule.heyvl
-ast2: tests/loop-rules/ast-rule2.heyvl
-ast3: tests/loop-rules/ast-rule3.heyvl
-ast4: tests/loop-rules/ast-rule4.heyvl
-past: tests/loop-rules/past.heyvl
+omega: tests/loop-rules/omega_invariants/countdown.heyvl
+ast1: tests/loop-rules/ast2018/ast-flipflop_core.heyvl
+ast2: tests/loop-rules/ast2018/ast-state-machine.heyvl
+ast3: tests/loop-rules/ast2018/negative_binomial.heyvl
+ast4: tests/loop-rules/ast2018/escaping_spline.heyvl
+past: tests/loop-rules/past2013/past.heyvl
