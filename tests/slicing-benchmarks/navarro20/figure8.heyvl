@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 // Figure 8 from Navarro and Olmedo's 2022 paper
 
 proc figure8() -> (a: Bool, s: Bool, t: Bool, l: Bool, b: Bool, e: Bool, x: Bool, d: Bool)

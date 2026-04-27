@@ -1,3 +1,4 @@
+// RUN: @caesar @file
 
 // In Section 3.3. of the Barros paper, they claim that their algorithms that do either forwards OR backwards
 // reasoning cannot slice in the following program. We can.

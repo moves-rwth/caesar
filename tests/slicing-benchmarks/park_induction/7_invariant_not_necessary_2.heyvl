@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 proc geo_invariant_useless2(init_x: UInt) -> (cont: Bool, x: UInt)
     pre ?(true)
     post ?(!cont)

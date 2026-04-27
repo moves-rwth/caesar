@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 coproc algorithm_r_wrong(n: UInt, x: UInt) -> (c: UInt)
     pre !?(n > 0 && n >= x && x >= 1)
     pre 1/n

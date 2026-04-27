@@ -1,3 +1,5 @@
+// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+
 /*
 
 // ? Race between tortoise and hare (taken from http://publications.rwth-aachen.de/record/814578/files/814578.pdf,)

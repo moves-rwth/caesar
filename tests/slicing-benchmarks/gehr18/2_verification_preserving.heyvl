@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 // Taken from Gehr et al. 2018 about Bayonet
 
 coproc networkUpper() -> (delivered: Bool)

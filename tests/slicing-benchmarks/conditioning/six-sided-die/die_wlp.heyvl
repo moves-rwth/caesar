@@ -1,3 +1,5 @@
+// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+
 // A variation of the conditioning example from the Schroer et al. 2023 paper
 // where the program encoded is
 //

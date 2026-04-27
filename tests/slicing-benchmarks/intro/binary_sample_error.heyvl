@@ -1,3 +1,5 @@
+// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+
 // Based on Example 4.5 from Navarro and Olmedo's 2022 paper
 
 coproc binary_sample_error() -> (r: EUReal)

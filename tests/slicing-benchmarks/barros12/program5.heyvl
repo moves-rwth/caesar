@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 proc program5(y: Int) -> (x: Int)
     pre ?(y > 10)
     post ?(x >= 0)

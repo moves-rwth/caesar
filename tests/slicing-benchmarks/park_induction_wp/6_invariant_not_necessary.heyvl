@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 coproc geo_invariant_useless(init_x: UInt) -> (cont: Bool, x: UInt)
     pre ?(true)
     post ?(!cont)

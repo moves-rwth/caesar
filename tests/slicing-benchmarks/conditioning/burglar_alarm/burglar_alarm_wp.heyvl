@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 coproc burgler_alarm_wp() -> (burglary: Bool)
     pre 0.001
     post [burglary]

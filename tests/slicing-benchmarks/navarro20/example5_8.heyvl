@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 // Example 5.8 from Navarro and Olmedo's 2022 paper
 
 // TODO: adjust this example to fit more closely to the original example

@@ -1,3 +1,5 @@
+// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+
 // benchmarks script extracts bound displayed in table from next line
 // bound 0.938M
 coproc circle_loop(M : UReal) -> (x : UReal, y : UReal, count : UReal)

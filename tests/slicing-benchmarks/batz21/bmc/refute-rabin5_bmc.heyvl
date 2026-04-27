@@ -1,3 +1,5 @@
+// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+
 coproc bounded_model_checking(init_i: UInt, init_n: UInt, init_d: UInt, init_phase: UInt) -> (i: UInt, n: UInt, d: UInt, phase: UInt)
     pre ([(1 < init_i) && (init_phase == 0)] * 0.6) + ([!((1 < init_i) && (init_phase == 0))] * 1)
     post [i == 1]

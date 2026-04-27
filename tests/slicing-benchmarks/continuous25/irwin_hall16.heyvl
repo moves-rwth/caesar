@@ -1,3 +1,5 @@
+// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+
 // Irwin-Hall distribution modeling the sum of M unif[0,1]-distributed random variables.
 coproc irwin_hall(M : UReal) -> (x : UReal)
     pre 0.531*M // changed pre so that pre might not entail invariant

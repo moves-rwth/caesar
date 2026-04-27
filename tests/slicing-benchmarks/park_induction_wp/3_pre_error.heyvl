@@ -1,3 +1,5 @@
+// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+
 coproc geo_pre_error(init_x: UInt) -> (x: UInt)
     pre 0
     post x

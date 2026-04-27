@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 // Example 4.5 from Navarro and Olmedo's 2022 paper
 
 coproc example45() -> (r: EUReal)

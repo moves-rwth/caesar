@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 // Reduced and passified version of Figure 7 from Navarro and Olmedo's 2022 paper
 
 proc figure7_reduced() -> (a: Bool, s: Bool, t: Bool, l: Bool, b: Bool, e: Bool, x: Bool, d: Bool)

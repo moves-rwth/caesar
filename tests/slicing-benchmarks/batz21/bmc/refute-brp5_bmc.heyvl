@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 coproc bounded_model_checking(init_toSend: UInt, init_sent: UInt, init_maxFailed: UInt, init_failed: UInt, init_totalFailed: UInt) -> (toSend: UInt, sent: UInt, maxFailed: UInt, failed: UInt, totalFailed: UInt)
     pre init_totalFailed + 1
     post totalFailed

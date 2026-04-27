@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 proc geo_invariant_useless(init_x: UInt) -> (x: UInt)
     pre 0
     post x

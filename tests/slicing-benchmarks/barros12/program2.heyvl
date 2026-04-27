@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 proc program2(init_x: Int) -> (x: Int)
     pre ?(0-init_x <= 50)
     // pre ?(init_x >= 0-50)

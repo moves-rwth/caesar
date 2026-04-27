@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 // On page 31, Navarro et al. claim that the following program cannot be successfully sliced without forwards reasoning. We can.
 proc navarro_page31(init_x: Int, init_y: Int) -> (x: Int, y: Int)
     pre ?(init_y > 0)
