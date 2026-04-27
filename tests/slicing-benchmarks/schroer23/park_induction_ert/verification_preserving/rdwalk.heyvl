@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 // Verification-preserving slicing reveals that we can remove the x = x - 1 assignment.
 
 @ert

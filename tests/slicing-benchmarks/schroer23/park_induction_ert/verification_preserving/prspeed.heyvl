@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 // Slicing finds out that the x = x + 0 assignments are redundant, but the other
 // assignments are necessary.
 

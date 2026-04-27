@@ -1,4 +1,4 @@
-// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+// RUN: bash -c '@caesar @file 2>&1 | tee /dev/stderr | grep -q "Counter-example to property found"'
 
 // Program (1) from page 6 of Leino et al.'s 2005 paper on generating error traces
 

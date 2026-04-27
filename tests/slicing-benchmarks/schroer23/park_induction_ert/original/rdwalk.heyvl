@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 @ert
 coproc main(init_x: UInt, init_n: UInt) -> (x: UInt, n: UInt)
     pre 2 * ((init_n + 1) - init_x)

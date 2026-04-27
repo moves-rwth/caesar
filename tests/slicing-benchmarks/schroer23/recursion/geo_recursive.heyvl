@@ -1,3 +1,5 @@
+// RUN: bash -c '@caesar @file 2>&1 | tee /dev/stderr | grep -q "Counter-example to property found"'
+
 // Error-witnessing slice reveals the pre of geo1 might not hold in the
 // recursive call.
 

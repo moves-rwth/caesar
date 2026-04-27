@@ -1,4 +1,4 @@
-// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+// RUN: bash -c '@caesar @file 2>&1 | tee /dev/stderr | grep -q "Counter-example to verification found"'
 
 // This file should not verify and we should get a counter-example. However,
 // the SMT solver seemed to choke when we used the fuel encoding for `max` -

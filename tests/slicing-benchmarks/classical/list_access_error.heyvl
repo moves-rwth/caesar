@@ -1,4 +1,4 @@
-// RUN: bash -c '@caesar @file 2>&1 | grep -q "assertion might not hold"'
+// RUN: bash -c '@caesar @file 2>&1 | tee /dev/stderr | grep -q "assertion might not hold"'
 
 proc proc_store(list: []UInt, index: UInt, value: UInt) -> (res: []UInt)
     // pre ?(index < len(list))

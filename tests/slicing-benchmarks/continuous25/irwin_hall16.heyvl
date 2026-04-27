@@ -1,4 +1,4 @@
-// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+// RUN: bash -c '@caesar @file 2>&1 | tee /dev/stderr | grep -q "Counter-example to verification found"'
 
 // Irwin-Hall distribution modeling the sum of M unif[0,1]-distributed random variables.
 coproc irwin_hall(M : UReal) -> (x : UReal)

@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 // Verification-preserving slices reveal that we can remove all r = 0
 // assignments; apparently in those cases the value of r is irrelevant.
 

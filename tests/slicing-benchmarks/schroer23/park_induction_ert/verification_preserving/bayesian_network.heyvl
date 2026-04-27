@@ -1,3 +1,5 @@
+// RUN: @caesar @file
+
 // Here, all assignments can be sliced
 
 @ert

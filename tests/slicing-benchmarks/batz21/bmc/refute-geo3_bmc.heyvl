@@ -1,4 +1,4 @@
-// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+// RUN: bash -c '@caesar @file 2>&1 | tee /dev/stderr | grep -q "Counter-example to property found"'
 
 coproc bounded_model_checking(init_c: UInt, init_f: UInt) -> (c: UInt, f: UInt)
     pre init_c + 0.999999999999

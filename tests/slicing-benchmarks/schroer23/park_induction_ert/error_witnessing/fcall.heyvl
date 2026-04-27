@@ -1,3 +1,5 @@
+// RUN: bash -c '@caesar @file --slice-error-first 2>&1 | tee /dev/stderr | grep -q "Counter-example to verification found"'
+
 // Changed invariant to be not inductive anymore.
 
 @ert

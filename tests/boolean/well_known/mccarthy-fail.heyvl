@@ -1,4 +1,4 @@
-// RUN: bash -c '@caesar @file 2>&1 | grep -q "post #0 is part of the error"'
+// RUN: bash -c '@caesar @file 2>&1 | tee /dev/stderr | grep -q "post #0 is part of the error"'
 
 proc M(n: UInt) -> (r: UInt)
     pre ?(true)
