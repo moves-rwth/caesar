@@ -4,6 +4,8 @@ Artifact for **_Caesar: A Deductive Verifier for Probabilistic Programs_**.
 
 This Docker image contains Caesar v4.0.0, its source code, the HeyVL benchmark set, and scripts for smoke testing and running all benchmarks. The image does not install the older `pgcl2heyvl` frontend; all benchmark inputs are included as HeyVL files.
 
+The main Caesar website is <https://www.caesarverifier.org/> and the online documentation is at <https://www.caesarverifier.org/docs/>. The online documentation is the preferred way to read the docs because navigation, search, and links are most convenient there. For artifact review, this image also contains the same documentation offline in Markdown source form and as compiled static HTML. The website may use Google Analytics, so anonymity cannot be guaranteed when using the online site.
+
 ## Quick Start
 
 Run the smoke test:
@@ -22,6 +24,11 @@ artifact/run-all-benchmarks.sh
 
 The full run reads `benchmarks.txt`, invokes `scooter` with a 60 second timeout and 10000 MB memory limit per benchmark, prints a table, and writes `benchmark-results.csv`.
 
+Offline documentation in this container:
+
+* Markdown source: `/root/caesar/website/docs/`
+* Compiled HTML: `/root/caesar/website/build/index.html`
+
 ## Claims And Tests
 
 | Claim | How to test it | Expected result |
@@ -31,6 +38,7 @@ The full run reads `benchmarks.txt`, invokes `scooter` with a 60 second timeout 
 | Representative tests cover the main verification features discussed in the paper. | Run the commands in **Tests By Feature**. | Each command reports verified procedures and exits successfully. |
 | The paper benchmark set is included and executable. | `artifact/run-all-benchmarks.sh` | `scooter` runs every entry in `benchmarks.txt`, prints a result table, and writes `benchmark-results.csv`. |
 | Benchmark provenance is documented. | Read **All Benchmarks** and the reference notes below. | Each benchmark group is mapped to a source paper, benchmark family, or Caesar case study. |
+| Caesar's documentation is available both online and offline. | Read <https://www.caesarverifier.org/docs/> or inspect `/root/caesar/website/docs/` and `/root/caesar/website/build/`. | The artifact provides Markdown documentation sources and a compiled static HTML copy. |
 
 ## Tests By Feature
 
@@ -91,4 +99,5 @@ Main references for benchmark provenance:
 * `src/slicing/`: slicing support.
 * `scooter/`: benchmark driver.
 * `tests/` and `pgcl/examples-heyvl/`: HeyVL benchmark files.
-* `website/docs/`: offline Markdown documentation.
+* `website/docs/`: offline Markdown documentation source.
+* `website/build/`: offline compiled HTML documentation.

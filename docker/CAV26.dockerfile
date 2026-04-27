@@ -28,6 +28,19 @@ RUN mkdir /result \
     && mkdir -p /root/caesar/target/release \
     && cp /result/scooter /root/caesar/target/release/scooter
 
+# ---- Documentation build ----
+
+FROM node:22-bookworm-slim AS docs
+
+WORKDIR /root/caesar/website
+COPY website/package.json website/yarn.lock ./
+RUN corepack enable \
+    && corepack prepare yarn@1.22.22 --activate \
+    && yarn install --frozen-lockfile
+
+COPY website/ ./
+RUN yarn build
+
 # ---- Runtime image ----
 
 FROM debian:bookworm-slim
@@ -50,6 +63,7 @@ RUN ln -snf /usr/share/zoneinfo/Etc/UTC /etc/localtime \
 COPY --from=builder /root/caesar /root/caesar
 COPY --from=builder /result/caesar /usr/local/bin/caesar
 COPY --from=builder /result/scooter /usr/local/bin/scooter
+COPY --from=docs /root/caesar/website/build /root/caesar/website/build
 
 RUN mkdir -p /root/caesar/artifact \
     && ln -sf /usr/local/bin/caesar /root/caesar/target/release/caesar \

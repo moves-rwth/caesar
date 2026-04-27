@@ -15,6 +15,15 @@ echo
 echo "Artifact guide:"
 echo "  /root/README.md"
 echo
+echo "Caesar website and docs:"
+echo "  https://www.caesarverifier.org/"
+echo "  https://www.caesarverifier.org/docs/"
+echo "  Online docs are easier to navigate, but the public website may use Google Analytics."
+echo
+echo "Offline docs in this container:"
+echo "  Markdown: /root/caesar/website/docs/"
+echo "  HTML:     /root/caesar/website/build/index.html"
+echo
 echo "Project directory:"
 echo "  /root/caesar"
 echo
