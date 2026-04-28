@@ -27,9 +27,11 @@ run_and_expect() {
     local description="$1"
     local expected="$2"
     shift 2
+    local command="$*"
 
     echo
     printf '%s%s%s\n' "$bold$cyan" "${description}" "$reset"
+    printf '  %s↳ %s%s\n' "$green" "$command" "$reset"
     local output
     output="$("$@" 2>&1)"
     printf '%s\n' "$output"
