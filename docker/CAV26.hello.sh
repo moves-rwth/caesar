@@ -37,12 +37,9 @@ cmd "artifact/run-smoke.sh"
 cmd "artifact/run-model-checking.sh"
 cmd "artifact/run-all-benchmarks.sh"
 cmd "caesar verify tests/case-studies/zeroconf.heyvl"
-cmd "caesar mc --run-storm path --storm-exact tests/model-checking/finite-geometric.heyvl"
+cmd "caesar mc --run-storm path --storm-exact --storm-constants bound=4 tests/model-checking/bounded-random-walk.heyvl"
 cmd "caesar verify --help"
 cmd "storm --version"
-
-heading "Artifact guide"
-path "/root/README.md"
 
 heading "Caesar website and docs"
 path "https://www.caesarverifier.org/"
