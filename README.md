@@ -23,7 +23,7 @@ The main Caesar website is <https://www.caesarverifier.org/> and the online docu
 
 This artifact is prepared for the CAV 2026 **Available**, **Functional**, and **Reusable** badges.
 
-* **Available:** the artifact is archived with a DOI on Zenodo. The artifact is distributed under the MIT license, and the submitted package includes `LICENSE`.
+* **Available:** the artifact is archived with DOI 10.5281/zenodo.19838027 on Zenodo. The artifact is distributed under the MIT license, and the submitted package includes `LICENSE`.
 * **Functional:** the submitted Docker image supports `linux/amd64` and `linux/arm64`, needs no network access once downloaded, and contains Caesar, Storm, smoke tests, representative feature checks, and the artifact-wide benchmark test runner.
 * **Reusable:** the image contains Caesar's source code, benchmark inputs, Dockerfile, build scripts, Markdown documentation, compiled HTML documentation, and examples for running Caesar on further HeyVL files. The submitted zip also includes a prebuilt VS Code extension for interactive use.
 
@@ -83,7 +83,7 @@ To execute the automated benchmark suite at once, run:
 artifact/run-all-benchmarks.sh
 ```
 
-This executes `python3 benchmarks.py`, which discovers HeyVL files under `tests/` and runs their `RUN` commands with the Caesar binary from the image. The wrapper writes the console log to `benchmark-results.txt`; the Python runner also writes per-file timings to `benchmark-results.csv`.
+This executes `python3 benchmarks.py`, which discovers HeyVL files under `tests/` and runs their `RUN` commands with the Caesar binary from the image. The wrapper writes the console log to `benchmark-results.txt`; the Python runner also writes per-file timings to `benchmark-results.csv`. For comparison, our result data can be found in `artifact/benchmark-results.txt` and `artifact/benchmark-results.csv`.
 
 The HeyVL test files begin with comments such as `// RUN:`, `// XFAIL:`, or `// IGNORE:`. These are test-runner directives: `RUN` gives the command to execute for that file, `XFAIL` marks an expected failure, and `IGNORE` excludes a file from the automatic benchmark run.
 
@@ -210,6 +210,7 @@ Inside the image, the artifact is organized around the Caesar repository and a s
   * `caesar/artifact/run-smoke.sh`: short CAV smoke test.
   * `caesar/artifact/run-model-checking.sh`: model-checking examples using Caesar's JANI backend and Storm.
   * `caesar/artifact/run-all-benchmarks.sh`: full benchmark test runner.
+  * `caesar/artifact/benchmark-results.*`: benchmark results for comparison.
   * `caesar/docker/CAV26.dockerfile`: Docker image recipe.
 * Documentation:
   * `caesar/website/docs/`: offline Markdown source for the Caesar documentation.
