@@ -16,10 +16,10 @@ artifact/run-smoke.sh
 
 Expected result: `tests/case-studies/zeroconf.heyvl` verifies two procedures.
 
-Run the model-checking smoke test:
+Run model checking with Storm:
 
 ```bash
-artifact/run-model-checking-smoke.sh
+artifact/run-model-checking.sh
 ```
 
 Expected result: Caesar runs checked-in examples through Storm: bounded-loop Markov chains, the Crowds anonymity protocol, Herman's self-stabilizing token-ring protocol, a noisy-OR Bayesian-network style model, and a BRP send-packet instance.
@@ -45,7 +45,7 @@ Offline documentation in this container:
 | --- | --- | --- |
 | Caesar and Storm are available in this container. | `caesar --help` and `storm --version` | Caesar prints usage information; Storm reports version 1.12.0. |
 | Caesar verifies quantitative HeyVL programs automatically using SMT-generated verification conditions. | `artifact/run-smoke.sh` | `tests/case-studies/zeroconf.heyvl` verifies both procedures. |
-| Caesar can translate executable HeyVL programs to JANI and run probabilistic model checking through Storm. | `artifact/run-model-checking-smoke.sh` | Caesar invokes `storm` via `--run-storm path` on the examples in `tests/model-checking/` and checks the expected results. |
+| Caesar can translate executable HeyVL programs to JANI and run probabilistic model checking through Storm. | `artifact/run-model-checking.sh` | Caesar invokes `storm` via `--run-storm path` on the examples in `tests/model-checking/` and checks the expected results. |
 | Representative tests cover the main verification features discussed in the paper. | Run the commands in **Tests By Feature**. | Each command reports verified procedures and exits successfully. |
 | Program slicing support and slicing benchmarks are included. | `caesar verify --slice-verify tests/slicing-benchmarks/navarro20/example4_3.heyvl` | The representative slicing benchmark verifies with slicing for correctness enabled. |
 | The automated HeyVL benchmark tests are included and executable. | `artifact/run-all-benchmarks.sh` | `benchmarks.py` discovers the checked-in benchmark tests, prints pass/expected-fail/fail/skip results, and writes `benchmark-results.txt` and `benchmark-results.csv`. |
@@ -62,7 +62,7 @@ Offline documentation in this container:
 | k-induction | `caesar verify pgcl/examples-heyvl/brp2.heyvl` |
 | wp/wlp variants | `caesar verify pgcl/examples-heyvl/unif_gen1.heyvl` and `caesar verify pgcl/examples-heyvl/unif_gen1_wlp.heyvl` |
 | Conditional expectations | `caesar verify tests/loopfree-prob/six-sided-die.heyvl` |
-| Model checking via JANI and Storm | `artifact/run-model-checking-smoke.sh` |
+| Model checking via JANI and Storm | `artifact/run-model-checking.sh` |
 | Expected runtime / ticks | `caesar verify tests/loop-rules/omega_invariants/countdown.heyvl` |
 | Almost-sure termination | `caesar verify tests/loop-rules/ast2018/ast-flipflop_core.heyvl` |
 | Positive almost-sure termination | `caesar verify tests/loop-rules/past2013/past.heyvl` |

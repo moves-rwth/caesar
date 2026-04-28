@@ -3,9 +3,25 @@ set -euo pipefail
 
 cd /root/caesar
 
-echo "Running Caesar model-checking smoke test with Storm..."
+if [[ -t 1 ]]; then
+    bold=$'\033[1m'
+    green=$'\033[32m'
+    red=$'\033[31m'
+    cyan=$'\033[36m'
+    yellow=$'\033[33m'
+    reset=$'\033[0m'
+else
+    bold=
+    green=
+    red=
+    cyan=
+    yellow=
+    reset=
+fi
+
+printf '%s%s%s\n' "$bold$cyan" "Running Caesar model checking with Storm..." "$reset"
 storm_version="$(storm --version)"
-printf '%s\n' "${storm_version%%$'\n'*}"
+printf '%sStorm:%s %s\n' "$bold" "$reset" "${storm_version%%$'\n'*}"
 
 run_and_expect() {
     local description="$1"
@@ -13,14 +29,15 @@ run_and_expect() {
     shift 2
 
     echo
-    echo "${description}"
+    printf '%s%s%s\n' "$bold$cyan" "${description}" "$reset"
     local output
     output="$("$@" 2>&1)"
     printf '%s\n' "$output"
     if [[ "$output" != *"$expected"* ]]; then
-        echo "Expected output to contain: $expected" >&2
+        printf '%sExpected output to contain:%s %s\n' "$red" "$reset" "$expected" >&2
         exit 1
     fi
+    printf '%sMatched expected output:%s %s\n' "$green" "$reset" "$expected"
 }
 
 run_and_expect \
@@ -58,4 +75,4 @@ run_and_expect \
     "1999999/1000000000000" \
     caesar mc --run-storm path --storm-exact --jani-skip-quant-pre --storm-constants packets=2,maxTries=3 tests/case-studies/brp-send-packet.heyvl
 
-echo "Model-checking smoke test completed."
+printf '%s%s%s\n' "$green" "Model checking completed." "$reset"

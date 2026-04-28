@@ -203,7 +203,7 @@ def main():
                 if expects_failure:
                     status = "xfailed"
                     label = "XFAIL"
-                    color = YELLOW
+                    color = GREEN
                 else:
                     status = "passed"
                     label = "PASS"
@@ -234,7 +234,7 @@ def main():
     print("\n--- Summary ---")
     print(f"Total:  {total}")
     print(f"{GREEN}Passed:{RESET} {passed}")
-    print(f"{YELLOW}XFailed:{RESET} {xfailed}")
+    print(f"{GREEN}XFailed:{RESET} {xfailed}")
     print(f"{RED}Failed:{RESET} {failed}")
     print(f"{BLUE}Skipped:{RESET} {skipped}")
 

@@ -1,34 +1,60 @@
 cd /root/caesar
 
-echo
-echo "Welcome to the Caesar CAV 2026 artifact."
-echo
-echo "Paper: Caesar: A Deductive Verifier for Probabilistic Programs"
-echo "Caesar version: v4.0.0"
-echo
-echo "Quick commands:"
-echo "  artifact/run-smoke.sh"
-echo "  artifact/run-model-checking-smoke.sh"
-echo "  artifact/run-all-benchmarks.sh"
-echo "  caesar verify tests/case-studies/zeroconf.heyvl"
-echo "  caesar mc --run-storm path --storm-exact tests/model-checking/finite-geometric.heyvl"
-echo "  caesar verify --help"
-echo "  storm --version"
-echo
-echo "Artifact guide:"
-echo "  /root/README.md"
-echo
-echo "Caesar website and docs:"
-echo "  https://www.caesarverifier.org/"
-echo "  https://www.caesarverifier.org/docs/"
-echo "  Online docs are easier to navigate, but the public website may use Google Analytics."
-echo
-echo "Offline docs in this container:"
-echo "  Markdown: /root/caesar/website/docs/"
-echo "  HTML:     /root/caesar/website/build/index.html"
-echo
-echo "Project directory:"
-echo "  /root/caesar"
-echo
+if [[ -t 1 ]]; then
+    bold=$'\033[1m'
+    dim=$'\033[2m'
+    cyan=$'\033[36m'
+    green=$'\033[32m'
+    yellow=$'\033[33m'
+    reset=$'\033[0m'
+else
+    bold=
+    dim=
+    cyan=
+    green=
+    yellow=
+    reset=
+fi
+
+heading() {
+    printf '\n%s%s%s\n' "$bold$cyan" "$1" "$reset"
+}
+
+cmd() {
+    printf '  %s%s%s\n' "$green" "$1" "$reset"
+}
+
+path() {
+    printf '  %s%s%s\n' "$yellow" "$1" "$reset"
+}
+
+printf '\n%sWelcome to the Caesar CAV 2026 artifact.%s\n\n' "$bold" "$reset"
+printf '%sPaper:%s Caesar: A Deductive Verifier for Probabilistic Programs\n' "$bold" "$reset"
+printf '%sCaesar version:%s v4.0.0\n' "$bold" "$reset"
+
+heading "Quick commands"
+cmd "artifact/run-smoke.sh"
+cmd "artifact/run-model-checking.sh"
+cmd "artifact/run-all-benchmarks.sh"
+cmd "caesar verify tests/case-studies/zeroconf.heyvl"
+cmd "caesar mc --run-storm path --storm-exact tests/model-checking/finite-geometric.heyvl"
+cmd "caesar verify --help"
+cmd "storm --version"
+
+heading "Artifact guide"
+path "/root/README.md"
+
+heading "Caesar website and docs"
+path "https://www.caesarverifier.org/"
+path "https://www.caesarverifier.org/docs/"
+printf '  %sOnline docs are easier to navigate, but the public website may use Google Analytics.%s\n' "$dim" "$reset"
+
+heading "Offline docs in this container"
+path "Markdown: /root/caesar/website/docs/"
+path "HTML:     /root/caesar/website/build/index.html"
+
+heading "Project directory"
+path "/root/caesar"
+printf '\n'
 
 exec bash

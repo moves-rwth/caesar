@@ -18,13 +18,12 @@ WORKDIR /root/caesar
 COPY Cargo.toml Cargo.lock build.rs ./
 COPY src/ src/
 COPY jani/ jani/
+COPY scooter/ scooter/
 COPY z3rro/ z3rro/
-
-RUN sed -i '/"scooter"/d' Cargo.toml
 
 RUN printf "[net]\ngit-fetch-with-cli = true\n" >> "$CARGO_HOME/config.toml"
 
-RUN cargo build --release -p caesar
+RUN cargo build --release --workspace
 
 RUN mkdir /result \
     && cp /root/caesar/target/release/caesar /result/caesar \
@@ -85,6 +84,7 @@ RUN ln -snf /usr/share/zoneinfo/Etc/UTC /etc/localtime \
     && echo "Etc/UTC" > /etc/timezone
 
 COPY . /root/caesar
+RUN rm -rf /root/caesar/scooter /root/caesar/run-benchmarks.fish
 COPY --from=storm /storm-root/ /
 COPY --from=builder /result/caesar /usr/local/bin/caesar
 COPY --from=docs /root/caesar/website/build /root/caesar/website/build
@@ -95,7 +95,7 @@ RUN mkdir -p /root/caesar/artifact /root/caesar/target/release \
 COPY artifact/ /root/caesar/artifact/
 
 RUN chmod +x /root/caesar/artifact/run-smoke.sh \
-    /root/caesar/artifact/run-model-checking-smoke.sh \
+    /root/caesar/artifact/run-model-checking.sh \
     /root/caesar/artifact/run-all-benchmarks.sh
 
 COPY docker/CAV26.hello.sh /root/caesar/docker/CAV26.hello.sh
