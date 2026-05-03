@@ -16,7 +16,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake llvm-dev libclang-dev clang lld
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --workspace --locked
+      - run: cargo test --workspace --locked -- --test-threads=1
 
   fmt:
     name: Rustfmt
