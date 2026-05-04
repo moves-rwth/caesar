@@ -170,7 +170,8 @@ Caesar is based on a 2022 Master thesis by Philipp Schroer entitled [_"A Deducti
 This thesis contains the foundations for Caesar, HeyVL, and HeyLo, including encodings for Park induction, k-induction, and bounded model checking.
 It also discusses the implementation of Caesar with its prenexing-based quantifier elimination and presents early experimental results.
 
-The [PDF file is available online](https://publications.rwth-aachen.de/record/998370/files/998370.pdf).
+This thesis was updated with a revised version on 2026-05-04.
+The [updated PDF file is available online](/assets/theses/schroer-caesar-msc-thesis-revised2026.pdf).
 
 <details>
 <summary>Abstract</summary>
