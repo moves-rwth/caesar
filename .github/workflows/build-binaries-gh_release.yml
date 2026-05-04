@@ -63,7 +63,7 @@ jobs:
           ref: ${{ inputs.git_ref }}
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: ${{ matrix.rust }}
         target: ${{ matrix.target }}
@@ -132,25 +132,25 @@ jobs:
       #  cp {CHANGELOG.md,FAQ.md,GUIDE.md} "$ARCHIVE"/doc/
       #  cp {README.md,COPYING,UNLICENSE,LICENSE-MIT} "$ARCHIVE"/
 
-    - name: Build archive (Windows)
+    - name: Build archive
+      id: build-archive
       shell: bash
-      if: matrix.os == 'windows-latest'
       run: |
-        7z a "$ARCHIVE.zip" "./$ARCHIVE/*"
-        echo "ASSET=$ARCHIVE.zip" >> $GITHUB_ENV
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          asset="$ARCHIVE.zip"
+          7z a "$asset" "./$ARCHIVE/*"
+        else
+          asset="$ARCHIVE.tar.gz"
+          tar czf "$asset" "$ARCHIVE"
+        fi
 
-    - name: Build archive (Unix)
-      shell: bash
-      if: matrix.os != 'windows-latest'
-      run: |
-        tar czf "$ARCHIVE.tar.gz" "$ARCHIVE"
-        echo "ASSET=$ARCHIVE.tar.gz" >> $GITHUB_ENV
+        echo "asset=$asset" >> "$GITHUB_OUTPUT"
 
     - name: Upload Release Files
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: ${{ inputs.git_ref }}
         # Also need to specify 'draft' again, so that the action finds the correct existing (draft) release
         draft: ${{ !inputs.is_prerelease }}
         files: |
-          ${{ env.ASSET }}
+          ${{ steps.build-archive.outputs.asset }}
