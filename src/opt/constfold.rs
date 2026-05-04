@@ -128,7 +128,7 @@ impl VisitorMut for ConstFold {
             }
             ExprKind::Ite(_cond, ref lhs, ref rhs) => {
                 if let (ExprKind::Lit(lhs_lit), ExprKind::Lit(rhs_lit)) =
-                    (&lhs.deref_cast().kind, &rhs.deref_cast().kind)
+                    (&deref_cast(lhs).kind, &deref_cast(rhs).kind)
                 {
                     if lhs_lit.node == rhs_lit.node {
                         *e = lhs.clone();
@@ -142,8 +142,15 @@ impl VisitorMut for ConstFold {
     }
 }
 
+fn deref_cast(e: &Expr) -> &Expr {
+    match &e.kind {
+        ExprKind::Cast(inner) => deref_cast(inner),
+        _ => e,
+    }
+}
+
 fn is_zero_lit(e: &Expr) -> bool {
-    match &e.deref_cast().kind {
+    match &deref_cast(e).kind {
         ExprKind::Lit(lit) => match &lit.node {
             LitKind::UInt(v) => v.is_zero(),
             LitKind::Frac(ratio) => Zero::is_zero(ratio),
@@ -154,7 +161,7 @@ fn is_zero_lit(e: &Expr) -> bool {
 }
 
 pub fn is_one_lit(e: &Expr) -> bool {
-    match &e.deref_cast().kind {
+    match &deref_cast(e).kind {
         ExprKind::Lit(lit) => match &lit.node {
             LitKind::UInt(v) => v.is_one(),
             LitKind::Frac(ratio) => One::is_one(ratio),
@@ -165,7 +172,7 @@ pub fn is_one_lit(e: &Expr) -> bool {
 }
 
 fn extract_const_number(e: &Expr) -> Option<ConcreteEUReal> {
-    match &e.deref_cast().kind {
+    match &deref_cast(e).kind {
         ExprKind::Lit(lit) => match &lit.node {
             LitKind::UInt(v) => Some(ConcreteEUReal::Real(BigRational::from_integer(
                 BigInt::from_biguint(Sign::Plus, v.clone()),
