@@ -1,0 +1,91 @@
+// RUN: @caesar @file
+// Curated from an external Caesar/Dafny comparison corpus.
+// This file keeps a proof-oriented bubble-sort implementation over built-in lists.
+
+proc sort_pair_at(input: []Int, index: UInt) -> (result: []Int)
+    pre ?(index + 1 < len(input))
+    post ?(
+        (len(result) == len(input)) &&
+        (select(result, index) <= select(result, index + 1)) &&
+        (forall k: UInt.
+            ((k < len(input)) && (k != index) && (k != index + 1)) ==>
+                (select(result, k) == select(input, k)))
+    )
+{
+    if select(input, index) > select(input, index + 1) {
+        var left: Int = select(input, index)
+        var right: Int = select(input, index + 1)
+        result = store(input, index, right)
+        result = store(result, index + 1, left)
+    } else {
+        result = input
+    }
+}
+
+proc bubble_sort(input: []Int) -> (sorted: []Int)
+    post ?(
+        (len(input) == len(sorted)) &&
+        (forall p: UInt, q: UInt.
+            ((p < q) && (q < len(sorted))) ==> (select(sorted, p) <= select(sorted, q)))
+    )
+{
+    sorted = input
+    var i: UInt = 0
+    var last: UInt = ite(0 < len(sorted), len(sorted) - 1, 0)
+
+    @invariant(?(
+        (i <= last) &&
+        (len(input) == len(sorted)) &&
+        (forall p: UInt, q: UInt.
+            ((last - i <= p) && (p < q) && (q <= last) && (last < len(sorted))) ==>
+                (select(sorted, p) <= select(sorted, q))) &&
+        (forall p: UInt, q: UInt.
+            ((p < last - i) && (last - i < q) && (q < len(sorted))) ==>
+                (select(sorted, p) <= select(sorted, q)))
+    ))
+    while 0 < last - i {
+        var j: UInt = 0
+
+        @invariant(?(
+            (j <= last - i) &&
+            (len(input) == len(sorted)) &&
+            (forall p: UInt, q: UInt.
+                ((last - i <= p) && (p < q) && (q <= last) && (last < len(sorted))) ==>
+                    (select(sorted, p) <= select(sorted, q))) &&
+            (forall p: UInt, q: UInt.
+                ((p < last - i) && (last - i < q) && (q < len(sorted))) ==>
+                    (select(sorted, p) <= select(sorted, q))) &&
+            (forall k: UInt. (k <= j) ==> (select(sorted, k) <= select(sorted, j)))
+        ))
+        while j < last - i {
+            if select(sorted, j) > select(sorted, j + 1) {
+                var left: Int = select(sorted, j)
+                var right: Int = select(sorted, j + 1)
+                sorted = store(sorted, j, right)
+                sorted = store(sorted, j + 1, left)
+            } else {}
+
+            j = j + 1
+        }
+
+        i = i + 1
+    }
+}
+
+proc bubble_sort_example() -> ()
+{
+    var input: []Int
+    assume ?(len(input) == 5)
+    input = store(input, 0, 3)
+    input = store(input, 1, 2)
+    input = store(input, 2, 5)
+    input = store(input, 3, 1)
+    input = store(input, 4, 4)
+
+    var sorted: []Int = bubble_sort(input)
+    assert ?(
+        forall p: UInt, q: UInt.
+            ((p < q) && (q < len(sorted))) ==> (select(sorted, p) <= select(sorted, q))
+    )
+    assert ?(len(sorted) == 5)
+}

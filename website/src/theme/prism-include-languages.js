@@ -16,5 +16,6 @@ export default function prismIncludeLanguages(PrismObject) {
     require(`prismjs/components/prism-${lang}`);
   });
   require(`./prism-language-heyvl`);
+  require(`./prism-language-dafny`);
   delete globalThis.Prism;
 }
