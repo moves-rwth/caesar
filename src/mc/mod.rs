@@ -546,9 +546,9 @@ fn extract_embed(expr: &Expr) -> Option<Expr> {
         match op.node {
             UnOpKind::Embed => return Some(operand.clone()),
             UnOpKind::Not => {
-                if let ExprKind::Unary(op, inner_operand) = &expr.kind {
+                if let ExprKind::Unary(op, inner_operand) = &operand.kind {
                     if op.node == UnOpKind::Embed {
-                        let builder = ExprBuilder::new(operand.span);
+                        let builder = ExprBuilder::new(expr.span);
                         return Some(builder.unary(
                             UnOpKind::Not,
                             Some(TyKind::Bool),
