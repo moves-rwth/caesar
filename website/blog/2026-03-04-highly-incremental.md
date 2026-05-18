@@ -4,7 +4,7 @@ authors: phisch
 tags: [publications]
 ---
 
-Our new paper _"Highly Incremental: A Simple Programmatic Approach for Many Objectives"_ by Philipp Schröer and Joost-Pieter Katoen presents a one-fits-all approach for quantitative objectives on probabilistic programs, applicable to verification with Caesar.
+Our new paper [_"Highly Incremental: A Simple Programmatic Approach for Many Objectives"_](https://doi.org/10.1007/978-3-032-26204-2_29) by Philipp Schröer and Joost-Pieter Katoen presents a one-fits-all approach for quantitative objectives on probabilistic programs, applicable to verification with Caesar.
 
 The paper [will be presented](https://conf.researchr.org/details/fm-2026/fm-2026-research-paper/31/Highly-Incremental-A-Simple-Programmatic-Approach-for-Many-Objectives) at [_The 27th International Symposium on Formal Methods (FM 2026)_](https://conf.researchr.org/home/fm-2026) in Tokyo, Japan.
 

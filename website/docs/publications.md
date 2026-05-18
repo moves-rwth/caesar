@@ -42,7 +42,7 @@ See also:
 
 ### FM '26: Highly Incremental: A Simple Programmatic Approach for Many Objectives
 
-The paper _"Highly Incremental: A Simple Programmatic Approach for Many Objectives"_ by Philipp Schröer and Joost-Pieter Katoen will be published presented at [_FM 2026)_](https://conf.researchr.org/home/fm-2026) in Tokyo, Japan.
+The paper [_"Highly Incremental: A Simple Programmatic Approach for Many Objectives"_](https://doi.org/10.1007/978-3-032-26204-2_29) by Philipp Schröer and Joost-Pieter Katoen was published at [_FM 2026)_](https://conf.researchr.org/home/fm-2026) in Tokyo, Japan.
 
 An **extended version with a detailed appendix of proofs and case studies** is available on arXiv: [_"Highly Incremental: A Simple Programmatic Approach for Many Objectives (Extended Version)"_](https://arxiv.org/abs/2603.02405).
 
