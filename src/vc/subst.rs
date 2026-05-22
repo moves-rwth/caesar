@@ -24,8 +24,14 @@ use crate::{
 /// This structure uses immutable data structures, so it is cheap to clone.
 #[derive(Default, Clone)]
 struct SubstFrame {
+    /// The substitutions in this frame.
     substs: im_rc::HashMap<Ident, Expr>,
-    free_vars: im_rc::HashSet<Ident>,
+    /// The number of right-hand sides of the substitutions in this frame that
+    /// the ident shows up in.
+    ///
+    /// This is used to compute whether a quantified variable needs to be
+    /// shadowed.
+    free_vars: im_rc::HashMap<Ident, usize>,
 }
 
 /// A structure to apply variable substitutions in expressions.
@@ -52,7 +58,9 @@ impl<'a> Subst<'a> {
         self.stack.push(self.cur.clone());
         let mut free_var_collector = FreeVariableCollector::new();
         free_var_collector.visit_expr(&mut expr).unwrap();
-        self.cur.free_vars.extend(free_var_collector.variables);
+        for free_var in free_var_collector.variables {
+            *self.cur.free_vars.entry(free_var).or_insert(0) += 1;
+        }
         self.cur.substs.insert(ident, expr);
     }
 
@@ -64,18 +72,29 @@ impl<'a> Subst<'a> {
     /// variable to avoid name clashes.
     pub fn push_quant(&mut self, span: Span, vars: &mut [QuantVar], tcx: &TyCtx) {
         self.stack.push(self.cur.clone());
+
         for var in vars {
             let ident = var.name();
-            self.cur.substs.remove(&ident);
 
-            // TODO: we never remove a variable from the set of free variables
-            // in the substitutions. This is sound because we might shadow too
-            // many variables this way, but never too few.
+            // remove the substitution for the variable (if present)
+            let old_expr = self.cur.substs.remove(&ident);
+
+            // if we removed an expression from the substitution map, update the
+            // free variables counter.
+            if let Some(mut old_expr) = old_expr {
+                let mut free_var_collector = FreeVariableCollector::new();
+                free_var_collector.visit_expr(&mut old_expr).unwrap();
+
+                for free_var in free_var_collector.variables {
+                    let counter = self.cur.free_vars.get_mut(&free_var).unwrap();
+                    *counter -= 1;
+                }
+            }
 
             // if the variable is contained in the free variables of this
             // substitution, then shadow it: rename the variable and replace all
             // occurrences of the original variable with the new one.
-            if self.cur.free_vars.contains(&ident) {
+            if self.cur.free_vars.get(&ident).unwrap_or(&0) > &0 {
                 tracing::trace!(ident=?ident, "shadowing quantified variable");
 
                 let new_span = span.variant(SpanVariant::Subst);
