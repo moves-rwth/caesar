@@ -4,7 +4,7 @@ sidebar_position: 6
 
 # The Caesar Tool
 
-The `caesar` binary contains all of Caesar's functionality: verifying HeyVL files, [checking entailments](./entailment.md), running the [LSP server](./vscode-and-lsp.md), and [translation support for model checking](../model-checking.md).
+The `caesar` binary contains all of Caesar's functionality: verifying HeyVL files, [checking entailments](./entailment.md), running the [LSP server](./vscode-and-lsp.md), [translation support for model checking](../model-checking.md), and an experimental [Dafny backend](../dafny.md).
 
 **Print help:**
 The command-line help information is much more detailed than this document.
@@ -50,6 +50,11 @@ Set a memory limit of 16000 megabytes with `--mem 16000`.
 
 The `caesar entailment` subcommand checks whether one `coproc`'s verification condition entails one `proc`'s verification condition.
 See [Entailment Checking](./entailment.md) for more information.
+
+## Subcommand `caesar dafny`
+
+The `caesar dafny` subcommand exports a supported Boolean fragment of HeyVL to Dafny and can optionally run `dafny verify` on the generated files.
+See the dedicated [Dafny backend documentation](../dafny.md) for the supported fragment, translation strategy, and command-line options.
 
 ## More Topics
 

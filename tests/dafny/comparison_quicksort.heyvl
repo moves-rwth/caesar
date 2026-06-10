@@ -1,0 +1,1 @@
+// RUN: bash -c 'dir=$(mktemp -d); @caesar dafny tests/boolean/dafny_comparison/quicksort.heyvl --dafny-dir "$dir"; out="$dir/tests/boolean/dafny_comparison/quicksort.dfy"; grep -q "type List(0,==)" "$out" && grep -q "function append" "$out" && grep -q "function quicksorted" "$out" && grep -q "method quicksort" "$out"'

@@ -21,6 +21,10 @@ impl Dependencies {
         self.0.contains(ident)
     }
 
+    pub fn into_hash_set(self) -> HashSet<Ident> {
+        self.0
+    }
+
     pub fn union(self, other: Self) -> Self {
         Dependencies(self.0.union(&other.0).cloned().collect())
     }

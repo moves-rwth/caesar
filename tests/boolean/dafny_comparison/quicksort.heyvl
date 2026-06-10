@@ -1,0 +1,81 @@
+// RUN: @caesar verify --function-encoding fuel-param-computation --max-fuel 8 @file
+// Invented for the Caesar/Dafny comparison corpus.
+// This file keeps a small quicksort development over a symbolic cons-list model.
+
+domain List {
+    func nil(): List
+    func cons(head: Int, tail: List): List
+
+    func head(list: List): Int
+    axiom head_cons forall value: Int, rest: List.
+        head(cons(value, rest)) == value
+
+    func tail(list: List): List
+    axiom tail_cons forall value: Int, rest: List.
+        tail(cons(value, rest)) == rest
+
+    func is_nil(list: List): Bool
+    axiom is_nil_def forall list: List.
+        is_nil(list) == (list == nil())
+
+    axiom cons_not_nil forall value: Int, rest: List.
+        cons(value, rest) != nil()
+
+    func append(left: List, right: List): List =
+        ite(is_nil(left), right, cons(head(left), append(tail(left), right)))
+
+    func filter_leq(pivot: Int, list: List): List =
+        ite(
+            is_nil(list),
+            nil(),
+            ite(
+                head(list) <= pivot,
+                cons(head(list), filter_leq(pivot, tail(list))),
+                filter_leq(pivot, tail(list))
+            )
+        )
+
+    func filter_gt(pivot: Int, list: List): List =
+        ite(
+            is_nil(list),
+            nil(),
+            ite(
+                pivot < head(list),
+                cons(head(list), filter_gt(pivot, tail(list))),
+                filter_gt(pivot, tail(list))
+            )
+        )
+
+    func quicksorted(list: List): List =
+        ite(
+            is_nil(list),
+            nil(),
+            append(
+                quicksorted(filter_leq(head(list), tail(list))),
+                cons(head(list), quicksorted(filter_gt(head(list), tail(list))))
+            )
+        )
+}
+
+proc quicksort(list: List) -> (result: List)
+    post ?(result == quicksorted(list))
+{
+    if is_nil(list) {
+        result = nil()
+    } else {
+        var pivot: Int = head(list)
+        var rest: List = tail(list)
+        var lower: List = quicksort(filter_leq(pivot, rest))
+        var greater: List = quicksort(filter_gt(pivot, rest))
+        result = append(lower, cons(pivot, greater))
+    }
+}
+
+proc quicksort_example() -> ()
+{
+    var input: List =
+        cons(3, cons(2, cons(5, cons(1, cons(4, nil())))))
+
+    var result: List = quicksort(input)
+    assert ?(result == quicksorted(input))
+}
