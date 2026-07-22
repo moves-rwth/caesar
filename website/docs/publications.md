@@ -27,6 +27,17 @@ import TOCInline from '@theme/TOCInline';
 
 ## Peer-Reviewed Papers
 
+### ITP '26: Securing the Foundations of an Intermediate Language for Probabilistic Program Verification
+
+The paper [_"Securing the Foundations of an Intermediate Language for Probabilistic Program Verification"_](https://doi.org/10.4230/LIPIcs.ITP.2026.29) by Oliver Bøving and Christoph Matheja was published at [ITP 2026](https://itp-conference-2026.github.io/), held in Lisbon, Portugal.
+
+The paper develops mechanized foundations in Lean for proving the correctness of HeyVL encodings and probabilistic-program verification techniques.
+It formalizes Markov decision processes and their probability spaces, characterizes expected total costs as least fixed points, and uses these results to verify weakest-precondition calculi and existing HeyVL encodings.
+
+The [paper is available as an open-access PDF](https://drops.dagstuhl.de/storage/00lipics/lipics-vol382-itp2026/LIPIcs.ITP.2026.29/LIPIcs.ITP.2026.29.pdf), and the accompanying [Lean formalization is available on Zenodo](https://doi.org/10.5281/zenodo.20346876).
+
+See also [our blog post about the paper](/blog/2026/07/22/itp26-securing-foundations).
+
 ### CAV '26: Caesar: A Deductive Verifier for Probabilistic Programs
 
 The tool paper _"Caesar: A Deductive Verifier for Probabilistic Programs"_ by Philipp Schröer, Kevin Batz, Umut Yiğit Dural, Darion Haase, Benjamin Lucien Kaminski, Joost-Pieter Katoen, and Christoph Matheja was accepted as a tool paper at [CAV 2026](https://conferences.i-cav.org/2026/), to be held in Lisbon, Portugal.
