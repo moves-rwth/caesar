@@ -4,7 +4,7 @@ authors: phisch
 tags: [publications]
 ---
 
-Our tool paper _"Caesar: A Deductive Verifier for Probabilistic Programs"_ was accepted as a tool paper at [CAV 2026](https://conferences.i-cav.org/2026/), to be held in Lisbon, Portugal.
+Our tool paper [_"Caesar: A Deductive Verifier for Probabilistic Programs"_](https://doi.org/10.1007/978-3-032-32537-2_27) was accepted as a tool paper at [CAV 2026](https://conferences.i-cav.org/2026/), to be held in Lisbon, Portugal.
 The authors are Philipp Schröer, Kevin Batz, Umut Yiğit Dural, Darion Haase, Benjamin Lucien Kaminski, Joost-Pieter Katoen, and Christoph Matheja.
 
 The **preprint is available on arXiv**: [_"Caesar: A Deductive Verifier for Probabilistic Programs"_](https://arxiv.org/abs/2605.15827).

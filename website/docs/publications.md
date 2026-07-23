@@ -40,7 +40,7 @@ See also [our blog post about the paper](/blog/2026/07/22/itp26-securing-foundat
 
 ### CAV '26: Caesar: A Deductive Verifier for Probabilistic Programs
 
-The tool paper _"Caesar: A Deductive Verifier for Probabilistic Programs"_ by Philipp Schröer, Kevin Batz, Umut Yiğit Dural, Darion Haase, Benjamin Lucien Kaminski, Joost-Pieter Katoen, and Christoph Matheja was accepted as a tool paper at [CAV 2026](https://conferences.i-cav.org/2026/), to be held in Lisbon, Portugal.
+The tool paper [_"Caesar: A Deductive Verifier for Probabilistic Programs"_](https://doi.org/10.1007/978-3-032-32537-2_27) by Philipp Schröer, Kevin Batz, Umut Yiğit Dural, Darion Haase, Benjamin Lucien Kaminski, Joost-Pieter Katoen, and Christoph Matheja was published at [CAV 2026](https://conferences.i-cav.org/2026/) in Lisbon, Portugal.
 
 The **preprint is available on arXiv**: [_"Caesar: A Deductive Verifier for Probabilistic Programs"_](https://arxiv.org/abs/2605.15827).
 
