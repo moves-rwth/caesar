@@ -409,3 +409,86 @@ pub enum SliceVerifyMethod {
     #[value(name = "exists-forall")]
     ExistsForall,
 }
+
+/// Controls which axis the outer synthesis loop refines on each iteration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+pub enum RefinementMode {
+    /// Single CEGIS attempt with one interval region; no refinement (default).
+    #[default]
+    None,
+    /// Increase the number of piecewise regions each iteration, using declared
+    /// type ranges (e.g. `a: UInt [0,3]`) to compute equal-width interval
+    /// boundaries. Requires at least one range declaration; errors otherwise.
+    Fixed,
+    /// Increase the polynomial degree by 1 each iteration.
+    Degree,
+    /// Use template variables as region-split boundaries; increase the number
+    /// of intervals each iteration (like Fixed, but boundaries are synthesised
+    /// rather than computed from equal-width arithmetic).
+    Variable,
+    /// For files that use `@k_induction(k, inv(...))`: start with the k written
+    /// in the annotation and increase it by 1 on each outer iteration that fails
+    /// to find a valid invariant. The template regions are held at 1 (no
+    /// piecewise splitting) while k is being searched.
+    KInduction,
+}
+
+#[derive(Debug, Default, Args)]
+#[command(next_help_heading = "Synthesizer Options")]
+pub struct SynthesizerOptions {
+    /// Polynomial degree for the template. In `degree` refinement mode this is
+    /// the starting degree, which increases by 1 each outer iteration.
+    #[arg(long)]
+    pub degree: Option<usize>,
+
+    /// Print syn_benchmarks timing and statistics on success.
+    #[arg(long)]
+    pub syn_benchmarks: bool,
+
+    /// Print verbose CEGIS info: loop headers, counterexamples, and close-CEX counts.
+    #[arg(long)]
+    pub syn_verbose: bool,
+
+    /// Print the template expression before CEGIS starts.
+    #[arg(long)]
+    pub print_template: bool,
+
+    /// Use a bare polynomial template without loop-aware structure.
+    /// By default, when a loop is detected, the template is built with the loop
+    /// guard treated structurally. This flag disables that and uses a plain
+    /// polynomial in all cases.
+    #[arg(long)]
+    pub bare_template: bool,
+
+    /// Use unsigned (non-negative) coefficients in the template.
+    #[arg(long)]
+    pub unsigned_coefficients: bool,
+
+    /// Maximum number of outer refinement iterations.
+    #[arg(long)]
+    pub max_refinements: Option<usize>,
+
+    /// Use fuel-bounded recursive function encoding: insert assume statements
+    /// that bound recursive calls during CEGIS, then verify soundness on the
+    /// original VC (without assumes) after a candidate invariant is found.
+    #[arg(long)]
+    pub rec_functions: bool,
+
+    /// Template refinement strategy.
+    ///
+    /// `none` (default): single CEGIS attempt, no refinement.  `fixed`:
+    /// increase piecewise regions each iteration using declared range
+    /// boundaries (requires range declarations).  `degree`: keep regions
+    /// fixed at 1 and increase the polynomial degree.  `variable`: like
+    /// `fixed` but region boundaries are synthesised by CEGIS.
+    #[arg(long, default_value = "none")]
+    pub refinement_mode: RefinementMode,
+
+    /// Per-iteration time limit in seconds for the soundness check that follows
+    /// a successful CEGIS round (only active when --rec-functions is set).
+    /// If the check does not conclude within this budget the fuel bound is
+    /// increased and synthesis retries, preserving the remaining global budget
+    /// for subsequent iterations.
+    #[arg(long, default_value = "30")]
+    pub soundness_timeout: u64,
+}

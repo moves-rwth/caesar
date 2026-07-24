@@ -4,6 +4,7 @@ pub mod model_check;
 pub mod options;
 pub mod refinement;
 pub mod run_lsp;
+pub mod synth;
 pub mod verify;
 
 use std::{
@@ -23,6 +24,7 @@ use crate::{
         options::{DebugOptions, InputOptions},
         refinement::run_verify_entailment_command,
         run_lsp::run_lsp_command,
+        synth::run_synth,
         verify::{run_verify_command, VerifyCommand},
     },
     servers::{CliServer, SharedServer},
@@ -65,6 +67,7 @@ impl CaesarCli {
             CaesarCommand::Mc(options) => run_model_checking_command(options),
             CaesarCommand::Lsp(options) => run_lsp_command(options).await,
             CaesarCommand::ShellCompletions(options) => run_shell_completions_command(options),
+            CaesarCommand::Synth(options) => run_synth(options).await,
             CaesarCommand::Other(_) => unreachable!(),
         }
     }
@@ -98,6 +101,8 @@ pub enum CaesarCommand {
     Lsp(VerifyCommand),
     /// Generate shell completions for the Caesar binary.
     ShellCompletions(ShellCompletionsCommand),
+    /// Synthesize function bodies to satisfy annotated `syn func` templates.
+    Synth(VerifyCommand),
     /// This is to support the default `verify` command.
     #[command(external_subcommand)]
     #[command(hide(true))]
@@ -112,6 +117,7 @@ impl CaesarCommand {
             CaesarCommand::Lsp(verify_options) => Some(&verify_options.debug_options),
             CaesarCommand::Mc(mc_options) => Some(&mc_options.debug_options),
             CaesarCommand::ShellCompletions(_) => None,
+            CaesarCommand::Synth(verify_options) => Some(&verify_options.debug_options),
             CaesarCommand::Other(_vec) => unreachable!(),
         }
     }

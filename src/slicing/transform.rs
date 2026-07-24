@@ -138,6 +138,7 @@ impl<'tcx> StmtSliceVisitor<'tcx> {
             init: None,
             span,
             created_from: None,
+            range: None,
         })));
 
         // return a variable expression with that new ident

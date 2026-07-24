@@ -6,4 +6,5 @@ pub mod error;
 pub mod front;
 pub mod item;
 pub mod quant_proof;
+pub mod ranges;
 pub mod smt_proof;

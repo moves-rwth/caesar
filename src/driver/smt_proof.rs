@@ -20,6 +20,7 @@ use z3rro::{
     util::{PrefixWriter, ReasonUnknown},
 };
 
+use crate::ast::Expr;
 use crate::depgraph::DepGraph;
 use crate::driver::commands::options::{
     DebugOptions, FunctionEncodingOption, QuantifierInstantiation, SliceVerifyMethod,
@@ -148,6 +149,33 @@ pub fn run_smt_prove_task(
     vc_is_valid: BoolVcProveTask,
     proc_soundness: &ProcSoundness,
 ) -> Result<ProveResult, CaesarError> {
+    run_smt_prove_task_with_ranges(
+        options,
+        limits_ref,
+        tcx,
+        depgraph,
+        name,
+        server,
+        slice_vars,
+        vc_is_valid,
+        proc_soundness,
+        &[],
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_smt_prove_task_with_ranges<'a>(
+    options: &VerifyCommand,
+    limits_ref: &LimitsRef,
+    tcx: &TyCtx,
+    depgraph: &DepGraph,
+    name: &SourceUnitName,
+    server: &mut dyn Server,
+    slice_vars: SliceStmts,
+    vc_is_valid: BoolVcProveTask,
+    proc_soundness: &'a ProcSoundness,
+    ranges_constraints: &'a [Expr],
+) -> Result<ProveResult, CaesarError> {
     let ctx = Context::new(&z3::Config::default());
     let function_encoder = mk_function_encoder(tcx, depgraph, options)?;
     let dep_config = DepConfig::Set(vc_is_valid.get_dependencies());
@@ -163,8 +191,14 @@ pub fn run_smt_prove_task(
         tracing::info!("Z3 tracing output will be written to `z3.log`.");
     }
 
-    let mut result =
-        vc_is_valid.run_solver(options, limits_ref, name, &ctx, &mut translate, &slice_vars)?;
+    let mut result = vc_is_valid.run_solver_with_ranges(
+        options,
+        limits_ref,
+        name,
+        &mut translate,
+        &slice_vars,
+        ranges_constraints,
+    )?;
 
     server
         .handle_vc_check_result(name, &mut result, &mut translate, proc_soundness)
@@ -178,6 +212,26 @@ pub fn mk_function_encoder<'ctx>(
     tcx: &TyCtx,
     depgraph: &DepGraph,
     options: &VerifyCommand,
+) -> Result<Box<dyn FunctionEncoder<'ctx> + 'ctx>, CaesarError> {
+    mk_function_encoder_override(
+        tcx,
+        depgraph,
+        options,
+        options.opt_options.no_synonym_axiom,
+        None,
+    )
+}
+
+/// Like [`mk_function_encoder`] but lets the caller override the
+/// `no_synonym_axiom` setting and the fuel bound independently of the CLI
+/// options.  When `max_fuel_override` is `Some(k)`, the fuel-based encodings
+/// use `k` instead of `options.opt_options.max_fuel`.
+pub fn mk_function_encoder_override<'ctx>(
+    tcx: &TyCtx,
+    depgraph: &DepGraph,
+    options: &VerifyCommand,
+    no_synonym_axiom: bool,
+    max_fuel_override: Option<usize>,
 ) -> Result<Box<dyn FunctionEncoder<'ctx> + 'ctx>, CaesarError> {
     let fe_opt = options.opt_options.function_encoding;
     let partial_encoding = if options.opt_options.no_partial_strengthening {
@@ -211,13 +265,13 @@ pub fn mk_function_encoder<'ctx>(
             let fuel_options = FuelEncodingOptions {
                 fuel_functions,
                 partial_encoding,
-                max_fuel: options.opt_options.max_fuel,
+                max_fuel: max_fuel_override.unwrap_or(options.opt_options.max_fuel),
                 computation: matches!(
                     fe_opt,
                     FunctionEncodingOption::FuelMonoComputation
                         | FunctionEncodingOption::FuelParamComputation
                 ),
-                synonym_axiom: !options.opt_options.no_synonym_axiom,
+                synonym_axiom: !no_synonym_axiom,
             };
             match fe_opt {
                 FunctionEncodingOption::FuelMono | FunctionEncodingOption::FuelMonoComputation => {
@@ -297,20 +351,24 @@ impl<'ctx> SmtVcProveTask<'ctx> {
     }
 
     /// Run the solver(s) on this SMT formula.
-    pub fn run_solver<'smt>(
+    pub fn run_solver_with_ranges<'smt>(
         self,
         options: &VerifyCommand,
         limits_ref: &LimitsRef,
         name: &SourceUnitName,
-        ctx: &'ctx Context,
         translate: &mut TranslateExprs<'smt, 'ctx>,
         slice_vars: &SliceStmts,
+        ranges_constraints: &[Expr],
     ) -> Result<SmtVcProveResult<'ctx>, CaesarError> {
         let span = info_span!("SAT check");
         let _entered = span.enter();
 
-        let prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc);
+        let ctx = translate.ctx.ctx();
+        let mut prover = mk_valid_query_prover(limits_ref, ctx, translate, &self.vc);
 
+        for constraint in ranges_constraints {
+            prover.add_assumption(&translate.t_bool(constraint));
+        }
         if options.debug_options.z3_probe {
             let goal = Goal::new(ctx, false, false, false);
             for assertion in prover.get_assertions() {
@@ -420,6 +478,25 @@ impl<'ctx> SmtVcProveTask<'ctx> {
             quant_vc: self.quant_vc,
         })
     }
+}
+
+/// Check whether `vc` is valid under the current SMT context and the given
+/// range assumptions. Returns the solver verdict and, on counterexample, the
+/// model. Uses a fresh one-shot prover — no slicing, no server notification.
+pub fn check_valid<'smt, 'ctx>(
+    vc: &Bool<'ctx>,
+    limits_ref: &LimitsRef,
+    translate: &mut TranslateExprs<'smt, 'ctx>,
+    ranges_constraints: &[Expr],
+) -> (ProveResult, Option<InstrumentedModel<'ctx>>) {
+    let ctx = translate.ctx.ctx();
+    let mut prover = mk_valid_query_prover(limits_ref, ctx, translate, vc);
+    for constraint in ranges_constraints {
+        prover.add_assumption(&translate.t_bool(constraint));
+    }
+    let result = prover.check_proof();
+    let model = prover.get_model();
+    (result, model)
 }
 
 fn mk_valid_query_prover<'smt, 'ctx>(

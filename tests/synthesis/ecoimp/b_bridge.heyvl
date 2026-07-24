@@ -1,0 +1,26 @@
+// RUN: @caesar synth --timeout 60 --refinement-mode degree @file
+
+domain MoreInvariants {
+    syn func bridge_inv(x: UInt, a: UInt, b: UInt) : EUReal
+}
+
+@ert
+coproc main(init_a: UInt, init_b: UInt, init_x: UInt) -> (a: UInt, b: UInt, x: UInt)
+    pre bridge_inv(init_x, init_b, init_a)
+    post 0
+{
+    var prob_choice: Bool
+    a = init_a
+    b = init_b
+    x = init_x
+    @invariant(bridge_inv(x, b, a))
+    while a < x && x < b {
+        tick 1
+        prob_choice = flip(1/2)
+        if prob_choice {
+            x = x - 1
+        } else {
+            x = x + 1
+        }
+    }
+}

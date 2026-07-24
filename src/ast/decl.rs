@@ -213,6 +213,12 @@ impl<T: SimplePretty> SimplePretty for DeclRef<T> {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct Range {
+    pub lower: u64,
+    pub upper: u64,
+}
+
 /// A variable declaration consists of a name, a type, and a mutability kind, and
 /// an optional initial expression.
 #[derive(Debug, Clone)]
@@ -225,6 +231,9 @@ pub struct VarDecl {
     /// If this declaration was created by cloning another variable declaration,
     /// we track the original name here.
     pub created_from: Option<Ident>,
+
+    // Optionally a range can be tracked to help invariant synthesis
+    pub range: Option<Range>,
 }
 
 impl VarDecl {
@@ -237,6 +246,7 @@ impl VarDecl {
             init: None,
             span: param.span,
             created_from: None,
+            range: param.range,
         };
         DeclRef::new(var_decl)
     }
@@ -412,6 +422,7 @@ pub struct Param {
     pub ty: Box<TyKind>,
     pub literal_only: bool,
     pub span: Span,
+    pub range: Option<Range>,
 }
 
 impl SimplePretty for Param {
@@ -502,6 +513,7 @@ pub struct FuncDecl {
     /// well. Functions with bodies are always computable, but this field will
     /// be `false` (because not explicitly marked).
     pub computable: bool,
+    pub syn: bool,
     pub span: Span,
 }
 

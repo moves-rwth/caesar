@@ -150,8 +150,7 @@ async fn verify_entailment(
         // Lowering the quantitative task to a Boolean one. This contains (lazy)
         // unfolding, quantifier elimination, and various optimizations
         // (depending on options).
-        let vc_is_valid =
-            lower_quant_prove_task(options, &limits_ref, &mut tcx, &first_name, vc_expr)?;
+        let vc_is_valid = lower_quant_prove_task(options, &limits_ref, &tcx, &first_name, vc_expr)?;
 
         // Running the SMT prove task: translating to Z3, running the solver.
         let slice_vars = first_slice_stmts.extend(second_slice_stmts);

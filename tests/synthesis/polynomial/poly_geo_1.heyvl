@@ -1,0 +1,23 @@
+// RUN: @caesar synth --refinement-mode degree --unsigned-coefficients @file
+
+domain Invariants {
+    syn func syninv(c:UInt, coin: Bool) : EUReal
+}
+
+@wp coproc flipWithspec() -> (c:UInt)
+pre syninv(0,true)
+post c*c
+{
+    c = 0
+    var coin: Bool = true
+    @invariant(syninv(c,coin))
+    while coin {
+
+        var prob_choice: Bool = flip(0.6)
+        if prob_choice {
+            c = c + 1
+        } else {
+            coin = false
+        }
+    }
+}

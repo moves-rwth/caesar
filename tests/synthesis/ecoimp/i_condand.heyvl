@@ -1,0 +1,25 @@
+// RUN: @caesar synth --refinement-mode degree @file
+
+domain MoreInvariants {
+    syn func condand_inv(n: Int, m: Int) : EUReal
+}
+
+@ert
+coproc main(init_n: Int, init_m: Int) -> (n: Int, m: Int)
+    pre condand_inv(init_n, init_m)
+    post 0
+{
+    var prob_choice: Bool
+    n = init_n
+    m = init_m
+    @invariant(condand_inv(n, m))
+    while 0 < n && 0 < m {
+        prob_choice = flip(1/2)
+        if prob_choice {
+            n = n - 1
+        } else {
+            m = m - 1
+        }
+        tick 1
+    }
+}

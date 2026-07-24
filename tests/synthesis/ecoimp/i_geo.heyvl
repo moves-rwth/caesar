@@ -1,0 +1,28 @@
+// RUN: @caesar synth --refinement-mode degree @file
+
+domain MoreInvariants {
+    syn func geo_inv(b: Int) : EUReal
+}
+
+@ert
+coproc main() -> (c: Int, b: Int)
+    pre geo_inv(0)
+    post 0
+{
+    var prob_choice: Bool
+    b = 0
+    @invariant(geo_inv(b))
+    while 0 < b {
+        prob_choice = flip(1/2)
+        if prob_choice {
+            c = 1
+            b = 0
+            tick 1
+        } else {
+            c = 0
+            tick 1
+        }
+        tick 2
+    }
+    tick 1
+}

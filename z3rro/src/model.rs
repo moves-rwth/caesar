@@ -185,14 +185,78 @@ impl<'ctx> SmtEval<'ctx> for Int<'ctx> {
     type Value = BigInt;
 
     fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<BigInt, SmtEvalError> {
-        // TODO: Z3's as_i64 only returns an i64 value. is there something more complete?
-        let value = model
-            .eval_ast(self, true)
-            .ok_or(SmtEvalError::EvalError)?
-            .as_i64()
-            .ok_or(SmtEvalError::ParseError)?;
-        Ok(BigInt::from(value))
+        let res = model.eval_ast(self, true).ok_or(SmtEvalError::EvalError)?;
+        if let Some(value) = res.as_i64() {
+            return Ok(BigInt::from(value));
+        }
+        parse_z3_integer(&format!("{res:?}"))
     }
+}
+
+/// Parse a Z3 real value from its debug string representation.
+///
+/// Z3 can produce several formats when `as_real()` doesn't fit in i64:
+///   `(/ num.0 denom.0)`, `(- (/ num.0 denom.0))`, `(/ (- num.0) denom.0)`
+fn parse_z3_real_string(s: &str) -> Result<BigRational, SmtEvalError> {
+    let s = s.trim();
+
+    // Strip outer "(- ...)" negation wrapper
+    if let Some(inner) = s.strip_prefix("(- ").and_then(|t| t.strip_suffix(')')) {
+        return parse_z3_real_string(inner).map(|r| -r);
+    }
+
+    // Parse "(/ num denom)" where num/denom may themselves be "(- n.0)"
+    if let Some(body) = s.strip_prefix("(/ ").and_then(|t| t.strip_suffix(')')) {
+        let (num_str, den_str) = split_two_sexpr(body).ok_or(SmtEvalError::ParseError)?;
+        let numerator = parse_z3_integer(num_str.trim())?;
+        let denominator = parse_z3_integer(den_str.trim())?;
+        return Ok(BigRational::new(numerator, denominator));
+    }
+
+    // Plain integer (with or without ".0" suffix)
+    parse_z3_integer(s).map(BigRational::from)
+}
+
+/// Parse a Z3 integer atom: `"42.0"`, `"42"`, or `"(- 42.0)"`.
+fn parse_z3_integer(s: &str) -> Result<BigInt, SmtEvalError> {
+    let s = s.trim();
+    if let Some(inner) = s.strip_prefix("(- ").and_then(|t| t.strip_suffix(')')) {
+        return parse_z3_integer(inner).map(|n| -n);
+    }
+    let s = s.trim_end_matches(".0");
+    BigInt::from_str(s).map_err(|_| SmtEvalError::ParseError)
+}
+
+/// Split a body string into exactly two s-expressions (atoms or parenthesised).
+fn split_two_sexpr(s: &str) -> Option<(&str, &str)> {
+    let s = s.trim();
+    let (first_end, second_start) = if s.starts_with('(') {
+        let mut depth = 0usize;
+        let mut end = 0;
+        for (i, c) in s.char_indices() {
+            match c {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = i + 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        (end, end)
+    } else {
+        let end = s.find(|c: char| c.is_ascii_whitespace()).unwrap_or(s.len());
+        (end, end)
+    };
+    let first = &s[..first_end];
+    let rest = s[second_start..].trim_start();
+    if first.is_empty() || rest.is_empty() {
+        return None;
+    }
+    Some((first, rest))
 }
 
 /// Evaluate a raw SMT value for display.
@@ -218,38 +282,18 @@ impl<'ctx> SmtEval<'ctx> for Real<'ctx> {
     type Value = BigRational;
 
     fn eval(&self, model: &InstrumentedModel<'ctx>) -> Result<Self::Value, SmtEvalError> {
-        let res = model
-            .eval_ast(self, false) // TODO
-            .ok_or(SmtEvalError::EvalError)?;
+        let res = model.eval_ast(self, true).ok_or(SmtEvalError::EvalError)?;
 
         // The .as_real() method only returns a pair of i64 values. If the
         // results don't fit in these types, we start some funky string parsing.
         if let Some((num, den)) = res.as_real() {
             Ok(BigRational::new(num.into(), den.into()))
         } else {
-            // we parse a string of the form "(/ num.0 denom.0)"
-            let division_expr = format!("{res:?}");
-            if !division_expr.starts_with("(/ ") || !division_expr.ends_with(".0)") {
-                return Err(SmtEvalError::ParseError);
-            }
-
-            let mut parts = division_expr.split_ascii_whitespace();
-
-            let first_part = parts.next().ok_or(SmtEvalError::ParseError)?;
-            if first_part != "(/" {
-                return Err(SmtEvalError::ParseError);
-            }
-
-            let second_part = parts.next().ok_or(SmtEvalError::ParseError)?;
-            let second_part = second_part.replace(".0", "");
-            let numerator = BigInt::from_str(&second_part).map_err(|_| SmtEvalError::ParseError)?;
-
-            let third_part = parts.next().ok_or(SmtEvalError::ParseError)?;
-            let third_part = third_part.replace(".0)", "");
-            let denominator =
-                BigInt::from_str(&third_part).map_err(|_| SmtEvalError::ParseError)?;
-
-            Ok(BigRational::new(numerator, denominator))
+            // Parse Z3 real string representations. Possible formats:
+            //   "(/ num.0 denom.0)"
+            //   "(- (/ num.0 denom.0))"
+            //   "(/ (- num.0) denom.0)"
+            parse_z3_real_string(&format!("{res:?}"))
         }
     }
 }

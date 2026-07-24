@@ -90,6 +90,7 @@ impl TransformTestCtx {
                 init: None,
                 span: Span::dummy_span(),
                 created_from: None,
+                range: None,
             })))
         }
         Self {

@@ -115,6 +115,7 @@ pub fn new_ident_with_name(tcx: &TyCtx, ty: &TyKind, span: Span, name: &str) -> 
             init: None,
             span,
             created_from: None,
+            range: None,
         };
         let decl = DeclRef::new(var_decl);
         tcx.declare(DeclKind::VarDecl(decl));
@@ -148,6 +149,7 @@ pub fn get_init_idents(tcx: &TyCtx, span: Span, idents: &[Ident]) -> Vec<Ident> 
                 init: None,
                 span,
                 created_from: Some(*ident),
+                range: None,
             };
             let decl = DeclRef::new(var_decl);
             tcx.declare(DeclKind::VarDecl(decl.clone()));
@@ -324,6 +326,7 @@ pub fn intrinsic_param(file: FileId, name: &str, ty: TyKind, literal_only: bool)
         ty: Box::new(ty),
         literal_only,
         span: Span::dummy_file_span(file),
+        range: None,
     }
 }
 
@@ -340,6 +343,7 @@ pub fn params_from_idents(idents: Vec<Ident>, tcx: &TyCtx) -> Vec<Param> {
                 ty: Box::new(var.ty.clone()),
                 literal_only: false,
                 span: ident.span,
+                range: None,
             })
         }
     }

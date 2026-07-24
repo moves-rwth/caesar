@@ -283,6 +283,7 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
                     init: Some(val.clone()),
                     span,
                     created_from: None,
+                    range: None,
                 }));
                 self.with_subscope(|this| {
                     this.declare(decl)?;

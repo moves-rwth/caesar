@@ -1,0 +1,50 @@
+// RUN: @caesar synth --refinement-mode fixed @file
+
+domain Invariants {
+    syn func zero_conf_inv(
+        tstart: UInt [0,1],
+        testablished: UInt [0,1],
+        tcurprobe: UInt [0,100000000]
+    ) : EUReal
+}
+
+coproc zero_conf () -> (established : UInt [0,1])
+pre 0.53
+post [established == 1]
+{
+    var start: UInt [0,1] = 1
+    var curprobe: UInt [0,100000000] = 0
+
+    established = 0
+
+    @invariant(
+        zero_conf_inv(start, established, curprobe)
+    )
+    while (
+        curprobe < 100000000 &&
+        established <= 0 &&
+        start <= 1
+    ) {
+
+        if (start == 1) {
+
+            var prob_choice: Bool = flip(0.5)
+            if prob_choice {
+                start = 0
+            } else {
+                start = 0
+                established = 1
+            }
+
+        } else {
+
+            var prob_choice: Bool = flip(0.999999999)
+            if prob_choice {
+                curprobe = curprobe + 1
+            } else {
+                start = 1
+                curprobe = 0
+            }
+        }
+    }
+}

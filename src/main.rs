@@ -22,6 +22,7 @@ mod scope_map;
 mod servers;
 mod slicing;
 mod smt;
+mod synthesis;
 mod timing;
 mod tyctx;
 mod vc;

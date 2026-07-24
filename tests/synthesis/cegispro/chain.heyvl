@@ -1,0 +1,32 @@
+// RUN: @caesar synth --refinement-mode fixed @file
+
+domain Invariants {
+    syn func chain_inv(
+        c: UInt [0,2],
+        x: UInt [0,1000000000000]
+    ) : EUReal
+}
+
+coproc chain () -> (c: UInt [0,2])
+pre 0.8
+post [c == 1]
+{
+    var x: UInt [0,1000000000000] = 0
+    c = 0
+
+    @invariant(
+      chain_inv(c,x)
+    )
+    while (
+        c <= 0
+        &&
+        x < 1000000000000
+    ) {
+        var prob_choice: Bool = flip(0.000000000001)
+        if prob_choice {
+            c = 1
+        } else {
+            x = x + 1
+        }
+    }
+}

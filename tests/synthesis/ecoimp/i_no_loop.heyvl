@@ -1,0 +1,27 @@
+// RUN: @caesar synth --refinement-mode degree @file
+
+domain MoreInvariants {
+    syn func no_loop_inv() : EUReal
+}
+
+@ert
+coproc main() -> (flag: Int, z: Int)
+    pre no_loop_inv()
+    post 0
+{
+    var prob_choice: Bool
+    prob_choice = flip(1/2)
+    if prob_choice {
+        flag = 0
+        tick 3
+    } else {
+        prob_choice = flip(1/2)
+        if prob_choice {
+            flag = 1
+            tick 5
+        } else {
+            flag = 1
+            tick 7
+        }
+    }
+}

@@ -1,0 +1,29 @@
+// RUN: @caesar synth @file
+
+domain Invariants {
+    syn func first_loop(tc:UInt, tcoin: Bool) : EUReal
+    syn func second_loop(tc:UInt, tcoin: Bool) : EUReal
+
+}
+@wp coproc fliptwice () -> (c:UInt)
+pre 2
+post c
+{
+    c = 0
+    var coin: Bool = true
+    @invariant(first_loop(c,coin))
+    while coin {
+        coin = flip(0.5)
+        if coin {
+            c = c+1
+        }
+        else {}
+
+    }
+    coin = true
+    @invariant(second_loop(c,coin))
+    while coin {
+        var prob_choice: Bool = flip(0.5)
+        if prob_choice { c = c + 1 } else  { coin = false }
+    }
+}

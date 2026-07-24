@@ -1,0 +1,27 @@
+// RUN: @caesar synth @file
+
+domain MoreInvariants {
+    syn func k_geo_inv(k: UInt, N:UInt, x: UInt, y: UInt) : EUReal
+
+}
+@wp coproc k_geo (N: UInt) -> (y:UInt)
+pre N+1
+post y
+{
+    var x: UInt = 0
+    y = 0
+    var k: UInt = 0
+
+    var coin: Bool = true
+    @invariant(k_geo_inv(k,N,x,y))
+    while k<= N {
+        coin = flip(0.5)
+        if coin {
+            k = k+1
+            y = y+x
+            x = 0
+        }
+        else { x = x+1}
+
+    }
+}

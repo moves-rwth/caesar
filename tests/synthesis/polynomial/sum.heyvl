@@ -1,0 +1,23 @@
+// RUN: @caesar synth --timeout 60 --refinement-mode degree --unsigned-coefficients @file
+
+domain Invariants {
+    syn func sum_inv(n: UInt, x: UInt, p: UReal) : UReal
+}
+
+proc loop_proc(init_n: UInt, init_x: UInt, p: UReal) -> (x: UInt)
+pre init_x + [init_n > 0]*((p*init_n)/2)
+post x
+{
+    var n: UInt = init_n
+    x = init_x
+
+    @invariant(sum_inv(n, x, p))
+    while (n > 0) {
+        var prob_choice: Bool = flip(p)
+        if prob_choice {
+            x = x + n
+        } else {
+        }
+        n = n - 1
+    }
+}

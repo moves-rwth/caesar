@@ -89,6 +89,14 @@ impl<T> Item<T> {
         &self.name
     }
 
+    pub fn value(&self) -> &T {
+        &self.item
+    }
+
+    pub fn value_mut(&mut self) -> &mut T {
+        &mut self.item
+    }
+
     pub fn enter_mut(&mut self) -> ItemEntered<'_, T> {
         ItemEntered {
             item: &mut self.item,
@@ -146,7 +154,7 @@ impl<T> Deref for Item<T> {
 }
 
 pub struct ItemEntered<'a, T> {
-    item: &'a mut T,
+    pub item: &'a mut T,
     _entered: tracing::span::Entered<'a>,
 }
 

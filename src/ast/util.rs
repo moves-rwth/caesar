@@ -1,9 +1,11 @@
 // Using [`IndexSet`], which is a HashSet that preserves the insertion order, for deterministic results
 use indexmap::IndexSet;
 
+use crate::ast::UnOpKind;
+
 use super::{
     visit::{walk_expr, walk_stmt, VisitorMut},
-    Direction, Expr, ExprKind, Ident, StmtKind,
+    Direction, Expr, ExprKind, Ident, LitKind, StmtKind,
 };
 
 /// Helper to find all free variables in expressions.
@@ -139,6 +141,98 @@ pub fn is_bot_lit(expr: &Expr) -> bool {
     }
 }
 
+pub fn is_zero_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(lit) => lit.node.is_zero(),
+        ExprKind::Cast(inner) => match &inner.kind {
+            ExprKind::Lit(lit) => lit.node.is_zero(),
+            _ => false,
+        },
+        ExprKind::Unary(un_op, inner) => match un_op.node {
+            UnOpKind::Parens => is_zero_lit(inner),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+pub fn is_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(_) => true,
+        ExprKind::Cast(inner) => is_lit(inner),
+        ExprKind::Unary(un_op, inner) => match un_op.node {
+            UnOpKind::Parens => is_lit(inner),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+pub fn is_neg_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(lit) => lit.node.is_negative(),
+        ExprKind::Cast(inner) => match &inner.kind {
+            ExprKind::Lit(lit) => lit.node.is_negative(),
+            _ => false,
+        },
+        ExprKind::Unary(un_op, inner) => match un_op.node {
+            UnOpKind::Parens => is_neg_lit(inner),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+pub fn is_one_lit(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Lit(lit) => lit.node.is_one(),
+        ExprKind::Cast(inner) => match &inner.kind {
+            ExprKind::Lit(lit) => lit.node.is_one(),
+            _ => false,
+        },
+        ExprKind::Unary(un_op, inner) => match un_op.node {
+            UnOpKind::Parens => is_one_lit(inner),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// Returns `true` if `expr` contains any negative numeric literal.
+fn has_negative_lit(expr: &Expr) -> bool {
+    if let ExprKind::Lit(lit) = &expr.kind {
+        return lit.node.is_negative();
+    }
+    expr.children().into_iter().any(has_negative_lit)
+}
+
+/// Strips `nonneg_cast(arg)` call nodes when `arg` contains no negative numeric literals,
+pub fn strip_nonneg_cast_if_nonneg(expr: &Expr) -> Expr {
+    let mut res = expr.clone();
+    StripNonnegCastVisitor.visit_expr(&mut res).unwrap();
+    res
+}
+
+struct StripNonnegCastVisitor;
+
+impl VisitorMut for StripNonnegCastVisitor {
+    type Err = ();
+
+    fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
+        if let ExprKind::Call(func, args) = &e.kind {
+            if func.name.to_string() == "nonneg_cast" {
+                if let [arg] = args.as_slice() {
+                    if !has_negative_lit(arg) {
+                        *e = arg.clone();
+                        return walk_expr(self, e);
+                    }
+                }
+            }
+        }
+        walk_expr(self, e)
+    }
+}
+
 /// Remove [`ExprKind::Cast`] from this expression. This is mainly used to make
 /// the pretty-printed expression look less verbose.
 pub fn remove_casts(expr: &Expr) -> Expr {
@@ -153,7 +247,7 @@ impl VisitorMut for RemoveCastsVisitor {
     type Err = ();
 
     fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
-        if let ExprKind::Cast(inner) = &mut e.kind {
+        while let ExprKind::Cast(inner) = &mut e.kind {
             *e = inner.clone();
         }
         walk_expr(self, e)
@@ -186,6 +280,7 @@ mod test {
             init: None,
             span: Span::dummy_span(),
             created_from: None,
+            range: None,
         })));
         let mut expr = builder.binary(
             BinOpKind::And,
@@ -204,4 +299,15 @@ mod test {
             vec![ident]
         );
     }
+}
+
+/// Extract a `u128` from an expression that is a `UInt` literal.
+/// Panics if the expression is not a `UInt` literal — callers must ensure this via type-checking.
+pub fn lit_u128(expr: &Expr) -> u128 {
+    if let ExprKind::Lit(lit) = &expr.kind {
+        if let LitKind::UInt(value) = &lit.node {
+            return u128::try_from(value).unwrap();
+        }
+    }
+    unreachable!()
 }

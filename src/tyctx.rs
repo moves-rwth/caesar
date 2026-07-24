@@ -23,7 +23,7 @@ pub struct TyCtx {
     ///
     /// It's an [`IndexMap`] to ensure stable iteration order over declarations.
     /// This keeps the SMT-LIB output deterministic.
-    declarations: RefCell<IndexMap<Ident, Rc<DeclKind>>>,
+    pub declarations: RefCell<IndexMap<Ident, Rc<DeclKind>>>,
     /// Global identifiers are those that are available in every new resolver at
     /// the top scope. Adding a global is essentially an "export" of a source
     /// and initializing a resolver with them is using "imports".
@@ -151,6 +151,7 @@ impl TyCtx {
         match lit {
             LitKind::Str(_) => TyKind::String,
             LitKind::UInt(_) => TyKind::UInt,
+            LitKind::Int(_) => TyKind::Int,
             LitKind::Frac(_) => TyKind::UReal,
             LitKind::Infinity => TyKind::EUReal,
             LitKind::Bool(_) => TyKind::Bool,

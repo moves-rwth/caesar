@@ -1,0 +1,24 @@
+// RUN: @caesar synth --refinement-mode fixed @file
+
+domain Invariants {
+    syn func for_grid_small(ta: UInt [0,10], tb:UInt [0,10]) : EUReal
+}
+@wp coproc grid_small() -> (a: UInt [0,10], b: UInt [0,10])
+pre 0.9
+post [a < 10 && 10 <= b]
+{
+
+    a = 0
+    b = 0
+
+    @invariant(for_grid_small(a,b))
+    while(a<10 && b<10){
+
+        var prob_choice: Bool = flip(0.5)
+        if prob_choice {
+            a = a+1
+        } else {
+           b = b+1
+        }
+    }
+}
