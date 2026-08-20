@@ -1,0 +1,82 @@
+// RUN: @caesar @file
+// Curated from an external Caesar/Dafny comparison corpus.
+// This file collects a few symbolic list operations over a small cons-list model.
+
+domain List {
+    func nil(): List
+    func cons(head: Int, tail: List): List
+
+    func head(list: List): Int
+    axiom head_cons forall value: Int, rest: List.
+        head(cons(value, rest)) == value
+
+    func tail(list: List): List
+    axiom tail_cons forall value: Int, rest: List.
+        tail(cons(value, rest)) == rest
+
+    func is_nil(list: List): Bool
+    axiom is_nil_def forall list: List.
+        is_nil(list) == (list == nil())
+
+    axiom cons_not_nil forall value: Int, rest: List.
+        cons(value, rest) != nil()
+
+    func length(list: List): UInt =
+        ite(is_nil(list), 0, 1 + length(tail(list)))
+
+    func select(list: List, index: UInt): Int =
+        ite(is_nil(list), 0, ite(index == 0, head(list), select(tail(list), index - 1)))
+}
+
+proc store_at(list: List, index: UInt, value: Int) -> (result: List)
+    pre ?(index < length(list))
+    post ?(
+        (length(result) == length(list)) &&
+        (select(result, index) == value) &&
+        (forall k: UInt.
+            ((k < length(list)) && (k != index)) ==> (select(result, k) == select(list, k)))
+    )
+{
+    if is_nil(list) {
+        result = list
+    } else {
+        var first: Int = head(list)
+        var rest: List = tail(list)
+        if index == 0 {
+            result = cons(value, rest)
+        } else {
+            var updated_rest: List = store_at(rest, index - 1, value)
+            result = cons(first, updated_rest)
+        }
+    }
+}
+
+proc append_value(list: List, value: Int) -> (result: List)
+    post ?(
+        (length(result) == length(list) + 1) &&
+        (select(result, length(list)) == value) &&
+        (forall k: UInt.
+            (k < length(list)) ==> (select(result, k) == select(list, k)))
+    )
+{
+    if is_nil(list) {
+        result = cons(value, nil())
+    } else {
+        var first: Int = head(list)
+        var rest: List = tail(list)
+        var extended_rest: List = append_value(rest, value)
+        result = cons(first, extended_rest)
+    }
+}
+
+proc get_last(list: List) -> (result: Int)
+    pre ?(!is_nil(list))
+    post ?(result == select(list, length(list) - 1))
+{
+    var rest: List = tail(list)
+    if is_nil(rest) {
+        result = head(list)
+    } else {
+        result = get_last(rest)
+    }
+}

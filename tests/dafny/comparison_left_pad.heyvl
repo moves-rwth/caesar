@@ -1,0 +1,1 @@
+// RUN: bash -c 'dir=$(mktemp -d); @caesar dafny tests/boolean/dafny_comparison/left_pad.heyvl --dafny-dir "$dir"; out="$dir/tests/boolean/dafny_comparison/left_pad.dfy"; grep -q "type List(0,==)" "$out" && grep -q "method left_pad" "$out"'

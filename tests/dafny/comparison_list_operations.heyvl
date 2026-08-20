@@ -1,0 +1,1 @@
+// RUN: bash -c 'dir=$(mktemp -d); @caesar dafny tests/boolean/dafny_comparison/list_operations.heyvl --dafny-dir "$dir"; out="$dir/tests/boolean/dafny_comparison/list_operations.dfy"; grep -q "type List(0,==)" "$out" && grep -q "method store_at" "$out" && grep -q "method append_value" "$out" && grep -q "method get_last" "$out"'

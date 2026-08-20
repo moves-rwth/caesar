@@ -1,0 +1,1 @@
+// RUN: bash -c 'dir=$(mktemp -d); @caesar dafny tests/boolean/dafny_comparison/selection_sort.heyvl --dafny-dir "$dir"; out="$dir/tests/boolean/dafny_comparison/selection_sort.dfy"; grep -q "method min_index_from" "$out" && grep -q "method selection_sort" "$out" && grep -q "method selection_sort_example" "$out"'

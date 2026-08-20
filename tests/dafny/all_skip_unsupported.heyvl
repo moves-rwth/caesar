@@ -1,0 +1,13 @@
+// RUN: bash -c 'dir=$(mktemp -d); out=$(@caesar dafny --filter "root$" @file --dafny-dir "$dir" --dafny-scope all 2>&1); status=$?; test $status -eq 0; printf "%s" "$out" | grep -q "coproc ghost"; dfy="$dir/tests/dafny/all_skip_unsupported.dfy"; grep -q "method root" "$dfy" && ! grep -q "method ghost" "$dfy"'
+
+proc root(x: UInt) -> (y: UInt)
+    pre ?(true)
+    post ?(y == x)
+{
+    y = x
+}
+
+coproc ghost() -> ()
+    pre ?(false)
+    post ?(false)
+{}

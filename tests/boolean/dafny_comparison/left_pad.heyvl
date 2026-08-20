@@ -1,0 +1,49 @@
+// RUN: @caesar @file
+// Curated from an external Caesar/Dafny comparison corpus.
+// This example pads a symbolic list on the left until it reaches the requested width.
+
+domain List {
+    func nil(): List
+    func cons(head: Int, tail: List): List
+
+    func head(list: List): Int
+    axiom head_cons forall value: Int, rest: List.
+        head(cons(value, rest)) == value
+
+    func tail(list: List): List
+    axiom tail_cons forall value: Int, rest: List.
+        tail(cons(value, rest)) == rest
+
+    func is_nil(list: List): Bool
+    axiom is_nil_def forall list: List.
+        is_nil(list) == (list == nil())
+
+    axiom cons_not_nil forall value: Int, rest: List.
+        cons(value, rest) != nil()
+
+    func length(list: List): UInt =
+        ite(is_nil(list), 0, 1 + length(tail(list)))
+
+    func select(list: List, index: UInt): Int =
+        ite(is_nil(list), 0, ite(index == 0, head(list), select(tail(list), index - 1)))
+
+    func padding(width: UInt, list: List): UInt =
+        ite(width < length(list), 0, width - length(list))
+}
+
+proc left_pad(list: List, width: UInt, fill: Int) -> (result: List)
+    post ?(
+        (length(result) == ite(width < length(list), length(list), width)) &&
+        (forall i: UInt.
+            (i < padding(width, list)) ==> (select(result, i) == fill)) &&
+        (forall j: UInt.
+            ((padding(width, list) <= j) && (j < length(result))) ==>
+                (select(result, j) == select(list, j - padding(width, list))))
+    )
+{
+    if width <= length(list) {
+        result = list
+    } else {
+        result = left_pad(cons(fill, list), width, fill)
+    }
+}
