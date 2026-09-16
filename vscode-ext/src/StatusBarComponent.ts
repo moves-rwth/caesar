@@ -5,6 +5,7 @@ import { DocumentStatus, DocumentStatusType, ServerStatus, VerifyResult } from "
 import { DocumentMap, Verifier } from "./Verifier";
 import { ConfigurationConstants } from "./constants";
 import { TextDocumentIdentifier } from "vscode-languageclient";
+import { assertNever } from "./assertNever";
 
 
 enum TooltipMenuType {
@@ -21,6 +22,33 @@ enum Command {
 
 
 interface StatusBarModel { tooltip_menu_type: TooltipMenuType, tooltip_status_text: vscode.MarkdownString, bar_text: string, command: Command }
+
+function summarizeResults(counts: DocumentStatus["status_counts"]) {
+    const summary = { verified: 0, failed: 0, unknown: 0, pending: 0 };
+    for (const [result, count] of counts) {
+        if (count <= 0) { continue; }
+        switch (result) {
+            case VerifyResult.Verified:
+                summary.verified += count;
+                break;
+            case VerifyResult.Refuted:
+            case VerifyResult.Failed:
+                summary.failed += count;
+                break;
+            case VerifyResult.Timeout:
+            case VerifyResult.Unknown:
+                summary.unknown += count;
+                break;
+            case VerifyResult.Todo:
+            case VerifyResult.Ongoing:
+                summary.pending += count;
+                break;
+            default:
+                assertNever(result);
+        }
+    }
+    return summary;
+}
 
 export class StatusBarComponent {
 
@@ -91,7 +119,7 @@ export class StatusBarComponent {
 
     render() {
         const document_status = this.documentStatuses.get({ uri: this.latestActiveHeyvlEditor?.document.uri.toString() ?? "" });
-        const model = this.mapStatusToModel(this.serverStatus, document_status);
+        const model = StatusBarComponent.mapStatusToModel(this.serverStatus, document_status);
 
         if (this.enabled) {
             this.view.text = model.bar_text;
@@ -134,10 +162,7 @@ export class StatusBarComponent {
 
             const document_status = this.documentStatuses.get(document_id);
 
-            const status_counts = new Map<VerifyResult, number>(document_status?.status_counts ?? []);
-            // const _verified = status_counts.get(VerifyResult.Verified) ?? 0;
-            const failed = (status_counts.get(VerifyResult.Failed) ?? 0) + (status_counts.get(VerifyResult.Refuted) ?? 0);
-            const unknown = (status_counts.get(VerifyResult.Unknown) ?? 0) + (status_counts.get(VerifyResult.Timeout) ?? 0);
+            const { failed, unknown } = summarizeResults(document_status?.status_counts ?? []);
 
             tooltipString.appendMarkdown(`${vscode.workspace.asRelativePath(vscode.Uri.parse(document_id.uri).path)}: $(error) ${failed} $(question) ${unknown}` + "\n\n --- \n");
         }
@@ -158,17 +183,19 @@ export class StatusBarComponent {
             case TooltipMenuType.stopped:
                 return new vscode.MarkdownString(
                     "[Start Caesar](command:caesar.startServer)", true);
+            default:
+                return assertNever(menu);
         }
     }
 
     /// Map the server status and document status to a model for the status bar that can be rendered.
-    private mapStatusToModel(server_status: ServerStatus, document_status: DocumentStatus | undefined): StatusBarModel {
-        let model = {
+    static mapStatusToModel(server_status: ServerStatus, document_status: DocumentStatus | undefined): StatusBarModel {
+        let model: StatusBarModel = {
             tooltip_menu_type: TooltipMenuType.stopped,
             tooltip_status_text: new vscode.MarkdownString("Caesar server is not running.", true),
             bar_text: "$(debug-start) Caesar Not Started",
             command: Command.StartServer
-        } as StatusBarModel;
+        };
 
         switch (server_status) {
             case ServerStatus.NotStarted:
@@ -203,8 +230,9 @@ export class StatusBarComponent {
                     command: Command.ShowOutput
                 };
                 break;
-            case ServerStatus.Ready:
-                switch (document_status?.status_type) {
+            case ServerStatus.Ready: {
+                const documentType = document_status?.status_type;
+                switch (documentType) {
                     case DocumentStatusType.Invalid:
                         model = {
                             bar_text: "$(error) Invalid File",
@@ -222,28 +250,34 @@ export class StatusBarComponent {
                         };
                         break;
                     case DocumentStatusType.Todo:
+                    case DocumentStatusType.Ongoing:
                     case DocumentStatusType.Done: {
-                        const someError = document_status?.status_counts.some(([result, _count]) => result === VerifyResult.Failed || result === VerifyResult.Timeout || result === VerifyResult.Unknown) ?? false;
-                        const someVerified = document_status?.status_counts.some(([result, _count]) => result === VerifyResult.Verified) ?? false;
+                        const { verified, failed, unknown, pending } = summarizeResults(document_status?.status_counts ?? []);
 
-                        if (!someError && someVerified) {
-                            // No error and at least one verified implies everything is verified.
-                            model = {
-                                tooltip_menu_type: TooltipMenuType.running,
-                                tooltip_status_text: new vscode.MarkdownString("All procedures verified successfully.", true),
-                                bar_text: "$(pass) Verified!",
-                                command: Command.ShowOutput
-                            };
-                        } else if (someError) {
-                            // At least one verified, but some errors
+                        if (documentType === DocumentStatusType.Todo && verified + failed + unknown + pending === 0) {
+                            model = this.cleanReadyModel();
+                        } else if (failed > 0 || unknown > 0) {
                             model = {
                                 bar_text: "$(warning) Verification Errors",
                                 tooltip_menu_type: TooltipMenuType.running,
                                 tooltip_status_text: new vscode.MarkdownString("Some procedures failed verification. Check the output for details.", true),
                                 command: Command.ShowOutput
                             };
-                        } else if (!someError && !someVerified) {
-                            // No error and no verified implies the file does not contain procedures yet.
+                        } else if (pending > 0 || documentType !== DocumentStatusType.Done) {
+                            model = {
+                                bar_text: "$(clock) Verification incomplete",
+                                tooltip_menu_type: TooltipMenuType.running,
+                                tooltip_status_text: new vscode.MarkdownString("Verification has not completed for all procedures.", true),
+                                command: Command.ShowOutput
+                            };
+                        } else if (verified > 0) {
+                            model = {
+                                tooltip_menu_type: TooltipMenuType.running,
+                                tooltip_status_text: new vscode.MarkdownString("All procedures verified successfully.", true),
+                                bar_text: "$(pass) Verified!",
+                                command: Command.ShowOutput
+                            };
+                        } else {
                             model = this.cleanReadyModel();
                         }
                         break;
@@ -252,8 +286,11 @@ export class StatusBarComponent {
                         // No document status means the file is not verified yet or there are no valid file open.
                         model = this.cleanReadyModel();
                         break;
+                    default:
+                        assertNever(documentType);
                 }
                 break;
+            }
             case ServerStatus.Verifying:
                 model.tooltip_menu_type = TooltipMenuType.running;
                 model.bar_text = "$(sync~spin) Verifying...";
@@ -264,12 +301,14 @@ export class StatusBarComponent {
                 model.bar_text = "$(warning) Error";
                 model.command = Command.ShowOutput;
                 break;
+            default:
+                assertNever(server_status);
         }
         return model;
     }
 
     /// Return the clean ready model for the status bar when there are no procedures verified yet.
-    private cleanReadyModel(): StatusBarModel {
+    private static cleanReadyModel(): StatusBarModel {
         return {
             tooltip_menu_type: TooltipMenuType.running,
             tooltip_status_text: new vscode.MarkdownString("Verify some HeyVL files!", true),
@@ -278,8 +317,6 @@ export class StatusBarComponent {
         };
     }
 }
-
-
 
 
 
