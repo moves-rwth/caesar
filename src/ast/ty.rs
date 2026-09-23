@@ -93,7 +93,7 @@ impl fmt::Display for TyKind {
                 write!(f, ")")
             }
             Self::List(element_ty) => write!(f, "[]{element_ty}"),
-            Self::Domain(arg0) => write!(f, "{}", &arg0.borrow().name),
+            Self::Domain(arg0) => write!(f, "{}", arg0.borrow().name),
             Self::String => write!(f, "String"),
             Self::SpecTy => write!(f, "<spec ty>"),
             Self::Unresolved(name) => write!(f, "{name}"),

@@ -46,9 +46,9 @@ impl SourceUnitName {
             Some(decl_name) => {
                 // On Windows, `:` is not allowed in paths. Use `__` instead.
                 let sep = if cfg!(windows) { "__" } else { "::" };
-                format!("{}{}{}.{}", &self.short_path, sep, decl_name, extension)
+                format!("{}{}{}.{}", self.short_path, sep, decl_name, extension)
             }
-            None => format!("{}.{}", &self.short_path, extension),
+            None => format!("{}.{}", self.short_path, extension),
         };
         let buf = PathBuf::from(file_name);
         // remove `..` parts from the path to avoid path traversal
@@ -65,9 +65,9 @@ impl SourceUnitName {
 impl fmt::Display for SourceUnitName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(decl_name) = &self.decl_name {
-            write!(f, "{}::{}", &self.short_path, decl_name)
+            write!(f, "{}::{}", self.short_path, decl_name)
         } else {
-            write!(f, "{}", &self.short_path)
+            write!(f, "{}", self.short_path)
         }
     }
 }

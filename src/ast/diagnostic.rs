@@ -113,7 +113,7 @@ impl StoredFile {
 
 impl fmt::Debug for StoredFile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", &self.path)
+        write!(f, "{}", self.path)
     }
 }
 

@@ -193,7 +193,7 @@ impl BoolVcProveTask {
 
     /// Print the theorem to prove.
     pub fn print_theorem(&self, name: &SourceUnitName) {
-        println!("{}: Theorem to prove:\n{}\n", name, &self.vc);
+        println!("{}: Theorem to prove:\n{}\n", name, self.vc);
     }
 
     /// Get the dependencies of this verification condition.

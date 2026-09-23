@@ -36,7 +36,7 @@ impl<'ctx> Debug for LitDecl<'ctx> {
 impl<'ctx> LitDecl<'ctx> {
     pub fn new(ctx: &'ctx Context, arg_sort: Sort<'ctx>) -> Self {
         // Clashes with user defined code are avoided by `$` in the name
-        let lit_name = format!("$Lit{}", &arg_sort);
+        let lit_name = format!("$Lit{}", arg_sort);
         // We add an uninterpreted function and add a separate defining axiom.
         // Using z3 RecFuncDecl causes the applications to get "optimised" away before solving.
         let func = FuncDecl::new(ctx, lit_name, &[&arg_sort], &arg_sort);

@@ -295,16 +295,16 @@ impl TycheckError {
             TycheckError::CannotCast { span, target, expr } => {
                 tracing::debug!(span = ?span, "cannot cast span");
                 Diagnostic::new(ReportKind::Error, *span)
-                    .with_message(format!("Cannot cast expression to type {}", &target))
+                    .with_message(format!("Cannot cast expression to type {}", target))
                     .with_label(Label::new(expr.span).with_message(format!(
                         "expected {}, found {}",
-                        &target,
-                        &expr.ty.as_ref().unwrap()
+                        target,
+                        expr.ty.as_ref().unwrap()
                     )))
             }
             TycheckError::TypeMismatch { span, lhs, rhs } => {
                 Diagnostic::new(ReportKind::Error, *span)
-                    .with_message(format!("Mismatched types {} and {}", &lhs, &rhs))
+                    .with_message(format!("Mismatched types {} and {}", lhs, rhs))
                     .with_label(Label::new(*span).with_message("here")) // TODO: improve the labels
             }
             TycheckError::ArgumentCountMismatch {
@@ -319,14 +319,14 @@ impl TycheckError {
                 operand_span,
                 ty,
             } => Diagnostic::new(ReportKind::Error, *span)
-                .with_message(format!("Illegal type {} for operand", &ty))
+                .with_message(format!("Illegal type {} for operand", ty))
                 .with_label(Label::new(*operand_span).with_message("here")),
             TycheckError::UnpackMismatch { span, rhs, .. } => {
                 Diagnostic::new(ReportKind::Error, *span)
                     .with_message("Could not unpack expression")
                     .with_label(
                         Label::new(rhs.span)
-                            .with_message(format!("type {}", &rhs.ty.as_ref().unwrap())),
+                            .with_message(format!("type {}", rhs.ty.as_ref().unwrap())),
                     )
             }
             TycheckError::CannotAssign { span, lhs_decl } => {

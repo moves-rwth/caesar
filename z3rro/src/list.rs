@@ -139,17 +139,17 @@ pub struct ListFactory<'ctx> {
 
 impl<'ctx> ListFactory<'ctx> {
     pub fn new(ctx: &'ctx Context, element_sort: &Sort<'ctx>) -> Rc<Self> {
-        let list_ty_name = format!("List[{}]", &element_sort);
+        let list_ty_name = format!("List[{}]", element_sort);
         let datatype = DatatypeBuilder::new(ctx, &*list_ty_name)
             .variant(
-                &format!("{}_list", &list_ty_name),
+                &format!("{}_list", list_ty_name),
                 vec![
                     (
-                        &format!("{}_len", &list_ty_name),
+                        &format!("{}_len", list_ty_name),
                         DatatypeAccessor::Sort(Sort::int(ctx)),
                     ),
                     (
-                        &format!("{}_elements", &list_ty_name),
+                        &format!("{}_elements", list_ty_name),
                         DatatypeAccessor::Sort(Sort::array(ctx, &Sort::int(ctx), element_sort)),
                     ),
                 ],

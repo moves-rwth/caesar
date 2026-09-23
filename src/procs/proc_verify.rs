@@ -29,10 +29,7 @@ pub fn encode_proc_verify(proc: &ProcDecl) -> Option<(Direction, Block)> {
     let direction = proc.direction;
 
     let body_ref = proc.body.borrow();
-    let body = match &*body_ref {
-        Some(body) => body,
-        None => return None,
-    };
+    let body = body_ref.as_ref()?;
 
     let proc_kind = match direction {
         Direction::Down => "proc",

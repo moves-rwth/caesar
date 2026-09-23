@@ -489,7 +489,7 @@ fn write_smtlib(
             write_detailed_command_info(&mut comment_writer)?;
             writeln!(comment_writer, "Source unit: {name}")?;
             if let Some(prove_result) = prove_result {
-                writeln!(comment_writer, "Prove result: {}", &prove_result)?;
+                writeln!(comment_writer, "Prove result: {}", prove_result)?;
             }
             file.write_all(smtlib.as_bytes())?;
             tracing::info!(?file_path, "SMT-LIB query written to file");
