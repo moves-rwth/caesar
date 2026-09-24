@@ -1,4 +1,4 @@
-//! Encoding of omega invariant proof rule for lower/upper-bounds of expectations of a loop
+//! Encode omega-invariant proof rules for loop expectations.
 //!
 //! @omega_invariant takes the arguments:
 //!
@@ -10,7 +10,7 @@ use std::{any::Any, fmt};
 
 use crate::{
     ast::{
-        util::ModifiedVariableCollector, visit::VisitorMut, BinOpKind, DeclKind, DeclRef,
+        util::ModifiedVariableCollector, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef,
         Direction, Expr, ExprBuilder, ExprKind, Files, Ident, QuantOpKind, SourceFilePath, Span,
         Spanned, Stmt, StmtKind, Symbol, TyKind, VarDecl, VarKind,
     },
@@ -136,14 +136,20 @@ impl Encoding for OmegaInvAnnotation {
         inner_stmt: &Stmt,
         mut enc_env: EncodingEnvironment,
     ) -> Result<GeneratedEncoding, AnnotationError> {
-        // Unpack values from struct
-        let annotation_span = enc_env.call_span;
+        let span = enc_env.call_span;
+        let [free_var, omega_inv] = two_args(args);
+        let ExprKind::Var(omega_var) = &free_var.kind else {
+            unreachable!("error should have been caught during resolve")
+        };
+        let omega_var = *omega_var;
+
         // The calculus determines the approximation, including when refuting a bound.
-        let direction =
-            match infer_fixpoint_semantics_kind(self, enc_env.calculus, enc_env.direction, args) {
-                FixpointSemanticsKind::LeastFixedPoint => Direction::Down,
-                FixpointSemanticsKind::GreatestFixedPoint => Direction::Up,
-            };
+        let semantics =
+            infer_fixpoint_semantics_kind(self, enc_env.calculus, enc_env.direction, args);
+        let direction = match semantics {
+            FixpointSemanticsKind::LeastFixedPoint => Direction::Down,
+            FixpointSemanticsKind::GreatestFixedPoint => Direction::Up,
+        };
         enc_env.direction = direction;
 
         let mut visitor = ModifiedVariableCollector::new();
@@ -152,39 +158,7 @@ impl Encoding for OmegaInvAnnotation {
             .into_iter()
             .collect();
 
-        let [free_var, omega_inv] = two_args(args);
-
-        let omega_var = if let ExprKind::Var(var_ref) = &free_var.kind {
-            *var_ref
-        } else {
-            unreachable!("error should have been caught during resolve")
-        };
-
-        let builder = ExprBuilder::new(annotation_span);
-
-        // Construct n+1 expression to substitute n with n+1, in order to construct I_{n+1} later
-        let omega_var_plus_1 = builder.binary(
-            BinOpKind::Add,
-            Some(TyKind::UInt),
-            builder.var(omega_var, tcx),
-            builder.uint(1),
-        );
-
-        // Construct necessary expressions for the conditions
-        // I_{n+1}
-        let next_omega_inv = builder.subst(omega_inv.clone(), [(omega_var, omega_var_plus_1)]);
-        // I_{0}
-        let null_omega_inv = builder.subst(omega_inv.clone(), [(omega_var, builder.uint(0))]);
-
-        // Phi_x(I_n)
-        let iter = encode_iter(
-            &enc_env,
-            inner_stmt,
-            hey_const(&enc_env, omega_inv, direction, tcx),
-        )
-        .unwrap();
-
-        // Start least fixed-point iteration at zero, bounded WLP at one, and unbounded GFP at top.
+        let builder = ExprBuilder::new(span);
         let terminator = match direction {
             Direction::Down => builder.bot_lit(tcx.spec_ty()),
             Direction::Up
@@ -196,36 +170,16 @@ impl Encoding for OmegaInvAnnotation {
             }
             Direction::Up => builder.top_lit(tcx.spec_ty()),
         };
-        let null_iter = encode_iter(
-            &enc_env,
-            inner_stmt,
-            hey_const(&enc_env, &terminator, direction, tcx),
-        )
-        .unwrap();
-
-        // I_0 <= Phi_{post}(0), or Psi_{post}(top) <= I_0 for greatest fixed points.
-        let cond1 = Spanned::new(
-            annotation_span,
-            vec![
-                Spanned::new(annotation_span, StmtKind::Validate(direction)),
-                Spanned::new(annotation_span, StmtKind::Assume(direction, null_omega_inv)),
-                null_iter,
-            ],
-        );
-
-        // For all n, I_{n+1} <= Phi_{post}(I_n), or the dual inequality.
-        let cond2 = Spanned::new(
-            annotation_span,
-            vec![
-                Spanned::new(annotation_span, StmtKind::Havoc(direction, vec![omega_var])),
-                Spanned::new(annotation_span, StmtKind::Validate(direction)),
-                Spanned::new(annotation_span, StmtKind::Assume(direction, next_omega_inv)),
-                iter,
-            ],
-        );
+        let base_case =
+            encode_base_case(tcx, &enc_env, inner_stmt, omega_var, omega_inv, &terminator);
+        let induction_step = encode_induction_step(tcx, &enc_env, inner_stmt, omega_var, omega_inv);
+        let conditions = match direction {
+            Direction::Down => StmtKind::Demonic(base_case, induction_step),
+            Direction::Up => StmtKind::Angelic(base_case, induction_step),
+        };
 
         // Quantify only the invariant so the solver can simplify the proof obligations separately.
-        let bound = builder.quant(
+        let bound = ExprBuilder::new(span).quant(
             match direction {
                 Direction::Down => QuantOpKind::Sup,
                 Direction::Up => QuantOpKind::Inf,
@@ -233,23 +187,15 @@ impl Encoding for OmegaInvAnnotation {
             [omega_var],
             omega_inv.clone(),
         );
-        let buf = vec![
+        let stmts = vec![
             // Evaluate the bound at loop entry before havocing the modified variables.
-            Spanned::new(annotation_span, StmtKind::Assert(direction, bound)),
-            Spanned::new(annotation_span, StmtKind::Havoc(direction, havoc_vars)),
-            // conditions
-            Spanned::new(
-                annotation_span,
-                if direction == Direction::Down {
-                    StmtKind::Demonic(cond1, cond2)
-                } else {
-                    StmtKind::Angelic(cond1, cond2)
-                },
-            ),
+            Spanned::new(span, StmtKind::Assert(direction, bound)),
+            Spanned::new(span, StmtKind::Havoc(direction, havoc_vars)),
+            Spanned::new(span, conditions),
         ];
 
         Ok(GeneratedEncoding {
-            block: Spanned::new(annotation_span, buf),
+            block: Spanned::new(span, stmts),
             decls: None,
         })
     }
@@ -261,4 +207,71 @@ impl Encoding for OmegaInvAnnotation {
     fn as_any(&self) -> &dyn Any {
         self
     }
+}
+
+/// Check I_0 <= Phi_f(0), or Psi_f(top) <= I_0 for greatest fixed points.
+fn encode_base_case(
+    tcx: &TyCtx,
+    enc_env: &EncodingEnvironment,
+    loop_stmt: &Stmt,
+    index: Ident,
+    invariant: &Expr,
+    terminator: &Expr,
+) -> Block {
+    let span = enc_env.call_span;
+    let direction = enc_env.direction;
+    let builder = ExprBuilder::new(span);
+    let initial_invariant = builder.subst(invariant.clone(), [(index, builder.uint(0))]);
+
+    let iteration = encode_iter(
+        enc_env,
+        loop_stmt,
+        hey_const(enc_env, terminator, direction, tcx),
+    )
+    .unwrap();
+
+    Spanned::new(
+        span,
+        vec![
+            Spanned::new(span, StmtKind::Validate(direction)),
+            Spanned::new(span, StmtKind::Assume(direction, initial_invariant)),
+            iteration,
+        ],
+    )
+}
+
+/// Check I_{n+1} <= Phi_f(I_n) for every n, or the dual inequality.
+fn encode_induction_step(
+    tcx: &TyCtx,
+    enc_env: &EncodingEnvironment,
+    loop_stmt: &Stmt,
+    index: Ident,
+    invariant: &Expr,
+) -> Block {
+    let span = enc_env.call_span;
+    let direction = enc_env.direction;
+    let builder = ExprBuilder::new(span);
+    let next_index = builder.binary(
+        BinOpKind::Add,
+        Some(TyKind::UInt),
+        builder.var(index, tcx),
+        builder.uint(1),
+    );
+    let next_invariant = builder.subst(invariant.clone(), [(index, next_index)]);
+    let iteration = encode_iter(
+        enc_env,
+        loop_stmt,
+        hey_const(enc_env, invariant, direction, tcx),
+    )
+    .unwrap();
+
+    Spanned::new(
+        span,
+        vec![
+            Spanned::new(span, StmtKind::Havoc(direction, vec![index])),
+            Spanned::new(span, StmtKind::Validate(direction)),
+            Spanned::new(span, StmtKind::Assume(direction, next_invariant)),
+            iteration,
+        ],
+    )
 }
