@@ -10,9 +10,9 @@ use std::{any::Any, fmt};
 
 use crate::{
     ast::{
-        visit::VisitorMut, BinOpKind, DeclKind, DeclRef, Direction, Expr, ExprBuilder, ExprKind,
-        Files, Ident, SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol, TyKind, VarDecl,
-        VarKind,
+        util::ModifiedVariableCollector, visit::VisitorMut, BinOpKind, DeclKind, DeclRef,
+        Direction, Expr, ExprBuilder, ExprKind, Files, Ident, QuantOpKind, SourceFilePath, Span,
+        Spanned, Stmt, StmtKind, Symbol, TyKind, VarDecl, VarKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -70,24 +70,26 @@ impl Encoding for OmegaInvAnnotation {
         call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), ResolveError> {
-        let mut args_iter = args.iter_mut();
-        if let Some(free_var) = args_iter.next() {
-            if let ExprKind::Var(var_ref) = &free_var.kind {
-                let var_decl = VarDecl {
-                    name: *var_ref,
-                    ty: TyKind::UInt,
-                    kind: VarKind::Mut,
-                    init: None,
-                    span: call_span,
-                    created_from: None,
-                };
-                // Declare the free variable to be used in the omega invariant
-                resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;
-            } else {
-                return Err(ResolveError::NotIdent(free_var.span));
+        // Scope the index to the invariant expression.
+        resolve.with_subscope(|resolve| {
+            let mut args_iter = args.iter_mut();
+            if let Some(free_var) = args_iter.next() {
+                if let ExprKind::Var(var_ref) = &free_var.kind {
+                    let var_decl = VarDecl {
+                        name: *var_ref,
+                        ty: TyKind::UInt,
+                        kind: VarKind::Mut,
+                        init: None,
+                        span: call_span,
+                        created_from: None,
+                    };
+                    resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;
+                } else {
+                    return Err(ResolveError::NotIdent(free_var.span));
+                }
             }
-        }
-        resolve.visit_exprs(args_iter.into_slice())
+            resolve.visit_exprs(args_iter.into_slice())
+        })
     }
 
     fn tycheck(
@@ -135,6 +137,12 @@ impl Encoding for OmegaInvAnnotation {
         let annotation_span = enc_env.call_span;
         let direction = enc_env.direction;
 
+        let mut visitor = ModifiedVariableCollector::new();
+        visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
+        let havoc_vars = (&visitor.modified_variables - &visitor.declared_variables)
+            .into_iter()
+            .collect();
+
         let [free_var, omega_inv] = two_args(args);
 
         let omega_var = if let ExprKind::Var(var_ref) = &free_var.kind {
@@ -167,20 +175,15 @@ impl Encoding for OmegaInvAnnotation {
         )
         .unwrap();
 
-        // Phi_x(0)
+        let initial_expectation = builder.cast(tcx.spec_ty().clone(), builder.uint(0));
         let null_iter = encode_iter(
             &enc_env,
             inner_stmt,
-            hey_const(
-                &enc_env,
-                &builder.cast(tcx.spec_ty().clone(), builder.uint(0)),
-                direction,
-                tcx,
-            ),
+            hey_const(&enc_env, &initial_expectation, direction, tcx),
         )
         .unwrap();
 
-        // I_0 <= Phi_{post}(0)
+        // I_0 <= Phi_{post}(0), or the dual inequality.
         let cond1 = Spanned::new(
             annotation_span,
             vec![
@@ -190,7 +193,7 @@ impl Encoding for OmegaInvAnnotation {
             ],
         );
 
-        // for all n. I_{n+1} <= Phi_{post}(I_n)
+        // For all n, I_{n+1} <= Phi_{post}(I_n), or the dual inequality.
         let cond2 = Spanned::new(
             annotation_span,
             vec![
@@ -201,22 +204,19 @@ impl Encoding for OmegaInvAnnotation {
             ],
         );
 
-        // conditions are checked with demonic if,
-        // we take sup or inf of the omega_inv before the demonic if
-        // to propagate the lower(upper) bound backwards for compositionality
-        // (if the conditions hold)
-
+        // Quantify only the invariant so the solver can simplify the proof obligations separately.
+        let bound = builder.quant(
+            match direction {
+                Direction::Down => QuantOpKind::Sup,
+                Direction::Up => QuantOpKind::Inf,
+            },
+            [omega_var],
+            omega_inv.clone(),
+        );
         let buf = vec![
-            // (co)havoc n
-            Spanned::new(
-                annotation_span,
-                StmtKind::Havoc(direction.toggle(), vec![omega_var]),
-            ),
-            // (co)assert omega_inv
-            Spanned::new(
-                annotation_span,
-                StmtKind::Assert(direction, omega_inv.clone()),
-            ),
+            // Evaluate the bound at loop entry before havocing the modified variables.
+            Spanned::new(annotation_span, StmtKind::Assert(direction, bound)),
+            Spanned::new(annotation_span, StmtKind::Havoc(direction, havoc_vars)),
             // conditions
             Spanned::new(
                 annotation_span,

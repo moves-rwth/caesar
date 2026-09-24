@@ -130,8 +130,8 @@ fn test_omega_transform() {
             proc main() -> () {
                 var x: UInt
                 {
-                    cohavoc n
-                    assert [(n > x)]
+                    assert sup n. [(n > x)]
+                    havoc x
                     if ⊓ {
                         validate
                         assume ([(n > x)])[n -> 0]
@@ -171,6 +171,91 @@ fn test_omega_transform() {
     remove_whitespace(&mut test_string);
     remove_whitespace(&mut res);
     assert_eq!(test_string, res);
+}
+
+#[test]
+fn test_omega_index_is_scoped_to_annotation() {
+    for loop_and_continuation in [
+        "while true { n = n + 1 }",
+        "while n > 0 {}",
+        "while false {} assert [n == 0]",
+    ] {
+        let source =
+            format!("proc main() -> () {{ @omega_invariant(n, [n > 0]) {loop_and_continuation} }}");
+        let err = verify_test(&source).0.unwrap_err();
+        assert!(err.to_string().contains("Name `n` is not declared"));
+    }
+}
+
+#[test]
+fn test_omega_index_can_be_reused() {
+    let source = r#"
+        @wp
+        proc main() -> ()
+            pre 1
+            post 1
+        {
+            @omega_invariant(n, [n >= 0])
+            while false {}
+            @omega_invariant(n, [n >= 0])
+            while false {}
+        }
+    "#;
+    assert!(verify_test(source).0.unwrap());
+}
+
+#[test]
+fn test_omega_preserves_assumptions_about_unmodified_parameters() {
+    let source = r#"
+        @wp
+        proc main(a: UInt) -> ()
+            pre [a == 0]
+            post 1
+        {
+            var x: UInt = 1
+            @omega_invariant(n, [a == 0 && x <= n] + [a != 0])
+            while x > 0 {
+                x = x - 1
+            }
+        }
+    "#;
+    assert!(verify_test(source).0.unwrap());
+}
+
+fn assert_omega_counterexample(source: &str) -> String {
+    let (result, mut server) = verify_test(source);
+    assert!(!result.unwrap());
+    let diagnostics = std::mem::take(&mut server.diagnostics);
+    let files = server.files.lock().unwrap();
+    let diagnostics = diagnostics
+        .into_iter()
+        .map(|diagnostic| diagnostic.into_string(&files))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(diagnostics.contains("Counter-example to"), "{diagnostics}");
+    assert!(
+        diagnostics.contains("pre-quantity evaluated to"),
+        "{diagnostics}"
+    );
+    diagnostics
+}
+
+#[test]
+fn test_omega_collects_variables_modified_by_cohavoc() {
+    assert_omega_counterexample(
+        r#"
+            proc main() -> ()
+                pre 1
+                post 1
+            {
+                var x: UInt = 0
+                @omega_invariant(n, [x > 0 || n > 0])
+                while true {
+                    cohavoc x
+                }
+            }
+        "#,
+    );
 }
 
 #[test]
