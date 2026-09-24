@@ -1,0 +1,16 @@
+// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+
+// The loop executes once and costs one tick, so two is not a lower bound.
+// The base condition holds at x = 0 but fails at the exit state x = 1.
+@ert
+proc omega_ert_base_state() -> ()
+    pre 2
+    post 0
+{
+    var x: UInt = 0
+    @omega_invariant(n, 2 * [n > 0 || x > 0])
+    while x == 0 {
+        tick 1
+        x = 1
+    }
+}

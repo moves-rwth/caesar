@@ -1,0 +1,15 @@
+// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+
+// The base case Psi_f(1) <= I_0 holds at x = 0 but fails at x = 1.
+// Checking only the entry state would incorrectly prove wlp <= 0.
+@wlp
+coproc omega_wlp_base_state() -> ()
+    pre 0
+    post 0
+{
+    var x: UInt = 0
+    @omega_invariant(n, [x == 0 && n == 0])
+    while true {
+        x = 1
+    }
+}

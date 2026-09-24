@@ -1,0 +1,15 @@
+// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+
+// The loop never terminates, so its wp is zero.
+// The base condition holds at x = 0 but fails at the successor state x = 1.
+@wp
+proc omega_wp_base_state() -> ()
+    pre 1
+    post 1
+{
+    var x: UInt = 0
+    @omega_invariant(n, [x > 0 || n > 0])
+    while true {
+        x = 1
+    }
+}

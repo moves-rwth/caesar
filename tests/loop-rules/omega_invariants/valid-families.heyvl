@@ -1,0 +1,51 @@
+// RUN: @caesar @file
+
+// The countdown terminates, so wp[loop](1) = 1.
+@wp
+proc omega_wp_countdown(init_x: UInt) -> (x: UInt)
+    pre 1
+    post 1
+{
+    x = init_x
+    @omega_invariant(n, [x <= n])
+    while x > 0 {
+        x = x - 1
+    }
+}
+
+// The countdown terminates, so wlp[loop](0) = 0.
+@wlp
+coproc omega_wlp_countdown(init_x: UInt) -> (x: UInt)
+    pre 0
+    post 0
+{
+    x = init_x
+    @omega_invariant(n, [x > n])
+    while x > 0 {
+        x = x - 1
+    }
+}
+
+// I_n = 1 gives the exact WLP of this nonterminating loop.
+@wlp
+coproc omega_wlp_nonterminating() -> ()
+    pre 1
+    post 0
+{
+    @omega_invariant(n, 1)
+    while true {}
+}
+
+// Each countdown iteration costs one tick.
+@ert
+proc omega_ert_countdown(init_x: UInt) -> (x: UInt)
+    pre init_x
+    post 0
+{
+    x = init_x
+    @omega_invariant(n, [x <= n] * x)
+    while x > 0 {
+        tick 1
+        x = x - 1
+    }
+}

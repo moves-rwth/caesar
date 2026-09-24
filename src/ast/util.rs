@@ -86,7 +86,7 @@ impl VisitorMut for ModifiedVariableCollector {
     type Err = ();
     fn visit_stmt(&mut self, s: &mut super::Stmt) -> Result<(), Self::Err> {
         match &s.node {
-            StmtKind::Assign(vars, _) => {
+            StmtKind::Assign(vars, _) | StmtKind::Havoc(_, vars) => {
                 self.modified_variables.extend(vars);
             }
             StmtKind::Var(var) => {

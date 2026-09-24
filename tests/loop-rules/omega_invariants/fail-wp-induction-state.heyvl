@@ -1,0 +1,15 @@
+// RUN: bash -c '@caesar @file 2>&1 | grep -q "Counter-example to verification found"'
+
+// I_0 = 0 satisfies the base case in every state.
+// The induction condition holds at x = 0 but fails at x = 1 and n = 0.
+@wp
+proc omega_wp_induction_state() -> ()
+    pre 1
+    post 1
+{
+    var x: UInt = 0
+    @omega_invariant(n, [n > 1 || (x > 0 && n > 0)])
+    while true {
+        x = 1
+    }
+}

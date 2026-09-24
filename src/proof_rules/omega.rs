@@ -1,4 +1,4 @@
-//! Encoding of omega invariant proof rule for lower/upper-bounds of expectations of a loop
+//! Encode omega-invariant proof rules for loop expectations.
 //!
 //! @omega_invariant takes the arguments:
 //!
@@ -10,20 +10,21 @@ use std::{any::Any, fmt};
 
 use crate::{
     ast::{
-        visit::VisitorMut, BinOpKind, DeclKind, DeclRef, Direction, Expr, ExprBuilder, ExprKind,
-        Files, Ident, SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol, TyKind, VarDecl,
-        VarKind,
+        util::ModifiedVariableCollector, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef,
+        Direction, Expr, ExprBuilder, ExprKind, Files, Ident, QuantOpKind, SourceFilePath, Span,
+        Spanned, Stmt, StmtKind, Symbol, TyKind, VarDecl, VarKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
     intrinsic::annotations::{tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus},
-    proof_rules::{calculus::ApproximationKind, FixpointSemanticsKind},
+    proof_rules::calculus::{ApproximationKind, FixpointKind},
     tyctx::TyCtx,
 };
 
 use super::{
+    infer_fixpoint_kind,
     util::{encode_iter, hey_const, intrinsic_param, two_args},
     Encoding, EncodingEnvironment, GeneratedEncoding,
 };
@@ -70,24 +71,26 @@ impl Encoding for OmegaInvAnnotation {
         call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), ResolveError> {
-        let mut args_iter = args.iter_mut();
-        if let Some(free_var) = args_iter.next() {
-            if let ExprKind::Var(var_ref) = &free_var.kind {
-                let var_decl = VarDecl {
-                    name: *var_ref,
-                    ty: TyKind::UInt,
-                    kind: VarKind::Mut,
-                    init: None,
-                    span: call_span,
-                    created_from: None,
-                };
-                // Declare the free variable to be used in the omega invariant
-                resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;
-            } else {
-                return Err(ResolveError::NotIdent(free_var.span));
+        // Scope the index to the invariant expression.
+        resolve.with_subscope(|resolve| {
+            let mut args_iter = args.iter_mut();
+            if let Some(free_var) = args_iter.next() {
+                if let ExprKind::Var(var_ref) = &free_var.kind {
+                    let var_decl = VarDecl {
+                        name: *var_ref,
+                        ty: TyKind::UInt,
+                        kind: VarKind::Mut,
+                        init: None,
+                        span: call_span,
+                        created_from: None,
+                    };
+                    resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;
+                } else {
+                    return Err(ResolveError::NotIdent(free_var.span));
+                }
             }
-        }
-        resolve.visit_exprs(args_iter.into_slice())
+            resolve.visit_exprs(args_iter.into_slice())
+        })
     }
 
     fn tycheck(
@@ -102,25 +105,21 @@ impl Encoding for OmegaInvAnnotation {
 
     fn get_approximation(
         &self,
-        fixpoint_semantics: FixpointSemanticsKind,
+        fixpoint_kind: FixpointKind,
         inner_approximation_kind: ApproximationKind,
         _calculus: Option<Calculus>,
     ) -> ApproximationKind {
-        let approx = match fixpoint_semantics {
-            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::UNDER,
-            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::OVER,
+        let approx = match fixpoint_kind {
+            FixpointKind::Least => ApproximationKind::UNDER,
+            FixpointKind::Greatest { .. } => ApproximationKind::OVER,
         };
         approx & inner_approximation_kind
     }
 
-    fn default_fixpoint_semantics(
-        &self,
-        direction: Direction,
-        _args: &[Expr],
-    ) -> FixpointSemanticsKind {
+    fn default_fixpoint_kind(&self, direction: Direction, _args: &[Expr]) -> FixpointKind {
         match direction {
-            Direction::Up => FixpointSemanticsKind::GreatestFixedPoint,
-            Direction::Down => FixpointSemanticsKind::LeastFixedPoint,
+            Direction::Up => FixpointKind::Greatest { one_bounded: false },
+            Direction::Down => FixpointKind::Least,
         }
     }
 
@@ -129,107 +128,56 @@ impl Encoding for OmegaInvAnnotation {
         tcx: &TyCtx,
         args: &[Expr],
         inner_stmt: &Stmt,
-        enc_env: EncodingEnvironment,
+        mut enc_env: EncodingEnvironment,
     ) -> Result<GeneratedEncoding, AnnotationError> {
-        // Unpack values from struct
-        let annotation_span = enc_env.call_span;
-        let direction = enc_env.direction;
-
+        let span = enc_env.call_span;
         let [free_var, omega_inv] = two_args(args);
-
-        let omega_var = if let ExprKind::Var(var_ref) = &free_var.kind {
-            *var_ref
-        } else {
+        let ExprKind::Var(omega_var) = &free_var.kind else {
             unreachable!("error should have been caught during resolve")
         };
+        let omega_var = *omega_var;
 
-        let builder = ExprBuilder::new(annotation_span);
+        // The calculus determines the approximation, including when refuting a bound.
+        let semantics = infer_fixpoint_kind(self, enc_env.calculus, enc_env.direction, args);
+        let direction = match semantics {
+            FixpointKind::Least => Direction::Down,
+            FixpointKind::Greatest { .. } => Direction::Up,
+        };
+        enc_env.direction = direction;
 
-        // Construct n+1 expression to substitute n with n+1, in order to construct I_{n+1} later
-        let omega_var_plus_1 = builder.binary(
-            BinOpKind::Add,
-            Some(TyKind::UInt),
-            builder.var(omega_var, tcx),
-            builder.uint(1),
+        let mut visitor = ModifiedVariableCollector::new();
+        visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
+        let havoc_vars = (&visitor.modified_variables - &visitor.declared_variables)
+            .into_iter()
+            .collect();
+
+        let terminator = semantics.terminator(ExprBuilder::new(span));
+        let base_case =
+            encode_base_case(tcx, &enc_env, inner_stmt, omega_var, omega_inv, &terminator);
+        let induction_step = encode_induction_step(tcx, &enc_env, inner_stmt, omega_var, omega_inv);
+        let conditions = match direction {
+            Direction::Down => StmtKind::Demonic(base_case, induction_step),
+            Direction::Up => StmtKind::Angelic(base_case, induction_step),
+        };
+
+        // Quantify only the invariant so the solver can simplify the proof obligations separately.
+        let bound = ExprBuilder::new(span).quant(
+            match direction {
+                Direction::Down => QuantOpKind::Sup,
+                Direction::Up => QuantOpKind::Inf,
+            },
+            [omega_var],
+            omega_inv.clone(),
         );
-
-        // Construct necessary expressions for the conditions
-        // I_{n+1}
-        let next_omega_inv = builder.subst(omega_inv.clone(), [(omega_var, omega_var_plus_1)]);
-        // I_{0}
-        let null_omega_inv = builder.subst(omega_inv.clone(), [(omega_var, builder.uint(0))]);
-
-        // Phi_x(I_n)
-        let iter = encode_iter(
-            &enc_env,
-            inner_stmt,
-            hey_const(&enc_env, omega_inv, direction, tcx),
-        )
-        .unwrap();
-
-        // Phi_x(0)
-        let null_iter = encode_iter(
-            &enc_env,
-            inner_stmt,
-            hey_const(
-                &enc_env,
-                &builder.cast(tcx.spec_ty().clone(), builder.uint(0)),
-                direction,
-                tcx,
-            ),
-        )
-        .unwrap();
-
-        // I_0 <= Phi_{post}(0)
-        let cond1 = Spanned::new(
-            annotation_span,
-            vec![
-                Spanned::new(annotation_span, StmtKind::Validate(direction)),
-                Spanned::new(annotation_span, StmtKind::Assume(direction, null_omega_inv)),
-                null_iter,
-            ],
-        );
-
-        // for all n. I_{n+1} <= Phi_{post}(I_n)
-        let cond2 = Spanned::new(
-            annotation_span,
-            vec![
-                Spanned::new(annotation_span, StmtKind::Havoc(direction, vec![omega_var])),
-                Spanned::new(annotation_span, StmtKind::Validate(direction)),
-                Spanned::new(annotation_span, StmtKind::Assume(direction, next_omega_inv)),
-                iter,
-            ],
-        );
-
-        // conditions are checked with demonic if,
-        // we take sup or inf of the omega_inv before the demonic if
-        // to propagate the lower(upper) bound backwards for compositionality
-        // (if the conditions hold)
-
-        let buf = vec![
-            // (co)havoc n
-            Spanned::new(
-                annotation_span,
-                StmtKind::Havoc(direction.toggle(), vec![omega_var]),
-            ),
-            // (co)assert omega_inv
-            Spanned::new(
-                annotation_span,
-                StmtKind::Assert(direction, omega_inv.clone()),
-            ),
-            // conditions
-            Spanned::new(
-                annotation_span,
-                if direction == Direction::Down {
-                    StmtKind::Demonic(cond1, cond2)
-                } else {
-                    StmtKind::Angelic(cond1, cond2)
-                },
-            ),
+        let stmts = vec![
+            // Evaluate the bound at loop entry before havocing the modified variables.
+            Spanned::new(span, StmtKind::Assert(direction, bound)),
+            Spanned::new(span, StmtKind::Havoc(direction, havoc_vars)),
+            Spanned::new(span, conditions),
         ];
 
         Ok(GeneratedEncoding {
-            block: Spanned::new(annotation_span, buf),
+            block: Spanned::new(span, stmts),
             decls: None,
         })
     }
@@ -241,4 +189,71 @@ impl Encoding for OmegaInvAnnotation {
     fn as_any(&self) -> &dyn Any {
         self
     }
+}
+
+/// Check I_0 <= Phi_f(0), or Psi_f(top) <= I_0 for greatest fixed points.
+fn encode_base_case(
+    tcx: &TyCtx,
+    enc_env: &EncodingEnvironment,
+    loop_stmt: &Stmt,
+    index: Ident,
+    invariant: &Expr,
+    terminator: &Expr,
+) -> Block {
+    let span = enc_env.call_span;
+    let direction = enc_env.direction;
+    let builder = ExprBuilder::new(span);
+    let initial_invariant = builder.subst(invariant.clone(), [(index, builder.uint(0))]);
+
+    let iteration = encode_iter(
+        enc_env,
+        loop_stmt,
+        hey_const(enc_env, terminator, direction, tcx),
+    )
+    .unwrap();
+
+    Spanned::new(
+        span,
+        vec![
+            Spanned::new(span, StmtKind::Validate(direction)),
+            Spanned::new(span, StmtKind::Assume(direction, initial_invariant)),
+            iteration,
+        ],
+    )
+}
+
+/// Check I_{n+1} <= Phi_f(I_n) for every n, or the dual inequality.
+fn encode_induction_step(
+    tcx: &TyCtx,
+    enc_env: &EncodingEnvironment,
+    loop_stmt: &Stmt,
+    index: Ident,
+    invariant: &Expr,
+) -> Block {
+    let span = enc_env.call_span;
+    let direction = enc_env.direction;
+    let builder = ExprBuilder::new(span);
+    let next_index = builder.binary(
+        BinOpKind::Add,
+        Some(TyKind::UInt),
+        builder.var(index, tcx),
+        builder.uint(1),
+    );
+    let next_invariant = builder.subst(invariant.clone(), [(index, next_index)]);
+    let iteration = encode_iter(
+        enc_env,
+        loop_stmt,
+        hey_const(enc_env, invariant, direction, tcx),
+    )
+    .unwrap();
+
+    Spanned::new(
+        span,
+        vec![
+            Spanned::new(span, StmtKind::Havoc(direction, vec![index])),
+            Spanned::new(span, StmtKind::Validate(direction)),
+            Spanned::new(span, StmtKind::Assume(direction, next_invariant)),
+            iteration,
+        ],
+    )
 }

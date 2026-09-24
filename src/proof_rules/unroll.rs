@@ -11,7 +11,8 @@ use crate::{
     ast::{
         util::{is_bot_lit, is_top_lit},
         visit::VisitorMut,
-        Direction, Expr, Files, Ident, SourceFilePath, Span, Spanned, Stmt, Symbol, TyKind,
+        Direction, Expr, ExprBuilder, Files, Ident, SourceFilePath, Span, Spanned, Stmt, Symbol,
+        TyKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -19,11 +20,12 @@ use crate::{
     },
     intrinsic::annotations::{tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus},
     opt::constfold::is_one_lit,
-    proof_rules::{calculus::ApproximationKind, FixpointSemanticsKind},
+    proof_rules::calculus::{ApproximationKind, FixpointKind},
     tyctx::TyCtx,
 };
 
 use super::{
+    infer_fixpoint_kind,
     util::{encode_unroll, hey_const, intrinsic_param, lit_u128, two_args},
     Encoding, EncodingEnvironment, GeneratedEncoding,
 };
@@ -84,36 +86,35 @@ impl Encoding for UnrollAnnotation {
 
     fn get_approximation(
         &self,
-        fixpoint_semantics: FixpointSemanticsKind,
+        fixpoint_kind: FixpointKind,
         inner_approximation_kind: ApproximationKind,
         _calculus: Option<Calculus>,
     ) -> ApproximationKind {
-        let approx = match fixpoint_semantics {
-            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::UNDER,
-            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::OVER,
+        let approx = match fixpoint_kind {
+            FixpointKind::Least => ApproximationKind::UNDER,
+            FixpointKind::Greatest { .. } => ApproximationKind::OVER,
         };
         approx & inner_approximation_kind
     }
 
-    fn default_fixpoint_semantics(
-        &self,
-        direction: Direction,
-        args: &[Expr],
-    ) -> FixpointSemanticsKind {
+    fn default_fixpoint_kind(&self, direction: Direction, args: &[Expr]) -> FixpointKind {
         if let [_, terminator] = args {
             if is_bot_lit(terminator) {
-                return FixpointSemanticsKind::LeastFixedPoint;
+                return FixpointKind::Least;
             }
-            if is_top_lit(terminator) || is_one_lit(terminator) {
-                return FixpointSemanticsKind::GreatestFixedPoint;
+            if is_one_lit(terminator) {
+                return FixpointKind::Greatest { one_bounded: true };
+            }
+            if is_top_lit(terminator) {
+                return FixpointKind::Greatest { one_bounded: false };
             }
         } else {
             unreachable!();
         }
 
         match direction {
-            Direction::Up => FixpointSemanticsKind::GreatestFixedPoint,
-            Direction::Down => FixpointSemanticsKind::LeastFixedPoint,
+            Direction::Up => FixpointKind::Greatest { one_bounded: false },
+            Direction::Down => FixpointKind::Least,
         }
     }
 
@@ -128,19 +129,9 @@ impl Encoding for UnrollAnnotation {
 
         let k: u128 = lit_u128(k);
 
-        // TODO: these should be warning diagnostics emitted to the user
-        match enc_env.direction {
-            Direction::Down => {
-                if !is_top_lit(terminator) {
-                    tracing::warn!("Unrolling terminator is not top element (down direction)");
-                }
-            }
-            Direction::Up => {
-                if !is_bot_lit(terminator) {
-                    tracing::warn!("Unrolling terminator is not bottom element (up direction)");
-                }
-            }
-        }
+        let semantics = infer_fixpoint_kind(self, enc_env.calculus, enc_env.direction, args);
+        let expected_terminator = semantics.terminator(ExprBuilder::new(enc_env.call_span));
+        warn_if_terminator_differs(terminator, &expected_terminator);
 
         // Extend the loop k times without asserts (unlike k-induction) because bmc flag is set
         let buf = encode_unroll(
@@ -162,5 +153,15 @@ impl Encoding for UnrollAnnotation {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+fn warn_if_terminator_differs(terminator: &Expr, expected_terminator: &Expr) {
+    let matches = (is_bot_lit(expected_terminator) && is_bot_lit(terminator))
+        || (is_one_lit(expected_terminator) && is_one_lit(terminator))
+        || (is_top_lit(expected_terminator) && is_top_lit(terminator));
+    if !matches {
+        // TODO: emit a diagnostic instead of a tracing warning.
+        tracing::warn!(%terminator, %expected_terminator, "Unrolling terminator does not match the fixed-point semantics");
     }
 }

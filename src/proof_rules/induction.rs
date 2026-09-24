@@ -19,7 +19,7 @@ use crate::{
         tycheck::{Tycheck, TycheckError},
     },
     intrinsic::annotations::{tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus},
-    proof_rules::{calculus::ApproximationKind, FixpointSemanticsKind},
+    proof_rules::calculus::{ApproximationKind, FixpointKind},
     slicing::{wrap_with_error_message, wrap_with_success_message},
     tyctx::TyCtx,
 };
@@ -86,25 +86,21 @@ impl Encoding for InvariantAnnotation {
 
     fn get_approximation(
         &self,
-        fixpoint_semantics: FixpointSemanticsKind,
+        fixpoint_kind: FixpointKind,
         inner_approximation_kind: ApproximationKind,
         _calculus: Option<Calculus>,
     ) -> ApproximationKind {
-        let approx = match fixpoint_semantics {
-            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::OVER,
-            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::UNDER,
+        let approx = match fixpoint_kind {
+            FixpointKind::Least => ApproximationKind::OVER,
+            FixpointKind::Greatest { .. } => ApproximationKind::UNDER,
         };
         approx & inner_approximation_kind
     }
 
-    fn default_fixpoint_semantics(
-        &self,
-        direction: Direction,
-        _args: &[Expr],
-    ) -> FixpointSemanticsKind {
+    fn default_fixpoint_kind(&self, direction: Direction, _args: &[Expr]) -> FixpointKind {
         match direction {
-            Direction::Up => FixpointSemanticsKind::LeastFixedPoint,
-            Direction::Down => FixpointSemanticsKind::GreatestFixedPoint,
+            Direction::Up => FixpointKind::Least,
+            Direction::Down => FixpointKind::Greatest { one_bounded: false },
         }
     }
 
@@ -186,25 +182,21 @@ impl Encoding for KIndAnnotation {
 
     fn get_approximation(
         &self,
-        fixpoint_semantics: FixpointSemanticsKind,
+        fixpoint_kind: FixpointKind,
         inner_approximation_kind: ApproximationKind,
         _calculus: Option<Calculus>,
     ) -> ApproximationKind {
-        let approx = match fixpoint_semantics {
-            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::OVER,
-            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::UNDER,
+        let approx = match fixpoint_kind {
+            FixpointKind::Least => ApproximationKind::OVER,
+            FixpointKind::Greatest { .. } => ApproximationKind::UNDER,
         };
         approx & inner_approximation_kind
     }
 
-    fn default_fixpoint_semantics(
-        &self,
-        direction: Direction,
-        _args: &[Expr],
-    ) -> FixpointSemanticsKind {
+    fn default_fixpoint_kind(&self, direction: Direction, _args: &[Expr]) -> FixpointKind {
         match direction {
-            Direction::Up => FixpointSemanticsKind::LeastFixedPoint,
-            Direction::Down => FixpointSemanticsKind::GreatestFixedPoint,
+            Direction::Up => FixpointKind::Least,
+            Direction::Down => FixpointKind::Greatest { one_bounded: false },
         }
     }
 
