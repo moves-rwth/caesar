@@ -18,15 +18,13 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{
-        tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
-    },
-    proof_rules::{calculus::ApproximationKind, FixpointSemanticsKind},
+    intrinsic::annotations::{tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus},
+    proof_rules::calculus::{ApproximationKind, FixpointKind},
     tyctx::TyCtx,
 };
 
 use super::{
-    infer_fixpoint_semantics_kind,
+    infer_fixpoint_kind,
     util::{encode_iter, hey_const, intrinsic_param, two_args},
     Encoding, EncodingEnvironment, GeneratedEncoding,
 };
@@ -107,25 +105,21 @@ impl Encoding for OmegaInvAnnotation {
 
     fn get_approximation(
         &self,
-        fixpoint_semantics: FixpointSemanticsKind,
+        fixpoint_kind: FixpointKind,
         inner_approximation_kind: ApproximationKind,
         _calculus: Option<Calculus>,
     ) -> ApproximationKind {
-        let approx = match fixpoint_semantics {
-            FixpointSemanticsKind::LeastFixedPoint => ApproximationKind::UNDER,
-            FixpointSemanticsKind::GreatestFixedPoint => ApproximationKind::OVER,
+        let approx = match fixpoint_kind {
+            FixpointKind::Least => ApproximationKind::UNDER,
+            FixpointKind::Greatest { .. } => ApproximationKind::OVER,
         };
         approx & inner_approximation_kind
     }
 
-    fn default_fixpoint_semantics(
-        &self,
-        direction: Direction,
-        _args: &[Expr],
-    ) -> FixpointSemanticsKind {
+    fn default_fixpoint_kind(&self, direction: Direction, _args: &[Expr]) -> FixpointKind {
         match direction {
-            Direction::Up => FixpointSemanticsKind::GreatestFixedPoint,
-            Direction::Down => FixpointSemanticsKind::LeastFixedPoint,
+            Direction::Up => FixpointKind::Greatest { one_bounded: false },
+            Direction::Down => FixpointKind::Least,
         }
     }
 
@@ -144,11 +138,10 @@ impl Encoding for OmegaInvAnnotation {
         let omega_var = *omega_var;
 
         // The calculus determines the approximation, including when refuting a bound.
-        let semantics =
-            infer_fixpoint_semantics_kind(self, enc_env.calculus, enc_env.direction, args);
+        let semantics = infer_fixpoint_kind(self, enc_env.calculus, enc_env.direction, args);
         let direction = match semantics {
-            FixpointSemanticsKind::LeastFixedPoint => Direction::Down,
-            FixpointSemanticsKind::GreatestFixedPoint => Direction::Up,
+            FixpointKind::Least => Direction::Down,
+            FixpointKind::Greatest { .. } => Direction::Up,
         };
         enc_env.direction = direction;
 
@@ -158,18 +151,7 @@ impl Encoding for OmegaInvAnnotation {
             .into_iter()
             .collect();
 
-        let builder = ExprBuilder::new(span);
-        let terminator = match direction {
-            Direction::Down => builder.bot_lit(tcx.spec_ty()),
-            Direction::Up
-                if enc_env
-                    .calculus
-                    .is_some_and(|calculus| calculus.calculus_type == CalculusType::Wlp) =>
-            {
-                builder.one_lit(tcx.spec_ty())
-            }
-            Direction::Up => builder.top_lit(tcx.spec_ty()),
-        };
+        let terminator = semantics.terminator(ExprBuilder::new(span));
         let base_case =
             encode_base_case(tcx, &enc_env, inner_stmt, omega_var, omega_inv, &terminator);
         let induction_step = encode_induction_step(tcx, &enc_env, inner_stmt, omega_var, omega_inv);

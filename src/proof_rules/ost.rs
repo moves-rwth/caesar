@@ -20,10 +20,8 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{
-        tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
-    },
-    proof_rules::{calculus::ApproximationKind, FixpointSemanticsKind},
+    intrinsic::annotations::{tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus},
+    proof_rules::calculus::{ApproximationKind, CalculusType, FixpointKind},
     tyctx::TyCtx,
 };
 
@@ -95,7 +93,7 @@ impl Encoding for OSTAnnotation {
 
     fn get_approximation(
         &self,
-        fixpoint_semantics: FixpointSemanticsKind,
+        fixpoint_kind: FixpointKind,
         inner_approximation_kind: ApproximationKind,
         calculus: Option<Calculus>,
     ) -> ApproximationKind {
@@ -105,20 +103,14 @@ impl Encoding for OSTAnnotation {
                 return ApproximationKind::UNKNOWN;
             }
         }
-        match (fixpoint_semantics, inner_approximation_kind) {
-            (FixpointSemanticsKind::LeastFixedPoint, ApproximationKind::EXACT) => {
-                ApproximationKind::EXACT
-            }
+        match (fixpoint_kind, inner_approximation_kind) {
+            (FixpointKind::Least, ApproximationKind::EXACT) => ApproximationKind::EXACT,
             _ => ApproximationKind::UNKNOWN,
         }
     }
 
-    fn default_fixpoint_semantics(
-        &self,
-        _direction: Direction,
-        _args: &[Expr],
-    ) -> FixpointSemanticsKind {
-        FixpointSemanticsKind::LeastFixedPoint
+    fn default_fixpoint_kind(&self, _direction: Direction, _args: &[Expr]) -> FixpointKind {
+        FixpointKind::Least
     }
 
     fn transform(

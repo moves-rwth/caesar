@@ -12,7 +12,10 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    proof_rules::{calculus::RecursiveProcBlame, Encoding, FixpointSemanticsKind},
+    proof_rules::{
+        calculus::{CalculusType, RecursiveProcBlame},
+        Encoding,
+    },
     slicing::selection::SliceAnnotation,
     tyctx::TyCtx,
 };
@@ -161,41 +164,6 @@ pub struct Calculus {
 impl std::fmt::Display for Calculus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum CalculusType {
-    Wp,
-    Wlp,
-    Ert,
-}
-
-impl std::fmt::Display for CalculusType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CalculusType::Wp => write!(f, "wp"),
-            CalculusType::Wlp => write!(f, "wlp"),
-            CalculusType::Ert => write!(f, "ert"),
-        }
-    }
-}
-
-impl CalculusType {
-    pub fn is_induction_allowed(&self, direction: Direction) -> bool {
-        matches!(
-            (self, direction),
-            (CalculusType::Wlp, Direction::Down)
-                | (CalculusType::Wp, Direction::Up)
-                | (CalculusType::Ert, Direction::Up)
-        )
-    }
-
-    pub fn to_fixed_point_semantics_kind(self) -> FixpointSemanticsKind {
-        match self {
-            CalculusType::Wp | CalculusType::Ert => FixpointSemanticsKind::LeastFixedPoint,
-            CalculusType::Wlp => FixpointSemanticsKind::GreatestFixedPoint,
-        }
     }
 }
 

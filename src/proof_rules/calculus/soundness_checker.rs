@@ -16,7 +16,7 @@ use crate::{
         item::SourceUnitName,
     },
     intrinsic::annotations::{AnnotationKind, Calculus},
-    proof_rules::{get_proc_calculus, infer_fixpoint_semantics_kind},
+    proof_rules::{get_proc_calculus, infer_fixpoint_kind},
     tyctx::TyCtx,
 };
 
@@ -151,8 +151,7 @@ impl ProcSoundness {
 /// [`OVER`][Self::OVER], and [`UNKNOWN`][Self::UNKNOWN] for the four possible combinations.
 ///
 /// Approximations arise from encoding annotations on loops or from negations in the program.
-/// The reference semantics is determined by the calculus annotation, or inferred from loop direction
-/// and encoding (see [`infer_fixpoint_semantics_kind`]).
+/// The reference semantics is determined by the calculus annotation, or inferred from loop direction and encoding (see [`infer_fixpoint_kind`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ApproximationKind {
     /// True if the vc semantics under-approximates the original program semantics.
@@ -287,7 +286,7 @@ fn track_approximation_in_statement(
             if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
                 tcx.get(*ident).unwrap().as_ref()
             {
-                let semantics_type = infer_fixpoint_semantics_kind(
+                let semantics_type = infer_fixpoint_kind(
                     // Qualified because of the RefCell::borrow naming clash
                     std::borrow::Borrow::borrow(anno_ref),
                     calculus,

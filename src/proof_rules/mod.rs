@@ -37,7 +37,7 @@ use crate::{
     intrinsic::annotations::{
         AnnotationError, AnnotationKind, AnnotationUnsoundnessError, Calculus,
     },
-    proof_rules::calculus::ApproximationKind,
+    proof_rules::calculus::{ApproximationKind, FixpointKind},
     tyctx::TyCtx,
 };
 
@@ -67,25 +67,16 @@ pub struct EncodingEnvironment {
     pub calculus: Option<Calculus>,
 }
 
-/// The type of loop semantics used in the encoding annotations
-pub enum FixpointSemanticsKind {
-    LeastFixedPoint,
-    GreatestFixedPoint,
-}
-
-/// Determine the loop semantics type based on the annotation, calculus,
-/// direction, and annotation arguments. The semantics are determined by the
-/// provided calculus if available; otherwise, they are inferred from the
-/// annotation and direction.
-pub fn infer_fixpoint_semantics_kind(
+/// Determine loop semantics from the calculus annotation, or infer them from the proof rule, direction, and arguments.
+pub fn infer_fixpoint_kind(
     encoding: &dyn Encoding,
     calculus: Option<Calculus>,
     direction: Direction,
     args: &[Expr],
-) -> FixpointSemanticsKind {
+) -> FixpointKind {
     match calculus {
-        Some(calculus) => calculus.calculus_type.to_fixed_point_semantics_kind(),
-        None => encoding.default_fixpoint_semantics(direction, args),
+        Some(calculus) => calculus.calculus_type.fixpoint_kind(),
+        None => encoding.default_fixpoint_kind(direction, args),
     }
 }
 
@@ -125,21 +116,13 @@ pub trait Encoding: fmt::Debug {
     /// [ApproximationKind::UNKNOWN] when given an incompatible calculus.
     fn get_approximation(
         &self,
-        fixpoint_semantics: FixpointSemanticsKind,
+        fixpoint_kind: FixpointKind,
         inner_approximation_kind: ApproximationKind,
         calculus: Option<Calculus>,
     ) -> ApproximationKind;
 
-    /// Get the sound fixpoint semantics kind for this encoding annotation based
-    /// on the direction and provided arguments.
-    ///
-    /// This function is used when there is no calculus annotation present on
-    /// the procedure.
-    fn default_fixpoint_semantics(
-        &self,
-        direction: Direction,
-        args: &[Expr],
-    ) -> FixpointSemanticsKind;
+    /// Infer the fixed-point kind from the direction and arguments when no calculus is annotated.
+    fn default_fixpoint_kind(&self, direction: Direction, args: &[Expr]) -> FixpointKind;
 
     /// Indicates if the encoding annotation is required to be the last statement of a procedure.
     fn is_terminator(&self) -> bool;

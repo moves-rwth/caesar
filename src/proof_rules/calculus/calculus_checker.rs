@@ -1,7 +1,10 @@
 use std::{collections::HashMap, ops::DerefMut};
 
 use crate::{
-    ast::{visit::VisitorMut, DeclKind, DeclRef, Diagnostic, Expr, ExprKind, Ident, ProcDecl},
+    ast::{
+        visit::VisitorMut, DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprKind, Ident,
+        ProcDecl,
+    },
     intrinsic::annotations::{
         AnnotationError, AnnotationKind, AnnotationUnsoundnessError, Calculus,
     },
@@ -9,7 +12,7 @@ use crate::{
     tyctx::TyCtx,
 };
 
-use super::RecursiveProcBlame;
+use super::{FixpointKind, RecursiveProcBlame};
 
 /// Walk the AST and check the rules of calculus annotations. For more information about the rules, see <https://www.caesarverifier.org/docs/proof-rules/calculi>
 pub struct CalculusVisitor<'tcx> {
@@ -107,7 +110,7 @@ impl<'tcx> VisitorMut for CalculusVisitor<'tcx> {
         // If the procedure has a calculus annotation, check the call graph for cycles
         if let Some(calculus) = curr_calculus {
             // If induction is not allowed, check whether the procedure has a recursive call
-            if !calculus.calculus_type.is_induction_allowed(proc.direction)
+            if !is_induction_allowed(calculus.calculus_type.fixpoint_kind(), proc.direction)
                 && self.recursive_procs.contains_key(&proc.name)
             {
                 return Err(CalculusVisitorError::UnsoundnessError(
@@ -140,4 +143,11 @@ impl<'tcx> VisitorMut for CalculusVisitor<'tcx> {
 
         res
     }
+}
+
+fn is_induction_allowed(semantics: FixpointKind, direction: Direction) -> bool {
+    matches!(
+        (semantics, direction),
+        (FixpointKind::Least, Direction::Up) | (FixpointKind::Greatest { .. }, Direction::Down)
+    )
 }
