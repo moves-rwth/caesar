@@ -241,6 +241,55 @@ fn assert_omega_counterexample(source: &str) -> String {
 }
 
 #[test]
+fn test_omega_wlp_refutation_uses_greatest_fixed_point() {
+    let diagnostics = assert_omega_counterexample(
+        r#"
+            @wlp
+            proc main() -> ()
+                pre 1
+                post 0
+            {
+                @omega_invariant(n, 0)
+                while false {}
+            }
+        "#,
+    );
+    assert!(diagnostics.contains("Counter-example to property found"));
+}
+
+#[test]
+fn test_omega_wp_refutation_uses_least_fixed_point() {
+    let diagnostics = assert_omega_counterexample(
+        r#"
+            @wp
+            coproc main() -> ()
+                pre 0
+                post 1
+            {
+                @omega_invariant(n, 1)
+                while false {}
+            }
+        "#,
+    );
+    assert!(diagnostics.contains("Counter-example to property found"));
+}
+
+#[test]
+fn test_omega_unbounded_upper_bound_starts_at_top() {
+    assert_omega_counterexample(
+        r#"
+            coproc main() -> ()
+                pre 1
+                post 0
+            {
+                @omega_invariant(n, 1)
+                while true {}
+            }
+        "#,
+    );
+}
+
+#[test]
 fn test_omega_collects_variables_modified_by_cohavoc() {
     assert_omega_counterexample(
         r#"

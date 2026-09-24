@@ -18,12 +18,15 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus},
+    intrinsic::annotations::{
+        tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus, CalculusType,
+    },
     proof_rules::{calculus::ApproximationKind, FixpointSemanticsKind},
     tyctx::TyCtx,
 };
 
 use super::{
+    infer_fixpoint_semantics_kind,
     util::{encode_iter, hey_const, intrinsic_param, two_args},
     Encoding, EncodingEnvironment, GeneratedEncoding,
 };
@@ -131,11 +134,17 @@ impl Encoding for OmegaInvAnnotation {
         tcx: &TyCtx,
         args: &[Expr],
         inner_stmt: &Stmt,
-        enc_env: EncodingEnvironment,
+        mut enc_env: EncodingEnvironment,
     ) -> Result<GeneratedEncoding, AnnotationError> {
         // Unpack values from struct
         let annotation_span = enc_env.call_span;
-        let direction = enc_env.direction;
+        // The calculus determines the approximation, including when refuting a bound.
+        let direction =
+            match infer_fixpoint_semantics_kind(self, enc_env.calculus, enc_env.direction, args) {
+                FixpointSemanticsKind::LeastFixedPoint => Direction::Down,
+                FixpointSemanticsKind::GreatestFixedPoint => Direction::Up,
+            };
+        enc_env.direction = direction;
 
         let mut visitor = ModifiedVariableCollector::new();
         visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
@@ -175,15 +184,26 @@ impl Encoding for OmegaInvAnnotation {
         )
         .unwrap();
 
-        let initial_expectation = builder.cast(tcx.spec_ty().clone(), builder.uint(0));
+        // Start least fixed-point iteration at zero, bounded WLP at one, and unbounded GFP at top.
+        let terminator = match direction {
+            Direction::Down => builder.bot_lit(tcx.spec_ty()),
+            Direction::Up
+                if enc_env
+                    .calculus
+                    .is_some_and(|calculus| calculus.calculus_type == CalculusType::Wlp) =>
+            {
+                builder.one_lit(tcx.spec_ty())
+            }
+            Direction::Up => builder.top_lit(tcx.spec_ty()),
+        };
         let null_iter = encode_iter(
             &enc_env,
             inner_stmt,
-            hey_const(&enc_env, &initial_expectation, direction, tcx),
+            hey_const(&enc_env, &terminator, direction, tcx),
         )
         .unwrap();
 
-        // I_0 <= Phi_{post}(0), or the dual inequality.
+        // I_0 <= Phi_{post}(0), or Psi_{post}(top) <= I_0 for greatest fixed points.
         let cond1 = Spanned::new(
             annotation_span,
             vec![
