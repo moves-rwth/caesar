@@ -241,6 +241,13 @@ pub fn init_calculi(files: &mut Files, tcx: &mut TyCtx) {
     tcx.add_global(wlp.name());
     tcx.declare(DeclKind::AnnotationDecl(wlp));
 
+    let uwlp = AnnotationKind::Calculus(Calculus {
+        name: Ident::with_dummy_file_span(Symbol::intern("uwlp"), file),
+        calculus_type: CalculusType::Uwlp,
+    });
+    tcx.add_global(uwlp.name());
+    tcx.declare(DeclKind::AnnotationDecl(uwlp));
+
     let ert = AnnotationKind::Calculus(Calculus {
         name: Ident::with_dummy_file_span(Symbol::intern("ert"), file),
         calculus_type: CalculusType::Ert,

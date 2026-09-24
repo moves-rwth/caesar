@@ -33,10 +33,11 @@ Both techniques are related, but [we explain the difference between applying the
 A `while` loop is annotated by the `@unroll(k, terminator)` annotation where `k` is a number literal and `terminator` is an expression of type `EUReal`.
 
 The `terminator` expression must correspond to the initial value of the fixed-point iteration semantics of the loop.
-By [Kleene's fixed-point theorem](https://en.wikipedia.org/wiki/Kleene_fixed-point_theorem), one should use the following values for `terminator`:
- * For *greatest fixed-point semantics* (`wlp`), one chooses the *top* element of the lattice:
-    * `1` for the one-bounded wlp semantics,
-    * or `\infty` for the unbounded expectation-based semantics.
+For sound bounds from finite fixed-point iteration, use the following values for `terminator`:
+
+ * For *greatest fixed-point semantics* (`wlp`, `uwlp`), one chooses the *top* element of the lattice:
+    * `1` for the one-bounded `@wlp` semantics,
+    * `\infty` for the unbounded `@uwlp` semantics over `EUReal`.
  * For *least fixed-point semantics* (`wp`, `ert`), one chooses the *bottom* element of the lattice:
     * `0` for expectation-based semantics (wp, ert).
 
@@ -45,7 +46,7 @@ By [Kleene's fixed-point theorem](https://en.wikipedia.org/wiki/Kleene_fixed-poi
 Loop unrolling can be used to *approximate* expected value semantics of a loop to gain insight into the actual semantics.
 
 The idea is to have Caesar *calculate* the expected value of the loop after a fixed number of iterations.
-As `k` increases, the unrolling approaches the true semantics, so we can use this to e.g. guess the expected value after an unbounded number of iterations.
+For the `wp` example below, the unrolling approaches the true semantics as `k` increases, so we can use this to e.g. guess the expected value after an unbounded number of iterations.
 This might help to find e.g. an [inductive invariant](./induction.md) for the loop.
 In contrast to the applications of [verification](#verification) and [refutation](#bounded-model-checking), unrolling for approximations does not require a `pre`, but just a `post` expectation.
 
@@ -101,14 +102,16 @@ We modified the above example to show a *lower bound* of `0.75` on the probabili
 
 For *verification*, the following combinations are sound.
 More details can be found in the [*Soundness* section](#soundness).
+
   * For `wlp`, use `@unroll(k, 1)` in a `coproc` to verify upper bounds on the greatest fixed-point semantics.
+  * For `uwlp`, use `@unroll(k, \infty)` in a `coproc` to verify upper bounds on the unbounded greatest-fixed-point semantics.
   * For `wp` and `ert`, use `@unroll(k, 0)` in a `proc` to verify lower bounds on the least fixed-point semantics.
 
 A *counter-example* from Caesar to verification will only be a counter-example for the $k$-unrolled program, but not for the original program.
 
 :::tip
 
-Use the [calculus annotations](./approximations#calculus-annotations) `@wp`, `@wlp`, `@ert` to have Caesar check you apply the `unroll` proof correctly to *verify* a specification.
+Use the [calculus annotations](./approximations#calculus-annotations) `@wp`, `@wlp`, `@uwlp`, `@ert` to have Caesar check you apply the `unroll` proof correctly to *verify* a specification.
 
 :::
 
@@ -142,7 +145,9 @@ It is a *true counter-example* to `init_c + 0.99` being an upper bound for the o
 
 The following combinations are sound for *refutations*.
 More details can be found in the [*Soundness* section](#soundness).
+
  * For `wlp`, use `@unroll(k, 1)` in a `proc` to refute a lower bound on the greatest fixed-point semantics.
+ * For `uwlp`, use `@unroll(k, \infty)` in a `proc` to refute a lower bound on the unbounded greatest-fixed-point semantics.
  * For `wp` and `ert`, use `@unroll(k, 0)` in a `coproc` to refute an upper bound on the least fixed-point semantics.
 
 If the program *verifies* in the above cases, we do not know whether the specification holds for the original semantics.
@@ -150,8 +155,9 @@ For example, the example program above verifies if you change `k = 11`; however 
 
 :::tip
 
-The [calculus annotations](./approximations#calculus-annotations) `@wlp`, `@wp`, `@ert` are supported for refutations as well.
+The [calculus annotations](./approximations#calculus-annotations) `@wlp`, `@uwlp`, `@wp`, `@ert` are supported for refutations as well.
 Caesar uses them to classify the result:
+
  * _"Counter-example to property found"_ means the refutation is sound for the original semantics.
  * _"Counter-example to verification found"_ means only the verification condition was refuted.
 
@@ -160,19 +166,24 @@ Caesar uses them to classify the result:
 
 ## Soundness
 
-By Kleene's fixed-point theorem, the following soundness conditions hold:
+By monotonicity of the loop characteristic functional, the following soundness conditions hold when the loop body has the required [approximation](./approximations#proof-rule-approximations):
 
  * $\mathrm{vc}\llbracket \texttt{@unroll(k, 1) while G \{ B \}} \rrbracket \sqsupseteq \mathrm{wlp}\llbracket \texttt{while G \{ B \}} \rrbracket$
+ * $\mathrm{vc}\llbracket \texttt{@unroll(k, }\infty\texttt{) while G \{ B \}} \rrbracket \sqsupseteq \mathrm{uwlp}\llbracket \texttt{while G \{ B \}} \rrbracket$
  * $\mathrm{vc}\llbracket \texttt{@unroll(k, 0) while G \{ B \}} \rrbracket \sqsubseteq \mathrm{wp}\llbracket \texttt{while G \{ B \}} \rrbracket$
  * $\mathrm{vc}\llbracket \texttt{@unroll(k, 0) while G \{ B \}} \rrbracket \sqsubseteq \mathrm{ert}\llbracket \texttt{while G \{ B \}} \rrbracket$
 
 For [the application of verification](#verification), this means:
+
  * `coproc` verifies using `@unroll(k, 1)` $\implies$ specification also holds for the original `wlp` semantics.
+ * `coproc` verifies using `@unroll(k, \infty)` $\implies$ specification also holds for the original `uwlp` semantics.
  * `proc` verifies using `@unroll(k, 0)` $\implies$ specification also holds for the original `wp` semantics.
  * `proc` verifies using `@unroll(k, 0)` $\implies$ specification also holds for the original `ert` semantics.
 
 For [the application of refutation (bounded model checking)](#bounded-model-checking), this means:
+
  * `proc` refutes using `@unroll(k, 1)` $\implies$ specification does not hold for the original `wlp` semantics.
+ * `proc` refutes using `@unroll(k, \infty)` $\implies$ specification does not hold for the original `uwlp` semantics.
  * `coproc` refutes using `@unroll(k, 0)` $\implies$ specification does not hold for the original `wp` semantics.
  * `coproc` refutes using `@unroll(k, 0)` $\implies$ specification does not hold for the original `ert` semantics.
 
@@ -208,7 +219,7 @@ A simple example is a loop that counts down a counter variable `c` in each itera
 Any unrolling of size `k` will not capture the semantics of the loop if `c` is larger than `k`.
 
 However, loop unrolling is *complete* for *refuting* specifications when the semantics is *continuous*.
-This is the case for the `wlp`, `wp`, and `ert` semantics.
+This is the case for `wp`, `ert`, and one-bounded `wlp` semantics.
 Then, any *wrong* bound on the pre can be refuted by *some* value of `k`.[^bmc-completeness]
 
 [^bmc-completeness]: See [_Latticed k-Induction with an Application to Probabilistic Programs_](https://link.springer.com/chapter/10.1007/978-3-030-81688-9_25) (CAV 2021) for more information on the theory of *bounded model checking* on probabilistic programs.

@@ -59,7 +59,10 @@ The cards below are the quick reference; the detailed rule mapping appears later
     {
       id: 'gfp',
       semantics: <TokGFP />,
-      calculi: [{ href: '#calculus-annotations', label: '@wlp' }],
+      calculi: [
+        { href: '#calculus-annotations', label: '@wlp' },
+        { href: '#calculus-annotations', label: '@uwlp' },
+      ],
       rules: [
         { href: '../heyvl/procs#calling-procedures', label: 'calls' },
         { href: './induction', label: '@invariant' },
@@ -86,7 +89,10 @@ The cards below are the quick reference; the detailed rule mapping appears later
     {
       id: 'gfp',
       semantics: <TokGFP />,
-      calculi: [{ href: '#calculus-annotations', label: '@wlp' }],
+      calculi: [
+        { href: '#calculus-annotations', label: '@wlp' },
+        { href: '#calculus-annotations', label: '@uwlp' },
+      ],
       rules: [
         { href: './unrolling', label: '@unroll' },
         { href: './omega-invariants', label: '@omega_invariant' },
@@ -213,15 +219,17 @@ We distinguish:
   - This is used in calculi such as $wp$ and $ert$.
   - In short: "nonterminating runs contribute post $0$ to the expected value".
 - **Greatest Fixed Point** (<TokGFP />) Semantics: while loops and recursive calls are interpreted via _greatest_ fixed points.
-  - This is used in calculi such as $wlp$.
-  - In short: "nonterminating runs contribute post $1$ to the expected value".
+  - This is used in the one-bounded $wlp$ and unbounded $uwlp$ calculi.
+  - The top element is $1$ for $wlp$ and $\infty$ for $uwlp$.
+  - For one-bounded $wlp$, nonterminating runs contribute $1$ to the expected value.
 
 ### Calculus Annotations {#calculus-annotations}
 
 Caesar supports procedure annotations to make the intended calculus explicit:
 
 - `@wp`: weakest pre-expectation calculus (least fixed points, nontermination contributes `0`).
-- `@wlp`: weakest liberal pre-expectation calculus (greatest fixed points, nontermination contributes `1`).
+- `@wlp`: one-bounded weakest liberal pre-expectation calculus (greatest fixed points over expectations in `[0, 1]`, with top `1`).
+- `@uwlp`: unbounded weakest liberal pre-expectation calculus (greatest fixed points over `EUReal` expectations, with top `\infty`).
 - `@ert`: expected runtime calculus (least fixed points).
 
 These annotations let Caesar check additional soundness conditions for proof-rule usage.
@@ -235,9 +243,9 @@ We recommend reading the following literature for formal accounts of the above s
 
 ### How Caesar Selects Original Semantics
 
-1. If a calculus annotation (`@wp`, `@wlp`, or `@ert`) is present on a (co)proc:
+1. If a calculus annotation (`@wp`, `@wlp`, `@uwlp`, or `@ert`) is present on a (co)proc:
    - <TokLFP /> for `@wp` and `@ert`,
-   - <TokGFP /> for `@wlp`.
+   - <TokGFP /> for `@wlp` (top `1`) and `@uwlp` (top `\infty`).
 2. Otherwise selected by the proof rule so that verifications are sound (see [Proof Rule Approximations](#proof-rule-approximations)).
    - E.g. for Induction, <TokGFP /> semantics are used for <TokProc />s and <TokLFP /> semantics for <TokCoproc />s.
    - E.g. for Loop Unrolling, <TokLFP /> semantics are used for <TokProc />s and <TokGFP /> semantics for <TokCoproc />s.
@@ -409,8 +417,8 @@ Caesar checks many proof-rule soundness conditions automatically, but not all mo
 
 **Hard errors:**
 
-- In calculus-annotated procedures, calling a procedure with a conflicting calculus annotation is rejected.
-- Potentially recursive calls are rejected where Park induction is not sound (`@wp proc`, `@wlp coproc`, `@ert proc`).
+- In calculus-annotated procedures, calling a procedure with a conflicting calculus annotation is rejected, including calls between `@wlp` and `@uwlp`.
+- Potentially recursive calls are rejected where Park induction is not sound (`@wp proc`, `@wlp coproc`, `@uwlp coproc`, `@ert proc`).
 
 **Diagnostics during verification:**
 
@@ -419,4 +427,4 @@ Caesar checks many proof-rule soundness conditions automatically, but not all mo
 **Not checked:**
 
 - Contradictions make verification trivially succeed — e.g., `assume ?(false)` in a `proc`; [contradictory axioms](../heyvl/domains#axioms-as-assumptions) are a common source.
-- There is no enforcement that `@ert` procedures contain `tick` statements, nor that `@wp`/`@wlp` procedures do not.
+- There is no enforcement that `@ert` procedures contain `tick` statements, nor that `@wp`/`@wlp`/`@uwlp` procedures do not.

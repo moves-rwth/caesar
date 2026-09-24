@@ -16,6 +16,7 @@ use crate::ast::{Expr, ExprBuilder, TyKind};
 pub enum CalculusType {
     Wp,
     Wlp,
+    Uwlp,
     Ert,
 }
 
@@ -24,6 +25,7 @@ impl std::fmt::Display for CalculusType {
         match self {
             Self::Wp => write!(f, "wp"),
             Self::Wlp => write!(f, "wlp"),
+            Self::Uwlp => write!(f, "uwlp"),
             Self::Ert => write!(f, "ert"),
         }
     }
@@ -34,6 +36,7 @@ impl CalculusType {
         match self {
             Self::Wp | Self::Ert => FixpointKind::Least,
             Self::Wlp => FixpointKind::Greatest { one_bounded: true },
+            Self::Uwlp => FixpointKind::Greatest { one_bounded: false },
         }
     }
 }

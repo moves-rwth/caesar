@@ -149,7 +149,7 @@
           ],
           "enumDescriptions": [
             "Do not add any explanations (default).",
-            "Add explanations for the wp/wlp/ert computations. Only @invariant-annotated loops are supported.",
+            "Add explanations for the wp/wlp/uwlp/ert computations, supported only for @invariant-annotated loops.",
             "Add explanations for the vc computation on core HeyVL."
           ],
           "description": "Explain ",
@@ -186,7 +186,7 @@
         "caesar.userInterface.inlineGhostText.showInlineGhostText": {
           "type": "boolean",
           "default": true,
-          "description": "Specifies whether to show inline ghost text about the wp/wlp/ert."
+          "description": "Specifies whether to show inline ghost text about the wp/wlp/uwlp/ert."
         },
         "caesar.userInterface.statusBar.showStatusBar": {
           "type": "boolean",

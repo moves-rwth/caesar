@@ -20,7 +20,7 @@ $$
 $$
 
 Here, $\Phi_f(X) = [G] \cdot \mathrm{wp}\llbracket Body \rrbracket(X) + [\neg G] \cdot f$ is the loop's characteristic functional for postexpectation $f$.
-The same rule applies to `ert`, and a dual version proves upper bounds for `wlp` semantics.
+The same rule applies to `ert`, and a dual version proves upper bounds for `wlp` and `uwlp` semantics.
 
 For more details on the proof rule, see the discussion following [Definition 5.3 of Benjamin Kaminski's PhD thesis](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=122).
 
@@ -56,7 +56,7 @@ The index is local to the loop and its annotation.
 
 :::tip
 
-Use the [calculus annotations](./approximations#calculus-annotations) `@wp`, `@wlp`, and `@ert` to select the intended semantics and have Caesar check whether verification or refutation is sound.
+Use the [calculus annotations](./approximations#calculus-annotations) `@wp`, `@wlp`, `@uwlp`, and `@ert` to select the intended semantics and have Caesar check whether verification or refutation is sound.
 
 :::
 
@@ -64,6 +64,7 @@ For every candidate invariant family, the encoding gives:
 
 - With `@wp` or `@ert`: an under-approximation of the least fixed point, giving sound verification in a `proc`.
 - With `@wlp`: an over-approximation of the one-bounded greatest fixed point, giving sound verification in a `coproc`.
+- With `@uwlp`: an over-approximation of the unbounded greatest fixed point, giving sound verification in a `coproc`.
 
 Without a calculus annotation, `proc` selects least fixed-point semantics and `coproc` selects unbounded greatest fixed-point semantics, starting at infinity.
 
@@ -117,6 +118,10 @@ For `wlp`, the encoding is dual: the entry bound becomes `coassert inf n. I(n)`,
 The base case ends the loop body with `coassert 1; coassume \infty`, and the induction step with `coassert I(n); coassume \infty`.
 The one in the base case is the starting expectation for the one-bounded greatest fixed point; the infinity in `coassume` belongs to the HeyVL encoding of a constant expectation.
 
+For `uwlp`, the same dual encoding uses `coassert \infty; coassume \infty` in the base case instead.
+The induction step is unchanged.
+This checks $I_0 \geq \Phi_f(\infty)$ instead of $I_0 \geq \Phi_f(1)$.
+
 ### Verification Pre-Expectation Semantics
 
 Let $C$ be `@omega_invariant(n, I) while G { Body }`, with postexpectation $f$ and loop-entry state $\sigma$.
@@ -133,7 +138,7 @@ $$
     \end{cases}
 $$
 
-For `wlp`, the checks use the dual inequalities described above, and the value is
+For `wlp` and `uwlp`, the checks use the dual inequalities with their respective top expectations, and the value is
 
 $$
     \mathrm{vc}\llbracket C \rrbracket(f)(\sigma) =
