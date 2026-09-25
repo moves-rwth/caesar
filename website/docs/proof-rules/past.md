@@ -76,7 +76,7 @@ such that all the following conditions are fulfilled:
     <summary>HeyVL Encoding</summary>
 
     ```heyvl
-    proc I_decreases(init_vars: ...) -> (vars: ...)
+    coproc I_decreases(init_vars: ...) -> (vars: ...)
         pre [G(init_vars)] * (I(init_vars) - epsilon)
         post 0
     {

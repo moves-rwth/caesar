@@ -691,19 +691,21 @@ fn test_past_transform() {
                 var x: UInt
                 {  }
             }
-            proc main_condition_1_0(x: UInt) -> () {
+            proc main_past_bounded_on_exit_0(x: UInt) -> () {
                 assert ?((([! ((1 <= x))] * cast(EUReal, (x + 1))) <= cast(EUReal, 10/10)))
             }
-            proc main_condition_2_0(x: UInt) -> () {
+            proc main_past_k_bounded_by_invariant_0(x: UInt) -> () {
                 assert (
                     ([(1 <= x)] * cast(EUReal, 10/10)) <= (
                         ([(1 <= x)] * cast(EUReal, (x + 1))) + [! ((1 <= x))]
                     )
                 )
             }
-            proc main_past_0(init_x: UInt) -> (x: UInt)
+            coproc main_past_decreases_0(init_x: UInt) -> (x: UInt)
                 pre (
-                    [(1 <= x)] * ((cast(EUReal, (x + 1)))[x -> init_x] - cast(EUReal, 5/10))
+                    [((1 <= x))[x -> init_x]] * (
+                        (cast(EUReal, (x + 1)))[x -> init_x] - cast(EUReal, 5/10)
+                    )
                 )
                 post cast(EUReal, 0)
             {
@@ -731,6 +733,71 @@ fn test_past_transform() {
     remove_whitespace(&mut test_string);
     remove_whitespace(&mut res);
     assert_eq!(test_string, res);
+}
+
+#[test]
+fn test_past_rejects_infinite_loop() {
+    // Issue #122 also fails without tick, isolating the required decrease.
+    for body in ["tick 1", ""] {
+        let source = format!(
+            r#"
+                @ert coproc main() -> ()
+                    pre 0
+                    post 0
+                {{
+                    @past(1, 0.5, 1)
+                    while true {{ {body} }}
+                }}
+            "#
+        );
+        let (result, mut server) = verify_test(&source);
+        assert!(!result.unwrap(), "{source}");
+        let diagnostics = std::mem::take(&mut server.diagnostics);
+        let files = server.files.lock().unwrap();
+        let diagnostics = diagnostics
+            .into_iter()
+            .map(|diagnostic| diagnostic.into_string(&files))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            diagnostics.contains("Counter-example to property found"),
+            "{diagnostics}"
+        );
+    }
+}
+
+#[test]
+fn test_past_accepts_deterministic_countdown() {
+    let source = r#"
+        proc main(init_x: UInt) -> (x: UInt)
+        {
+            x = init_x
+            @past(x + 1, 0.5, 1)
+            while 0 < x {
+                x = x - 1
+            }
+        }
+    "#;
+    assert!(verify_test(source).0.unwrap());
+}
+
+#[test]
+fn test_past_accepts_probabilistic_countdown() {
+    let source = r#"
+        proc main(init_x: UInt) -> (x: UInt)
+        {
+            var prob_choice: Bool
+            x = init_x
+            @past(x + 1, 0.5, 1)
+            while 0 < x {
+                prob_choice = flip(0.5)
+                if prob_choice {
+                    x = x - 1
+                } else {}
+            }
+        }
+    "#;
+    assert!(verify_test(source).0.unwrap());
 }
 
 #[test]
