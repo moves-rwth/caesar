@@ -76,7 +76,7 @@ such that all the following conditions are fulfilled:
     <summary>HeyVL Encoding</summary>
 
     ```heyvl
-    proc I_decreases(init_vars: ...) -> (vars: ...)
+    coproc I_decreases(init_vars: ...) -> (vars: ...)
         pre [G(init_vars)] * (I(init_vars) - epsilon)
         post 0
     {
@@ -88,6 +88,9 @@ such that all the following conditions are fulfilled:
         } else {}
     }
     ```
+
+    The `coproc` checks the upper bound required by Condition 3.
+    The sequence `assert I(vars)` followed by `assume 0` yields `I(vars)` as its pre-expectation.
 
     </details>
 

@@ -701,7 +701,7 @@ fn test_past_transform() {
                     )
                 )
             }
-            proc main_past_0(init_x: UInt) -> (x: UInt)
+            coproc main_past_0(init_x: UInt) -> (x: UInt)
                 pre (
                     [(1 <= x)] * ((cast(EUReal, (x + 1)))[x -> init_x] - cast(EUReal, 5/10))
                 )
@@ -731,6 +731,37 @@ fn test_past_transform() {
     remove_whitespace(&mut test_string);
     remove_whitespace(&mut res);
     assert_eq!(test_string, res);
+}
+
+#[test]
+fn test_past_rejects_infinite_loop() {
+    // Issue #122 also fails without tick, isolating the required decrease.
+    for body in ["tick 1", ""] {
+        let source = format!(
+            r#"
+                @ert coproc main() -> ()
+                    pre 0
+                    post 0
+                {{
+                    @past(1, 0.5, 1)
+                    while true {{ {body} }}
+                }}
+            "#
+        );
+        let (result, mut server) = verify_test(&source);
+        assert!(!result.unwrap(), "{source}");
+        let diagnostics = std::mem::take(&mut server.diagnostics);
+        let files = server.files.lock().unwrap();
+        let diagnostics = diagnostics
+            .into_iter()
+            .map(|diagnostic| diagnostic.into_string(&files))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            diagnostics.contains("Counter-example to property found"),
+            "{diagnostics}"
+        );
+    }
 }
 
 #[test]
