@@ -51,11 +51,12 @@ pub struct ProcInfo {
     direction: Direction,
 }
 
-/// The result of transforming an annotation call. It contains generated
-/// statements and declarations.
+/// The result of transforming an annotation call.
+/// It contains generated statements, declarations, and diagnostics.
 pub struct GeneratedEncoding {
     block: Block,
     decls: Option<Vec<DeclKind>>,
+    diagnostics: Vec<Diagnostic>,
 }
 
 /// The environment information when the encoding annotation is called
@@ -173,6 +174,7 @@ pub struct ProcContext {
 pub struct EncodingVisitor<'tcx> {
     tcx: &'tcx mut TyCtx,
     new_source_units: Vec<Item<SourceUnit>>,
+    diagnostics: Vec<Diagnostic>,
     terminator_annotation: Option<Ident>, // The name of the terminator annotation if there is one
     nesting_level: usize,
     proc_context: Option<ProcContext>, // The relevant context of the current procedure being visited for soundness
@@ -183,16 +185,16 @@ impl<'tcx> EncodingVisitor<'tcx> {
         EncodingVisitor {
             tcx,
             new_source_units: vec![],
+            diagnostics: vec![],
             terminator_annotation: None,
             nesting_level: 0,
             proc_context: None,
         }
     }
 
-    /// Finish this visitor, returning the list of new source units that were
-    /// generated for side-conditions.
-    pub fn finish(self) -> Vec<Item<SourceUnit>> {
-        self.new_source_units
+    /// Finish this visitor, returning source units generated for side conditions and encoding diagnostics.
+    pub fn finish(self) -> (Vec<Item<SourceUnit>>, Vec<Diagnostic>) {
+        (self.new_source_units, self.diagnostics)
     }
 }
 
@@ -305,6 +307,7 @@ impl<'tcx> VisitorMut for EncodingVisitor<'tcx> {
                     let mut enc_gen = anno_ref
                         .transform(self.tcx, inputs, inner_stmt, enc_env)
                         .map_err(EncodingVisitorError::Annotation)?;
+                    self.diagnostics.append(&mut enc_gen.diagnostics);
 
                     // Visit generated statements
                     self.visit_block(&mut enc_gen.block)?;

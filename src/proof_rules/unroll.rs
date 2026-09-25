@@ -27,7 +27,7 @@ use super::{
     infer_fixpoint_kind,
     util::{
         default_fixpoint_kind_from_terminator, encode_unroll, hey_const, intrinsic_param, lit_u128,
-        select_terminator, warn_if_terminator_differs,
+        select_terminator, terminator_mismatch_diagnostic,
     },
     Encoding, EncodingEnvironment, GeneratedEncoding,
 };
@@ -115,7 +115,8 @@ impl Encoding for UnrollAnnotation {
         let semantics = infer_fixpoint_kind(self, enc_env.calculus, enc_env.direction, args);
         let builder = ExprBuilder::new(enc_env.call_span);
         let terminator = select_terminator(semantics, explicit_terminator, builder);
-        warn_if_terminator_differs(self.name(), semantics, explicit_terminator, builder);
+        let diagnostic =
+            terminator_mismatch_diagnostic(self.name(), semantics, explicit_terminator, builder);
 
         // Extend the loop k times without asserts (unlike k-induction) because bmc flag is set
         let buf = encode_unroll(
@@ -128,6 +129,7 @@ impl Encoding for UnrollAnnotation {
         Ok(GeneratedEncoding {
             block: Spanned::new(enc_env.stmt_span, buf),
             decls: None,
+            diagnostics: diagnostic.into_iter().collect(),
         })
     }
 

@@ -1,6 +1,10 @@
+use ariadne::ReportKind;
 use pretty_assertions::assert_eq;
 
-use crate::driver::commands::verify::{single_desugar_test, verify_test};
+use crate::driver::{
+    commands::verify::{single_desugar_test, single_desugar_test_with_werr, verify_test},
+    error::CaesarError,
+};
 
 /// Remove trailing whitespace from each line of the string, remove newlines
 /// before and after the string, and remove the common indentation from each line.
@@ -124,7 +128,9 @@ fn test_unroll_transform() {
 }
 
 fn normalized_desugar(source: &str) -> String {
-    single_desugar_test(source)
+    let (result, server) = single_desugar_test_with_werr(source, true);
+    assert!(server.diagnostics.is_empty(), "{source}");
+    result
         .unwrap()
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -192,8 +198,58 @@ fn test_explicit_terminator_expressions_are_preserved() {
                 while true {{}}
             }}"
         );
-        let result = normalized_desugar(&source);
+        let (result, mut server) = single_desugar_test_with_werr(&source, false);
+        let result = result.unwrap();
         assert!(result.contains("assert (x + cast(EUReal, 2))"), "{result}");
+        assert_eq!(server.diagnostics.len(), 1);
+        let diagnostic = server.diagnostics.pop().unwrap();
+        assert_eq!(diagnostic.kind(), ReportKind::Warning);
+        let span = diagnostic.span();
+        assert_eq!(&source[span.start..span.end], "x + 2");
+        let text = diagnostic.into_string(&server.files.lock().unwrap());
+        assert!(text.contains("[terminator-mismatch]"), "{text}");
+        assert!(
+            text.contains(&format!("Terminator for `@{rule}`")),
+            "{text}"
+        );
+        assert!(text.contains("Expected `0`"), "{text}");
+        assert!(text.contains("Inferred fixed-point kind: least."), "{text}");
+    }
+}
+
+#[test]
+fn test_terminator_warning_reports_greatest_fixed_point_kind() {
+    for (context, kind, expected) in [
+        ("@wlp proc", "greatest (one-bounded)", "1"),
+        ("@uwlp proc", "greatest (unbounded)", "∞"),
+    ] {
+        let source = format!("{context} main() -> () {{ @unroll(0, 2) while true {{}} }}");
+        let (result, mut server) = single_desugar_test_with_werr(&source, false);
+        result.unwrap();
+        assert_eq!(server.diagnostics.len(), 1);
+        let diagnostic = server.diagnostics.pop().unwrap();
+        let text = diagnostic.into_string(&server.files.lock().unwrap());
+        assert!(
+            text.contains(&format!("Inferred fixed-point kind: {kind}.")),
+            "{text}"
+        );
+        assert!(text.contains(&format!("Expected `{expected}`")), "{text}");
+    }
+}
+
+#[test]
+fn test_terminator_mismatch_is_fatal_with_werr() {
+    for rule in ["@unroll(0, 1)", "@omega_invariant(n, 0, 1)"] {
+        let source = format!("@wp proc main() -> () {{ {rule} while true {{}} }}");
+        let (result, server) = single_desugar_test_with_werr(&source, true);
+        assert!(matches!(
+            result,
+            Err(CaesarError::Diagnostic(ref diagnostic))
+                if diagnostic.kind() == ReportKind::Warning
+                    && diagnostic.to_string().contains("[terminator-mismatch]")
+        ));
+        // Fatal diagnostics are returned to the caller instead of being queued.
+        assert!(server.diagnostics.is_empty());
     }
 }
 
@@ -247,7 +303,9 @@ fn test_omega_terminator_uses_outer_scope() {
             while true {}
         }
     "#;
-    let result = normalized_desugar(source);
+    let (result, server) = single_desugar_test_with_werr(source, false);
+    let result = result.unwrap();
+    assert_eq!(server.diagnostics.len(), 1);
     assert!(
         result.contains("assert cast(EUReal, ite(n, 2, 3))"),
         "{result}"

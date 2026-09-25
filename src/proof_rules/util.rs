@@ -2,14 +2,15 @@
 
 use std::cell::RefCell;
 
+use ariadne::ReportKind;
 use num::{BigInt, BigRational, Zero};
 
 use crate::{
     ast::{
-        util::{is_bot_lit, is_top_lit},
-        DeclKind, DeclRef, Direction, Expr, ExprBuilder, ExprData, ExprKind, FileId, Ident,
-        LitKind, Param, ProcDecl, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind, Symbol,
-        TyKind, VarDecl, VarKind,
+        util::{is_bot_lit, is_top_lit, remove_casts},
+        DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprBuilder, ExprData, ExprKind, FileId,
+        Ident, Label, LitKind, Param, ProcDecl, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind,
+        Symbol, TyKind, VarDecl, VarKind,
     },
     opt::constfold::is_one_lit,
     tyctx::TyCtx,
@@ -51,24 +52,38 @@ pub fn select_terminator(
         .unwrap_or_else(|| semantics.terminator(builder))
 }
 
-/// Warn about explicit terminators that do not match the inferred fixed-point semantics.
-pub fn warn_if_terminator_differs(
+/// Diagnose explicit terminators that do not match the inferred fixed-point semantics.
+pub fn terminator_mismatch_diagnostic(
     annotation: Ident,
     semantics: FixpointKind,
     terminator: Option<&Expr>,
     builder: ExprBuilder,
-) {
-    let Some(terminator) = terminator else {
-        return;
-    };
+) -> Option<Diagnostic> {
+    let terminator = terminator?;
     let expected_terminator = semantics.terminator(builder);
     let matches = (is_bot_lit(&expected_terminator) && is_bot_lit(terminator))
         || (is_one_lit(&expected_terminator) && is_one_lit(terminator))
         || (is_top_lit(&expected_terminator) && is_top_lit(terminator));
-    if !matches {
-        // TODO: emit a diagnostic instead of a tracing warning.
-        tracing::warn!(%annotation, %terminator, %expected_terminator, "Loop terminator does not match the fixed-point semantics");
+    if matches {
+        return None;
     }
+
+    let expected_terminator = remove_casts(&expected_terminator);
+
+    Some(
+        Diagnostic::new(ReportKind::Warning, terminator.span)
+            .with_code(lsp_types::NumberOrString::String(
+                "terminator-mismatch".to_owned(),
+            ))
+            .with_message(format!(
+                "Terminator for `@{annotation}` does not match the inferred fixed-point semantics"
+            ))
+            .with_label(
+                Label::new(terminator.span)
+                    .with_message(format!("Expected `{expected_terminator}`")),
+            )
+            .with_note(format!("Inferred fixed-point kind: {semantics}.")),
+    )
 }
 
 /// Encode the extend step in k-induction and bmc recursively for k times

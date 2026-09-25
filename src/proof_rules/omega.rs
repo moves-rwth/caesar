@@ -30,7 +30,7 @@ use super::{
     infer_fixpoint_kind,
     util::{
         default_fixpoint_kind_from_terminator, encode_iter, hey_const, intrinsic_param,
-        select_terminator, warn_if_terminator_differs,
+        select_terminator, terminator_mismatch_diagnostic,
     },
     Encoding, EncodingEnvironment, GeneratedEncoding,
 };
@@ -163,7 +163,8 @@ impl Encoding for OmegaInvAnnotation {
 
         let builder = ExprBuilder::new(span);
         let terminator = select_terminator(semantics, explicit_terminator, builder);
-        warn_if_terminator_differs(self.name(), semantics, explicit_terminator, builder);
+        let diagnostic =
+            terminator_mismatch_diagnostic(self.name(), semantics, explicit_terminator, builder);
         let base_case =
             encode_base_case(tcx, &enc_env, inner_stmt, omega_var, omega_inv, &terminator);
         let induction_step = encode_induction_step(tcx, &enc_env, inner_stmt, omega_var, omega_inv);
@@ -191,6 +192,7 @@ impl Encoding for OmegaInvAnnotation {
         Ok(GeneratedEncoding {
             block: Spanned::new(span, stmts),
             decls: None,
+            diagnostics: diagnostic.into_iter().collect(),
         })
     }
 

@@ -383,6 +383,7 @@ impl Encoding for OSTAnnotation {
             decls: Some(vec![
                 cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,
             ]),
+            diagnostics: vec![],
         })
     }
 
