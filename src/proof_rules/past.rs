@@ -281,10 +281,12 @@ impl Encoding for PASTAnnotation {
             .unwrap(),
         );
 
+        // Evaluate the guard in the same initial state as the invariant.
+        let init_guard = to_init_expr(tcx, annotation_span, loop_guard, &modified_vars);
         let cond3_pre = builder.binary(
             BinOpKind::Mul,
             Some(TyKind::EUReal),
-            builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), loop_guard.clone()),
+            builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), init_guard),
             builder.binary(BinOpKind::Sub, Some(TyKind::EUReal), init_inv, eps.clone()),
         );
 

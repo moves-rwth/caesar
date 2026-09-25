@@ -703,7 +703,9 @@ fn test_past_transform() {
             }
             coproc main_past_0(init_x: UInt) -> (x: UInt)
                 pre (
-                    [(1 <= x)] * ((cast(EUReal, (x + 1)))[x -> init_x] - cast(EUReal, 5/10))
+                    [((1 <= x))[x -> init_x]] * (
+                        (cast(EUReal, (x + 1)))[x -> init_x] - cast(EUReal, 5/10)
+                    )
                 )
                 post cast(EUReal, 0)
             {
@@ -762,6 +764,40 @@ fn test_past_rejects_infinite_loop() {
             "{diagnostics}"
         );
     }
+}
+
+#[test]
+fn test_past_accepts_deterministic_countdown() {
+    let source = r#"
+        proc main(init_x: UInt) -> (x: UInt)
+        {
+            x = init_x
+            @past(x + 1, 0.5, 1)
+            while 0 < x {
+                x = x - 1
+            }
+        }
+    "#;
+    assert!(verify_test(source).0.unwrap());
+}
+
+#[test]
+fn test_past_accepts_probabilistic_countdown() {
+    let source = r#"
+        proc main(init_x: UInt) -> (x: UInt)
+        {
+            var prob_choice: Bool
+            x = init_x
+            @past(x + 1, 0.5, 1)
+            while 0 < x {
+                prob_choice = flip(0.5)
+                if prob_choice {
+                    x = x - 1
+                } else {}
+            }
+        }
+    "#;
+    assert!(verify_test(source).0.unwrap());
 }
 
 #[test]
