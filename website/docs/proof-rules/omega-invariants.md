@@ -26,7 +26,7 @@ For more details on the proof rule, see the discussion following [Definition 5.3
 
 ## Usage
 
-Add `@omega_invariant(n, I)` to a `while` loop, where `I` describes the family $I_n$.
+Add `@omega_invariant(n, I)` or `@omega_invariant(n, I, terminator)` to a `while` loop, where `I` describes the family $I_n$.
 In the following example, each iteration decrements `x` and costs one tick.
 The family $I_n = [x\leq n]\cdot x$ proves that the expected runtime is at least the initial value of `x`.
 
@@ -49,8 +49,13 @@ The family $I_n = [x\leq n]\cdot x$ proves that the expected runtime is at least
 
 - `n`: A natural-number index bound only within the invariant expression.
 - `I`: An expectation in the program variables and `n` that describes the candidate family.
+- `terminator`: An optional expression of type `EUReal` used to terminate the loop unfolding in the base case.
 
-The index is local to the loop and its annotation.
+The index is bound only within `I`.
+The terminator expression resolves names in the surrounding program scope, so it cannot refer to the bound index.
+
+Terminator inference and mismatch warnings work as for [loop unrolling](./unrolling#usage).
+When omitted, the terminator defaults to `0` for `@wp` and `@ert`, `1` for `@wlp`, and `\infty` for `@uwlp`.
 
 ## Soundness
 
@@ -60,7 +65,7 @@ Use the [calculus annotations](./approximations#calculus-annotations) `@wp`, `@w
 
 :::
 
-For every candidate invariant family, the encoding gives:
+For every candidate invariant family, when the terminator is the appropriate initial value for the intended fixed-point semantics, the encoding gives:
 
 - With `@wp` or `@ert`: an under-approximation of the least fixed point, giving sound verification in a `proc`.
 - With `@wlp`: an over-approximation of the one-bounded greatest fixed point, giving sound verification in a `coproc`.
@@ -122,9 +127,11 @@ For `uwlp`, the same dual encoding uses `coassert \infty; coassume \infty` in th
 The induction step is unchanged.
 This checks $I_0 \geq \Phi_f(\infty)$ instead of $I_0 \geq \Phi_f(1)$.
 
+An explicit terminator is used in the base case as `assert terminator` for least fixed-point semantics or `coassert terminator` for greatest fixed-point semantics.
+
 ### Verification Pre-Expectation Semantics
 
-Let $C$ be `@omega_invariant(n, I) while G { Body }`, with postexpectation $f$ and loop-entry state $\sigma$.
+Let $C$ be `@omega_invariant(n, I, terminator) while G { Body }`, using the inferred terminator when it is omitted, with postexpectation $f$ and loop-entry state $\sigma$.
 Write $H(\sigma)$ for the states that agree with $\sigma$ on every program variable not modified by the loop, as in [local inductive invariants](./induction#local-inductive-invariants).
 The checks of the encoding succeed from $\sigma$ if the base case holds in every state in $H(\sigma)$ and the induction step holds in every such state for every $n\in\mathbb{N}$.
 
@@ -138,7 +145,7 @@ $$
     \end{cases}
 $$
 
-For `wlp` and `uwlp`, the checks use the dual inequalities with their respective top expectations, and the value is
+For `wlp` and `uwlp`, the checks use the dual inequalities with the chosen terminator, which defaults to their respective top expectations, and the value is
 
 $$
     \mathrm{vc}\llbracket C \rrbracket(f)(\sigma) =

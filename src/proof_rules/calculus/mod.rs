@@ -51,6 +51,16 @@ pub enum FixpointKind {
     },
 }
 
+impl std::fmt::Display for FixpointKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Least => "least",
+            Self::Greatest { one_bounded: true } => "greatest (one-bounded)",
+            Self::Greatest { one_bounded: false } => "greatest (unbounded)",
+        })
+    }
+}
+
 impl FixpointKind {
     /// The starting expectation in Kleene's fixed-point iteration.
     ///

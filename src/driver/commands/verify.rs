@@ -127,12 +127,20 @@ pub(crate) fn verify_test(source: &str) -> (Result<bool, CaesarError>, crate::se
 
 #[cfg(test)]
 pub(crate) fn single_desugar_test(source: &str) -> Result<String, CaesarError> {
+    single_desugar_test_with_werr(source, true).0
+}
+
+#[cfg(test)]
+pub(crate) fn single_desugar_test_with_werr(
+    source: &str,
+    werr: bool,
+) -> (Result<String, CaesarError>, crate::servers::TestServer) {
     use crate::ast::SourceFilePath;
 
     use crate::driver::front::parse_and_tycheck;
 
     let mut options = VerifyCommand::default();
-    options.input_options.werr = true;
+    options.input_options.werr = werr;
 
     let mut server = crate::servers::TestServer::new(&options);
     let file_id = server
@@ -142,18 +150,21 @@ pub(crate) fn single_desugar_test(source: &str) -> Result<String, CaesarError> {
         .add(SourceFilePath::Builtin, source.to_owned())
         .id;
 
-    let (mut module, mut tcx) = parse_and_tycheck(
-        &options.input_options,
-        &options.debug_options,
-        &mut server,
-        &[file_id],
-    )?;
+    let result = (|| {
+        let (mut module, mut tcx) = parse_and_tycheck(
+            &options.input_options,
+            &options.debug_options,
+            &mut server,
+            &[file_id],
+        )?;
 
-    assert_eq!(module.items.len(), 1);
+        assert_eq!(module.items.len(), 1);
 
-    module.apply_encodings(&mut tcx, &mut server)?;
+        module.apply_encodings(&mut tcx, &mut server)?;
 
-    Ok(module.to_string())
+        Ok(module.to_string())
+    })();
+    (result, server)
 }
 
 /// Synchronously verify the given files.

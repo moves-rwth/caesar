@@ -4,6 +4,7 @@
 //!
 //! - `free_variable`: the variable that is used in the omega invariant
 //! - `omega_inv`: the omega invariant of the loop
+//! - `terminator` (optional): the terminator of the loop unfolding in the base case, inferred from the calculus when omitted
 //!
 
 use std::{any::Any, fmt};
@@ -18,14 +19,19 @@ use crate::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus},
+    intrinsic::annotations::{
+        tycheck_annotation_call_with_optional_args, AnnotationDecl, AnnotationError, Calculus,
+    },
     proof_rules::calculus::{ApproximationKind, FixpointKind},
     tyctx::TyCtx,
 };
 
 use super::{
     infer_fixpoint_kind,
-    util::{encode_iter, hey_const, intrinsic_param, two_args},
+    util::{
+        default_fixpoint_kind_from_terminator, encode_iter, hey_const, intrinsic_param,
+        select_terminator, terminator_mismatch_diagnostic,
+    },
     Encoding, EncodingEnvironment, GeneratedEncoding,
 };
 
@@ -41,10 +47,14 @@ impl OmegaInvAnnotation {
 
         let omega_inv_param = intrinsic_param(file, "omega_inv", TyKind::EUReal, false);
         let free_var_param = intrinsic_param(file, "free_variable", TyKind::UInt, false);
+        let terminator_param = intrinsic_param(file, "terminator", TyKind::SpecTy, false);
 
         let anno_decl = AnnotationDecl {
             name,
-            inputs: Spanned::with_dummy_file_span(vec![free_var_param, omega_inv_param], file),
+            inputs: Spanned::with_dummy_file_span(
+                vec![free_var_param, omega_inv_param, terminator_param],
+                file,
+            ),
             span: Span::dummy_file_span(file),
         };
 
@@ -72,8 +82,9 @@ impl Encoding for OmegaInvAnnotation {
         args: &mut [Expr],
     ) -> Result<(), ResolveError> {
         // Scope the index to the invariant expression.
+        let (invariant_args, terminator_args) = args.split_at_mut(args.len().min(2));
         resolve.with_subscope(|resolve| {
-            let mut args_iter = args.iter_mut();
+            let mut args_iter = invariant_args.iter_mut();
             if let Some(free_var) = args_iter.next() {
                 if let ExprKind::Var(var_ref) = &free_var.kind {
                     let var_decl = VarDecl {
@@ -90,7 +101,8 @@ impl Encoding for OmegaInvAnnotation {
                 }
             }
             resolve.visit_exprs(args_iter.into_slice())
-        })
+        })?;
+        resolve.visit_exprs(terminator_args)
     }
 
     fn tycheck(
@@ -99,8 +111,7 @@ impl Encoding for OmegaInvAnnotation {
         call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), TycheckError> {
-        tycheck_annotation_call(tycheck, call_span, &self.0, args)?;
-        Ok(())
+        tycheck_annotation_call_with_optional_args(tycheck, call_span, &self.0, args, 2)
     }
 
     fn get_approximation(
@@ -116,11 +127,8 @@ impl Encoding for OmegaInvAnnotation {
         approx & inner_approximation_kind
     }
 
-    fn default_fixpoint_kind(&self, direction: Direction, _args: &[Expr]) -> FixpointKind {
-        match direction {
-            Direction::Up => FixpointKind::Greatest { one_bounded: false },
-            Direction::Down => FixpointKind::Least,
-        }
+    fn default_fixpoint_kind(&self, direction: Direction, args: &[Expr]) -> FixpointKind {
+        default_fixpoint_kind_from_terminator(direction, args.get(2))
     }
 
     fn transform(
@@ -131,7 +139,9 @@ impl Encoding for OmegaInvAnnotation {
         mut enc_env: EncodingEnvironment,
     ) -> Result<GeneratedEncoding, AnnotationError> {
         let span = enc_env.call_span;
-        let [free_var, omega_inv] = two_args(args);
+        let free_var = &args[0];
+        let omega_inv = &args[1];
+        let explicit_terminator = args.get(2);
         let ExprKind::Var(omega_var) = &free_var.kind else {
             unreachable!("error should have been caught during resolve")
         };
@@ -151,7 +161,10 @@ impl Encoding for OmegaInvAnnotation {
             .into_iter()
             .collect();
 
-        let terminator = semantics.terminator(ExprBuilder::new(span));
+        let builder = ExprBuilder::new(span);
+        let terminator = select_terminator(semantics, explicit_terminator, builder);
+        let diagnostic =
+            terminator_mismatch_diagnostic(self.name(), semantics, explicit_terminator, builder);
         let base_case =
             encode_base_case(tcx, &enc_env, inner_stmt, omega_var, omega_inv, &terminator);
         let induction_step = encode_induction_step(tcx, &enc_env, inner_stmt, omega_var, omega_inv);
@@ -179,6 +192,7 @@ impl Encoding for OmegaInvAnnotation {
         Ok(GeneratedEncoding {
             block: Spanned::new(span, stmts),
             decls: None,
+            diagnostics: diagnostic.into_iter().collect(),
         })
     }
 
@@ -191,7 +205,7 @@ impl Encoding for OmegaInvAnnotation {
     }
 }
 
-/// Check I_0 <= Phi_f(0), or Psi_f(top) <= I_0 for greatest fixed points.
+/// Check I_0 <= Phi_f(terminator), or Psi_f(terminator) <= I_0 for greatest fixed points.
 fn encode_base_case(
     tcx: &TyCtx,
     enc_env: &EncodingEnvironment,

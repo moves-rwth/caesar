@@ -3,30 +3,32 @@
 //! @unroll takes the arguments:
 //!
 //! - `k`: the number of times the loop will be unrolled
-//! - `terminator`: the terminator of the loop
+//! - `terminator` (optional): the terminator of the loop, inferred from the calculus when omitted
 
 use std::{any::Any, fmt};
 
 use crate::{
     ast::{
-        util::{is_bot_lit, is_top_lit},
-        visit::VisitorMut,
-        Direction, Expr, ExprBuilder, Files, Ident, SourceFilePath, Span, Spanned, Stmt, Symbol,
-        TyKind,
+        visit::VisitorMut, Direction, Expr, ExprBuilder, Files, Ident, SourceFilePath, Span,
+        Spanned, Stmt, Symbol, TyKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus},
-    opt::constfold::is_one_lit,
+    intrinsic::annotations::{
+        tycheck_annotation_call_with_optional_args, AnnotationDecl, AnnotationError, Calculus,
+    },
     proof_rules::calculus::{ApproximationKind, FixpointKind},
     tyctx::TyCtx,
 };
 
 use super::{
     infer_fixpoint_kind,
-    util::{encode_unroll, hey_const, intrinsic_param, lit_u128, two_args},
+    util::{
+        default_fixpoint_kind_from_terminator, encode_unroll, hey_const, intrinsic_param, lit_u128,
+        select_terminator, terminator_mismatch_diagnostic,
+    },
     Encoding, EncodingEnvironment, GeneratedEncoding,
 };
 
@@ -40,11 +42,11 @@ impl UnrollAnnotation {
         let name = Ident::with_dummy_file_span(Symbol::intern("unroll"), file);
 
         let k_param = intrinsic_param(file, "k", TyKind::UInt, true);
-        let invariant_param = intrinsic_param(file, "terminator", TyKind::SpecTy, false);
+        let terminator_param = intrinsic_param(file, "terminator", TyKind::SpecTy, false);
 
         let anno_decl = AnnotationDecl {
             name,
-            inputs: Spanned::with_dummy_file_span(vec![k_param, invariant_param], file),
+            inputs: Spanned::with_dummy_file_span(vec![k_param, terminator_param], file),
             span: Span::dummy_file_span(file),
         };
 
@@ -71,8 +73,7 @@ impl Encoding for UnrollAnnotation {
         call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), TycheckError> {
-        tycheck_annotation_call(tycheck, call_span, &self.0, args)?;
-        Ok(())
+        tycheck_annotation_call_with_optional_args(tycheck, call_span, &self.0, args, 1)
     }
 
     fn resolve(
@@ -98,24 +99,7 @@ impl Encoding for UnrollAnnotation {
     }
 
     fn default_fixpoint_kind(&self, direction: Direction, args: &[Expr]) -> FixpointKind {
-        if let [_, terminator] = args {
-            if is_bot_lit(terminator) {
-                return FixpointKind::Least;
-            }
-            if is_one_lit(terminator) {
-                return FixpointKind::Greatest { one_bounded: true };
-            }
-            if is_top_lit(terminator) {
-                return FixpointKind::Greatest { one_bounded: false };
-            }
-        } else {
-            unreachable!();
-        }
-
-        match direction {
-            Direction::Up => FixpointKind::Greatest { one_bounded: false },
-            Direction::Down => FixpointKind::Least,
-        }
+        default_fixpoint_kind_from_terminator(direction, args.get(1))
     }
 
     fn transform(
@@ -125,25 +109,27 @@ impl Encoding for UnrollAnnotation {
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
     ) -> Result<GeneratedEncoding, AnnotationError> {
-        let [k, terminator] = two_args(args);
-
-        let k: u128 = lit_u128(k);
+        let k = lit_u128(&args[0]);
+        let explicit_terminator = args.get(1);
 
         let semantics = infer_fixpoint_kind(self, enc_env.calculus, enc_env.direction, args);
-        let expected_terminator = semantics.terminator(ExprBuilder::new(enc_env.call_span));
-        warn_if_terminator_differs(terminator, &expected_terminator);
+        let builder = ExprBuilder::new(enc_env.call_span);
+        let terminator = select_terminator(semantics, explicit_terminator, builder);
+        let diagnostic =
+            terminator_mismatch_diagnostic(self.name(), semantics, explicit_terminator, builder);
 
         // Extend the loop k times without asserts (unlike k-induction) because bmc flag is set
         let buf = encode_unroll(
             &enc_env,
             inner_stmt,
             k,
-            hey_const(&enc_env, terminator, enc_env.direction, tcx),
+            hey_const(&enc_env, &terminator, enc_env.direction, tcx),
         );
 
         Ok(GeneratedEncoding {
             block: Spanned::new(enc_env.stmt_span, buf),
             decls: None,
+            diagnostics: diagnostic.into_iter().collect(),
         })
     }
 
@@ -153,15 +139,5 @@ impl Encoding for UnrollAnnotation {
 
     fn as_any(&self) -> &dyn Any {
         self
-    }
-}
-
-fn warn_if_terminator_differs(terminator: &Expr, expected_terminator: &Expr) {
-    let matches = (is_bot_lit(expected_terminator) && is_bot_lit(terminator))
-        || (is_one_lit(expected_terminator) && is_one_lit(terminator))
-        || (is_top_lit(expected_terminator) && is_top_lit(terminator));
-    if !matches {
-        // TODO: emit a diagnostic instead of a tracing warning.
-        tracing::warn!(%terminator, %expected_terminator, "Unrolling terminator does not match the fixed-point semantics");
     }
 }

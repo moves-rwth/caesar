@@ -1,6 +1,10 @@
+use ariadne::ReportKind;
 use pretty_assertions::assert_eq;
 
-use crate::driver::commands::verify::{single_desugar_test, verify_test};
+use crate::driver::{
+    commands::verify::{single_desugar_test, single_desugar_test_with_werr, verify_test},
+    error::CaesarError,
+};
 
 /// Remove trailing whitespace from each line of the string, remove newlines
 /// before and after the string, and remove the common indentation from each line.
@@ -121,6 +125,191 @@ fn test_unroll_transform() {
     remove_whitespace(&mut test_string);
     remove_whitespace(&mut res);
     assert_eq!(test_string, res);
+}
+
+fn normalized_desugar(source: &str) -> String {
+    let (result, server) = single_desugar_test_with_werr(source, true);
+    assert!(server.diagnostics.is_empty(), "{source}");
+    result
+        .unwrap()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[test]
+fn test_optional_terminators_match_explicit_defaults() {
+    // The calculus must determine the default even when the procedure direction is used for refutation.
+    for direction in ["proc", "coproc"] {
+        for (calculus, terminator) in [
+            ("@wp", "0"),
+            ("@ert", "0"),
+            ("@wlp", "1"),
+            ("@uwlp", "∞"),
+            ("", if direction == "proc" { "0" } else { "∞" }),
+        ] {
+            for (rule, required_args) in [
+                ("unroll", "0"), // Zero unrollings produce only the terminator.
+                ("unroll", "2"),
+                ("omega_invariant", "n, [n > 0]"),
+            ] {
+                let source = |args: &str| {
+                    format!(
+                        "{calculus} {direction} main() -> () {{ @{rule}({args}) while true {{}} }}"
+                    )
+                };
+                let implicit = source(required_args);
+                let explicit = source(&format!("{required_args}, {terminator}"));
+                assert_eq!(
+                    normalized_desugar(&implicit),
+                    normalized_desugar(&explicit),
+                    "{implicit}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn test_omega_explicit_terminator_selects_fixed_point_semantics() {
+    // An explicit terminator must select the same omega encoding as the corresponding calculus.
+    for direction in ["proc", "coproc"] {
+        for (calculus, terminator) in [("wp", "0"), ("wlp", "1"), ("uwlp", "∞")] {
+            let source = format!(
+                "{direction} main() -> () {{ @omega_invariant(n, [n > 0], {terminator}) while true {{}} }}"
+            );
+            // Desugared procedures omit calculus annotations when printed.
+            assert_eq!(
+                normalized_desugar(&source),
+                normalized_desugar(&format!("@{calculus} {source}")),
+                "{source}"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_explicit_terminator_expressions_are_preserved() {
+    // Keep the supplied expression even though wp would otherwise choose 0.
+    for (rule, required_args) in [("unroll", "0"), ("omega_invariant", "n, [n > 0]")] {
+        let source = format!(
+            "@wp proc main(x: EUReal) -> () {{
+                @{rule}({required_args}, x + 2)
+                while true {{}}
+            }}"
+        );
+        let (result, mut server) = single_desugar_test_with_werr(&source, false);
+        let result = result.unwrap();
+        assert!(result.contains("assert (x + cast(EUReal, 2))"), "{result}");
+        assert_eq!(server.diagnostics.len(), 1);
+        let diagnostic = server.diagnostics.pop().unwrap();
+        assert_eq!(diagnostic.kind(), ReportKind::Warning);
+        let span = diagnostic.span();
+        assert_eq!(&source[span.start..span.end], "x + 2");
+        let text = diagnostic.into_string(&server.files.lock().unwrap());
+        assert!(text.contains("[terminator-mismatch]"), "{text}");
+        assert!(
+            text.contains(&format!("Terminator for `@{rule}`")),
+            "{text}"
+        );
+        assert!(text.contains("Expected `0`"), "{text}");
+        assert!(text.contains("Inferred fixed-point kind: least."), "{text}");
+    }
+}
+
+#[test]
+fn test_terminator_warning_reports_greatest_fixed_point_kind() {
+    for (context, kind, expected) in [
+        ("@wlp proc", "greatest (one-bounded)", "1"),
+        ("@uwlp proc", "greatest (unbounded)", "∞"),
+    ] {
+        let source = format!("{context} main() -> () {{ @unroll(0, 2) while true {{}} }}");
+        let (result, mut server) = single_desugar_test_with_werr(&source, false);
+        result.unwrap();
+        assert_eq!(server.diagnostics.len(), 1);
+        let diagnostic = server.diagnostics.pop().unwrap();
+        let text = diagnostic.into_string(&server.files.lock().unwrap());
+        assert!(
+            text.contains(&format!("Inferred fixed-point kind: {kind}.")),
+            "{text}"
+        );
+        assert!(text.contains(&format!("Expected `{expected}`")), "{text}");
+    }
+}
+
+#[test]
+fn test_terminator_mismatch_is_fatal_with_werr() {
+    for rule in ["@unroll(0, 1)", "@omega_invariant(n, 0, 1)"] {
+        let source = format!("@wp proc main() -> () {{ {rule} while true {{}} }}");
+        let (result, server) = single_desugar_test_with_werr(&source, true);
+        assert!(matches!(
+            result,
+            Err(CaesarError::Diagnostic(ref diagnostic))
+                if diagnostic.kind() == ReportKind::Warning
+                    && diagnostic.to_string().contains("[terminator-mismatch]")
+        ));
+        // Fatal diagnostics are returned to the caller instead of being queued.
+        assert!(server.diagnostics.is_empty());
+    }
+}
+
+#[test]
+fn test_optional_terminators_reject_invalid_argument_counts() {
+    for (annotation, expected) in [
+        ("@unroll()", "Expected 1 to 2 arguments, got 0"),
+        ("@unroll(1, 0, 0)", "Expected 1 to 2 arguments, got 3"),
+        ("@omega_invariant()", "Expected 2 to 3 arguments, got 0"),
+        ("@omega_invariant(n)", "Expected 2 to 3 arguments, got 1"),
+        (
+            "@omega_invariant(n, 0, 0, 0)",
+            "Expected 2 to 3 arguments, got 4",
+        ),
+    ] {
+        let source = format!("proc main() -> () {{ {annotation} while true {{}} }}");
+        let err = single_desugar_test(&source).unwrap_err();
+        assert!(err.to_string().contains(expected), "{annotation}: {err}");
+    }
+}
+
+#[test]
+fn test_optional_terminators_preserve_argument_type_checks() {
+    for (annotation, expected) in [
+        ("@unroll(true)", "Cannot cast expression to type UInt"),
+        ("@unroll(1, true)", "Cannot cast expression to type EUReal"),
+        (
+            "@omega_invariant(n, 1, true)",
+            "Cannot cast expression to type EUReal",
+        ),
+        ("@unroll(k)", "Expected a literal here"),
+        ("@unroll(k, 0)", "Expected a literal here"),
+    ] {
+        let source = format!("proc main(k: UInt) -> () {{ {annotation} while true {{}} }}");
+        let err = single_desugar_test(&source).unwrap_err();
+        assert!(err.to_string().contains(expected), "{annotation}: {err}");
+    }
+}
+
+#[test]
+fn test_omega_terminator_uses_outer_scope() {
+    // The invariant's index must not leak into the terminator.
+    let source = "proc main() -> () { @omega_invariant(n, [n > 0], n) while true {} }";
+    let err = single_desugar_test(source).unwrap_err();
+    assert!(err.to_string().contains("Name `n` is not declared"));
+
+    // Different types distinguish the outer Bool n from the invariant's UInt n.
+    let source = r#"
+        proc main(n: Bool) -> () {
+            @omega_invariant(n, [n > 0], ite(n, 2, 3))
+            while true {}
+        }
+    "#;
+    let (result, server) = single_desugar_test_with_werr(source, false);
+    let result = result.unwrap();
+    assert_eq!(server.diagnostics.len(), 1);
+    assert!(
+        result.contains("assert cast(EUReal, ite(n, 2, 3))"),
+        "{result}"
+    );
 }
 
 #[test]

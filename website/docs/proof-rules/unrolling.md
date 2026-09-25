@@ -30,16 +30,14 @@ Both techniques are related, but [we explain the difference between applying the
 
 ## Usage
 
-A `while` loop is annotated by the `@unroll(k, terminator)` annotation where `k` is a number literal and `terminator` is an expression of type `EUReal`.
+A `while` loop is annotated by `@unroll(k)` or `@unroll(k, terminator)`, where `k` is a nonnegative integer literal and `terminator` is an expression of type `EUReal`.
+When omitted, the terminator defaults to `0` for `@wp` and `@ert`, `1` for `@wlp`, and `\infty` for `@uwlp`.
 
-The `terminator` expression must correspond to the initial value of the fixed-point iteration semantics of the loop.
-For sound bounds from finite fixed-point iteration, use the following values for `terminator`:
+Without a calculus annotation, an explicit `0`, `1`, or `\infty` determines the fixed-point semantics.
+Otherwise, `proc` defaults to `0` and `coproc` to `\infty`.
 
- * For *greatest fixed-point semantics* (`wlp`, `uwlp`), one chooses the *top* element of the lattice:
-    * `1` for the one-bounded `@wlp` semantics,
-    * `\infty` for the unbounded `@uwlp` semantics over `EUReal`.
- * For *least fixed-point semantics* (`wp`, `ert`), one chooses the *bottom* element of the lattice:
-    * `0` for expectation-based semantics (wp, ert).
+An explicit terminator is always used.
+Caesar warns if it does not match the inferred semantics.
 
 ## Approximating Loop Semantics {#approximation}
 
@@ -51,7 +49,7 @@ This might help to find e.g. an [inductive invariant](./induction.md) for the lo
 In contrast to the applications of [verification](#verification) and [refutation](#bounded-model-checking), unrolling for approximations does not require a `pre`, but just a `post` expectation.
 
 Consider this simple geometric loop example.
-We want to encode a loop with `wp` semantics, so we use `0` as our `terminator`.
+We want to encode a loop with `wp` semantics, so we let `@wp` select `0` as our `terminator`.
 
 ```heyvl
 @wp proc geo1_unroll() -> (c: UInt)
@@ -60,7 +58,7 @@ We want to encode a loop with `wp` semantics, so we use `0` as our `terminator`.
 {
     c = 0
     var cont: Bool = true
-    @unroll(3, 0) // k = 3, terminator = 0
+    @unroll(3) // k = 3, terminator defaults to 0 for @wp
     while cont {
         var prob_choice: Bool = flip(0.5)
         if prob_choice { cont = false } else { c = c + 1 }
@@ -166,7 +164,7 @@ Caesar uses them to classify the result:
 
 ## Soundness
 
-By monotonicity of the loop characteristic functional, the following soundness conditions hold when the loop body has the required [approximation](./approximations#proof-rule-approximations):
+By monotonicity of the loop characteristic functional, the following soundness conditions hold when the loop body has the required [approximation](./approximations#proof-rule-approximations) and the terminator is the appropriate initial value:
 
  * $\mathrm{vc}\llbracket \texttt{@unroll(k, 1) while G \{ B \}} \rrbracket \sqsupseteq \mathrm{wlp}\llbracket \texttt{while G \{ B \}} \rrbracket$
  * $\mathrm{vc}\llbracket \texttt{@unroll(k, }\infty\texttt{) while G \{ B \}} \rrbracket \sqsupseteq \mathrm{uwlp}\llbracket \texttt{while G \{ B \}} \rrbracket$
@@ -189,9 +187,9 @@ For [the application of refutation (bounded model checking)](#bounded-model-chec
 
 ## Semantics
 
-An annotated loop `@unroll(k, terminator) while G { B }` is replaced by its $k$-step unfolding.
+An annotated loop `@unroll(k, terminator) while G { B }` is replaced by its $k$-step unfolding, using the inferred terminator when it is omitted.
 Below, we show `k = 3` unfoldings.
-The `terminator` is encoded by an `assert 0; assume 0` at the end of the `k = 3` loop iterations.
+For `terminator = 0`, the terminator is encoded by an `assert 0; assume 0` at the end of the `k = 3` loop iterations.
 
 ```heyvl
 if cont {

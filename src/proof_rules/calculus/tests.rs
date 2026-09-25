@@ -12,6 +12,38 @@ fn diagnostics_text(server: &mut TestServer) -> String {
 }
 
 #[test]
+fn test_optional_terminator_inference_soundness() {
+    // Each program verifies; the inferred approximation determines whether its proof is sound.
+    for (calculus, direction, terminator, bound, expect_unsound) in [
+        ("@wp", "coproc", None, "0", true),
+        ("@wlp", "proc", None, "1", true),
+        ("", "proc", None, "0", false),
+        ("", "coproc", None, "∞", false),
+        ("", "coproc", Some("0"), "0", true),
+        ("", "proc", Some("1"), "1", true),
+        ("", "proc", Some("∞"), "∞", true),
+    ] {
+        let suffix = terminator.map_or(String::new(), |expr| format!(", {expr}"));
+        for rule in [
+            format!("@unroll(1{suffix})"),
+            format!("@omega_invariant(n, {bound}{suffix})"),
+        ] {
+            let source = format!(
+                "{calculus} {direction} main() -> () pre {bound} post 0 {{ {rule} while true {{}} }}"
+            );
+            let (result, mut server) = verify_test(&source);
+            assert!(result.unwrap(), "{source}");
+            let diagnostics = diagnostics_text(&mut server);
+            assert_eq!(
+                diagnostics.contains("Unsound verification"),
+                expect_unsound,
+                "{source}\n{diagnostics}"
+            );
+        }
+    }
+}
+
+#[test]
 fn test_unsound_proof() {
     let source = r#"
     @wp

@@ -221,6 +221,26 @@ pub fn tycheck_annotation_call(
     Ok(())
 }
 
+/// Typecheck an annotation call with optional trailing arguments.
+pub fn tycheck_annotation_call_with_optional_args(
+    tycheck: &mut Tycheck<'_>,
+    span: Span,
+    annotation: &AnnotationDecl,
+    args: &mut [Expr],
+    required_args: usize,
+) -> Result<(), TycheckError> {
+    let max_args = annotation.inputs.node.len();
+    if !(required_args..=max_args).contains(&args.len()) {
+        return Err(TycheckError::ArgumentCountRangeMismatch {
+            span,
+            min: required_args,
+            max: max_args,
+            caller: args.len(),
+        });
+    }
+    tycheck.check_call(span, &annotation.inputs.node[..args.len()], args)
+}
+
 /// Add all built-in calculus annotations as globals into the [`TyCtx`].
 pub fn init_calculi(files: &mut Files, tcx: &mut TyCtx) {
     let file = files

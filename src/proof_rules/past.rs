@@ -305,6 +305,7 @@ impl Encoding for PASTAnnotation {
         Ok(GeneratedEncoding {
             block: Spanned::new(annotation_span, vec![]),
             decls: Some(vec![cond1_proc, cond2_proc, cond3_proc]),
+            diagnostics: vec![],
         })
     }
 

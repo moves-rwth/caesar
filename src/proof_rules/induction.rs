@@ -281,6 +281,7 @@ fn transform_k_induction(
     Ok(GeneratedEncoding {
         block: Spanned::new(enc_env.stmt_span, buf),
         decls: None,
+        diagnostics: vec![],
     })
 }
 

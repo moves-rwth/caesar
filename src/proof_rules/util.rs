@@ -2,18 +2,89 @@
 
 use std::cell::RefCell;
 
+use ariadne::ReportKind;
 use num::{BigInt, BigRational, Zero};
 
 use crate::{
     ast::{
-        DeclKind, DeclRef, Direction, Expr, ExprBuilder, ExprData, ExprKind, FileId, Ident,
-        LitKind, Param, ProcDecl, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind, Symbol,
-        TyKind, VarDecl, VarKind,
+        util::{is_bot_lit, is_top_lit, remove_casts},
+        DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprBuilder, ExprData, ExprKind, FileId,
+        Ident, Label, LitKind, Param, ProcDecl, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind,
+        Symbol, TyKind, VarDecl, VarKind,
     },
+    opt::constfold::is_one_lit,
     tyctx::TyCtx,
 };
 
-use super::{EncodingEnvironment, ProcInfo};
+use super::{calculus::FixpointKind, EncodingEnvironment, ProcInfo};
+
+/// Infer fixed-point semantics from an explicit terminator, falling back to the procedure direction.
+pub fn default_fixpoint_kind_from_terminator(
+    direction: Direction,
+    terminator: Option<&Expr>,
+) -> FixpointKind {
+    if let Some(terminator) = terminator {
+        if is_bot_lit(terminator) {
+            return FixpointKind::Least;
+        }
+        if is_one_lit(terminator) {
+            return FixpointKind::Greatest { one_bounded: true };
+        }
+        if is_top_lit(terminator) {
+            return FixpointKind::Greatest { one_bounded: false };
+        }
+    }
+
+    match direction {
+        Direction::Down => FixpointKind::Least,
+        Direction::Up => FixpointKind::Greatest { one_bounded: false },
+    }
+}
+
+/// Use the explicit terminator when present, or the terminator of the inferred fixed-point semantics.
+pub fn select_terminator(
+    semantics: FixpointKind,
+    terminator: Option<&Expr>,
+    builder: ExprBuilder,
+) -> Expr {
+    terminator
+        .cloned()
+        .unwrap_or_else(|| semantics.terminator(builder))
+}
+
+/// Diagnose explicit terminators that do not match the inferred fixed-point semantics.
+pub fn terminator_mismatch_diagnostic(
+    annotation: Ident,
+    semantics: FixpointKind,
+    terminator: Option<&Expr>,
+    builder: ExprBuilder,
+) -> Option<Diagnostic> {
+    let terminator = terminator?;
+    let expected_terminator = semantics.terminator(builder);
+    let matches = (is_bot_lit(&expected_terminator) && is_bot_lit(terminator))
+        || (is_one_lit(&expected_terminator) && is_one_lit(terminator))
+        || (is_top_lit(&expected_terminator) && is_top_lit(terminator));
+    if matches {
+        return None;
+    }
+
+    let expected_terminator = remove_casts(&expected_terminator);
+
+    Some(
+        Diagnostic::new(ReportKind::Warning, terminator.span)
+            .with_code(lsp_types::NumberOrString::String(
+                "terminator-mismatch".to_owned(),
+            ))
+            .with_message(format!(
+                "Terminator for `@{annotation}` does not match the inferred fixed-point semantics"
+            ))
+            .with_label(
+                Label::new(terminator.span)
+                    .with_message(format!("Expected `{expected_terminator}`")),
+            )
+            .with_note(format!("Inferred fixed-point kind: {semantics}.")),
+    )
+}
 
 /// Encode the extend step in k-induction and bmc recursively for k times
 /// # Arguments

@@ -221,7 +221,7 @@ impl Module {
     ) -> Result<&mut [Item<SourceUnit>], CaesarError> {
         let mut new_units = vec![];
         for source_unit in &mut self.items {
-            let unit_extras = source_unit.enter_mut().apply_encodings(tcx)?;
+            let unit_extras = source_unit.enter_mut().apply_encodings(tcx, server)?;
             new_units.extend(unit_extras);
         }
         for source_unit in &mut new_units {
@@ -450,6 +450,7 @@ impl SourceUnit {
     pub fn apply_encodings(
         &mut self,
         tcx: &mut TyCtx,
+        server: &mut dyn Server,
     ) -> Result<Vec<Item<SourceUnit>>, CaesarError> {
         let mut encoding_visitor = EncodingVisitor::new(tcx);
         match self {
@@ -457,7 +458,11 @@ impl SourceUnit {
             SourceUnit::Raw(block) => encoding_visitor.visit_block(block),
         }
         .map_err(|ann_err| ann_err.diagnostic())?;
-        Ok(encoding_visitor.finish())
+        let (new_source_units, diagnostics) = encoding_visitor.finish();
+        for diagnostic in diagnostics {
+            server.add_or_throw_diagnostic(diagnostic)?;
+        }
+        Ok(new_source_units)
     }
 
     /// If this is a declaration, add the dependencies to the [DepGraph].
