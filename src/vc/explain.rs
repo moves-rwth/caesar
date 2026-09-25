@@ -18,12 +18,13 @@ use crate::{
         Expr, ExprBuilder, Files, Ident, ProcDecl, Span, Spanned, Stmt, StmtKind, Symbol, TyKind,
     },
     driver::error::CaesarError,
-    intrinsic::annotations::AnnotationKind,
+    intrinsic::annotations::{AnnotationKind, Calculus},
     opt::{constfold::ConstFold, unfolder::Unfolder},
     pretty::SimplePretty,
     proof_rules::{
-        self, encode_unroll, hey_const, negations::DirectionTracker, EncodingEnvironment,
-        InvariantAnnotation, UnrollAnnotation,
+        self, encode_unroll, get_proc_calculus, hey_const, infer_fixpoint_kind,
+        negations::DirectionTracker, select_terminator, EncodingEnvironment, InvariantAnnotation,
+        UnrollAnnotation,
     },
     resource_limits::LimitsRef,
     smt::{funcs::axiomatic::AxiomaticFunctionEncoder, DepConfig, SmtCtx},
@@ -95,6 +96,8 @@ impl ExprExplanation {
 pub struct VcExplanation {
     /// The direction is needed to run proof rule encodings in explanations.
     pub direction: DirectionTracker,
+    /// The enclosing procedure's calculus determines implicit loop terminators.
+    calculus: Option<Calculus>,
     /// A stack of explanations for expressions.
     exprs: Vec<ExprExplanation>,
     /// The current block which is being processed. This is used to remove
@@ -198,12 +201,10 @@ pub(super) fn explain_annotated_while(
                     return explain_park_induction(vcgen, &args[0], body);
                 }
 
-                if anno_ref
-                    .as_any()
-                    .downcast_ref::<UnrollAnnotation>()
-                    .is_some()
-                {
-                    return explain_unroll(vcgen, inner_stmt, args, stmt.span, *anno_span, post);
+                if let Some(annotation) = anno_ref.as_any().downcast_ref::<UnrollAnnotation>() {
+                    return explain_unroll(
+                        vcgen, annotation, inner_stmt, args, stmt.span, *anno_span, post,
+                    );
                 }
             }
         }
@@ -224,7 +225,9 @@ pub fn explain_decl_vc(
         let body = proc.body.borrow();
         if let Some(ref body) = *body {
             let post = fold_spec(&proc, proc.ensures());
-            let res = explain_raw_vc(tcx, body, post, proc.direction, limits_ref)?;
+            let calculus = get_proc_calculus(&proc, tcx).map_err(|err| err.diagnostic())?;
+            let res =
+                explain_vc_with_calculus(tcx, body, post, proc.direction, calculus, limits_ref)?;
             return Ok(Some(res));
         }
     }
@@ -239,7 +242,20 @@ pub fn explain_raw_vc(
     direction: Direction,
     limits_ref: &LimitsRef,
 ) -> Result<VcExplanation, CaesarError> {
-    let mut vcgen = Vcgen::new(tcx, limits_ref, Some(VcExplanation::new(direction)));
+    explain_vc_with_calculus(tcx, block, post, direction, None, limits_ref)
+}
+
+fn explain_vc_with_calculus(
+    tcx: &TyCtx,
+    block: &Block,
+    post: Expr,
+    direction: Direction,
+    calculus: Option<Calculus>,
+    limits_ref: &LimitsRef,
+) -> Result<VcExplanation, CaesarError> {
+    let mut explanation = VcExplanation::new(direction);
+    explanation.calculus = calculus;
+    let mut vcgen = Vcgen::new(tcx, limits_ref, Some(explanation));
     vcgen.vcgen_block(block, post)?;
     Ok(vcgen.explanation.unwrap())
 }
@@ -255,6 +271,7 @@ fn explain_park_induction(
 
 fn explain_unroll(
     vcgen: &mut Vcgen,
+    annotation: &UnrollAnnotation,
     loop_stmt: &Stmt,
     args: &[Expr],
     stmt_span: Span,
@@ -262,20 +279,22 @@ fn explain_unroll(
     post: &Expr,
 ) -> Result<Expr, CaesarError> {
     let k = proof_rules::lit_u128(&args[0]);
-    let terminator = &args[1];
-    let direction = *vcgen.explanation.as_ref().unwrap().direction;
+    let explanation = vcgen.explanation.as_ref().unwrap();
+    let direction = *explanation.direction;
     let enc_env = EncodingEnvironment {
         // this name is not used during unrolling, so we use a dummy
         base_proc_ident: Ident::with_dummy_span(Symbol::intern("unroll_env")),
         stmt_span,
         call_span,
         direction,
-        calculus: None, // calculus only affects the approximation, which is not relevant while explaining unrolling
+        calculus: explanation.calculus,
     };
+    let semantics = infer_fixpoint_kind(annotation, enc_env.calculus, direction, args);
+    let terminator = select_terminator(semantics, args.get(1), ExprBuilder::new(call_span));
 
     // 1. generate the explanations for the loop body in k-1 iterations
     if k > 0 {
-        let prev_iter_expr = vcgen_unroll(vcgen, loop_stmt, &enc_env, post, k - 1, terminator)?;
+        let prev_iter_expr = vcgen_unroll(vcgen, loop_stmt, &enc_env, post, k - 1, &terminator)?;
 
         if let StmtKind::While(_d, body) = &loop_stmt.node {
             // we do not use the pre-vc of the initial iteration, but the generated
@@ -290,7 +309,7 @@ fn explain_unroll(
 
     // unroll the loop
     let temp_vcgen = Vcgen::new(vcgen.tcx, &vcgen.limits_ref, None);
-    let mut return_expr = vcgen_unroll(&temp_vcgen, loop_stmt, &enc_env, post, k, terminator)?;
+    let mut return_expr = vcgen_unroll(&temp_vcgen, loop_stmt, &enc_env, post, k, &terminator)?;
 
     // apply substitutions and simplify the pre-vc of the unrolled loop, add it
     // to our explanations in `vcgen`.

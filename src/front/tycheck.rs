@@ -237,6 +237,12 @@ pub enum TycheckError {
         callee: usize,
         caller: usize,
     },
+    ArgumentCountRangeMismatch {
+        span: Span,
+        min: usize,
+        max: usize,
+        caller: usize,
+    },
     WrongOperandType {
         span: Span,
         operand_span: Span,
@@ -313,6 +319,14 @@ impl TycheckError {
                 caller,
             } => Diagnostic::new(ReportKind::Error, *span)
                 .with_message(format!("Expected {callee} arguments, got {caller}"))
+                .with_label(Label::new(*span).with_message("here")),
+            TycheckError::ArgumentCountRangeMismatch {
+                span,
+                min,
+                max,
+                caller,
+            } => Diagnostic::new(ReportKind::Error, *span)
+                .with_message(format!("Expected {min} to {max} arguments, got {caller}"))
                 .with_label(Label::new(*span).with_message("here")),
             TycheckError::WrongOperandType {
                 span,

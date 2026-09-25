@@ -6,14 +6,70 @@ use num::{BigInt, BigRational, Zero};
 
 use crate::{
     ast::{
+        util::{is_bot_lit, is_top_lit},
         DeclKind, DeclRef, Direction, Expr, ExprBuilder, ExprData, ExprKind, FileId, Ident,
         LitKind, Param, ProcDecl, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind, Symbol,
         TyKind, VarDecl, VarKind,
     },
+    opt::constfold::is_one_lit,
     tyctx::TyCtx,
 };
 
-use super::{EncodingEnvironment, ProcInfo};
+use super::{calculus::FixpointKind, EncodingEnvironment, ProcInfo};
+
+/// Infer fixed-point semantics from an explicit terminator, falling back to the procedure direction.
+pub fn default_fixpoint_kind_from_terminator(
+    direction: Direction,
+    terminator: Option<&Expr>,
+) -> FixpointKind {
+    if let Some(terminator) = terminator {
+        if is_bot_lit(terminator) {
+            return FixpointKind::Least;
+        }
+        if is_one_lit(terminator) {
+            return FixpointKind::Greatest { one_bounded: true };
+        }
+        if is_top_lit(terminator) {
+            return FixpointKind::Greatest { one_bounded: false };
+        }
+    }
+
+    match direction {
+        Direction::Down => FixpointKind::Least,
+        Direction::Up => FixpointKind::Greatest { one_bounded: false },
+    }
+}
+
+/// Use the explicit terminator when present, or the terminator of the inferred fixed-point semantics.
+pub fn select_terminator(
+    semantics: FixpointKind,
+    terminator: Option<&Expr>,
+    builder: ExprBuilder,
+) -> Expr {
+    terminator
+        .cloned()
+        .unwrap_or_else(|| semantics.terminator(builder))
+}
+
+/// Warn about explicit terminators that do not match the inferred fixed-point semantics.
+pub fn warn_if_terminator_differs(
+    annotation: Ident,
+    semantics: FixpointKind,
+    terminator: Option<&Expr>,
+    builder: ExprBuilder,
+) {
+    let Some(terminator) = terminator else {
+        return;
+    };
+    let expected_terminator = semantics.terminator(builder);
+    let matches = (is_bot_lit(&expected_terminator) && is_bot_lit(terminator))
+        || (is_one_lit(&expected_terminator) && is_one_lit(terminator))
+        || (is_top_lit(&expected_terminator) && is_top_lit(terminator));
+    if !matches {
+        // TODO: emit a diagnostic instead of a tracing warning.
+        tracing::warn!(%annotation, %terminator, %expected_terminator, "Loop terminator does not match the fixed-point semantics");
+    }
+}
 
 /// Encode the extend step in k-induction and bmc recursively for k times
 /// # Arguments
