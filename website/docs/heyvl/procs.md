@@ -42,7 +42,7 @@ $$
 
 Let us decompose the example into its parts:
 
- 1. **Calculus Annotation `@wp` (optional)**: Fixes the calculus for this (co)proc; you can also use `@wlp` or `@ert` (see [Calculus Annotations](#calculus-annotations)).
+ 1. **Calculus Annotation `@wp` (optional)**: Fixes the calculus for this (co)proc; you can also use `@wlp`, `@uwlp`, or `@ert` (see [Calculus Annotations](#calculus-annotations)).
  2. **Keyword `proc`**: We verify that $\mathtt{init\_x} + 0.5 \leq \mathbb{E}(\mathtt{x})$ holds, i.e. the expected value of `x` after executing `maybe_increment` is at least `init_x + 0.5`.
     - If we used the `coproc` keyword instead, we would verify $\mathtt{init\_x} + 0.5 \geq \mathbb{E}(\mathtt{x})$ (*upper* instead of *lower* bounds).
  3. We have one **input parameter** `init_x` of type [`UInt`](../stdlib/numbers.md#uint).
@@ -221,10 +221,12 @@ The quantitative setting behaves the same, we have $\inf \emptyset = \infty$ and
 
 ### Calculus Annotations {#calculus-annotations}
 
-Calculus annotations are optional. You can place `@wp`, `@wlp`, or `@ert` above a `proc`/`coproc` declaration.
+Calculus annotations are optional.
+You can place `@wp`, `@wlp`, `@uwlp`, or `@ert` above a `proc`/`coproc` declaration.
 
 The annotation fixes the intended loop/recursion semantics of the (co)proc and enables additional soundness checks for proof-rule usage.
 `@wp` and `@ert` use least fixed-point semantics (nontermination contributes `0`), while `@wlp` uses greatest fixed-point semantics in the one-bounded setting (nontermination contributes `1`).
+`@uwlp` uses greatest fixed-point semantics over `EUReal`, with top `\infty`.
 This is only relevant when proof rules are involved, i.e. when loops or recursion are present in the program.
 
 See [Soundness of Proof Rules](../proof-rules/approximations#calculus-annotations) for the full details on the soundness guarantees and checks provided by calculus annotations.
@@ -263,6 +265,9 @@ In the following, we will talk about procedures, but everything applies to copro
 Procedure calls make use of the procedure's specification *only* and do not inspect the procedure body.
 Somewhat informally, we could say that *assuming* the callee procedure verifies, the procedure call can be replaced by the procedure's body and the program will still verify.
 This enables modular reasoning: one can verify a big program and we can re-use already-verified parts of it in other parts.
+
+When caller and callee both have explicit calculus annotations, they must use the same calculus.
+See the [calculus soundness checks](../proof-rules/approximations#what-is-checked) for restrictions on recursion.
 
 ### Example: A Spare Engine
 

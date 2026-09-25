@@ -10,13 +10,14 @@ The *non-probabilistic* intuition goes as follows: induction requires an _invari
 The invariant must hold before the loop, and then we are guaranteed that the invariant holds after the loop.
 The rule corresponds to the well-known [proof rule for loops from Hoare logic](https://en.wikipedia.org/wiki/Hoare_logic#While_rule).
 
-Generalized to *probabilistic* `wlp` semantics, induction allows us to prove a lower bound on the `wlp`-semantics of a loop.
+Generalized to *probabilistic* greatest-fixed-point semantics, induction allows us to prove a lower bound on the `wlp` or `uwlp` semantics of a loop.
 $I$ must be an expression whose expected value does not decrease with each loop iteration.
 Formally:
 $$
     I \sqsubseteq [G] \cdot \mathrm{wlp}\llbracket Body \rrbracket(I) + [\neg G] \cdot f \quad\text{implies}\quad I \sqsubseteq \mathrm{wlp}\llbracket \texttt{while G \{ Body \}} \rrbracket(f)
 $$
 A dual version exists for `wp` and `ert` semantics.
+The same inequality holds with `uwlp` in place of `wlp`, using the full `EUReal` lattice instead of the one-bounded lattice.
 
 *$k$-induction* is a strictly stronger version of induction.
 Refer to the [CAV 2021 paper presenting *latticed k-induction*](https://link.springer.com/chapter/10.1007/978-3-030-81688-9_25) for more details.
@@ -48,7 +49,7 @@ $$
     I \sqsupseteq [G] \cdot \mathrm{wp}\llbracket Body \rrbracket(I) + [\neg G] \cdot f \quad\text{implies}\quad I \sqsupseteq \mathrm{wp}\llbracket \texttt{while G \{ Body \}} \rrbracket(f)
 $$
 
-In a `proc`, Caesar will use the *sub-invariant* version to prove a lower bound on the greatest fixed-point semantics of the loop (`wlp` semantics):
+In a `proc`, Caesar will use the *sub-invariant* version to prove a lower bound on the greatest fixed-point semantics of the loop (`wlp` or `uwlp` semantics):
 $$
     I \sqsubseteq [G] \cdot \mathrm{wlp}\llbracket Body \rrbracket(I) + [\neg G] \cdot f \quad\text{implies}\quad I \sqsubseteq \mathrm{wlp}\llbracket \texttt{while G \{ Body \}} \rrbracket(f)
 $$
@@ -86,24 +87,29 @@ We recommend reading the [*Latticed k-induction* paper](https://link.springer.co
 
 :::tip
 
-Use the [calculus annotations](./approximations#calculus-annotations) `@wp`, `@wlp`, `@ert` to have Caesar check that the applied proof rules are sound with respect to the semantics of the chosen calculus.
+Use the [calculus annotations](./approximations#calculus-annotations) `@wp`, `@wlp`, `@uwlp`, `@ert` to have Caesar check that the applied proof rules are sound with respect to the semantics of the chosen calculus.
 Then you don't have to worry about this section yourself.
 
 :::
 
-For all loops and all *invariant candidates* $I$, the following holds:
+For loop bodies with the required [approximation](./approximations#proof-rule-approximations) and *invariant candidates* $I$ in the chosen calculus's domain, the following holds:
+
  * In `proc`s: $\mathrm{vc}\llbracket \texttt{@invariant(I) while G \{ B \}} \rrbracket \sqsubseteq \mathrm{wlp}\llbracket \texttt{while G \{ B \}} \rrbracket$ <small>&mdash; (wlp uses greatest fixed-point semantics)</small>,
     * Thus: `proc` verifies using `@invariant(I)` $\implies$ specification also holds for the original `wlp` semantics.
+ * In `proc`s: $\mathrm{vc}\llbracket \texttt{@invariant(I) while G \{ B \}} \rrbracket \sqsubseteq \mathrm{uwlp}\llbracket \texttt{while G \{ B \}} \rrbracket$ <small>&mdash; (uwlp uses unbounded greatest fixed-point semantics)</small>,
+    * Thus: `proc` verifies using `@invariant(I)` $\implies$ specification also holds for the original `uwlp` semantics.
  * In `coproc`s: $\mathrm{vc}\llbracket \texttt{@invariant(I) while G \{ B \}} \rrbracket \sqsupseteq \mathrm{wp}\llbracket \texttt{while G \{ B \}} \rrbracket$ <small>&mdash; (wp uses least fixed-point semantics)</small>,
-    * Thus: `coproc` verifies using `@invariant(I)` $\implies$ specification also holds for the original `wlp` semantics.
+    * Thus: `coproc` verifies using `@invariant(I)` $\implies$ specification also holds for the original `wp` semantics.
  * In `coproc`s: $\mathrm{vc}\llbracket \texttt{@invariant(I) while G \{ B \}} \rrbracket \sqsupseteq \mathrm{ert}\llbracket \texttt{while G \{ B \}} \rrbracket$ <small>&mdash; (ert uses least fixed-point semantics)</small>,
     * Thus: `coproc` verifies using `@invariant(I)` $\implies$ specification also holds for the original `ert` semantics.
 
 Stated in terms of fixed points:
+
  * In `proc`s, `@invariant` *under-approximates* the *greatest fixed-point* loop semantics,
  * In `coproc`s, `@invariant` *over-approximates* the *least fixed-point* loop semantics.
 
 The same statements hold for _k-induction_ (`@k_induction(k, I)`).
+With an explicit `@uwlp` annotation, both rules under-approximate the greatest fixed point in either procedure direction: this supports sound verification in a `proc` and sound refutation in a `coproc`.
 
 ## Internal Details
 
@@ -117,6 +123,7 @@ More polished formal details on the HeyVL encodings and the (simplified) semanti
 :::
 
 For most of this section, we focus on the encoding of loops with `@invariant` in a `proc` below, i.e. Park induction for lower bounds on greatest fixed-point semantics.
+The argument applies to both `wlp` over one-bounded expectations and `uwlp` over `EUReal` expectations; replace `wlp` by `uwlp` in the formulas for the latter case.
 The `coproc`/least-fixed point case is dual.
 [k-induction details](#k-induction-encoding-and-interpretation) are similar, and handled at the end of this section.
 Let `@invariant(I) while G { Body }` be a loop with an invariant candidate `I`.

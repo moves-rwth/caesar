@@ -290,6 +290,45 @@ fn test_omega_unbounded_upper_bound_starts_at_top() {
 }
 
 #[test]
+fn test_omega_uwlp_starts_at_infinity_instead_of_one() {
+    let source = r#"
+        @wlp
+        coproc main() -> ()
+            pre 1
+            post 0
+        {
+            @omega_invariant(n, 1)
+            while true {}
+        }
+    "#;
+    let (result, server) = verify_test(source);
+    assert!(result.unwrap());
+    assert!(server.diagnostics.is_empty());
+    let diagnostics = assert_omega_counterexample(&source.replace("@wlp", "@uwlp"));
+    assert!(diagnostics.contains("Counter-example to verification found"));
+}
+
+#[test]
+fn test_omega_uwlp_finite_upper_bound_on_terminating_loop() {
+    let source = r#"
+        @uwlp
+        coproc main() -> ()
+            pre 2
+            post 2
+        {
+            var b: Bool = true
+            @omega_invariant(n, ite(n == 0 && b, ∞, 2))
+            while b {
+                b = false
+            }
+        }
+    "#;
+    let (result, server) = verify_test(source);
+    assert!(result.unwrap());
+    assert!(server.diagnostics.is_empty());
+}
+
+#[test]
 fn test_omega_collects_variables_modified_by_cohavoc() {
     assert_omega_counterexample(
         r#"
