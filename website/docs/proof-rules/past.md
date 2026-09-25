@@ -89,9 +89,6 @@ such that all the following conditions are fulfilled:
     }
     ```
 
-    The `coproc` checks the upper bound required by Condition 3.
-    The sequence `assert I(vars)` followed by `assume 0` yields `I(vars)` as its pre-expectation.
-
     </details>
 
 Then `while G { Body }` is universally positively almost-surely terminating, i.e. `ert[while G { Body }](0) < ∞`.
