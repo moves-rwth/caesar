@@ -1,4 +1,4 @@
-//! Encode the proof rule for almost-sure termination of a loop by McIver et al. (2018)
+//! Encode an almost-sure termination rule based on McIver et al. (2018).
 //!
 //! @ast takes the arguments:
 //!
@@ -17,9 +17,9 @@ use crate::{
     ast::{
         util::{FreeVariableCollector, ModifiedVariableCollector},
         visit::{walk_expr, walk_stmt, VisitorMut},
-        BinOpKind, DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprBuilder, ExprKind, Files,
-        Ident, Label, ProcSpec, SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol, TyKind,
-        UnOpKind, VarDecl, VarKind,
+        BinOpKind, Block, DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprBuilder, ExprKind,
+        Files, Ident, Label, ProcSpec, SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol,
+        TyKind, UnOpKind, VarDecl, VarKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -191,9 +191,7 @@ impl Encoding for ASTAnnotation {
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
     ) -> Result<GeneratedEncoding, AnnotationError> {
-        // Unpack values from struct
         let annotation_span = enc_env.call_span;
-        let base_proc_ident = enc_env.base_proc_ident;
 
         let [invariant, variant, free_var, prob, decrease] = five_args(args);
         let builder = ExprBuilder::new(annotation_span);
@@ -251,31 +249,94 @@ impl Encoding for ASTAnnotation {
 
         let init_assigns = multiple_assign(annotation_span, modified_vars.clone(), init_exprs);
 
-        // Replace all variables with the init versions in the variant
-        let init_variant = to_init_expr(tcx, annotation_span, variant, &modified_vars);
+        let encoding = AstEncoding {
+            tcx,
+            env: &enc_env,
+            loop_stmt: inner_stmt,
+            invariant,
+            variant,
+            free_var,
+            prob,
+            decrease,
+            modified_vars,
+            input_init_vars,
+            init_assigns,
+        };
+        let [prob_conditions, decrease_conditions] = encoding.encode_function_conditions();
+        let invariant_condition = encoding.encode_invariant();
+        let variant_bound = encoding.encode_variant_bound(loop_guard);
+        let progress_condition = encoding.encode_progress(loop_guard, loop_body);
+        let invariant_expr =
+            builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), invariant.clone());
 
-        let a_ident = tcx.clone_var(free_var, annotation_span, VarKind::Input);
-        let a_expr = ident_to_expr(tcx, annotation_span, a_ident);
+        Ok(GeneratedEncoding {
+            block: Spanned::new(
+                annotation_span,
+                encode_loop_spec(
+                    annotation_span,
+                    &invariant_expr,
+                    encoding.modified_vars,
+                    Direction::Down,
+                )
+                .into(),
+            ),
+            decls: Some(vec![
+                prob_conditions,
+                decrease_conditions,
+                invariant_condition,
+                variant_bound,
+                progress_condition,
+            ]),
+            diagnostics: vec![],
+        })
+    }
 
-        let b_ident = tcx.clone_var(free_var, annotation_span, VarKind::Input);
-        let b_expr = ident_to_expr(tcx, annotation_span, b_ident);
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+struct AstEncoding<'a> {
+    tcx: &'a TyCtx,
+    env: &'a EncodingEnvironment,
+    loop_stmt: &'a Stmt,
+    invariant: &'a Expr,
+    variant: &'a Expr,
+    free_var: Ident,
+    prob: &'a Expr,
+    decrease: &'a Expr,
+    modified_vars: Vec<Ident>,
+    input_init_vars: Vec<Ident>,
+    init_assigns: Vec<Stmt>,
+}
+
+impl AstEncoding<'_> {
+    fn encode_function_conditions(&self) -> [DeclKind; 2] {
+        let span = self.env.call_span;
+        let builder = ExprBuilder::new(span);
+
+        let a_ident = self.tcx.clone_var(self.free_var, span, VarKind::Input);
+        let a_expr = ident_to_expr(self.tcx, span, a_ident);
+
+        let b_ident = self.tcx.clone_var(self.free_var, span, VarKind::Input);
+        let b_expr = ident_to_expr(self.tcx, span, b_ident);
 
         let mut function_variables = FreeVariableCollector::new();
-        for expr in [invariant, prob, decrease] {
+        for expr in [self.invariant, self.prob, self.decrease] {
             function_variables.visit_expr(&mut expr.clone()).unwrap();
         }
-        function_variables.variables.shift_remove(&free_var);
+        function_variables.variables.shift_remove(&self.free_var);
         let mut function_inputs = vec![a_ident, b_ident];
         function_inputs.extend(function_variables.variables);
 
         // ?(I && a <= b)
-        let cond1_2_pre = builder.unary(
+        let pre = builder.unary(
             UnOpKind::Embed,
             Some(TyKind::EUReal),
             builder.binary(
                 BinOpKind::And,
                 Some(TyKind::Bool),
-                invariant.clone(),
+                self.invariant.clone(),
                 builder.binary(
                     BinOpKind::Le,
                     Some(TyKind::Bool),
@@ -285,174 +346,165 @@ impl Encoding for ASTAnnotation {
             ),
         );
 
-        let prob_a = builder.subst(prob.clone(), [(free_var, a_expr.clone())]);
-        let prob_b = builder.subst(prob.clone(), [(free_var, b_expr.clone())]);
-        let decrease_a = builder.subst(decrease.clone(), [(free_var, a_expr)]);
-        let decrease_b = builder.subst(decrease.clone(), [(free_var, b_expr)]);
+        let prob_a = builder.subst(self.prob.clone(), [(self.free_var, a_expr.clone())]);
+        let prob_b = builder.subst(self.prob.clone(), [(self.free_var, b_expr.clone())]);
+        let decrease_a = builder.subst(self.decrease.clone(), [(self.free_var, a_expr)]);
+        let decrease_b = builder.subst(self.decrease.clone(), [(self.free_var, b_expr)]);
 
-        // ?(0 < prob(b) && prob(b) <= prob(a) && prob(a) <= 1)
-        let cond1_post = builder.unary(
-            UnOpKind::Embed,
-            Some(TyKind::EUReal),
-            builder.binary(
-                BinOpKind::And,
-                Some(TyKind::Bool),
-                builder.binary(
-                    BinOpKind::Gt,
-                    Some(TyKind::Bool),
-                    prob_b.clone(),
-                    builder.cast(TyKind::UReal, builder.uint(0)),
-                ),
-                builder.binary(
-                    BinOpKind::And,
-                    Some(TyKind::Bool),
+        let prob_proc_info = ProcInfo {
+            name: "prob_conditions".to_string(),
+            inputs: params_from_idents(function_inputs.clone(), self.tcx),
+            outputs: vec![],
+            spec: vec![
+                ProcSpec::Requires(pre.clone()),
+                ProcSpec::Ensures(builder.unary(
+                    UnOpKind::Embed,
+                    Some(TyKind::EUReal),
+                    builder.binary(
+                        BinOpKind::Gt,
+                        Some(TyKind::Bool),
+                        prob_b.clone(),
+                        builder.cast(TyKind::UReal, builder.uint(0)),
+                    ),
+                )),
+                ProcSpec::Ensures(builder.unary(
+                    UnOpKind::Embed,
+                    Some(TyKind::EUReal),
                     builder.binary(BinOpKind::Le, Some(TyKind::Bool), prob_b, prob_a.clone()),
+                )),
+                ProcSpec::Ensures(builder.unary(
+                    UnOpKind::Embed,
+                    Some(TyKind::EUReal),
                     builder.binary(
                         BinOpKind::Le,
                         Some(TyKind::Bool),
                         prob_a,
                         builder.cast(TyKind::UReal, builder.uint(1)),
                     ),
-                ),
-            ),
-        );
-
-        // ?(0 < decrease(b) && decrease(b) <= decrease(a))
-        let cond2_post = builder.unary(
-            UnOpKind::Embed,
-            Some(TyKind::EUReal),
-            builder.binary(
-                BinOpKind::And,
-                Some(TyKind::Bool),
-                builder.binary(
-                    BinOpKind::Gt,
-                    Some(TyKind::Bool),
-                    decrease_b.clone(),
-                    builder.cast(TyKind::UReal, builder.uint(0)),
-                ),
-                builder.binary(BinOpKind::Le, Some(TyKind::Bool), decrease_b, decrease_a),
-            ),
-        );
-
-        let cond1_proc_info = ProcInfo {
-            name: "prob_conditions".to_string(),
-            inputs: params_from_idents(function_inputs.clone(), tcx),
-            outputs: vec![],
-            spec: vec![
-                ProcSpec::Requires(cond1_2_pre.clone()),
-                ProcSpec::Ensures(cond1_post),
-            ],
-            body: Spanned::new(annotation_span, vec![]),
-            direction: Direction::Down,
-        };
-
-        let cond1_proc = generate_proc(annotation_span, cond1_proc_info, base_proc_ident, tcx);
-
-        let cond2_proc_info = ProcInfo {
-            name: "decrease_conditions".to_string(),
-            inputs: params_from_idents(function_inputs, tcx),
-            outputs: vec![],
-            spec: vec![
-                ProcSpec::Requires(cond1_2_pre),
-                ProcSpec::Ensures(cond2_post),
-            ],
-            body: Spanned::new(annotation_span, vec![]),
-            direction: Direction::Down,
-        };
-
-        let cond2_proc = generate_proc(annotation_span, cond2_proc_info, base_proc_ident, tcx);
-
-        // [I]
-        let cond3_expr = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), invariant.clone());
-
-        let mut cond3_body = init_assigns.clone();
-        cond3_body.push(encode_iter(&enc_env, inner_stmt, vec![]).unwrap());
-
-        // [I] <= Phi_{[I]}([I])
-        let cond3_proc_info = ProcInfo {
-            name: "I_wp_subinvariant".to_string(),
-            inputs: params_from_idents(input_init_vars.clone(), tcx),
-            outputs: params_from_idents(modified_vars.clone(), tcx),
-            spec: vec![
-                ProcSpec::Requires(to_init_expr(
-                    tcx,
-                    annotation_span,
-                    &cond3_expr,
-                    &modified_vars,
                 )),
-                ProcSpec::Ensures(cond3_expr.clone()),
             ],
-            body: Spanned::new(annotation_span, cond3_body),
+            body: Spanned::new(span, vec![]),
             direction: Direction::Down,
         };
 
-        let cond3_proc = generate_proc(annotation_span, cond3_proc_info, base_proc_ident, tcx);
+        let prob_proc = generate_proc(span, prob_proc_info, self.env.base_proc_ident, self.tcx);
 
-        // Check the upper bound for every demonic choice, restricted to invariant states.
-        let mut cond4_body = init_assigns.clone();
-        cond4_body.push(Spanned::new(
-            annotation_span,
-            StmtKind::Assume(
-                Direction::Up,
-                builder.unary(
+        let decrease_proc_info = ProcInfo {
+            name: "decrease_conditions".to_string(),
+            inputs: params_from_idents(function_inputs, self.tcx),
+            outputs: vec![],
+            spec: vec![
+                ProcSpec::Requires(pre),
+                ProcSpec::Ensures(builder.unary(
                     UnOpKind::Embed,
                     Some(TyKind::EUReal),
-                    builder.unary(UnOpKind::Not, Some(TyKind::Bool), invariant.to_owned()),
-                ),
-            ),
-        ));
-        let mut variant_iteration = encode_iter(&enc_env, inner_stmt, vec![]).unwrap();
-        AwpEncoder.visit_stmt(&mut variant_iteration).unwrap();
-        cond4_body.push(variant_iteration);
-
-        let cond4_proc_info = ProcInfo {
-            name: "V_awp_superinvariant".to_string(),
-            inputs: params_from_idents(input_init_vars.clone(), tcx),
-            outputs: params_from_idents(modified_vars.clone(), tcx),
-            spec: vec![
-                ProcSpec::Requires(builder.cast(TyKind::EUReal, init_variant.clone())),
-                ProcSpec::Ensures(builder.cast(
-                    TyKind::EUReal,
-                    builder.ite(
-                        Some(TyKind::UReal),
-                        loop_guard.clone(),
-                        variant.clone(),
+                    builder.binary(
+                        BinOpKind::Gt,
+                        Some(TyKind::Bool),
+                        decrease_b.clone(),
                         builder.cast(TyKind::UReal, builder.uint(0)),
                     ),
                 )),
+                ProcSpec::Ensures(builder.unary(
+                    UnOpKind::Embed,
+                    Some(TyKind::EUReal),
+                    builder.binary(BinOpKind::Le, Some(TyKind::Bool), decrease_b, decrease_a),
+                )),
             ],
-            body: Spanned::new(annotation_span, cond4_body),
+            body: Spanned::new(span, vec![]),
+            direction: Direction::Down,
+        };
+
+        let decrease_proc =
+            generate_proc(span, decrease_proc_info, self.env.base_proc_ident, self.tcx);
+
+        [prob_proc, decrease_proc]
+    }
+
+    fn encode_invariant(&self) -> DeclKind {
+        let span = self.env.call_span;
+        let builder = ExprBuilder::new(span);
+
+        let invariant_expr = builder.unary(
+            UnOpKind::Iverson,
+            Some(TyKind::EUReal),
+            self.invariant.clone(),
+        );
+
+        let mut body = self.init_assigns.clone();
+        body.push(encode_iter(self.env, self.loop_stmt, vec![]).unwrap());
+
+        // [I] <= Phi_{[I]}([I])
+        let proc_info = ProcInfo {
+            name: "I_wp_subinvariant".to_string(),
+            inputs: params_from_idents(self.input_init_vars.clone(), self.tcx),
+            outputs: params_from_idents(self.modified_vars.clone(), self.tcx),
+            spec: vec![
+                ProcSpec::Requires(to_init_expr(
+                    self.tcx,
+                    span,
+                    &invariant_expr,
+                    &self.modified_vars,
+                )),
+                ProcSpec::Ensures(invariant_expr),
+            ],
+            body: Spanned::new(span, body),
+            direction: Direction::Down,
+        };
+
+        generate_proc(span, proc_info, self.env.base_proc_ident, self.tcx)
+    }
+
+    fn encode_variant_bound(&self, loop_guard: &Expr) -> DeclKind {
+        let span = self.env.call_span;
+        let builder = ExprBuilder::new(span);
+
+        let init_variant = to_init_expr(self.tcx, span, self.variant, &self.modified_vars);
+        let init_invariant = to_init_expr(self.tcx, span, self.invariant, &self.modified_vars);
+
+        let mut body = self.init_assigns.clone();
+        let mut variant_iteration = encode_iter(self.env, self.loop_stmt, vec![]).unwrap();
+        AwpEncoder.visit_stmt(&mut variant_iteration).unwrap();
+        body.push(variant_iteration);
+
+        let proc_info = ProcInfo {
+            name: "V_awp_superinvariant".to_string(),
+            inputs: params_from_idents(self.input_init_vars.clone(), self.tcx),
+            outputs: params_from_idents(self.modified_vars.clone(), self.tcx),
+            spec: vec![
+                ProcSpec::Requires(builder.unary(
+                    UnOpKind::Not,
+                    Some(TyKind::EUReal),
+                    builder.unary(UnOpKind::Embed, Some(TyKind::EUReal), init_invariant),
+                )),
+                ProcSpec::Requires(builder.cast(TyKind::EUReal, init_variant)),
+                ProcSpec::Ensures(builder.binary(
+                    BinOpKind::Mul,
+                    Some(TyKind::EUReal),
+                    builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), loop_guard.clone()),
+                    builder.cast(TyKind::EUReal, self.variant.clone()),
+                )),
+            ],
+            body: Spanned::new(span, body),
             direction: Direction::Up,
         };
 
-        let cond4_proc = generate_proc(annotation_span, cond4_proc_info, base_proc_ident, tcx);
+        generate_proc(span, proc_info, self.env.base_proc_ident, self.tcx)
+    }
 
-        // [I] * [G] * (p o V)
-        let cond5_pre = builder.binary(
-            BinOpKind::Mul,
-            Some(TyKind::EUReal),
-            builder.unary(
-                UnOpKind::Iverson,
-                Some(TyKind::EUReal),
-                invariant.to_owned(),
-            ),
-            builder.binary(
-                BinOpKind::Mul,
-                Some(TyKind::EUReal),
-                builder.unary(
-                    UnOpKind::Iverson,
-                    Some(TyKind::EUReal),
-                    loop_guard.to_owned(),
-                ),
-                builder.cast(
-                    TyKind::EUReal,
-                    builder.subst(prob.clone(), [(free_var, variant.clone())]),
-                ),
-            ),
-        );
+    fn encode_progress(&self, loop_guard: &Expr, loop_body: &Block) -> DeclKind {
+        let span = self.env.call_span;
+        let builder = ExprBuilder::new(span);
+
+        let init_variant = to_init_expr(self.tcx, span, self.variant, &self.modified_vars);
+        let init_invariant = to_init_expr(self.tcx, span, self.invariant, &self.modified_vars);
+        let init_guard = to_init_expr(self.tcx, span, loop_guard, &self.modified_vars);
+        let init_prob = builder.subst(self.prob.clone(), [(self.free_var, init_variant.clone())]);
+        let invariant_pre = builder.unary(UnOpKind::Embed, Some(TyKind::EUReal), init_invariant);
+        let guard_pre = builder.unary(UnOpKind::Embed, Some(TyKind::EUReal), init_guard);
 
         // [!G || V + d(V(init)) <= V(init)]
-        let cond5_post = builder.unary(
+        let post = builder.unary(
             UnOpKind::Iverson,
             Some(TyKind::EUReal),
             builder.binary(
@@ -465,51 +517,35 @@ impl Encoding for ASTAnnotation {
                     builder.binary(
                         BinOpKind::Add,
                         Some(TyKind::UReal),
-                        variant.clone(),
-                        builder.subst(decrease.clone(), [(free_var, init_variant.clone())]),
+                        self.variant.clone(),
+                        builder.subst(
+                            self.decrease.clone(),
+                            [(self.free_var, init_variant.clone())],
+                        ),
                     ),
                     init_variant,
                 ),
             ),
         );
 
-        let mut cond5_body = init_assigns;
-        cond5_body.extend(loop_body.node.clone());
+        let mut body = self.init_assigns.clone();
+        body.extend(loop_body.node.clone());
 
-        let cond5_proc_info = ProcInfo {
+        let proc_info = ProcInfo {
             name: "progress_condition".to_string(),
-            inputs: params_from_idents(input_init_vars, tcx),
-            outputs: params_from_idents(modified_vars.clone(), tcx),
+            inputs: params_from_idents(self.input_init_vars.clone(), self.tcx),
+            outputs: params_from_idents(self.modified_vars.clone(), self.tcx),
             spec: vec![
-                ProcSpec::Requires(to_init_expr(
-                    tcx,
-                    annotation_span,
-                    &cond5_pre,
-                    &modified_vars,
-                )),
-                ProcSpec::Ensures(cond5_post),
+                ProcSpec::Requires(invariant_pre),
+                ProcSpec::Requires(guard_pre),
+                ProcSpec::Requires(builder.cast(TyKind::EUReal, init_prob)),
+                ProcSpec::Ensures(post),
             ],
-            body: Spanned::new(annotation_span, cond5_body),
+            body: Spanned::new(span, body),
             direction: Direction::Down,
         };
 
-        let cond5_proc = generate_proc(annotation_span, cond5_proc_info, base_proc_ident, tcx);
-
-        Ok(GeneratedEncoding {
-            block: Spanned::new(
-                annotation_span,
-                encode_loop_spec(annotation_span, &cond3_expr, modified_vars, Direction::Down)
-                    .into(),
-            ),
-            decls: Some(vec![
-                cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc,
-            ]),
-            diagnostics: vec![],
-        })
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
+        generate_proc(span, proc_info, self.env.base_proc_ident, self.tcx)
     }
 }
 

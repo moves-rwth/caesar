@@ -810,23 +810,16 @@ fn test_ast_transform() {
         }
         proc main_prob_conditions_0(v_0: UReal, v_1: UReal) -> ()
             pre ?((true && (v_0 <= v_1)))
-            post ?((
-                ((5/10)[v -> v_1] > cast(UReal, 0)) && (
-                    ((5/10)[v -> v_1] <= (5/10)[v -> v_0]) && (
-                        (5/10)[v -> v_0] <= cast(UReal, 1)
-                    )
-                )
-            ))
+            post ?(((5/10)[v -> v_1] > cast(UReal, 0)))
+            post ?(((5/10)[v -> v_1] <= (5/10)[v -> v_0]))
+            post ?(((5/10)[v -> v_0] <= cast(UReal, 1)))
         {
 
         }
         proc main_decrease_conditions_0(v_0: UReal, v_1: UReal) -> ()
             pre ?((true && (v_0 <= v_1)))
-            post ?((
-                ((cast(UReal, 1))[v -> v_1] > cast(UReal, 0)) && (
-                    (cast(UReal, 1))[v -> v_1] <= (cast(UReal, 1))[v -> v_0]
-                )
-            ))
+            post ?(((cast(UReal, 1))[v -> v_1] > cast(UReal, 0)))
+            post ?(((cast(UReal, 1))[v -> v_1] <= (cast(UReal, 1))[v -> v_0]))
         {
 
         }
@@ -838,17 +831,17 @@ fn test_ast_transform() {
             if (1 <= x) { x = (x - 1) } else {  }
         }
         coproc main_V_awp_superinvariant_0(init_x: UInt) -> (x: UInt)
+            pre ! (?((true)[x -> init_x]))
             pre cast(EUReal, (cast(UReal, x))[x -> init_x])
-            post cast(EUReal, ite((1 <= x), cast(UReal, x), cast(UReal, 0)))
+            post ([(1 <= x)] * cast(EUReal, cast(UReal, x)))
         {
             x = init_x
-            coassume ?(! (true))
             if (1 <= x) { x = (x - 1) } else {  }
         }
         proc main_progress_condition_0(init_x: UInt) -> (x: UInt)
-            pre (
-                ([true] * ([(1 <= x)] * cast(EUReal, (5/10)[v -> cast(UReal, x)])))
-            )[x -> init_x]
+            pre ?((true)[x -> init_x])
+            pre ?(((1 <= x))[x -> init_x])
+            pre cast(EUReal, (5/10)[v -> (cast(UReal, x))[x -> init_x]])
             post [(
                 ! ((1 <= x)) || (
                     (
