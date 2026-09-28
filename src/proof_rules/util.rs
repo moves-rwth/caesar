@@ -187,29 +187,6 @@ pub fn hey_const(
     ]
 }
 
-pub fn new_ident_with_name(tcx: &TyCtx, ty: &TyKind, span: Span, name: &str) -> Ident {
-    let new_ident = Ident {
-        name: Symbol::intern(name),
-        span,
-    };
-
-    // If the init_variable is not already defined.
-    if tcx.get(new_ident).is_none() {
-        let var_decl = VarDecl {
-            name: new_ident,
-            ty: ty.clone(),
-            kind: VarKind::Input,
-            init: None,
-            span,
-            created_from: None,
-        };
-        let decl = DeclRef::new(var_decl);
-        tcx.declare(DeclKind::VarDecl(decl));
-    }
-
-    new_ident
-}
-
 /// Get the init versions of the given idents and declare them
 pub fn get_init_idents(tcx: &TyCtx, span: Span, idents: &[Ident]) -> Vec<Ident> {
     let mut new_idents = vec![];

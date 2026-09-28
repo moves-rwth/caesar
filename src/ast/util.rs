@@ -7,8 +7,6 @@ use super::{
 };
 
 /// Helper to find all free variables in expressions.
-///
-/// Expressions with substitutions in them are not allowed and will lead to a panic!
 #[derive(Debug, Default)]
 pub struct FreeVariableCollector {
     pub variables: IndexSet<Ident>,
@@ -52,13 +50,19 @@ impl VisitorMut for FreeVariableCollector {
                 // remove the set of bound variables that haven't been free
                 // before from the set of free variables.
                 for var in bound_and_not_free {
-                    self.variables.swap_remove(&var);
+                    self.variables.shift_remove(&var);
                 }
 
                 Ok(())
             }
-            ExprKind::Subst(_, _, _) => {
-                panic!("cannot find free variables in expressions with substitutions: {expr}")
+            ExprKind::Subst(ident, value, expr) => {
+                self.visit_expr(value)?;
+                let already_free = self.variables.contains(ident);
+                self.visit_expr(expr)?;
+                if !already_free {
+                    self.variables.shift_remove(ident);
+                }
+                Ok(())
             }
             _ => walk_expr(self, expr),
         }
@@ -218,5 +222,54 @@ mod test {
             collector.variables.into_iter().collect::<Vec<Ident>>(),
             vec![ident]
         );
+    }
+
+    #[test]
+    fn test_free_bindings() {
+        let builder = ExprBuilder::new(Span::dummy_span());
+        let tcx = TyCtx::new(TyKind::EUReal);
+        let [x, y, z] = ["x", "y", "z"].map(|name| {
+            let ident = Ident::with_dummy_span(Symbol::intern(name));
+            tcx.declare(crate::ast::DeclKind::VarDecl(DeclRef::new(VarDecl {
+                name: ident,
+                ty: TyKind::Bool,
+                kind: VarKind::Input,
+                init: None,
+                span: Span::dummy_span(),
+                created_from: None,
+            })));
+            ident
+        });
+        let var = |ident| builder.var(ident, &tcx);
+        let and = |lhs, rhs| builder.binary(BinOpKind::And, None, lhs, rhs);
+
+        for (mut expr, expected) in [
+            (
+                builder.subst(and(var(x), var(z)), [(x, var(y))]),
+                vec![y, z],
+            ),
+            (
+                builder.subst(and(var(x), var(z)), [(x, var(x))]),
+                vec![x, z],
+            ),
+            (
+                and(var(x), builder.subst(and(var(x), var(z)), [(x, var(y))])),
+                vec![x, y, z],
+            ),
+            (
+                builder.subst(
+                    builder.subst(and(var(x), var(y)), [(y, var(z))]),
+                    [(x, var(y))],
+                ),
+                vec![y, z],
+            ),
+            (
+                builder.quant(QuantOpKind::Exists, [x], and(var(x), and(var(y), var(z)))),
+                vec![y, z],
+            ),
+        ] {
+            let actual = FreeVariableCollector::new().collect_and_clear(&mut expr);
+            assert_eq!(actual.into_iter().collect::<Vec<_>>(), expected);
+        }
     }
 }

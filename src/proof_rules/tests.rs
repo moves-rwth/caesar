@@ -808,15 +808,25 @@ fn test_ast_transform() {
             var x: UInt
             { assert [true]; havoc x; validate; assume [true] }
         }
-        proc main_prob_antitone_0(a: UReal, b: UReal) -> ()
-            pre ?((a <= b))
-            post ?(((5/10)[v -> a] >= (5/10)[v -> b]))
+        proc main_prob_conditions_0(v_0: UReal, v_1: UReal) -> ()
+            pre ?((true && (v_0 <= v_1)))
+            post ?((
+                ((5/10)[v -> v_1] > cast(UReal, 0)) && (
+                    ((5/10)[v -> v_1] <= (5/10)[v -> v_0]) && (
+                        (5/10)[v -> v_0] <= cast(UReal, 1)
+                    )
+                )
+            ))
         {
 
         }
-        proc main_decrease_antitone_0(a: UReal, b: UReal) -> ()
-            pre ?((a <= b))
-            post ?(((v)[v -> a] >= (v)[v -> b]))
+        proc main_decrease_conditions_0(v_0: UReal, v_1: UReal) -> ()
+            pre ?((true && (v_0 <= v_1)))
+            post ?((
+                ((cast(UReal, 1))[v -> v_1] > cast(UReal, 0)) && (
+                    (cast(UReal, 1))[v -> v_1] <= (cast(UReal, 1))[v -> v_0]
+                )
+            ))
         {
 
         }
@@ -827,14 +837,9 @@ fn test_ast_transform() {
             x = init_x
             if (1 <= x) { x = (x - 1) } else {  }
         }
-        proc main_termination_condition_0(x: UInt) -> ()
-            pre ?(true)
-        {
-            assert ?(((1 <= x) → (cast(UReal, x) > cast(UReal, 0))))
-        }
         coproc main_V_awp_superinvariant_0(init_x: UInt) -> (x: UInt)
             pre cast(EUReal, (cast(UReal, x))[x -> init_x])
-            post cast(EUReal, cast(UReal, x))
+            post cast(EUReal, ite((1 <= x), cast(UReal, x), cast(UReal, 0)))
         {
             x = init_x
             coassume ?(! (true))
@@ -845,10 +850,12 @@ fn test_ast_transform() {
                 ([true] * ([(1 <= x)] * cast(EUReal, (5/10)[v -> cast(UReal, x)])))
             )[x -> init_x]
             post [(
-                cast(UReal, x) <= (
-                    (cast(UReal, x))[x -> init_x] - (v)[v -> (
-                        cast(UReal, x)
-                    )[x -> init_x]]
+                ! ((1 <= x)) || (
+                    (
+                        cast(UReal, x) + (cast(UReal, 1))[v -> (
+                            cast(UReal, x)
+                        )[x -> init_x]]
+                    ) <= (cast(UReal, x))[x -> init_x]
                 )
             )]
         {
@@ -860,7 +867,7 @@ fn test_ast_transform() {
     let source = r#"
             proc main() -> () {
                 var x: UInt
-                @ast(true, x, v, 0.5, v)
+                @ast(true, x, v, 0.5, 1)
                 while 1 <= x {
                     x = x - 1
                 }
@@ -897,6 +904,116 @@ fn test_ast_pre_and_post() {
             "#
         );
         assert_eq!(verify_test(&source).0.unwrap(), expected, "{source}");
+    }
+}
+
+#[test]
+fn test_ast_variant_at_exit() {
+    for (variant, body, expected) in [
+        ("0", "done = flip(0.5)", true),
+        ("1", "done = flip(0.5)", true),
+        ("x", "x = x + 1; done = true", true),
+        ("0", "", false),
+    ] {
+        let source = format!(
+            r#"
+                @wp proc main() -> ()
+                    pre 1
+                    post 1
+                {{
+                    var x: UReal = 0
+                    var done: Bool = false
+                    @ast(true, {variant}, v, 0.5, 1)
+                    while !done {{ {body} }}
+                }}
+            "#
+        );
+        assert_eq!(verify_test(&source).0.unwrap(), expected, "{source}");
+    }
+}
+
+#[test]
+fn test_ast_function_conditions() {
+    for (invariant, prob, decrease, expected) in [
+        ("true", "0", "1", false),
+        ("true", "2", "1", false),
+        ("true", "1", "0", false),
+        ("true", "1", "v + 1", false),
+        ("true", "ite(v <= 1, 0.5, 1)", "1", false),
+        ("x <= 1", "ite(v <= 1, 1, 0)", "1", false),
+        ("true", "1", "ite(v == 0, 0, 1)", false),
+        ("bound > 0 && bound <= 1", "bound", "1", true),
+        ("bound > 0", "1", "bound", true),
+        ("true", "bound", "1", false),
+        ("true", "let(x, 1, x)", "let(v, 1, v)", true),
+    ] {
+        let source = format!(
+            r#"
+                @wp proc main() -> ()
+                    pre 1
+                    post 1
+                {{
+                    var x: UReal = 1
+                    var bound: UReal = 1
+                    var v: UInt = 7
+                    @ast({invariant}, x, v, {prob}, {decrease})
+                    while x > 0 {{ x = 0 }}
+                    assert [v == 7]
+                }}
+            "#
+        );
+        assert_eq!(verify_test(&source).0.unwrap(), expected, "{source}");
+    }
+}
+
+#[test]
+fn test_ast_function_dependencies() {
+    for (prob, decrease, body, following, reason) in [
+        (
+            "x",
+            "1",
+            "x = 0",
+            "",
+            "`prob` must not depend on loop-modified variable `x`.",
+        ),
+        (
+            "1",
+            "x",
+            "x = 0",
+            "",
+            "`decrease` must not depend on loop-modified variable `x`.",
+        ),
+        (
+            "let(t, x, t)",
+            "1",
+            "@unroll(0) while true { x = 0 }",
+            "",
+            "`prob` must not depend on loop-modified variable `x`.",
+        ),
+        (
+            "1",
+            "1",
+            "x = 0",
+            "assert [v == 0]",
+            "Name `v` is not declared",
+        ),
+    ] {
+        let source = format!(
+            r#"
+                @wp proc main() -> () {{
+                    var x: UReal = 1
+                    @ast(true, x, v, {prob}, {decrease})
+                    while x > 0 {{ {body} }}
+                    {following}
+                }}
+            "#
+        );
+        let (result, server) = verify_test(&source);
+        let CaesarError::Diagnostic(diagnostic) = result.unwrap_err() else {
+            panic!("expected an annotation-argument or resolution diagnostic");
+        };
+        let text = diagnostic.into_string(&server.files.lock().unwrap());
+        assert!(text.contains(reason), "{source}\n{text}");
     }
 }
 

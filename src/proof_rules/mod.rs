@@ -106,6 +106,7 @@ pub trait Encoding: fmt::Debug {
         &self,
         _tcx: &TyCtx,
         _call_span: Span,
+        _args: &[Expr],
         _inner_stmt: &Stmt,
     ) -> Result<Vec<Diagnostic>, AnnotationError> {
         Ok(vec![])
@@ -263,7 +264,7 @@ impl<'tcx> VisitorMut for EncodingVisitor<'tcx> {
                 {
                     self.diagnostics.extend(
                         anno_ref
-                            .validate(self.tcx, *annotation_span, inner_stmt)
+                            .validate(self.tcx, *annotation_span, inputs, inner_stmt)
                             .map_err(EncodingVisitorError::Annotation)?,
                     );
                 }

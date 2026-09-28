@@ -31,15 +31,16 @@ Caesar supports the _"new proof rule for almost-sure termination"_ by McIver et 
 You can find the [extended version of the paper on arxiv](https://arxiv.org/pdf/1711.03588.pdf).
 The paper was [published at POPL 2018](https://dl.acm.org/doi/10.1145/3158121).
 
-The proof rule is based on a real-valued _loop variant_ $\mathtt{V}$ (also known as _super-martingale_) that decreases randomly with a certain probability $\mathtt{prob}(v)$ in each iteration by a certain amount $\mathtt{decrease}(v)$, where $v = V(s)$ is the variant's value in the current state $s$.
-The latter two quantities are specified by user-provided _decrease_ and _probability_ functions.
+The proof rule uses a nonnegative _loop variant_ $\mathtt{V}$ whose expected value does not increase, counting its value as zero after loop exit.
+Each iteration must exit or decrease the variant by at least $\mathtt{decrease}(v)$ with probability at least $\mathtt{prob}(v)$, where $v$ is the variant's initial value.
 Additionally, a Boolean _invariant_ $\mathtt{I}$ must be specified which limits the set of states on which almost-sure termination is checked.
 
 ### Formal Theorem
 
 Consider a loop `while G { Body }`.
-The loop's used and modified variables, except the ones declared within the loop, are referred to as `vars`.
+The loop's and annotation's variables, except loop-local declarations and the logical argument `v`, are referred to as `vars`.
 Give
+
 - $\mathtt{I}$ a Boolean predicate,
 - $\mathtt{V}$ a variant function assigning a value $\mathbb{R}_{\geq 0}$ to every state,
 - $\mathtt{prob} \colon \mathbb{R}_{\geq 0} \to (0,1]$,
@@ -47,35 +48,35 @@ Give
 
 such that all the following conditions are fulfilled:
 
-1. $\mathtt{prob}$ is antitone,
+1. Under `I`, $0 < \mathtt{prob}(b) \le \mathtt{prob}(a) \le 1$ for every $0 \le a \le b$.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
 
     ```heyvl
-    proc prob_antitone(a: UReal, b: UReal) -> ()
-        pre ?(a <= b)
-        post ?(prob(a) >= prob(b))
+    proc prob_conditions(vars: ..., a: UReal, b: UReal) -> ()
+        pre ?(I(vars) && a <= b)
+        post ?(0 < prob(b) && prob(b) <= prob(a) && prob(a) <= 1)
     {}
     ```
 
     </p>
     </details>
-2. $\mathtt{decrease}$ is antitone,
+2. Under `I`, $0 < \mathtt{decrease}(b) \le \mathtt{decrease}(a)$ for every $0 \le a \le b$.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
 
     ```heyvl
-    proc decrease_antitone(a: UReal, b: UReal) -> ()
-        pre ?(a <= b)
-        post ?(decrease(a) >= decrease(b))
+    proc decrease_conditions(vars: ..., a: UReal, b: UReal) -> ()
+        pre ?(I(vars) && a <= b)
+        post ?(0 < decrease(b) && decrease(b) <= decrease(a))
     {}
     ```
 
     </p>
     </details>
-3. `[I]` is a `wp`-subinvariant of `while G { Body }` with respect to `[I]`,
+3. Under `I && G`, `wp[Body]([I]) = 1`: the body terminates almost surely and preserves `I`.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
@@ -95,21 +96,7 @@ such that all the following conditions are fulfilled:
 
     </p>
     </details>
-4. For states fulfilling the invariant `I`: if the loop guard `G` holds, then $\mathtt{V} > 0$,
-    <details>
-    <summary>HeyVL Encoding</summary>
-    <p>
-
-    ```heyvl
-    proc termination_condition(vars: ...) -> ()
-        pre ?(I(vars))
-        post ?(G(vars) ==> V(vars) > 0)
-    {}
-    ```
-
-    </p>
-    </details>
-5. Under `I`, `V` is an `awp`-superinvariant: its expected value does not increase under any demonic choice.
+4. Under `I && G`, `awp[Body](ite(G, V, 0)) <= V`: the expected variant does not increase under any demonic choice, counting zero on exit.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
@@ -118,7 +105,7 @@ such that all the following conditions are fulfilled:
     coproc V_awp_superinvariant(init_vars: ...) -> (vars: ...)
         pre ?(!I(init_vars))
         pre V(init_vars)
-        post V(vars)
+        post ite(G(vars), V(vars), 0)
     {
         vars = init_vars // set current state to input values
         if G {
@@ -128,11 +115,11 @@ such that all the following conditions are fulfilled:
     ```
 
     `Body_awp` replaces demonic choice with angelic choice and `havoc` with `cohavoc`.
-    Conditions 3 (invariant) and 6 (progress) use the original body.
+    Conditions 3 (invariant) and 5 (progress) use the original body.
 
     </p>
     </details>
-6. `V` satisfies a _progress_ condition, ensuring that, in expectation, one loop iteration decreases the variant by at least `decrease` with probability at least `prob`.
+5. Under `I && G`, the probability of exit or a decrease by at least `decrease(v)` is at least `prob(v)`, with `v` fixed to the initial variant value.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
@@ -141,7 +128,7 @@ such that all the following conditions are fulfilled:
     @wp
     proc progress_condition(init_vars: ...) -> (vars: ...)
         pre [I(init_vars)] * [G(init_vars)] * prob(V(init_vars))
-        post [V(vars) <= V(init_vars) - decrease(V(init_vars))]
+        post [!G(vars) || V(vars) + decrease(V(init_vars)) <= V(init_vars)]
     {
         vars = init_vars // set current state to input values
         Body
@@ -156,7 +143,7 @@ Then `while G { Body }` is almost-surely terminating from all initial states sat
 
 ### Usage
 
-Use `@ast(I, V, v, prob(v), decrease(v))` to generate the six checks above.
+Use `@ast(I, V, v, prob(v), decrease(v))` to generate the five checks above.
 Below is the encoding of the "escaping spline" example [from Section 5.4 of the proof rule's paper](https://dl.acm.org/doi/pdf/10.1145/3158121#page=18).
 
 ```heyvl
@@ -189,15 +176,20 @@ The five parameters are:
 
  * `invariant`: A Boolean invariant that holds before, during, and after the loop.
  * `variant`: The variant of type `UReal`.
- * `variable`: The free variable `v` used in `prob(v)` and `decrease(v)`.
- * `prob(v)`: The minimum probability of a decrease at variant value `v`.
- * `decrease(v)`: The minimum decrease at variant value `v`.
+ * `variable`: The logical variable `v`, scoped to `prob(v)` and `decrease(v)`.
+ * `prob(v)`: The minimum probability of exit or decrease at variant value `v`.
+ * `decrease(v)`: The minimum decrease when the loop does not exit.
+
+Caesar checks that `prob` and `decrease` depend only on `v` and variables not modified by the loop.
+Their bounds and antitonicity are checked for all nonnegative arguments, including zero, independently of the current variant value.
+Any assumptions on unchanged parameters must follow from `I`.
+The variant may be zero while the loop is active and positive after exit.
 
 :::warning[Manual checks]
 
-Check that `prob` and `decrease` depend only on `v` and variables not modified by the loop.
-Also check `0 < prob(v) <= 1` and `decrease(v) > 0` for every `v >= 0`.
-Caesar does not verify these assumptions.
+Check that sampling distributions are valid, for example `0 <= p <= 1` for `flip(p)`.
+The body must encode a probabilistic program; arbitrary HeyVL logical statements need not satisfy this assumption.
+Caesar does not check all of these requirements.
 If Caesar warns about a `havoc` domain, also check that it is finite.
 
 :::
@@ -207,8 +199,10 @@ Caesar warns on `havoc` if it cannot prove that each variable's type is finite.
 
 ### Soundness
 
-`@ast` under-approximates `wp` for exact loop bodies, supporting sound verification in a `proc`.
+Under these assumptions, `@ast` under-approximates `wp` for exact loop bodies, supporting sound verification in a `proc`.
 Use [`@wp`](./approximations#calculus-annotations) to check the required approximations.
+On each bounded range of variant values, conditions 1–2 give uniform positive progress bounds.
+Condition 4 bounds the probability of leaving that range, and condition 5 forces eventual exit within it.
 
 <details>
 <summary>Differences from the published formulations</summary>
@@ -217,26 +211,23 @@ These comparisons use the same `I`, `V`, `prob`, and `decrease`.
 
 Compared with [POPL Theorem 4.1](https://arxiv.org/pdf/1711.03588.pdf#page=7):
 
-- **Conditions 1–2 (antitonicity), more restrictive:** Caesar checks `prob` and `decrease` also at zero; the paper requires antitonicity only for positive arguments.
-- **Condition 5 (superinvariant), equivalent under condition 3:** Caesar checks `awp[Body](V) <= V` under `I && G`.
-  The paper's condition (iv) instead checks `H ⊖ V <= wp[Body](H ⊖ V)` under `I && G` for every `H > 0`, where `H ⊖ V = max(H - V, 0)`.
-  Condition 3 ensures that `Body` terminates almost surely under `I && G`, so [Lemma B.1](https://arxiv.org/pdf/1711.03588.pdf#page=33) gives equivalence for every demonic choice.
-- **Condition 6 (progress), more permissive:** Caesar uses `V <= max(v - decrease(v), 0)` where the paper's condition (iii) uses `V <= v - decrease(v)`.
-  These agree when `decrease(v) <= v`; otherwise Caesar accepts reaching `V = 0`, whereas the paper's event is impossible because its bound is negative.
-  Conditions 3 and 4 ensure that reaching `V = 0` forces loop exit.
+- **Function assumptions → conditions 1–2:** Caesar also checks antitonicity at zero; the paper only requires it at positive arguments.
+- **(ii), positive active variant:** Caesar omits this condition; condition 5 requires a positive probability of exit when `V = 0`.
+- **(iii), progress → condition 5:** the paper requires `V <= v - decrease(v)`; Caesar also counts exit as progress.
+- **(iv), bounded complements → condition 4:** with body termination from condition 3, the paper's bound on `H ⊖ V` is equivalent to `awp[Body](V) <= V` by [Lemma B.1](https://arxiv.org/pdf/1711.03588.pdf#page=33).
+  Caesar uses the smaller postexpectation `ite(G, V, 0)`, so exit values do not affect the bound.
 
 Compared with [Kaminski's thesis, Theorem 6.8](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=149):
 
-- **Condition 4 (termination), more permissive:** Caesar requires `I && G ==> V > 0`; the thesis's condition (b) requires `!G <==> V == 0` in all states.
-  Caesar allows positive `V` after loop exit and imposes no positivity condition outside `I`.
-- **Condition 5 (superinvariant), more permissive:** The thesis's condition (c) requires `awp[Body](V) <= V` whenever `G` holds; Caesar requires it only under `I && G`.
-- **Condition 6 (progress), more permissive:** The thesis's condition (d) uses ordinary subtraction; Caesar's truncated subtraction also accepts reaching `V = 0` when `decrease(v) > v`.
+- **(b), termination indication:** the thesis requires `!G <==> V == 0` globally; Caesar requires neither direction.
+- **(c), superinvariant → condition 4:** the thesis bounds `awp[Body](V)` whenever `G` holds; Caesar bounds `awp[Body](ite(G, V, 0))` only under `I && G`.
+- **(d), progress → condition 5:** the thesis requires ordinary decrease; Caesar also counts exit as progress.
 
 </details>
 
 ### HeyVL Encoding
 
-Besides generating the six checks, Caesar replaces the loop with:
+Besides generating the five checks, Caesar replaces the loop with:
 
 ```heyvl
 assert [I]

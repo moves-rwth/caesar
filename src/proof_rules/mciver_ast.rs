@@ -15,7 +15,7 @@ use indexmap::IndexSet;
 
 use crate::{
     ast::{
-        util::ModifiedVariableCollector,
+        util::{FreeVariableCollector, ModifiedVariableCollector},
         visit::{walk_expr, walk_stmt, VisitorMut},
         BinOpKind, DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprBuilder, ExprKind, Files,
         Ident, Label, ProcSpec, SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol, TyKind,
@@ -94,23 +94,24 @@ impl Encoding for ASTAnnotation {
         resolve.visit_expr(invariant)?;
         resolve.visit_expr(variant)?;
 
-        if let ExprKind::Var(var_ref) = &free_var.kind {
-            let var_decl = VarDecl {
-                name: *var_ref,
-                ty: TyKind::UReal,
-                kind: VarKind::Mut,
-                init: None,
-                span: call_span,
-                created_from: None,
-            };
-            // Declare the free variable to be used in the omega invariant
-            resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;
-        } else {
-            return Err(ResolveError::NotIdent(free_var.span));
-        }
+        resolve.with_subscope(|resolve| {
+            if let ExprKind::Var(var_ref) = &free_var.kind {
+                let var_decl = VarDecl {
+                    name: *var_ref,
+                    ty: TyKind::UReal,
+                    kind: VarKind::Mut,
+                    init: None,
+                    span: call_span,
+                    created_from: None,
+                };
+                resolve.declare(DeclKind::VarDecl(DeclRef::new(var_decl)))?;
+            } else {
+                return Err(ResolveError::NotIdent(free_var.span));
+            }
 
-        resolve.visit_expr(prob)?;
-        resolve.visit_expr(decrease)
+            resolve.visit_expr(prob)?;
+            resolve.visit_expr(decrease)
+        })
     }
 
     fn tycheck(
@@ -127,6 +128,7 @@ impl Encoding for ASTAnnotation {
         &self,
         tcx: &TyCtx,
         call_span: Span,
+        args: &[Expr],
         inner_stmt: &Stmt,
     ) -> Result<Vec<Diagnostic>, AnnotationError> {
         let mut validator = AstBodyValidator {
@@ -137,6 +139,25 @@ impl Encoding for ASTAnnotation {
         };
         if matches!(inner_stmt.node, StmtKind::While(_, _)) {
             validator.visit_stmt(&mut inner_stmt.clone())?;
+            let [_, _, free_var, prob, decrease] = five_args(args);
+            let ExprKind::Var(free_var) = &free_var.kind else {
+                unreachable!("free variable has been resolved");
+            };
+            let modified = ModifiedVariableCollector::from_stmt(inner_stmt);
+            let mut free_variables = FreeVariableCollector::new();
+            for (name, expr) in [("prob", prob), ("decrease", decrease)] {
+                for variable in free_variables.collect_and_clear(&mut expr.clone()) {
+                    if variable != *free_var && modified.modified_variables.contains(&variable) {
+                        return Err(AnnotationError::WrongArgument {
+                            span: call_span,
+                            arg: expr.clone(),
+                            message: format!(
+                                "`{name}` must not depend on loop-modified variable `{variable}`."
+                            ),
+                        });
+                    }
+                }
+            }
         }
         Ok(validator.diagnostics)
     }
@@ -198,17 +219,18 @@ impl Encoding for ASTAnnotation {
         let visitor = ModifiedVariableCollector::from_stmt(inner_stmt);
         let modified_vars = visitor.modified_outside_declarations();
 
-        let modified_or_used: IndexSet<Ident> = visitor
-            .modified_variables
-            .union(&visitor.used_variables)
-            .cloned()
-            .collect();
+        let mut free_variables = FreeVariableCollector::new();
+        free_variables.visit_stmt(&mut inner_stmt.clone()).unwrap();
+        for expr in [invariant, variant, prob, decrease] {
+            free_variables.visit_expr(&mut expr.clone()).unwrap();
+        }
+        free_variables.variables.shift_remove(&free_var);
 
         // Get the "init_{}" versions of the variable identifiers and declare them
         let init_idents = get_init_idents(tcx, annotation_span, &modified_vars);
 
         // Variables that are used but not modified or declared in the loop (These won't be transformed into an init version)
-        let only_used_idents: Vec<Ident> = (&visitor.used_variables
+        let only_used_idents: Vec<Ident> = (&free_variables.variables
             - &visitor
                 .declared_variables
                 .union(&visitor.modified_variables)
@@ -229,62 +251,92 @@ impl Encoding for ASTAnnotation {
 
         let init_assigns = multiple_assign(annotation_span, modified_vars.clone(), init_exprs);
 
-        // That is modified variables AND variables used in an expression (exclude the variables that are declared in the loop)
-        // ((Modified ∪ Used) - Declared)
-        // This is used in procs that do not modify any variables in their body
-        let input_vars: Vec<Ident> = (&modified_or_used - &visitor.declared_variables)
-            .into_iter()
-            .collect();
-
         // Replace all variables with the init versions in the variant
         let init_variant = to_init_expr(tcx, annotation_span, variant, &modified_vars);
 
-        let a_ident = new_ident_with_name(tcx, &TyKind::UReal, annotation_span, "a");
+        let a_ident = tcx.clone_var(free_var, annotation_span, VarKind::Input);
         let a_expr = ident_to_expr(tcx, annotation_span, a_ident);
 
-        let b_ident = new_ident_with_name(tcx, &TyKind::UReal, annotation_span, "b");
+        let b_ident = tcx.clone_var(free_var, annotation_span, VarKind::Input);
         let b_expr = ident_to_expr(tcx, annotation_span, b_ident);
 
-        // ?(a <= b)
+        let mut function_variables = FreeVariableCollector::new();
+        for expr in [invariant, prob, decrease] {
+            function_variables.visit_expr(&mut expr.clone()).unwrap();
+        }
+        function_variables.variables.shift_remove(&free_var);
+        let mut function_inputs = vec![a_ident, b_ident];
+        function_inputs.extend(function_variables.variables);
+
+        // ?(I && a <= b)
         let cond1_2_pre = builder.unary(
             UnOpKind::Embed,
             Some(TyKind::EUReal),
             builder.binary(
-                BinOpKind::Le,
+                BinOpKind::And,
                 Some(TyKind::Bool),
-                a_expr.clone(),
-                b_expr.clone(),
+                invariant.clone(),
+                builder.binary(
+                    BinOpKind::Le,
+                    Some(TyKind::Bool),
+                    a_expr.clone(),
+                    b_expr.clone(),
+                ),
             ),
         );
 
-        // ?(prob(a) >= prob(b))
+        let prob_a = builder.subst(prob.clone(), [(free_var, a_expr.clone())]);
+        let prob_b = builder.subst(prob.clone(), [(free_var, b_expr.clone())]);
+        let decrease_a = builder.subst(decrease.clone(), [(free_var, a_expr)]);
+        let decrease_b = builder.subst(decrease.clone(), [(free_var, b_expr)]);
+
+        // ?(0 < prob(b) && prob(b) <= prob(a) && prob(a) <= 1)
         let cond1_post = builder.unary(
             UnOpKind::Embed,
             Some(TyKind::EUReal),
             builder.binary(
-                BinOpKind::Ge,
+                BinOpKind::And,
                 Some(TyKind::Bool),
-                builder.subst(prob.clone(), [(free_var, a_expr.clone())]),
-                builder.subst(prob.clone(), [(free_var, b_expr.clone())]),
+                builder.binary(
+                    BinOpKind::Gt,
+                    Some(TyKind::Bool),
+                    prob_b.clone(),
+                    builder.cast(TyKind::UReal, builder.uint(0)),
+                ),
+                builder.binary(
+                    BinOpKind::And,
+                    Some(TyKind::Bool),
+                    builder.binary(BinOpKind::Le, Some(TyKind::Bool), prob_b, prob_a.clone()),
+                    builder.binary(
+                        BinOpKind::Le,
+                        Some(TyKind::Bool),
+                        prob_a,
+                        builder.cast(TyKind::UReal, builder.uint(1)),
+                    ),
+                ),
             ),
         );
 
-        // ?(decrease(a) >= decrease(b))
+        // ?(0 < decrease(b) && decrease(b) <= decrease(a))
         let cond2_post = builder.unary(
             UnOpKind::Embed,
             Some(TyKind::EUReal),
             builder.binary(
-                BinOpKind::Ge,
+                BinOpKind::And,
                 Some(TyKind::Bool),
-                builder.subst(decrease.clone(), [(free_var, a_expr)]),
-                builder.subst(decrease.clone(), [(free_var, b_expr)]),
+                builder.binary(
+                    BinOpKind::Gt,
+                    Some(TyKind::Bool),
+                    decrease_b.clone(),
+                    builder.cast(TyKind::UReal, builder.uint(0)),
+                ),
+                builder.binary(BinOpKind::Le, Some(TyKind::Bool), decrease_b, decrease_a),
             ),
         );
 
-        // prob antitone
         let cond1_proc_info = ProcInfo {
-            name: "prob_antitone".to_string(),
-            inputs: params_from_idents(vec![a_ident, b_ident], tcx),
+            name: "prob_conditions".to_string(),
+            inputs: params_from_idents(function_inputs.clone(), tcx),
             outputs: vec![],
             spec: vec![
                 ProcSpec::Requires(cond1_2_pre.clone()),
@@ -297,8 +349,8 @@ impl Encoding for ASTAnnotation {
         let cond1_proc = generate_proc(annotation_span, cond1_proc_info, base_proc_ident, tcx);
 
         let cond2_proc_info = ProcInfo {
-            name: "decrease_antitone".to_string(),
-            inputs: params_from_idents(vec![a_ident, b_ident], tcx),
+            name: "decrease_conditions".to_string(),
+            inputs: params_from_idents(function_inputs, tcx),
             outputs: vec![],
             spec: vec![
                 ProcSpec::Requires(cond1_2_pre),
@@ -308,22 +360,13 @@ impl Encoding for ASTAnnotation {
             direction: Direction::Down,
         };
 
-        // decrease antitone
         let cond2_proc = generate_proc(annotation_span, cond2_proc_info, base_proc_ident, tcx);
 
         // [I]
         let cond3_expr = builder.unary(UnOpKind::Iverson, Some(TyKind::EUReal), invariant.clone());
 
         let mut cond3_body = init_assigns.clone();
-        cond3_body.push(
-            encode_iter(
-                &enc_env,
-                inner_stmt,
-                // hey_const(annotation_span, &cond3_expr, tcx),
-                vec![],
-            )
-            .unwrap(),
-        );
+        cond3_body.push(encode_iter(&enc_env, inner_stmt, vec![]).unwrap());
 
         // [I] <= Phi_{[I]}([I])
         let cond3_proc_info = ProcInfo {
@@ -345,48 +388,9 @@ impl Encoding for ASTAnnotation {
 
         let cond3_proc = generate_proc(annotation_span, cond3_proc_info, base_proc_ident, tcx);
 
-        // ?(loop_guard ==> (variant > 0))
-        let cond4_expr = builder.unary(
-            UnOpKind::Embed,
-            Some(TyKind::EUReal),
-            builder.binary(
-                BinOpKind::Impl,
-                Some(TyKind::Bool),
-                loop_guard.clone(),
-                builder.binary(
-                    BinOpKind::Gt,
-                    Some(TyKind::Bool),
-                    variant.clone(),
-                    builder.cast(TyKind::UReal, builder.uint(0)),
-                ),
-            ),
-        );
-
-        // if I then (G ==> V > 0)
-        let cond4_proc_info = ProcInfo {
-            // create the ProcInfo according to the generate_proc function below
-            name: "termination_condition".to_string(),
-            inputs: params_from_idents(input_vars, tcx),
-            outputs: vec![],
-            spec: vec![ProcSpec::Requires(builder.unary(
-                UnOpKind::Embed,
-                Some(TyKind::EUReal),
-                invariant.to_owned(),
-            ))],
-            body: Spanned::new(
-                annotation_span,
-                vec![Spanned::new(
-                    annotation_span,
-                    StmtKind::Assert(Direction::Down, cond4_expr),
-                )],
-            ),
-            direction: Direction::Down,
-        };
-        let cond4_proc = generate_proc(annotation_span, cond4_proc_info, base_proc_ident, tcx);
-
         // Check the upper bound for every demonic choice, restricted to invariant states.
-        let mut cond5_body = init_assigns.clone();
-        cond5_body.push(Spanned::new(
+        let mut cond4_body = init_assigns.clone();
+        cond4_body.push(Spanned::new(
             annotation_span,
             StmtKind::Assume(
                 Direction::Up,
@@ -399,27 +403,32 @@ impl Encoding for ASTAnnotation {
         ));
         let mut variant_iteration = encode_iter(&enc_env, inner_stmt, vec![]).unwrap();
         AwpEncoder.visit_stmt(&mut variant_iteration).unwrap();
-        cond5_body.push(variant_iteration);
+        cond4_body.push(variant_iteration);
 
-        let cond5_proc_info = ProcInfo {
+        let cond4_proc_info = ProcInfo {
             name: "V_awp_superinvariant".to_string(),
             inputs: params_from_idents(input_init_vars.clone(), tcx),
             outputs: params_from_idents(modified_vars.clone(), tcx),
             spec: vec![
-                ProcSpec::Requires(builder.cast(
+                ProcSpec::Requires(builder.cast(TyKind::EUReal, init_variant.clone())),
+                ProcSpec::Ensures(builder.cast(
                     TyKind::EUReal,
-                    to_init_expr(tcx, annotation_span, variant, &modified_vars),
+                    builder.ite(
+                        Some(TyKind::UReal),
+                        loop_guard.clone(),
+                        variant.clone(),
+                        builder.cast(TyKind::UReal, builder.uint(0)),
+                    ),
                 )),
-                ProcSpec::Ensures(builder.cast(TyKind::EUReal, variant.clone())),
             ],
-            body: Spanned::new(annotation_span, cond5_body),
+            body: Spanned::new(annotation_span, cond4_body),
             direction: Direction::Up,
         };
 
-        let cond5_proc = generate_proc(annotation_span, cond5_proc_info, base_proc_ident, tcx);
+        let cond4_proc = generate_proc(annotation_span, cond4_proc_info, base_proc_ident, tcx);
 
         // [I] * [G] * (p o V)
-        let cond6_pre = builder.binary(
+        let cond5_pre = builder.binary(
             BinOpKind::Mul,
             Some(TyKind::EUReal),
             builder.unary(
@@ -442,28 +451,32 @@ impl Encoding for ASTAnnotation {
             ),
         );
 
-        // [V <= V(init) - d(V(init))]
-        let cond6_post = builder.unary(
+        // [!G || V + d(V(init)) <= V(init)]
+        let cond5_post = builder.unary(
             UnOpKind::Iverson,
             Some(TyKind::EUReal),
             builder.binary(
-                BinOpKind::Le,
+                BinOpKind::Or,
                 Some(TyKind::Bool),
-                variant.clone(),
+                builder.unary(UnOpKind::Not, Some(TyKind::Bool), loop_guard.clone()),
                 builder.binary(
-                    BinOpKind::Sub,
-                    Some(TyKind::UReal),
-                    init_variant.clone(),
-                    builder.subst(decrease.clone(), [(free_var, init_variant)]),
+                    BinOpKind::Le,
+                    Some(TyKind::Bool),
+                    builder.binary(
+                        BinOpKind::Add,
+                        Some(TyKind::UReal),
+                        variant.clone(),
+                        builder.subst(decrease.clone(), [(free_var, init_variant.clone())]),
+                    ),
+                    init_variant,
                 ),
             ),
         );
 
-        let mut cond6_body = init_assigns;
-        cond6_body.extend(loop_body.node.clone());
+        let mut cond5_body = init_assigns;
+        cond5_body.extend(loop_body.node.clone());
 
-        // [I] * [G] * (p o V) <= \\s. wp[P]([V <= V(s) - d(V(s))])(s)
-        let cond6_proc_info = ProcInfo {
+        let cond5_proc_info = ProcInfo {
             name: "progress_condition".to_string(),
             inputs: params_from_idents(input_init_vars, tcx),
             outputs: params_from_idents(modified_vars.clone(), tcx),
@@ -471,16 +484,16 @@ impl Encoding for ASTAnnotation {
                 ProcSpec::Requires(to_init_expr(
                     tcx,
                     annotation_span,
-                    &cond6_pre,
+                    &cond5_pre,
                     &modified_vars,
                 )),
-                ProcSpec::Ensures(cond6_post),
+                ProcSpec::Ensures(cond5_post),
             ],
-            body: Spanned::new(annotation_span, cond6_body),
+            body: Spanned::new(annotation_span, cond5_body),
             direction: Direction::Down,
         };
 
-        let cond6_proc = generate_proc(annotation_span, cond6_proc_info, base_proc_ident, tcx);
+        let cond5_proc = generate_proc(annotation_span, cond5_proc_info, base_proc_ident, tcx);
 
         Ok(GeneratedEncoding {
             block: Spanned::new(
@@ -489,7 +502,7 @@ impl Encoding for ASTAnnotation {
                     .into(),
             ),
             decls: Some(vec![
-                cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,
+                cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc,
             ]),
             diagnostics: vec![],
         })
