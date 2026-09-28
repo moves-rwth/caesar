@@ -832,7 +832,7 @@ fn test_ast_transform() {
         {
             assert ?(((1 <= x) → (cast(UReal, x) > cast(UReal, 0))))
         }
-        coproc main_V_wp_superinvariant_0(init_x: UInt) -> (x: UInt)
+        coproc main_V_awp_superinvariant_0(init_x: UInt) -> (x: UInt)
             pre cast(EUReal, (cast(UReal, x))[x -> init_x])
             post cast(EUReal, cast(UReal, x))
         {
@@ -900,6 +900,177 @@ fn test_ast_pre_and_post() {
     }
 }
 
+#[test]
+fn test_ast_rejects_demonically_biased_random_walks() {
+    // Every choice has positive progress, but a demon can select upward drift.
+    for body in [
+        r#"
+            if \cap {
+                x = x - 1
+            } else {
+                var b: Bool = flip(0.25)
+                if b { x = x - 1 } else { x = x + 1 }
+            }
+        "#,
+        r#"
+            var choice: Bool = false
+            havoc choice
+            if choice {
+                x = x - 1
+            } else {
+                var b: Bool = flip(0.25)
+                if b { x = x - 1 } else { x = x + 1 }
+            }
+        "#,
+        r#"
+            var sampled: Bool = flip(0.5)
+            var choice: Bool = false
+            if \cap { choice = sampled } else { choice = !sampled }
+            if choice {
+                x = x - 1
+            } else {
+                var b: Bool = flip(0.25)
+                if b { x = x - 1 } else { x = x + 1 }
+            }
+        "#,
+    ] {
+        let source = format!(
+            r#"
+                @wp proc main() -> (x: UInt)
+                    pre 1
+                    post 1
+                {{
+                    x = 1
+                    @ast(true, x, v, 0.25, 1)
+                    while x > 0 {{ {body} }}
+                }}
+            "#
+        );
+        assert!(!verify_test(&source).0.unwrap(), "{source}");
+    }
+}
+
+#[test]
+fn test_ast_requires_progress_for_every_demonic_choice() {
+    let source = r#"
+        @wp proc main() -> ()
+            pre 1
+            post 1
+        {
+            var x: UInt = 1
+            @ast(true, x, v, 1, 1)
+            while x > 0 {
+                if \cap { x = x - 1 } else {}
+            }
+        }
+    "#;
+    assert!(!verify_test(source).0.unwrap());
+}
+
+#[test]
+fn test_ast_rejects_unsupported_source_statements() {
+    for (body, reason) in [
+        // Check before an inner annotation can erase the source.
+        (
+            r"@unroll(0) while true { if \cup {} else {} }",
+            "Angelic choice is not allowed.",
+        ),
+        ("if + {} else {}", "Additive choice is not allowed."),
+        (
+            "var choice: Bool = false; cohavoc choice",
+            "Angelic havoc is not allowed.",
+        ),
+        ("helper()", "Procedure calls are not allowed."),
+        (
+            "var local: Bool",
+            "Loop-local variables must be initialized.",
+        ),
+    ] {
+        let source = format!(
+            r#"
+                proc helper() -> () {{}}
+                @wp proc main() -> ()
+                    pre 1
+                    post 1
+                {{
+                    var x: UInt = 1
+                    @ast(true, x, v, 1, 1)
+                    while x > 0 {{ {body} }}
+                }}
+            "#
+        );
+        let (result, server) = verify_test(&source);
+        let CaesarError::Diagnostic(diagnostic) = result.unwrap_err() else {
+            panic!("expected an unsupported-statement diagnostic");
+        };
+        assert_eq!(diagnostic.kind(), ReportKind::Error);
+        let text = diagnostic.into_string(&server.files.lock().unwrap());
+        assert!(text.contains(reason), "{source}\n{text}");
+        if body.contains("if ") || body.contains("cohavoc") {
+            assert!(
+                text.contains("Only probabilistic or demonic choices are allowed."),
+                "{text}"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_ast_warns_about_possibly_infinite_havoc_domains() {
+    let source = r#"
+        @wp proc main() -> () {
+            var x: UInt = 1
+            var y: UReal = 0
+            var flag: Bool = false
+            @ast(true, x, v, 1, 1)
+            while x > 0 {
+                havoc flag
+                @unroll(0) while true { havoc flag, x, y }
+            }
+        }
+    "#;
+    let (result, mut server) = single_desugar_test_with_werr(source, false);
+    result.unwrap();
+    assert_eq!(server.diagnostics.len(), 1);
+    let diagnostic = server.diagnostics.pop().unwrap();
+    assert_eq!(diagnostic.kind(), ReportKind::Warning);
+    let text = diagnostic.into_string(&server.files.lock().unwrap());
+    assert!(text.contains("Havoc domain may be infinite"), "{text}");
+    assert!(text.contains("`x` has type `UInt`"), "{text}");
+    assert!(text.contains("`y` has type `UReal`"), "{text}");
+    assert!(!text.contains("`flag` has type"), "{text}");
+
+    let (result, server) = single_desugar_test_with_werr(source, true);
+    assert!(matches!(
+        result,
+        Err(CaesarError::Diagnostic(ref diagnostic))
+            if diagnostic.kind() == ReportKind::Warning
+                && diagnostic.to_string().contains("Havoc domain may be infinite")
+    ));
+    assert!(server.diagnostics.is_empty());
+}
+
+#[test]
+fn test_ast_accepts_pure_functions_and_distributions() {
+    let source = r#"
+        domain Helpers {
+            func predecessor(n: UInt): UInt = n - 1
+        }
+        @wp proc main() -> ()
+            pre 1
+            post 1
+        {
+            var x: UInt = 1
+            @ast(true, x, v, 0.5, 1)
+            while x > 0 {
+                var choice: Bool = flip(0.5)
+                if choice { x = predecessor(x) } else {}
+            }
+        }
+    "#;
+    assert!(verify_test(source).0.unwrap());
+}
+
 /// Test if the fresh identifier generation works correctly
 /// when there are multiple instances of the annotation type on the same procedure
 #[test]
@@ -913,8 +1084,7 @@ fn test_double_annotation() {
         @ast(true, (3 * ite(!(x % 2 == 0), 1, 0)) + ite(x >= 10, x - 10, 10 - x), v, 0.5, 2)
         while x != 10 {
             if x % 2 == 0{
-                var prob_choice: Bool
-                prob_choice = flip(1/2)
+                var prob_choice: Bool = flip(1/2)
                 if prob_choice {
                     x = x - 2
                 } else {
@@ -928,8 +1098,7 @@ fn test_double_annotation() {
         @ast(true, (3 * ite(!(x % 2 == 0), 1, 0)) + ite(x >= 10, x - 10, 10 - x), t, 0.5, 2)
         while x != 10 {
             if x % 2 == 0{
-                var prob_choice: Bool
-                prob_choice = flip(1/2)
+                var prob_choice: Bool = flip(1/2)
                 if prob_choice {
                     x = x - 2
                 } else {

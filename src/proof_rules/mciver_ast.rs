@@ -10,13 +10,16 @@
 
 use std::{any::Any, fmt};
 
+use ariadne::ReportKind;
 use indexmap::IndexSet;
 
 use crate::{
     ast::{
-        util::ModifiedVariableCollector, visit::VisitorMut, BinOpKind, DeclKind, DeclRef,
-        Direction, Expr, ExprBuilder, ExprKind, Files, Ident, ProcSpec, SourceFilePath, Span,
-        Spanned, Stmt, StmtKind, Symbol, TyKind, UnOpKind, VarDecl, VarKind,
+        util::ModifiedVariableCollector,
+        visit::{walk_expr, walk_stmt, VisitorMut},
+        BinOpKind, DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprBuilder, ExprKind, Files,
+        Ident, Label, ProcSpec, SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol, TyKind,
+        UnOpKind, VarDecl, VarKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -110,10 +113,6 @@ impl Encoding for ASTAnnotation {
         resolve.visit_expr(decrease)
     }
 
-    // TODO: handle nondeterminism!
-    //  - only allow demonic nondet
-    //  - transform to angelic nondet for upper bounds reasoning
-
     fn tycheck(
         &self,
         tycheck: &mut Tycheck<'_>,
@@ -122,6 +121,24 @@ impl Encoding for ASTAnnotation {
     ) -> Result<(), TycheckError> {
         tycheck_annotation_call(tycheck, call_span, &self.0, args)?;
         Ok(())
+    }
+
+    fn validate(
+        &self,
+        tcx: &TyCtx,
+        call_span: Span,
+        inner_stmt: &Stmt,
+    ) -> Result<Vec<Diagnostic>, AnnotationError> {
+        let mut validator = AstBodyValidator {
+            tcx,
+            annotation_name: self.name(),
+            call_span,
+            diagnostics: vec![],
+        };
+        if matches!(inner_stmt.node, StmtKind::While(_, _)) {
+            validator.visit_stmt(&mut inner_stmt.clone())?;
+        }
+        Ok(validator.diagnostics)
     }
 
     fn get_approximation(
@@ -178,11 +195,8 @@ impl Encoding for ASTAnnotation {
         };
 
         // Collect modified variables (exclude the variables that are declared in the loop)
-        let mut visitor = ModifiedVariableCollector::new();
-        visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
-        let modified_vars: Vec<Ident> = (&visitor.modified_variables - &visitor.declared_variables)
-            .into_iter()
-            .collect();
+        let visitor = ModifiedVariableCollector::from_stmt(inner_stmt);
+        let modified_vars = visitor.modified_outside_declarations();
 
         let modified_or_used: IndexSet<Ident> = visitor
             .modified_variables
@@ -370,8 +384,7 @@ impl Encoding for ASTAnnotation {
         };
         let cond4_proc = generate_proc(annotation_span, cond4_proc_info, base_proc_ident, tcx);
 
-        // Phi_{V}(V) <= V ⊔ ?(!I)
-        // Modification: only check that V is a superinvariant for states fulfilling the invariant
+        // Check the upper bound for every demonic choice, restricted to invariant states.
         let mut cond5_body = init_assigns.clone();
         cond5_body.push(Spanned::new(
             annotation_span,
@@ -384,10 +397,12 @@ impl Encoding for ASTAnnotation {
                 ),
             ),
         ));
-        cond5_body.push(encode_iter(&enc_env, inner_stmt, vec![]).unwrap());
+        let mut variant_iteration = encode_iter(&enc_env, inner_stmt, vec![]).unwrap();
+        AwpEncoder.visit_stmt(&mut variant_iteration).unwrap();
+        cond5_body.push(variant_iteration);
 
         let cond5_proc_info = ProcInfo {
-            name: "V_wp_superinvariant".to_string(),
+            name: "V_awp_superinvariant".to_string(),
             inputs: params_from_idents(input_init_vars.clone(), tcx),
             outputs: params_from_idents(modified_vars.clone(), tcx),
             spec: vec![
@@ -482,5 +497,111 @@ impl Encoding for ASTAnnotation {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+/// Check that loop bodies use only demonic nondeterminism.
+struct AstBodyValidator<'tcx> {
+    tcx: &'tcx TyCtx,
+    annotation_name: Ident,
+    call_span: Span,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl AstBodyValidator<'_> {
+    fn unsupported(
+        &self,
+        statement_span: Span,
+        message: &str,
+        note: Option<&'static str>,
+    ) -> AnnotationError {
+        AnnotationError::UnsupportedStatement {
+            span: self.call_span,
+            annotation_name: self.annotation_name,
+            statement_span,
+            message: message.to_owned(),
+            note,
+        }
+    }
+}
+
+impl VisitorMut for AstBodyValidator<'_> {
+    type Err = AnnotationError;
+
+    fn visit_stmt(&mut self, stmt: &mut Stmt) -> Result<(), Self::Err> {
+        let choice_note = Some("Only probabilistic or demonic choices are allowed.");
+        let error = match &stmt.node {
+            StmtKind::Angelic(_, _) => Some(("Angelic choice is not allowed.", choice_note)),
+            StmtKind::Additive(_, _) => Some(("Additive choice is not allowed.", choice_note)),
+            StmtKind::Havoc(Direction::Up, _) => {
+                Some(("Angelic havoc is not allowed.", choice_note))
+            }
+            StmtKind::Havoc(Direction::Down, variables) => {
+                let labels: Vec<_> = variables
+                    .iter()
+                    .filter_map(|ident| {
+                        let decl = self.tcx.get(*ident).unwrap();
+                        let DeclKind::VarDecl(var) = decl.as_ref() else {
+                            unreachable!("havoc variables have been typechecked")
+                        };
+                        let ty = &var.borrow().ty;
+                        (*ty != TyKind::Bool).then(|| {
+                            Label::new(stmt.span).with_message(format!(
+                                "`{ident}` has type `{ty}`, which is not known to be finite."
+                            ))
+                        })
+                    })
+                    .collect();
+                if !labels.is_empty() {
+                    self.diagnostics.push(
+                        Diagnostic::new(ReportKind::Warning, stmt.span)
+                            .with_message("Havoc domain may be infinite")
+                            .with_labels(labels)
+                            .with_note("`@ast` requires finite nondeterminism."),
+                    );
+                }
+                None
+            }
+            StmtKind::Var(var) if var.borrow().init.is_none() => Some((
+                "Loop-local variables must be initialized.",
+                Some("`@ast` requires explicit `havoc` for demonic nondeterminism."),
+            )),
+            _ => None,
+        };
+        if let Some((message, note)) = error {
+            return Err(self.unsupported(stmt.span, message, note));
+        }
+        walk_stmt(self, stmt)
+    }
+
+    fn visit_expr(&mut self, expr: &mut Expr) -> Result<(), Self::Err> {
+        if let ExprKind::Call(ident, _) = &expr.kind {
+            if matches!(
+                self.tcx.get(*ident).unwrap().as_ref(),
+                DeclKind::ProcDecl(_)
+            ) {
+                return Err(self.unsupported(expr.span, "Procedure calls are not allowed.", None));
+            }
+        }
+        walk_expr(self, expr)
+    }
+}
+
+/// Switch demonic choices to angelic choices for `awp`.
+struct AwpEncoder;
+
+impl VisitorMut for AwpEncoder {
+    type Err = ();
+
+    fn visit_stmt(&mut self, stmt: &mut Stmt) -> Result<(), Self::Err> {
+        walk_stmt(self, stmt)?;
+        match &mut stmt.node {
+            StmtKind::Demonic(lhs, rhs) => {
+                stmt.node = StmtKind::Angelic(lhs.clone(), rhs.clone());
+            }
+            StmtKind::Havoc(direction @ Direction::Down, _) => *direction = Direction::Up,
+            _ => {}
+        }
+        Ok(())
     }
 }

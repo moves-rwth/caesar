@@ -7,7 +7,7 @@ sidebar_position: 5
 _Almost-sure termination_ (AST for short) means that a program terminates with probability one.
 In our probabilistic setting, this does not necessarily mean that all executions terminate (we would call that _certain termination_), but only that the expected value to reach a terminating state is one.
 In terms of weakest pre-expectations, this means that `wp[C](1) = 1` holds for a program `C`.
-For a nice overview of details and proof rules that are available in the literature, we refer to [Chapter 6 of Benjamin Kaminski's PhD thesis](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=139).[^1]
+For a nice overview of details and proof rules that are available in the literature, we refer to [Chapter 6 of Benjamin Kaminski's PhD thesis](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=139).
 
 In Caesar, there are several ways to prove almost-sure termination:
 
@@ -103,30 +103,32 @@ such that all the following conditions are fulfilled:
     ```heyvl
     proc termination_condition(vars: ...) -> ()
         pre ?(I(vars))
-        post ?(G(vars) ==> V(vars) > 0]
+        post ?(G(vars) ==> V(vars) > 0)
     {}
     ```
 
     </p>
     </details>
-5. For states fulfilling the invariant `I`: `V` is a `wp`-superinvariant of `while G { Body }` with respect to `V`, i.e. in expectation the variant does not increase after one loop iteration [^1]
+5. Under `I`, `V` is an `awp`-superinvariant: its expected value does not increase under any demonic choice.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
 
     ```heyvl
-    @wp
-    coproc V_wp_superinvariant(init_vars: ...) -> (vars: ...)
+    coproc V_awp_superinvariant(init_vars: ...) -> (vars: ...)
         pre ?(!I(init_vars))
         pre V(init_vars)
         post V(vars)
     {
         vars = init_vars // set current state to input values
         if G {
-            Body
+            Body_awp
         } else {}
     }
     ```
+
+    `Body_awp` replaces demonic choice with angelic choice and `havoc` with `cohavoc`.
+    Conditions 3 (invariant) and 6 (progress) use the original body.
 
     </p>
     </details>
@@ -154,7 +156,7 @@ Then `while G { Body }` is almost-surely terminating from all initial states sat
 
 ### Usage
 
-By applying the `@ast` annotation to a loop, Caesar will check the above requirements for a given invariant, variant, probability and decrease function.
+Use `@ast(I, V, v, prob(v), decrease(v))` to generate the six checks above.
 Below is the encoding of the "escaping spline" example [from Section 5.4 of the proof rule's paper](https://dl.acm.org/doi/pdf/10.1145/3158121#page=18).
 
 ```heyvl
@@ -183,29 +185,54 @@ proc ast_example4() -> ()
 
 #### Inputs
 
-You can see all five parameters are passed to the `@ast` annotation in sequence:
+The five parameters are:
 
- * `invariant`: The Boolean invariant. Has to hold before the loop, be maintained in each iteration, and holds after the loop.
+ * `invariant`: A Boolean invariant that holds before, during, and after the loop.
  * `variant`: The variant of type `UReal`.
- * `variable`: The free variable `v` in `prob(v)` and `decrease(v)` for their respective parameters.
- * `prob(v)`: Given a value of the variant `v`, give the probability of a decrease.
- * `decrease(v)`: Given a value of the variant `v`, give the amount of the decrease that happens with probability `prob(v)`.
+ * `variable`: The free variable `v` used in `prob(v)` and `decrease(v)`.
+ * `prob(v)`: The minimum probability of a decrease at variant value `v`.
+ * `decrease(v)`: The minimum decrease at variant value `v`.
 
+:::warning[Manual checks]
 
-:::warning
-
-While the paper's proof rule supports (demonic and countable) nondeterminism, Caesar's implementation does not at this moment.
-Users must manually ensure that no nondeterminism is present in the program.
-
-The implementation might be extended in the future to support nondeterminism.
-Refer to [Section 8.1 of the paper](https://dl.acm.org/doi/pdf/10.1145/3158121#page=25) for more details.
+Check that `prob` and `decrease` depend only on `v` and variables not modified by the loop.
+Also check `0 < prob(v) <= 1` and `decrease(v) > 0` for every `v >= 0`.
+Caesar does not verify these assumptions.
+If Caesar warns about a `havoc` domain, also check that it is finite.
 
 :::
+
+The loop body must not contain angelic or additive choice, `cohavoc`, `havoc` over infinite domains, procedure calls, or uninitialized loop-local declarations.
+Caesar warns on `havoc` if it cannot prove that each variable's type is finite.
 
 ### Soundness
 
 `@ast` under-approximates `wp` for exact loop bodies, supporting sound verification in a `proc`.
 Use [`@wp`](./approximations#calculus-annotations) to check the required approximations.
+
+<details>
+<summary>Differences from the published formulations</summary>
+
+These comparisons use the same `I`, `V`, `prob`, and `decrease`.
+
+Compared with [POPL Theorem 4.1](https://arxiv.org/pdf/1711.03588.pdf#page=7):
+
+- **Conditions 1–2 (antitonicity), more restrictive:** Caesar checks `prob` and `decrease` also at zero; the paper requires antitonicity only for positive arguments.
+- **Condition 5 (superinvariant), equivalent under condition 3:** Caesar checks `awp[Body](V) <= V` under `I && G`.
+  The paper's condition (iv) instead checks `H ⊖ V <= wp[Body](H ⊖ V)` under `I && G` for every `H > 0`, where `H ⊖ V = max(H - V, 0)`.
+  Condition 3 ensures that `Body` terminates almost surely under `I && G`, so [Lemma B.1](https://arxiv.org/pdf/1711.03588.pdf#page=33) gives equivalence for every demonic choice.
+- **Condition 6 (progress), more permissive:** Caesar uses `V <= max(v - decrease(v), 0)` where the paper's condition (iii) uses `V <= v - decrease(v)`.
+  These agree when `decrease(v) <= v`; otherwise Caesar accepts reaching `V = 0`, whereas the paper's event is impossible because its bound is negative.
+  Conditions 3 and 4 ensure that reaching `V = 0` forces loop exit.
+
+Compared with [Kaminski's thesis, Theorem 6.8](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=149):
+
+- **Condition 4 (termination), more permissive:** Caesar requires `I && G ==> V > 0`; the thesis's condition (b) requires `!G <==> V == 0` in all states.
+  Caesar allows positive `V` after loop exit and imposes no positivity condition outside `I`.
+- **Condition 5 (superinvariant), more permissive:** The thesis's condition (c) requires `awp[Body](V) <= V` whenever `G` holds; Caesar requires it only under `I && G`.
+- **Condition 6 (progress), more permissive:** The thesis's condition (d) uses ordinary subtraction; Caesar's truncated subtraction also accepts reaching `V = 0` when `decrease(v) > v`.
+
+</details>
 
 ### HeyVL Encoding
 
@@ -221,5 +248,3 @@ assume [I]
 This checks `I` at loop entry and forgets modified variables, excluding loop-local declarations.
 The following statements must verify for every resulting state satisfying `I`.
 Unmodified variables retain their values.
-
-[^1]: Note that the version of the "new proof rule for almost-sure termination" in Benjamin Kaminski's PhD Thesis Theorem 6.8 is slightly different from the one in the published paper at POPL 2018. We use a modified version of the latter.
