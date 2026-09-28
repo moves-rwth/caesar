@@ -120,8 +120,6 @@ impl Encoding for ASTAnnotation {
         call_span: Span,
         args: &mut [Expr],
     ) -> Result<(), TycheckError> {
-        // TODO: does not check that the proc lower bounds!
-
         tycheck_annotation_call(tycheck, call_span, &self.0, args)?;
         Ok(())
     }
@@ -139,7 +137,7 @@ impl Encoding for ASTAnnotation {
             }
         }
         match (fixpoint_kind, inner_approximation_kind) {
-            (FixpointKind::Least, ApproximationKind::EXACT) => ApproximationKind::EXACT,
+            (FixpointKind::Least, ApproximationKind::EXACT) => ApproximationKind::UNDER,
             _ => ApproximationKind::UNKNOWN,
         }
     }
@@ -470,7 +468,11 @@ impl Encoding for ASTAnnotation {
         let cond6_proc = generate_proc(annotation_span, cond6_proc_info, base_proc_ident, tcx);
 
         Ok(GeneratedEncoding {
-            block: Spanned::new(annotation_span, vec![]),
+            block: Spanned::new(
+                annotation_span,
+                encode_loop_spec(annotation_span, &cond3_expr, modified_vars, Direction::Down)
+                    .into(),
+            ),
             decls: Some(vec![
                 cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,
             ]),

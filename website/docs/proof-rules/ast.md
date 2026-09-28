@@ -202,4 +202,24 @@ Refer to [Section 8.1 of the paper](https://dl.acm.org/doi/pdf/10.1145/3158121#p
 
 :::
 
+### Soundness
+
+`@ast` under-approximates `wp` for exact loop bodies, supporting sound verification in a `proc`.
+Use [`@wp`](./approximations#calculus-annotations) to check the required approximations.
+
+### HeyVL Encoding
+
+Besides generating the six checks, Caesar replaces the loop with:
+
+```heyvl
+assert [I]
+havoc modified_vars
+validate
+assume [I]
+```
+
+This checks `I` at loop entry and forgets modified variables, excluding loop-local declarations.
+The following statements must verify for every resulting state satisfying `I`.
+Unmodified variables retain their values.
+
 [^1]: Note that the version of the "new proof rule for almost-sure termination" in Benjamin Kaminski's PhD Thesis Theorem 6.8 is slightly different from the one in the published paper at POPL 2018. We use a modified version of the latter.

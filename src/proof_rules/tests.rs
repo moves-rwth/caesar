@@ -806,7 +806,7 @@ fn test_ast_transform() {
         r#"
         proc main() -> () {
             var x: UInt
-            {  }
+            { assert [true]; havoc x; validate; assume [true] }
         }
         proc main_prob_antitone_0(a: UReal, b: UReal) -> ()
             pre ?((a <= b))
@@ -872,12 +872,42 @@ fn test_ast_transform() {
     assert_eq!(test_string, res);
 }
 
+#[test]
+fn test_ast_pre_and_post() {
+    for (pre, post, assertion, expected) in [
+        ("[init_x == 1]", "[init_x == 1 && x <= 1]", "[x <= 1]", true),
+        ("1", "1", "1", false),
+        ("[init_x == 1]", "[x == 1]", "1", false),
+        ("[init_x == 1]", "1", "0", false),
+    ] {
+        let source = format!(
+            r#"
+                @wp proc main(init_x: UInt) -> (x: UInt)
+                    pre {pre}
+                    post {post}
+                {{
+                    x = init_x
+                    @ast(x <= 1, x, v, 1, 1)
+                    while x > 0 {{
+                        var amount: UInt = init_x + 1
+                        x = x - amount
+                    }}
+                    assert {assertion}
+                }}
+            "#
+        );
+        assert_eq!(verify_test(&source).0.unwrap(), expected, "{source}");
+    }
+}
+
 /// Test if the fresh identifier generation works correctly
 /// when there are multiple instances of the annotation type on the same procedure
 #[test]
 fn test_double_annotation() {
     let source = r#"
     proc main() -> ()
+        pre 1
+        post 1
     {
         var x: UInt
         @ast(true, (3 * ite(!(x % 2 == 0), 1, 0)) + ite(x >= 10, x - 10, 10 - x), v, 0.5, 2)
