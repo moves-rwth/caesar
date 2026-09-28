@@ -152,6 +152,22 @@ pub fn encode_iter(
     None
 }
 
+/// Encode a loop specification with the same invariant before and after the loop.
+/// Callers choose the modified variables and add any rule-specific diagnostic annotations.
+pub fn encode_loop_spec(
+    span: Span,
+    invariant: &Expr,
+    variables: Vec<Ident>,
+    direction: Direction,
+) -> [Stmt; 4] {
+    [
+        Spanned::new(span, StmtKind::Assert(direction, invariant.clone())),
+        Spanned::new(span, StmtKind::Havoc(direction, variables)),
+        Spanned::new(span, StmtKind::Validate(direction)),
+        Spanned::new(span, StmtKind::Assume(direction, invariant.clone())),
+    ]
+}
+
 /// Constant program which always evaluates to the given expression
 pub fn hey_const(
     enc_env: &EncodingEnvironment,

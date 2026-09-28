@@ -3,7 +3,7 @@ use indexmap::IndexSet;
 
 use super::{
     visit::{walk_expr, walk_stmt, VisitorMut},
-    Direction, Expr, ExprKind, Ident, StmtKind,
+    Direction, Expr, ExprKind, Ident, Stmt, StmtKind,
 };
 
 /// Helper to find all free variables in expressions.
@@ -79,6 +79,21 @@ pub struct ModifiedVariableCollector {
 impl ModifiedVariableCollector {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Collect modified, declared, and used variables without changing the statement.
+    pub fn from_stmt(stmt: &Stmt) -> Self {
+        let mut collector = Self::new();
+        collector.visit_stmt(&mut stmt.clone()).unwrap();
+        collector
+    }
+
+    /// Return modified variables not declared in the statement, in encounter order.
+    pub fn modified_outside_declarations(&self) -> Vec<Ident> {
+        self.modified_variables
+            .difference(&self.declared_variables)
+            .copied()
+            .collect()
     }
 }
 

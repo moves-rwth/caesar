@@ -155,11 +155,8 @@ impl Encoding for OmegaInvAnnotation {
         };
         enc_env.direction = direction;
 
-        let mut visitor = ModifiedVariableCollector::new();
-        visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
-        let havoc_vars = (&visitor.modified_variables - &visitor.declared_variables)
-            .into_iter()
-            .collect();
+        let havoc_vars =
+            ModifiedVariableCollector::from_stmt(inner_stmt).modified_outside_declarations();
 
         let builder = ExprBuilder::new(span);
         let terminator = select_terminator(semantics, explicit_terminator, builder);
