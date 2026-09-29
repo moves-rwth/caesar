@@ -346,6 +346,12 @@ impl AstEncoding<'_> {
             ),
         );
 
+        let positive_a = builder.binary(
+            BinOpKind::Gt,
+            Some(TyKind::Bool),
+            a_expr.clone(),
+            builder.cast(TyKind::UReal, builder.uint(0)),
+        );
         let prob_a = builder.subst(self.prob.clone(), [(self.free_var, a_expr.clone())]);
         let prob_b = builder.subst(self.prob.clone(), [(self.free_var, b_expr.clone())]);
         let decrease_a = builder.subst(self.decrease.clone(), [(self.free_var, a_expr)]);
@@ -370,7 +376,12 @@ impl AstEncoding<'_> {
                 ProcSpec::Ensures(builder.unary(
                     UnOpKind::Embed,
                     Some(TyKind::EUReal),
-                    builder.binary(BinOpKind::Le, Some(TyKind::Bool), prob_b, prob_a.clone()),
+                    builder.binary(
+                        BinOpKind::Impl,
+                        Some(TyKind::Bool),
+                        positive_a.clone(),
+                        builder.binary(BinOpKind::Le, Some(TyKind::Bool), prob_b, prob_a.clone()),
+                    ),
                 )),
                 ProcSpec::Ensures(builder.unary(
                     UnOpKind::Embed,
@@ -408,7 +419,12 @@ impl AstEncoding<'_> {
                 ProcSpec::Ensures(builder.unary(
                     UnOpKind::Embed,
                     Some(TyKind::EUReal),
-                    builder.binary(BinOpKind::Le, Some(TyKind::Bool), decrease_b, decrease_a),
+                    builder.binary(
+                        BinOpKind::Impl,
+                        Some(TyKind::Bool),
+                        positive_a,
+                        builder.binary(BinOpKind::Le, Some(TyKind::Bool), decrease_b, decrease_a),
+                    ),
                 )),
             ],
             body: Spanned::new(span, vec![]),

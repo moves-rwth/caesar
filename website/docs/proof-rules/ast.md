@@ -33,7 +33,7 @@ An [extended version of the paper](https://arxiv.org/pdf/1711.03588.pdf) is avai
 
 The rule uses a _loop variant_ $\mathtt{V}$ to measure progress towards termination.
 If an iteration starts with variant value $v$, it must exit or decrease $\mathtt{V}$ by at least $\mathtt{decrease}(v)$ with probability at least $\mathtt{prob}(v)$.
-Both functions must be positive and nonincreasing.
+Both functions must be positive, and nonincreasing on positive arguments.
 
 The variant may increase on individual iterations, but its expected value after an iteration must not exceed its value before the iteration.
 For this expectation, the variant is treated as zero if the loop exits.
@@ -52,7 +52,7 @@ Choose:
 
 Caesar checks the following five conditions:
 
-1. Under `I`, $0 < \mathtt{prob}(b) \le \mathtt{prob}(a) \le 1$ for every $0 \le a \le b$.
+1. Under `I`, $0 < \mathtt{prob}(v) \le 1$ for every $v \ge 0$, and $\mathtt{prob}(b) \le \mathtt{prob}(a)$ for every $0 < a \le b$.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
@@ -61,14 +61,14 @@ Caesar checks the following five conditions:
     proc prob_conditions(vars: ..., a: UReal, b: UReal) -> ()
         pre ?(I(vars) && a <= b)
         post ?(0 < prob(b))
-        post ?(prob(b) <= prob(a))
+        post ?(a > 0 ==> prob(b) <= prob(a))
         post ?(prob(a) <= 1)
     {}
     ```
 
     </p>
     </details>
-2. Under `I`, $0 < \mathtt{decrease}(b) \le \mathtt{decrease}(a)$ for every $0 \le a \le b$.
+2. Under `I`, $\mathtt{decrease}(v) > 0$ for every $v \ge 0$, and $\mathtt{decrease}(b) \le \mathtt{decrease}(a)$ for every $0 < a \le b$.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
@@ -77,7 +77,7 @@ Caesar checks the following five conditions:
     proc decrease_conditions(vars: ..., a: UReal, b: UReal) -> ()
         pre ?(I(vars) && a <= b)
         post ?(0 < decrease(b))
-        post ?(decrease(b) <= decrease(a))
+        post ?(a > 0 ==> decrease(b) <= decrease(a))
     {}
     ```
 
@@ -206,7 +206,7 @@ These comparisons use the same `I`, `V`, `prob`, and `decrease`.
 
 Compared with [McIver et al., POPL 2018, Theorem 4.1](https://arxiv.org/pdf/1711.03588.pdf#page=7):
 
-- **Function assumptions → conditions 1–2:** the bounds on `prob` and `decrease` are unchanged; Caesar additionally requires antitonicity at zero.
+- **Function assumptions → conditions 1–2:** unchanged.
 - **(i), invariant → condition 3:** unchanged; `I` is preserved and the body terminates almost surely under `I && G`.
 - **(ii), positive active variant:** the paper requires `I && G ==> V > 0`; Caesar allows `V = 0` while the guard holds.
 - **(iii), progress → condition 5:** the paper counts only `V + decrease(v) <= v` as progress; Caesar also counts `!G`.
@@ -216,7 +216,7 @@ Compared with [McIver et al., POPL 2018, Theorem 4.1](https://arxiv.org/pdf/1711
 
 Compared with [Kaminski's thesis, Theorem 6.8](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=149):
 
-- **Function assumptions → conditions 1–2:** unchanged; the thesis already requires the same bounds and antitonicity, including at zero.
+- **Function assumptions → conditions 1–2:** the bounds are the same, but the thesis additionally requires antitonicity at zero.
 - **(a), invariant → condition 3:** unchanged, including body termination under `I && G`.
 - **(b), termination indication:** the thesis requires `!G <==> V == 0` in every state; Caesar allows zero while active and positive values after exit.
 - **(c), superinvariant → condition 4:** the thesis requires `awp[Body](V) <= V` under `G`, including outside `I`; Caesar checks `awp[Body]([G] * V) <= V` only under `I && G`.

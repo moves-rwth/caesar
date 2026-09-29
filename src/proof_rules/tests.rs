@@ -811,7 +811,7 @@ fn test_ast_transform() {
         proc main_prob_conditions_0(v_0: UReal, v_1: UReal) -> ()
             pre ?((true && (v_0 <= v_1)))
             post ?(((5/10)[v -> v_1] > cast(UReal, 0)))
-            post ?(((5/10)[v -> v_1] <= (5/10)[v -> v_0]))
+            post ?(((v_0 > cast(UReal, 0)) → ((5/10)[v -> v_1] <= (5/10)[v -> v_0])))
             post ?(((5/10)[v -> v_0] <= cast(UReal, 1)))
         {
 
@@ -819,7 +819,11 @@ fn test_ast_transform() {
         proc main_decrease_conditions_0(v_0: UReal, v_1: UReal) -> ()
             pre ?((true && (v_0 <= v_1)))
             post ?(((cast(UReal, 1))[v -> v_1] > cast(UReal, 0)))
-            post ?(((cast(UReal, 1))[v -> v_1] <= (cast(UReal, 1))[v -> v_0]))
+            post ?((
+                (v_0 > cast(UReal, 0)) → (
+                    (cast(UReal, 1))[v -> v_1] <= (cast(UReal, 1))[v -> v_0]
+                )
+            ))
         {
 
         }
@@ -916,7 +920,7 @@ fn test_ast_variant_at_exit() {
                 {{
                     var x: UReal = 0
                     var done: Bool = false
-                    @ast(true, {variant}, v, 0.5, 1)
+                    @ast(true, {variant}, v, ite(v == 0, 0.25, 0.5), ite(v == 0, 0.5, 1))
                     while !done {{ {body} }}
                 }}
             "#
@@ -930,6 +934,8 @@ fn test_ast_function_conditions() {
     for (invariant, prob, decrease, expected) in [
         ("true", "0", "1", false),
         ("true", "2", "1", false),
+        ("true", "ite(v == 0, 0, 1)", "1", false),
+        ("true", "ite(v == 0, 2, 1)", "1", false),
         ("true", "1", "0", false),
         ("true", "1", "v + 1", false),
         ("true", "ite(v <= 1, 0.5, 1)", "1", false),
