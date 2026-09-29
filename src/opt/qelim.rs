@@ -22,6 +22,11 @@ pub fn qelim(tcx: &mut TyCtx, vc_expr: &mut QuantVcProveTask) {
 /// A sufficient condition for the expression to be finite.
 /// May return false for finite expressions.
 fn is_finite(expr: &Expr) -> bool {
+    is_finite_with(expr, is_finite)
+}
+
+/// Evaluate structural finiteness using `is_finite` for subexpressions.
+fn is_finite_with(expr: &Expr, mut is_finite: impl FnMut(&Expr) -> bool) -> bool {
     if let TyKind::UInt | TyKind::UReal = expr.ty.as_ref().unwrap() {
         return true;
     }

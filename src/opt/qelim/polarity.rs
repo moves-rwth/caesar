@@ -2,21 +2,27 @@
 //!
 //! Quantifiers are replaced by free variables only in contexts permitted by the proof direction.
 
+use std::collections::HashMap;
+
+use ref_cast::RefCast;
 use tracing::debug;
 
 use crate::{
     ast::{
         BinOpKind, Direction, Expr, ExprBuilder, ExprData, ExprKind, Ident, QuantOpKind, QuantVar,
-        Span, SpanVariant, TyKind, UnOpKind, VarKind,
+        RefEqShared, Span, SpanVariant, TyKind, UnOpKind, VarKind,
     },
     driver::quant_proof::QuantVcProveTask,
     tyctx::TyCtx,
 };
 
-use super::is_finite;
+use super::is_finite_with;
 
 pub fn eliminate(tcx: &mut TyCtx, vc_expr: &mut QuantVcProveTask) {
-    let mut qelim = Qelim { tcx };
+    let mut qelim = Qelim {
+        tcx,
+        finiteness: HashMap::new(),
+    };
     match vc_expr.direction {
         Direction::Down => qelim.qelim_inf(&mut vc_expr.expr),
         Direction::Up => qelim.qelim_sup(&mut vc_expr.expr),
@@ -25,13 +31,26 @@ pub fn eliminate(tcx: &mut TyCtx, vc_expr: &mut QuantVcProveTask) {
 
 struct Qelim<'tcx> {
     tcx: &'tcx mut TyCtx,
+    finiteness: HashMap<RefEqShared<ExprData>, bool>,
 }
 
 impl Qelim<'_> {
+    fn is_finite(&mut self, expr: &Expr) -> bool {
+        if let Some(&finite) = self.finiteness.get(RefEqShared::ref_cast(expr)) {
+            return finite;
+        }
+        let finite = is_finite_with(expr, |child| self.is_finite(child));
+        self.finiteness
+            .insert(RefEqShared::new(expr.clone()), finite);
+        finite
+    }
+
     fn qelim_inf(&mut self, expr: &mut Expr) {
         if !matches!(expr.ty.as_ref().unwrap(), TyKind::Bool | TyKind::EUReal) {
             return;
         }
+        // Release the cached source before mutation to avoid copy-on-write and stale facts.
+        self.finiteness.remove(RefEqShared::ref_cast(expr));
         let expr_data: &mut ExprData = &mut *expr;
         match &mut expr_data.kind {
             ExprKind::Var(_) => {}
@@ -50,8 +69,8 @@ impl Qelim<'_> {
                     self.qelim_inf(b)
                 }
                 BinOpKind::Mul => {
-                    let a_finite = is_finite(a);
-                    let b_finite = is_finite(b);
+                    let a_finite = self.is_finite(a);
+                    let b_finite = self.is_finite(b);
                     if b_finite {
                         self.qelim_inf(a);
                     }
@@ -88,6 +107,8 @@ impl Qelim<'_> {
         if !matches!(expr.ty.as_ref().unwrap(), TyKind::Bool | TyKind::EUReal) {
             return;
         }
+        // Release the cached source before mutation to avoid copy-on-write and stale facts.
+        self.finiteness.remove(RefEqShared::ref_cast(expr));
         let expr_data: &mut ExprData = &mut *expr;
         match &mut expr_data.kind {
             ExprKind::Var(_) => {}
@@ -106,8 +127,8 @@ impl Qelim<'_> {
                     self.qelim_sup(b)
                 }
                 BinOpKind::Mul => {
-                    let a_finite = is_finite(a);
-                    let b_finite = is_finite(b);
+                    let a_finite = self.is_finite(a);
+                    let b_finite = self.is_finite(b);
                     if b_finite {
                         self.qelim_sup(a);
                     }
