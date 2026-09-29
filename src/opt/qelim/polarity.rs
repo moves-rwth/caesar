@@ -49,8 +49,16 @@ impl Qelim<'_> {
                     self.qelim_inf(a);
                     self.qelim_inf(b)
                 }
-                BinOpKind::Mul if is_finite(a) => self.qelim_inf(b),
-                BinOpKind::Mul if is_finite(b) => self.qelim_inf(a),
+                BinOpKind::Mul => {
+                    let a_finite = is_finite(a);
+                    let b_finite = is_finite(b);
+                    if b_finite {
+                        self.qelim_inf(a);
+                    }
+                    if a_finite {
+                        self.qelim_inf(b);
+                    }
+                }
                 BinOpKind::Impl | BinOpKind::Compare => {
                     self.qelim_sup(a);
                     self.qelim_inf(b);
@@ -59,7 +67,8 @@ impl Qelim<'_> {
             },
             ExprKind::Unary(un_op, ref mut operand) => match un_op.node {
                 UnOpKind::Not => self.qelim_sup(operand),
-                UnOpKind::Parens => self.qelim_inf(operand),
+                // ?(forall i. P_i) = inf_i ?P_i.
+                UnOpKind::Embed | UnOpKind::Parens => self.qelim_inf(operand),
                 _ => {}
             },
             ExprKind::Cast(ref mut inner) => self.qelim_inf(inner),
@@ -96,8 +105,16 @@ impl Qelim<'_> {
                     self.qelim_sup(a);
                     self.qelim_sup(b)
                 }
-                BinOpKind::Mul if is_finite(a) => self.qelim_sup(b),
-                BinOpKind::Mul if is_finite(b) => self.qelim_sup(a),
+                BinOpKind::Mul => {
+                    let a_finite = is_finite(a);
+                    let b_finite = is_finite(b);
+                    if b_finite {
+                        self.qelim_sup(a);
+                    }
+                    if a_finite {
+                        self.qelim_sup(b);
+                    }
+                }
                 BinOpKind::CoImpl | BinOpKind::CoCompare => {
                     self.qelim_inf(a);
                     self.qelim_sup(b);
@@ -106,7 +123,8 @@ impl Qelim<'_> {
             },
             ExprKind::Unary(un_op, ref mut operand) => match un_op.node {
                 UnOpKind::Non => self.qelim_inf(operand),
-                UnOpKind::Parens => self.qelim_sup(operand),
+                // ?(exists i. P_i) = sup_i ?P_i.
+                UnOpKind::Embed | UnOpKind::Parens => self.qelim_sup(operand),
                 _ => {}
             },
             ExprKind::Cast(ref mut inner) => self.qelim_sup(inner),

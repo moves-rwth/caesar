@@ -297,8 +297,9 @@ fn is_nonnegative_index(expr: &Expr, index: Ident) -> bool {
 mod tests {
     use crate::{
         ast::{
-            util::remove_casts, visit::VisitorMut, DeclKind, DeclRef, Direction, Expr, ExprBuilder,
-            ExprKind, FileId, Ident, QuantOpKind, Span, Symbol, TyKind, VarDecl, VarKind,
+            stats::StatsVisitor, util::remove_casts, visit::VisitorMut, DeclKind, DeclRef,
+            Direction, Expr, ExprBuilder, ExprKind, FileId, Ident, QuantOpKind, Span, Symbol,
+            TyKind, VarDecl, VarKind,
         },
         depgraph::DepGraph,
         driver::quant_proof::QuantVcProveTask,
@@ -460,23 +461,31 @@ mod tests {
     }
 
     #[test]
-    fn algebraic_elimination_enables_polarity_elimination() {
-        for source in [
-            "(inf i: UInt. i * [true]) * (inf j: Bool. [j])",
-            "(inf j: Bool. [j]) * (inf i: UInt. i * [true])",
+    fn algebraic_and_polarity_elimination() {
+        use Direction::{Down, Up};
+
+        for (direction, source) in [
+            (Down, "inf i: UInt. ?(i == t)"),
+            (Up, "sup i: UInt. ?(i == t)"),
+            (
+                Down,
+                "((inf i: UInt. i + [true]) ⊓ (inf j: Bool. [j])) * (1 ⊓ (inf k: Bool. [k]))",
+            ),
+            (
+                Up,
+                "((sup i: UInt. [i <= t]) ⊓ (sup j: Bool. [j])) * (1 ⊓ (sup k: Bool. [k]))",
+            ),
         ] {
             let (mut tcx, expr) = parse_typed(source);
             let mut task = QuantVcProveTask {
                 deps: DepGraph::new(AxiomInstantiation::Decreasing).get_reachable([]),
-                direction: Direction::Down,
+                direction,
                 expr,
             };
             qelim(&mut tcx, &mut task);
-            assert!(
-                !task.expr.to_string().contains("inf"),
-                "{source}: {}",
-                task.expr
-            );
+            let mut stats = StatsVisitor::default();
+            stats.visit_expr(&mut task.expr).unwrap();
+            assert_eq!(stats.stats.num_quants, 0, "{source}: {}", task.expr);
         }
         assert_rewrite("inf i: UInt. i * (sup j: UInt. [i <= j])", "0 * 1");
     }
