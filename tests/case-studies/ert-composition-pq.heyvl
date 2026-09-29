@@ -1,0 +1,89 @@
+// RUN: @caesar @file
+
+// P and Q each run in expected polynomial time, but P;Q has infinite expected runtime.
+//
+// P starts with k=1 and tosses a biased coin whose probability of heads is 1/4.
+// On heads it doubles k and repeats; on tails it stops and returns k.
+// Q takes k as input and prints k rows of k dots.
+//
+// Integers are stored in unary: P has no input and constant expected runtime; Q takes quadratic time in its input length.
+// Ticks account for unary operations up to constant factors.
+// Ordinary invariants prove upper bounds; omega invariants prove lower bounds by counting only printed dots.
+
+@ert
+coproc p_upper() -> (k: UInt)
+    pre 2
+    post 0
+{
+    tick 1
+    k = 1
+    var more: Bool = flip(0.25)
+    // k + (1/4)*2*(2*k) = 2*k pays for doubling and the expected remaining work.
+    @invariant(ite(more, 2 * k, 0))
+    while more {
+        // Since k >= 1, the copying charge also covers constant loop overhead.
+        tick k
+        k = 2 * k
+        more = flip(0.25)
+    }
+}
+
+@ert
+proc q_lower(k: UInt) -> ()
+    pre k * k
+    post 0
+{
+    var i: UInt = k
+    @omega_invariant(m, [i <= m] * i * k)
+    while i > 0 {
+        i = i - 1
+        var j: UInt = k
+        // The current row has j dots left, followed by i complete rows.
+        @omega_invariant(n, [j <= n] * (j + i * k))
+        while j > 0 {
+            tick 1
+            j = j - 1
+        }
+    }
+}
+
+@ert
+coproc q_upper(k: UInt) -> ()
+    pre 2 * k * k + k + 1
+    post 0
+{
+    tick k + 1
+    var i: UInt = k
+    // Each row costs k for copying its counter and k for printing.
+    @invariant(2 * i * k)
+    while i > 0 {
+        tick k
+        i = i - 1
+        var j: UInt = k
+        @invariant(j + 2 * i * k)
+        while j > 0 {
+            tick 1
+            j = j - 1
+        }
+    }
+}
+
+// P returns 2^s with probability (3/4)*4^(-s), after which Q prints 4^s dots.
+// Each s contributes 3/4 to the expected print count, so P;Q has infinite expected runtime.
+@ert
+proc pq_infinite() -> (k: UInt)
+    pre ∞
+    post 0
+{
+    k = 1
+    var more: Bool = flip(0.25)
+    // After doubling, stopping contributes (3/4)*(2*k)^2 = 3*k*k per unfolding.
+    // The family is unbounded when more is true and k > 0.
+    @omega_invariant(m, ite(more, 3 * m * k * k, k * k))
+    while more {
+        k = 2 * k
+        more = flip(0.25)
+    }
+
+    q_lower(k)
+}
