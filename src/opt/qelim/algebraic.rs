@@ -2,12 +2,14 @@
 //!
 //! These identities apply in all expression contexts, independently of proof polarity.
 
-use std::ops::BitAnd;
+use std::{collections::HashMap, ops::BitAnd};
+
+use ref_cast::RefCast;
 
 use crate::ast::{
-    util::FreeVariableCollector,
     visit::{walk_expr, VisitorMut},
-    BinOpKind, Expr, ExprBuilder, ExprKind, Ident, QuantOpKind, SpanVariant, TyKind, UnOpKind,
+    BinOpKind, Expr, ExprBuilder, ExprData, ExprKind, Ident, QuantOpKind, RefEqShared, SpanVariant,
+    TyKind, UnOpKind,
 };
 
 use super::is_finite;
@@ -100,15 +102,21 @@ fn elim_single_index(expr: &Expr) -> Option<Expr> {
         QuantOpKind::Forall | QuantOpKind::Exists => return None,
     };
     let builder = ExprBuilder::new(expr.span.variant(SpanVariant::Qelim));
-    elim_quantified_body(bound, var.name(), body, builder).map(|result| result.replacement)
+    elim_quantified_body(
+        bound,
+        &mut IndexDependencies::new(var.name()),
+        body,
+        builder,
+    )
+    .map(|result| result.replacement)
 }
 
 /// Eliminate `inf index. body` or `sup index. body`.
 /// Returns a replacement with its attainment guarantee, or `None` if no rule applies.
-fn elim_quantified_body(
+fn elim_quantified_body<'a>(
     bound: BoundKind,
-    index: Ident,
-    body: &Expr,
+    index: &mut IndexDependencies<'a>,
+    body: &'a Expr,
     builder: ExprBuilder,
 ) -> Option<EliminationResult> {
     use Attainment::{Guaranteed, Unknown};
@@ -119,18 +127,19 @@ fn elim_quantified_body(
     }
     // inf_i c = c and sup_i c = c, when c does not depend on i.
     // Every index attains the bound.
-    if independent_of(body, index) {
+    if index.independent_of(body) {
         return Some(EliminationResult {
             replacement: builder.cast(TyKind::EUReal, body.clone()),
             attainment: Guaranteed,
         });
     }
-    let eliminate = |body| elim_quantified_body(bound, index, body, builder);
+    let eliminate =
+        |index: &mut IndexDependencies<'a>, body| elim_quantified_body(bound, index, body, builder);
     let body = strip_numeric_wrappers(body);
     match &body.kind {
         // inf_i i = 0 and sup_i i = ∞, for i: UInt, UReal, or EUReal.
         // Zero belongs to all three domains; infinity belongs only to EUReal.
-        ExprKind::Var(var) if *var == index => Some(EliminationResult {
+        ExprKind::Var(var) if *var == index.name => Some(EliminationResult {
             replacement: match bound {
                 Infimum => builder.bot_lit(&TyKind::EUReal),
                 Supremum => builder.infinity_lit(),
@@ -144,9 +153,9 @@ fn elim_quantified_body(
         // inf_i ite(b, f_i, g_i) = ite(b, inf_i f_i, inf_i g_i).
         // sup_i ite(b, f_i, g_i) = ite(b, sup_i f_i, sup_i g_i).
         // An index-independent condition preserves attainment if both branches guarantee it.
-        ExprKind::Ite(cond, lhs, rhs) if independent_of(cond, index) => {
-            let lhs = eliminate(lhs)?;
-            let rhs = eliminate(rhs)?;
+        ExprKind::Ite(cond, lhs, rhs) if index.independent_of(cond) => {
+            let lhs = eliminate(index, lhs)?;
+            let rhs = eliminate(index, rhs)?;
             Some(EliminationResult {
                 replacement: builder.ite(
                     Some(TyKind::EUReal),
@@ -161,15 +170,15 @@ fn elim_quantified_body(
         // inf_i (f_i * c) = (inf_i f_i) * c, and sup_i (f_i * c) = (sup_i f_i) * c.
         // The operands must be nonnegative, and c must not depend on i.
         ExprKind::Binary(op, lhs, rhs) if matches!(op.node, BinOpKind::Add | BinOpKind::Mul) => {
-            let constant = if independent_of(lhs, index) {
+            let constant = if index.independent_of(lhs) {
                 lhs
-            } else if independent_of(rhs, index) {
+            } else if index.independent_of(rhs) {
                 rhs
             } else {
                 return None;
             };
-            let lhs = eliminate(lhs)?;
-            let rhs = eliminate(rhs)?;
+            let lhs = eliminate(index, lhs)?;
+            let rhs = eliminate(index, rhs)?;
             // The constant is attained, so conjunction retains the dependent operand's guarantee.
             let attainment = lhs.attainment & rhs.attainment;
             // For infimum scaling, c < ∞ or attainment of inf_i f_i is sufficient.
@@ -211,10 +220,10 @@ fn elim_quantified_body(
 /// | i >= t    | 1        | [t = 0] |
 ///
 /// Both bounds are attained because each indicator has a nonempty, finite range.
-fn elim_threshold(
+fn elim_threshold<'a>(
     bound: BoundKind,
-    index: Ident,
-    condition: &Expr,
+    index: &mut IndexDependencies<'a>,
+    condition: &'a Expr,
     builder: ExprBuilder,
 ) -> Option<Expr> {
     let (comparison, threshold) = match_threshold(index, condition)?;
@@ -240,14 +249,17 @@ fn elim_threshold(
 
 /// Match a threshold comparison with the nonnegative index on the left.
 /// The threshold must be nonnegative, finite, and independent of the index.
-fn match_threshold(index: Ident, condition: &Expr) -> Option<(BinOpKind, &Expr)> {
+fn match_threshold<'a>(
+    index: &mut IndexDependencies<'a>,
+    condition: &'a Expr,
+) -> Option<(BinOpKind, &'a Expr)> {
     let ExprKind::Binary(comparison, lhs, rhs) = &strip_numeric_wrappers(condition).kind else {
         return None;
     };
     // Put the index on the left: t < i becomes i > t, and t <= i becomes i >= t.
-    let (comparison, threshold) = if is_nonnegative_index(lhs, index) {
+    let (comparison, threshold) = if is_nonnegative_index(lhs, index.name) {
         (comparison.node, rhs)
-    } else if is_nonnegative_index(rhs, index) {
+    } else if is_nonnegative_index(rhs, index.name) {
         let reversed = match comparison.node {
             BinOpKind::Le => BinOpKind::Ge,
             BinOpKind::Lt => BinOpKind::Gt,
@@ -260,17 +272,50 @@ fn match_threshold(index: Ident, condition: &Expr) -> Option<(BinOpKind, &Expr)>
         return None;
     };
     let threshold = strip_numeric_wrappers(threshold);
-    if !is_nonnegative(threshold) || !is_finite(threshold) || !independent_of(threshold, index) {
+    if !is_nonnegative(threshold) || !is_finite(threshold) || !index.independent_of(threshold) {
         return None;
     }
     Some((comparison, threshold))
 }
 
-/// Whether `index` is absent from the free variables of `expr`.
-fn independent_of(expr: &Expr, index: Ident) -> bool {
-    !FreeVariableCollector::new()
-        .collect_and_clear(&mut expr.clone())
-        .contains(&index)
+/// Memoized free-variable checks for one index in an immutable quantified body.
+struct IndexDependencies<'a> {
+    name: Ident,
+    cache: HashMap<&'a RefEqShared<ExprData>, bool>,
+}
+
+impl<'a> IndexDependencies<'a> {
+    fn new(name: Ident) -> Self {
+        Self {
+            name,
+            cache: HashMap::new(),
+        }
+    }
+
+    fn independent_of(&mut self, expr: &'a Expr) -> bool {
+        let key = RefEqShared::ref_cast(expr);
+        if let Some(&independent) = self.cache.get(key) {
+            return independent;
+        }
+        let independent = match &expr.kind {
+            ExprKind::Var(var) => *var != self.name,
+            ExprKind::Call(_, args) => args.iter().all(|arg| self.independent_of(arg)),
+            ExprKind::Ite(cond, lhs, rhs) => {
+                self.independent_of(cond) && self.independent_of(lhs) && self.independent_of(rhs)
+            }
+            ExprKind::Binary(_, lhs, rhs) => self.independent_of(lhs) && self.independent_of(rhs),
+            ExprKind::Unary(_, inner) | ExprKind::Cast(inner) => self.independent_of(inner),
+            ExprKind::Quant(_, vars, _, body) => {
+                vars.iter().any(|var| var.name() == self.name) || self.independent_of(body)
+            }
+            ExprKind::Subst(var, value, body) => {
+                self.independent_of(value) && (*var == self.name || self.independent_of(body))
+            }
+            ExprKind::Lit(_) => true,
+        };
+        self.cache.insert(key, independent);
+        independent
+    }
 }
 
 fn is_nonnegative(expr: &Expr) -> bool {
@@ -310,7 +355,7 @@ mod tests {
     };
 
     use super::super::qelim;
-    use super::{elim_quantified_body, eliminate, Attainment, BoundKind};
+    use super::{elim_quantified_body, eliminate, Attainment, BoundKind, IndexDependencies};
 
     fn parse_typed(source: &str) -> (TyCtx, Expr) {
         let mut tcx = TyCtx::new(TyKind::EUReal);
@@ -358,8 +403,13 @@ mod tests {
             QuantOpKind::Sup => BoundKind::Supremum,
             _ => panic!("expected inf or sup: {source}"),
         };
-        let result = elim_quantified_body(bound, var.name(), body, ExprBuilder::new(expr.span))
-            .unwrap_or_else(|| panic!("{source}"));
+        let result = elim_quantified_body(
+            bound,
+            &mut IndexDependencies::new(var.name()),
+            body,
+            ExprBuilder::new(expr.span),
+        )
+        .unwrap_or_else(|| panic!("{source}"));
         assert_eq!(result.attainment, attainment, "{source}");
         assert_replacement(result.replacement, expected, source);
     }
