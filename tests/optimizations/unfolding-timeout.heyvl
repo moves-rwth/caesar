@@ -1,0 +1,7 @@
+// RUN: @caesar verify @file --timeout 5
+
+// An inconclusive reachability check must retain the quantified postcondition.
+proc p(w: EUReal) -> ()
+    pre w
+    post [forall n: UInt. exists m: UInt. n < m] * w
+{}

@@ -22,7 +22,7 @@
 //! unreachability. However, we must *never* falsely eliminate reachable
 //! parts of the expression.
 
-use std::ops::DerefMut;
+use std::{ops::DerefMut, time::Duration};
 
 use z3::SatResult;
 use z3rro::prover::{IncrementalMode, Prover};
@@ -40,6 +40,9 @@ use crate::{
 };
 
 use crate::smt::translate_exprs::TranslateExprs;
+
+/// Reachability checks are optional optimizations and should stay cheap.
+const REACHABILITY_TIMEOUT: Duration = Duration::from_millis(10);
 
 /// An assumed predicate on an expression's lattice value.
 enum Guard<'a> {
@@ -103,6 +106,41 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
         res
     }
 
+    /// Return the local query budget, or `None` when too little time remains for a bounded Z3 call.
+    fn reachability_timeout(&self) -> Result<Option<Duration>, LimitError> {
+        let limits_ref = &self.subst.limits_ref;
+        limits_ref.check_limits()?;
+        let timeout = limits_ref
+            .time_left()
+            .map_or(REACHABILITY_TIMEOUT, |remaining| {
+                remaining.min(REACHABILITY_TIMEOUT)
+            });
+
+        // Z3 treats a timeout rounded down to zero milliseconds as unlimited.
+        if timeout < Duration::from_millis(1) {
+            limits_ref.check_limits()?;
+            tracing::trace!("skipping unfolder query with less than one millisecond remaining");
+            return Ok(None);
+        }
+
+        Ok(Some(timeout))
+    }
+
+    /// Check satisfiability of the current assumptions within the local time budget.
+    /// Propagate global resource-limit errors.
+    fn check_sat(&mut self) -> Result<SatResult, LimitError> {
+        let Some(timeout) = self.reachability_timeout()? else {
+            return Ok(SatResult::Unknown);
+        };
+        self.prover.set_timeout(timeout);
+        let result = self.prover.check_sat();
+        self.subst.limits_ref.check_limits()?;
+        if result == SatResult::Unknown {
+            tracing::trace!(reason = ?self.prover.get_reason_unknown(), "inconclusive unfolder query; retaining branch");
+        }
+        Ok(result)
+    }
+
     /// Unfold `expr` using cheap facts implied by `guard`.
     /// Return `Unreachable` without visiting `expr` only when the guard is proved impossible.
     fn unfold_under(
@@ -110,6 +148,8 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
         expr: &mut Expr,
         guard: Guard<'_>,
     ) -> Result<UnfoldResult, LimitError> {
+        self.subst.limits_ref.check_limits()?;
+
         // Extract a cheap Boolean condition, or rule out a contradictory literal guard.
         let condition = match guard {
             Guard::Top(value) => match &value.ty {
@@ -165,7 +205,7 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
         self.with_prover_scope(|this| {
             this.prover.add_assumption(&condition_z3);
             tracing::trace!(condition = %condition_z3, "added guard to unfolder solver");
-            if this.prover.check_sat() == SatResult::Unsat {
+            if this.check_sat()? == SatResult::Unsat {
                 tracing::trace!(solver = ?this.prover, "skipping unreachable expression");
                 Ok(UnfoldResult::Unreachable)
             } else {
@@ -194,8 +234,9 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
             ExprKind::Subst(ident, subst, expr) => {
                 self.visit_expr(subst)?;
                 self.subst.push_subst(*ident, subst.clone());
-                self.visit_expr(expr)?;
+                let result = self.visit_expr(expr);
                 self.subst.pop();
+                result?;
                 *e = expr.clone(); // TODO: this is an unnecessary clone
                 Ok(())
             }
@@ -266,12 +307,12 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                     self.translate.fresh(quant_var.name());
                 }
 
-                self.visit_expr(expr)?;
+                let result = self.visit_expr(expr);
 
                 self.translate.pop();
                 self.prover.pop();
                 self.subst.pop();
-                Ok(())
+                result
             }
             _ => walk_expr(self, e),
         }
