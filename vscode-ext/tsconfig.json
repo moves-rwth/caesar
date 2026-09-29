@@ -5,7 +5,8 @@
 		"outDir": "out",
 		"esModuleInterop": true,
 		"lib": [
-			"ES2022"
+            "ES2022",
+            "DOM" // WebAssembly types used by vscode-oniguruma.
 		],
 		"sourceMap": true,
 		"rootDir": "src",

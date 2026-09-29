@@ -4,10 +4,12 @@ import * as vscode from 'vscode';
 import { Verifier } from './Verifier';
 import { ServerConfig } from './Config';
 import { ConfigurationConstants } from './constants';
+import { registerReferenceHovers } from './ReferenceHoverProvider';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
+    context.subscriptions.push(registerReferenceHovers(context.extensionPath));
 	const verifier = new Verifier(context);
 	void verifier.installer.regularlyCheckForUpdatesIfEnabled();
 	if (ServerConfig.get(ConfigurationConstants.autoStartServer)) {
