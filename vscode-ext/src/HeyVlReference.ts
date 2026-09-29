@@ -45,13 +45,33 @@ export const HEYVL_REFERENCE: Readonly<Record<string, ReferenceEntry>> = {
     proc: {
         title: "proc — lower-bound specification",
         description: "Declares a procedure with input parameters, output parameters, and a quantitative specification.",
-        details: "Verification checks `pre ≤ vc[body](post)` in every initial state, making `pre` a lower bound on the verification pre-expectation.",
+        details: "Verification transforms `post` backwards through the body and checks `pre ≤ vc[body](post)` in every initial state. " +
+            "The `pre` therefore gives a lower bound on the resulting expectation.\n\n" +
+            "**Specification details**\n\n" +
+            "The `pre` is an `EUReal` expression over input parameters, evaluated in the initial state. " +
+            "The `post` is an `EUReal` expression over input and output parameters, evaluated in the final state.\n\n" +
+            "Multiple `pre` clauses combine by minimum (`⊓`), as do multiple `post` clauses. " +
+            "For `pre A pre B` and `post C post D`, verification checks:\n\n" +
+            "```text\n(A ⊓ B) ≤ vc[body](C ⊓ D)\n```\n\n" +
+            "An omitted `pre` or `post` defaults to `∞`.\n\n" +
+            "For Boolean conditions, use `pre ?(P)` and `post ?(Q)`. " +
+            "Repeated clauses then combine their conditions by conjunction.",
         documentation: procedures,
     },
     coproc: {
         title: "coproc — upper-bound specification",
         description: "Declares a coprocedure with input parameters, output parameters, and a quantitative specification.",
-        details: "Verification checks `pre ≥ vc[body](post)` in every initial state, making `pre` an upper bound on the verification pre-expectation.",
+        details: "Verification transforms `post` backwards through the body and checks `pre ≥ vc[body](post)` in every initial state. " +
+            "The `pre` therefore gives an upper bound on the resulting expectation.\n\n" +
+            "**Specification details**\n\n" +
+            "The `pre` is an `EUReal` expression over input parameters, evaluated in the initial state. " +
+            "The `post` is an `EUReal` expression over input and output parameters, evaluated in the final state.\n\n" +
+            "Multiple `pre` clauses combine by maximum (`⊔`), as do multiple `post` clauses. " +
+            "For `pre A pre B` and `post C post D`, verification checks:\n\n" +
+            "```text\n(A ⊔ B) ≥ vc[body](C ⊔ D)\n```\n\n" +
+            "An omitted `pre` or `post` defaults to `0`.\n\n" +
+            "For Boolean conditions, use `pre !?(P)` and `post !?(Q)`. " +
+            "Repeated clauses then combine their conditions by conjunction.",
         documentation: procedures,
     },
     pre: {
