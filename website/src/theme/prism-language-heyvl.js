@@ -1,10 +1,9 @@
 (function (Prism) {
-  // Expand nested comments to four levels, following Prism's Rust grammar.
-  let blockComment = /\/\*(?:[^*/]|\*(?!\/)|\/(?!\*)|<self>)*(?:\*\/|$)/.source;
-  for (let i = 0; i < 2; i++) {
-    blockComment = blockComment.replace(/<self>/g, () => blockComment);
+  // Support four levels of nested comments, following Prism's Rust grammar.
+  let blockComment = '(?!)';
+  for (let depth = 0; depth < 4; depth++) {
+    blockComment = String.raw`\/\*(?:[^*/]|\*(?!\/)|\/(?!\*)|${blockComment})*(?:\*\/|$)`;
   }
-  blockComment = blockComment.replace(/<self>/g, '(?!)');
 
   Prism.languages.heyvl = {
     'comment': {
