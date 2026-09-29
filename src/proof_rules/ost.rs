@@ -142,11 +142,8 @@ impl Encoding for OSTAnnotation {
             .collect();
 
         // Collect modified variables for havoc (exclude the variables that are declared in the loop)
-        let mut visitor = ModifiedVariableCollector::new();
-        visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
-        let modified_vars: Vec<Ident> = (&visitor.modified_variables - &visitor.declared_variables)
-            .into_iter()
-            .collect();
+        let modified_vars =
+            ModifiedVariableCollector::from_stmt(inner_stmt).modified_outside_declarations();
 
         let (loop_guard, loop_body) = if let StmtKind::While(guard, body) = &inner_stmt.node {
             (guard, body)

@@ -806,17 +806,24 @@ fn test_ast_transform() {
         r#"
         proc main() -> () {
             var x: UInt
-            {  }
+            { assert [true]; havoc x; validate; assume [true] }
         }
-        proc main_prob_antitone_0(a: UReal, b: UReal) -> ()
-            pre ?((a <= b))
-            post ?(((5/10)[v -> a] >= (5/10)[v -> b]))
+        proc main_prob_conditions_0(v_0: UReal, v_1: UReal) -> ()
+            pre ?((true && (v_0 <= v_1)))
+            post ?(((5/10)[v -> v_1] > cast(UReal, 0)))
+            post ?(((v_0 > cast(UReal, 0)) → ((5/10)[v -> v_1] <= (5/10)[v -> v_0])))
+            post ?(((5/10)[v -> v_0] <= cast(UReal, 1)))
         {
 
         }
-        proc main_decrease_antitone_0(a: UReal, b: UReal) -> ()
-            pre ?((a <= b))
-            post ?(((v)[v -> a] >= (v)[v -> b]))
+        proc main_decrease_conditions_0(v_0: UReal, v_1: UReal) -> ()
+            pre ?((true && (v_0 <= v_1)))
+            post ?(((cast(UReal, 1))[v -> v_1] > cast(UReal, 0)))
+            post ?((
+                (v_0 > cast(UReal, 0)) → (
+                    (cast(UReal, 1))[v -> v_1] <= (cast(UReal, 1))[v -> v_0]
+                )
+            ))
         {
 
         }
@@ -827,28 +834,25 @@ fn test_ast_transform() {
             x = init_x
             if (1 <= x) { x = (x - 1) } else {  }
         }
-        proc main_termination_condition_0(x: UInt) -> ()
-            pre ?(true)
-        {
-            assert ?(((1 <= x) → (cast(UReal, x) > cast(UReal, 0))))
-        }
-        coproc main_V_wp_superinvariant_0(init_x: UInt) -> (x: UInt)
+        coproc main_V_awp_superinvariant_0(init_x: UInt) -> (x: UInt)
+            pre ! (?((true)[x -> init_x]))
             pre cast(EUReal, (cast(UReal, x))[x -> init_x])
-            post cast(EUReal, cast(UReal, x))
+            post ([(1 <= x)] * cast(EUReal, cast(UReal, x)))
         {
             x = init_x
-            coassume ?(! (true))
             if (1 <= x) { x = (x - 1) } else {  }
         }
         proc main_progress_condition_0(init_x: UInt) -> (x: UInt)
-            pre (
-                ([true] * ([(1 <= x)] * cast(EUReal, (5/10)[v -> cast(UReal, x)])))
-            )[x -> init_x]
+            pre ?((true)[x -> init_x])
+            pre ?(((1 <= x))[x -> init_x])
+            pre cast(EUReal, (5/10)[v -> (cast(UReal, x))[x -> init_x]])
             post [(
-                cast(UReal, x) <= (
-                    (cast(UReal, x))[x -> init_x] - (v)[v -> (
-                        cast(UReal, x)
-                    )[x -> init_x]]
+                ! ((1 <= x)) || (
+                    (
+                        cast(UReal, x) + (cast(UReal, 1))[v -> (
+                            cast(UReal, x)
+                        )[x -> init_x]]
+                    ) <= (cast(UReal, x))[x -> init_x]
                 )
             )]
         {
@@ -860,7 +864,7 @@ fn test_ast_transform() {
     let source = r#"
             proc main() -> () {
                 var x: UInt
-                @ast(true, x, v, 0.5, v)
+                @ast(true, x, v, 0.5, 1)
                 while 1 <= x {
                     x = x - 1
                 }
@@ -872,19 +876,331 @@ fn test_ast_transform() {
     assert_eq!(test_string, res);
 }
 
+#[test]
+fn test_ast_pre_and_post() {
+    for (pre, post, assertion, expected) in [
+        ("[init_x == 1]", "[init_x == 1 && x <= 1]", "[x <= 1]", true),
+        ("1", "1", "1", false),
+        ("[init_x == 1]", "[x == 1]", "1", false),
+        ("[init_x == 1]", "1", "0", false),
+    ] {
+        let source = format!(
+            r#"
+                @wp proc main(init_x: UInt) -> (x: UInt)
+                    pre {pre}
+                    post {post}
+                {{
+                    x = init_x
+                    @ast(x <= 1, x, v, 1, 1)
+                    while x > 0 {{
+                        var amount: UInt = init_x + 1
+                        x = x - amount
+                    }}
+                    assert {assertion}
+                }}
+            "#
+        );
+        assert_eq!(verify_test(&source).0.unwrap(), expected, "{source}");
+    }
+}
+
+#[test]
+fn test_ast_variant_at_exit() {
+    for (variant, body, expected) in [
+        ("0", "done = flip(0.5)", true),
+        ("1", "done = flip(0.5)", true),
+        ("x", "x = x + 1; done = true", true),
+        ("0", "", false),
+    ] {
+        let source = format!(
+            r#"
+                @wp proc main() -> ()
+                    pre 1
+                    post 1
+                {{
+                    var x: UReal = 0
+                    var done: Bool = false
+                    @ast(true, {variant}, v, ite(v == 0, 0.25, 0.5), ite(v == 0, 0.5, 1))
+                    while !done {{ {body} }}
+                }}
+            "#
+        );
+        assert_eq!(verify_test(&source).0.unwrap(), expected, "{source}");
+    }
+}
+
+#[test]
+fn test_ast_function_conditions() {
+    for (invariant, prob, decrease, expected) in [
+        ("true", "0", "1", false),
+        ("true", "2", "1", false),
+        ("true", "ite(v == 0, 0, 1)", "1", false),
+        ("true", "ite(v == 0, 2, 1)", "1", false),
+        ("true", "1", "0", false),
+        ("true", "1", "v + 1", false),
+        ("true", "ite(v <= 1, 0.5, 1)", "1", false),
+        ("x <= 1", "ite(v <= 1, 1, 0)", "1", false),
+        ("true", "1", "ite(v == 0, 0, 1)", false),
+        ("bound > 0 && bound <= 1", "bound", "1", true),
+        ("bound > 0", "1", "bound", true),
+        ("true", "bound", "1", false),
+        ("true", "let(x, 1, x)", "let(v, 1, v)", true),
+    ] {
+        let source = format!(
+            r#"
+                @wp proc main() -> ()
+                    pre 1
+                    post 1
+                {{
+                    var x: UReal = 1
+                    var bound: UReal = 1
+                    var v: UInt = 7
+                    @ast({invariant}, x, v, {prob}, {decrease})
+                    while x > 0 {{ x = 0 }}
+                    assert [v == 7]
+                }}
+            "#
+        );
+        assert_eq!(verify_test(&source).0.unwrap(), expected, "{source}");
+    }
+}
+
+#[test]
+fn test_ast_function_dependencies() {
+    for (prob, decrease, body, following, reason) in [
+        (
+            "x",
+            "1",
+            "x = 0",
+            "",
+            "`prob` must not depend on loop-modified variable `x`.",
+        ),
+        (
+            "1",
+            "x",
+            "x = 0",
+            "",
+            "`decrease` must not depend on loop-modified variable `x`.",
+        ),
+        (
+            "let(t, x, t)",
+            "1",
+            "@unroll(0) while true { x = 0 }",
+            "",
+            "`prob` must not depend on loop-modified variable `x`.",
+        ),
+        (
+            "1",
+            "1",
+            "x = 0",
+            "assert [v == 0]",
+            "Name `v` is not declared",
+        ),
+    ] {
+        let source = format!(
+            r#"
+                @wp proc main() -> () {{
+                    var x: UReal = 1
+                    @ast(true, x, v, {prob}, {decrease})
+                    while x > 0 {{ {body} }}
+                    {following}
+                }}
+            "#
+        );
+        let (result, server) = verify_test(&source);
+        let CaesarError::Diagnostic(diagnostic) = result.unwrap_err() else {
+            panic!("expected an annotation-argument or resolution diagnostic");
+        };
+        let text = diagnostic.into_string(&server.files.lock().unwrap());
+        assert!(text.contains(reason), "{source}\n{text}");
+    }
+}
+
+#[test]
+fn test_ast_rejects_demonically_biased_random_walks() {
+    // Every choice has positive progress, but a demon can select upward drift.
+    for body in [
+        r#"
+            if \cap {
+                x = x - 1
+            } else {
+                var b: Bool = flip(0.25)
+                if b { x = x - 1 } else { x = x + 1 }
+            }
+        "#,
+        r#"
+            var choice: Bool = false
+            havoc choice
+            if choice {
+                x = x - 1
+            } else {
+                var b: Bool = flip(0.25)
+                if b { x = x - 1 } else { x = x + 1 }
+            }
+        "#,
+        r#"
+            var sampled: Bool = flip(0.5)
+            var choice: Bool = false
+            if \cap { choice = sampled } else { choice = !sampled }
+            if choice {
+                x = x - 1
+            } else {
+                var b: Bool = flip(0.25)
+                if b { x = x - 1 } else { x = x + 1 }
+            }
+        "#,
+    ] {
+        let source = format!(
+            r#"
+                @wp proc main() -> (x: UInt)
+                    pre 1
+                    post 1
+                {{
+                    x = 1
+                    @ast(true, x, v, 0.25, 1)
+                    while x > 0 {{ {body} }}
+                }}
+            "#
+        );
+        assert!(!verify_test(&source).0.unwrap(), "{source}");
+    }
+}
+
+#[test]
+fn test_ast_requires_progress_for_every_demonic_choice() {
+    let source = r#"
+        @wp proc main() -> ()
+            pre 1
+            post 1
+        {
+            var x: UInt = 1
+            @ast(true, x, v, 1, 1)
+            while x > 0 {
+                if \cap { x = x - 1 } else {}
+            }
+        }
+    "#;
+    assert!(!verify_test(source).0.unwrap());
+}
+
+#[test]
+fn test_ast_rejects_unsupported_source_statements() {
+    for (body, reason) in [
+        // Check before an inner annotation can erase the source.
+        (
+            r"@unroll(0) while true { if \cup {} else {} }",
+            "Angelic choice is not allowed.",
+        ),
+        ("if + {} else {}", "Additive choice is not allowed."),
+        (
+            "var choice: Bool = false; cohavoc choice",
+            "Angelic havoc is not allowed.",
+        ),
+        ("helper()", "Procedure calls are not allowed."),
+        (
+            "var local: Bool",
+            "Loop-local variables must be initialized.",
+        ),
+    ] {
+        let source = format!(
+            r#"
+                proc helper() -> () {{}}
+                @wp proc main() -> ()
+                    pre 1
+                    post 1
+                {{
+                    var x: UInt = 1
+                    @ast(true, x, v, 1, 1)
+                    while x > 0 {{ {body} }}
+                }}
+            "#
+        );
+        let (result, server) = verify_test(&source);
+        let CaesarError::Diagnostic(diagnostic) = result.unwrap_err() else {
+            panic!("expected an unsupported-statement diagnostic");
+        };
+        assert_eq!(diagnostic.kind(), ReportKind::Error);
+        let text = diagnostic.into_string(&server.files.lock().unwrap());
+        assert!(text.contains(reason), "{source}\n{text}");
+        if body.contains("if ") || body.contains("cohavoc") {
+            assert!(
+                text.contains("Only probabilistic or demonic choices are allowed."),
+                "{text}"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_ast_warns_about_possibly_infinite_havoc_domains() {
+    let source = r#"
+        @wp proc main() -> () {
+            var x: UInt = 1
+            var y: UReal = 0
+            var flag: Bool = false
+            @ast(true, x, v, 1, 1)
+            while x > 0 {
+                havoc flag
+                @unroll(0) while true { havoc flag, x, y }
+            }
+        }
+    "#;
+    let (result, mut server) = single_desugar_test_with_werr(source, false);
+    result.unwrap();
+    assert_eq!(server.diagnostics.len(), 1);
+    let diagnostic = server.diagnostics.pop().unwrap();
+    assert_eq!(diagnostic.kind(), ReportKind::Warning);
+    let text = diagnostic.into_string(&server.files.lock().unwrap());
+    assert!(text.contains("Havoc domain may be infinite"), "{text}");
+    assert!(text.contains("`x` has type `UInt`"), "{text}");
+    assert!(text.contains("`y` has type `UReal`"), "{text}");
+    assert!(!text.contains("`flag` has type"), "{text}");
+
+    let (result, server) = single_desugar_test_with_werr(source, true);
+    assert!(matches!(
+        result,
+        Err(CaesarError::Diagnostic(ref diagnostic))
+            if diagnostic.kind() == ReportKind::Warning
+                && diagnostic.to_string().contains("Havoc domain may be infinite")
+    ));
+    assert!(server.diagnostics.is_empty());
+}
+
+#[test]
+fn test_ast_accepts_pure_functions_and_distributions() {
+    let source = r#"
+        domain Helpers {
+            func predecessor(n: UInt): UInt = n - 1
+        }
+        @wp proc main() -> ()
+            pre 1
+            post 1
+        {
+            var x: UInt = 1
+            @ast(true, x, v, 0.5, 1)
+            while x > 0 {
+                var choice: Bool = flip(0.5)
+                if choice { x = predecessor(x) } else {}
+            }
+        }
+    "#;
+    assert!(verify_test(source).0.unwrap());
+}
+
 /// Test if the fresh identifier generation works correctly
 /// when there are multiple instances of the annotation type on the same procedure
 #[test]
 fn test_double_annotation() {
     let source = r#"
     proc main() -> ()
+        pre 1
+        post 1
     {
         var x: UInt
         @ast(true, (3 * ite(!(x % 2 == 0), 1, 0)) + ite(x >= 10, x - 10, 10 - x), v, 0.5, 2)
         while x != 10 {
             if x % 2 == 0{
-                var prob_choice: Bool
-                prob_choice = flip(1/2)
+                var prob_choice: Bool = flip(1/2)
                 if prob_choice {
                     x = x - 2
                 } else {
@@ -898,8 +1214,7 @@ fn test_double_annotation() {
         @ast(true, (3 * ite(!(x % 2 == 0), 1, 0)) + ite(x >= 10, x - 10, 10 - x), t, 0.5, 2)
         while x != 10 {
             if x % 2 == 0{
-                var prob_choice: Bool
-                prob_choice = flip(1/2)
+                var prob_choice: Bool = flip(1/2)
                 if prob_choice {
                     x = x - 2
                 } else {

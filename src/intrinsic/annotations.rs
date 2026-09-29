@@ -48,6 +48,13 @@ pub enum AnnotationError {
         span: Span,
         annotation_name: Ident,
     },
+    UnsupportedStatement {
+        span: Span,
+        annotation_name: Ident,
+        statement_span: Span,
+        message: String,
+        note: Option<&'static str>,
+    },
 }
 
 #[derive(Debug)]
@@ -104,6 +111,25 @@ impl AnnotationError {
                     annotation_name.name
                 ))
                 .with_label(Label::new(span).with_message("This annotation is not defined.")),
+            AnnotationError::UnsupportedStatement {
+                span,
+                annotation_name,
+                statement_span,
+                message,
+                note,
+            } => {
+                let diagnostic = Diagnostic::new(ReportKind::Error, statement_span)
+                    .with_message(message)
+                    .with_label(
+                        Label::new(statement_span)
+                            .with_message(format!("Not supported by `@{annotation_name}`")),
+                    )
+                    .with_label(Label::new(span).with_message("Proof rule applied here"));
+                match note {
+                    Some(note) => diagnostic.with_note(note),
+                    None => diagnostic,
+                }
+            }
         }
     }
 }

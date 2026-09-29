@@ -101,6 +101,17 @@ pub trait Encoding: fmt::Debug {
         args: &mut [Expr],
     ) -> Result<(), TycheckError>;
 
+    /// Validate the source statement before nested annotations are desugared.
+    fn validate(
+        &self,
+        _tcx: &TyCtx,
+        _call_span: Span,
+        _args: &[Expr],
+        _inner_stmt: &Stmt,
+    ) -> Result<Vec<Diagnostic>, AnnotationError> {
+        Ok(vec![])
+    }
+
     /// Transform the annotated loop into a sequence of statements and
     /// declarations.
     fn transform(
@@ -248,6 +259,16 @@ impl<'tcx> VisitorMut for EncodingVisitor<'tcx> {
         match &mut s.node {
             // If the statement is an annotation, transform it
             StmtKind::Annotation(annotation_span, ident, inputs, inner_stmt) => {
+                if let DeclKind::AnnotationDecl(AnnotationKind::Encoding(anno_ref)) =
+                    self.tcx.get(*ident).unwrap().as_ref()
+                {
+                    self.diagnostics.extend(
+                        anno_ref
+                            .validate(self.tcx, *annotation_span, inputs, inner_stmt)
+                            .map_err(EncodingVisitorError::Annotation)?,
+                    );
+                }
+
                 // First visit the statement that is annotated and handle inner annotations
                 self.nesting_level += 1;
                 self.visit_stmt(inner_stmt)?;

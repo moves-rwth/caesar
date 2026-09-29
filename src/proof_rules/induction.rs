@@ -25,7 +25,9 @@ use crate::{
 };
 
 use super::{
-    util::{encode_extend, encode_iter, intrinsic_param, lit_u128, one_arg, two_args},
+    util::{
+        encode_extend, encode_iter, encode_loop_spec, intrinsic_param, lit_u128, one_arg, two_args,
+    },
     Encoding, EncodingEnvironment, GeneratedEncoding,
 };
 
@@ -242,14 +244,13 @@ fn transform_k_induction(
     let annotation_span = enc_env.call_span;
     let direction = enc_env.direction;
 
-    let mut visitor = ModifiedVariableCollector::new();
-    visitor.visit_stmt(&mut inner_stmt.clone()).unwrap();
+    let visitor = ModifiedVariableCollector::from_stmt(inner_stmt);
     let havoc_vars = visitor.modified_variables.into_iter().collect();
 
     let mut buf = vec![];
 
     // Construct the specification of the k-induction encoding
-    buf.extend(encode_loop_spec(
+    buf.extend(encode_induction_spec(
         annotation_span,
         invariant,
         havoc_vars,
@@ -286,7 +287,7 @@ fn transform_k_induction(
 }
 
 /// Encode the loop "spec call" with respective error messages.
-fn encode_loop_spec(
+fn encode_induction_spec(
     span: Span,
     invariant: &Expr,
     variables: Vec<Ident>,
@@ -297,17 +298,12 @@ fn encode_loop_spec(
         Direction::Up => "pre ≱ I",
     };
     let error_msg = format!("pre might not entail the invariant ({error_condition})");
+    let [assert, havoc, validate, assume] = encode_loop_spec(span, invariant, variables, direction);
     vec![
-        wrap_with_error_message(
-            Spanned::new(span, StmtKind::Assert(direction, invariant.clone())),
-            &error_msg,
-        ),
-        Spanned::new(span, StmtKind::Havoc(direction, variables)),
-        Spanned::new(span, StmtKind::Validate(direction)),
-        wrap_with_success_message(
-            Spanned::new(span, StmtKind::Assume(direction, invariant.clone())),
-            "invariant not necessary for inductivity",
-        ),
+        wrap_with_error_message(assert, &error_msg),
+        havoc,
+        validate,
+        wrap_with_success_message(assume, "invariant not necessary for inductivity"),
     ]
 }
 

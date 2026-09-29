@@ -287,11 +287,8 @@ fn encode_decrease(
     let builder = ExprBuilder::new(span);
 
     // Collect modified variables, excluding those declared within the loop.
-    let mut visitor = ModifiedVariableCollector::new();
-    visitor.visit_stmt(&mut loop_stmt.clone()).unwrap();
-    let modified_vars: Vec<Ident> = (&visitor.modified_variables - &visitor.declared_variables)
-        .into_iter()
-        .collect();
+    let modified_vars =
+        ModifiedVariableCollector::from_stmt(loop_stmt).modified_outside_declarations();
 
     let mut free_var_collector = FreeVariableCollector::new();
     let inv_variables: Vec<Ident> = free_var_collector

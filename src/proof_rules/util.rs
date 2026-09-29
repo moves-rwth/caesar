@@ -152,6 +152,22 @@ pub fn encode_iter(
     None
 }
 
+/// Encode a loop specification with the same invariant before and after the loop.
+/// Callers choose the modified variables and add any rule-specific diagnostic annotations.
+pub fn encode_loop_spec(
+    span: Span,
+    invariant: &Expr,
+    variables: Vec<Ident>,
+    direction: Direction,
+) -> [Stmt; 4] {
+    [
+        Spanned::new(span, StmtKind::Assert(direction, invariant.clone())),
+        Spanned::new(span, StmtKind::Havoc(direction, variables)),
+        Spanned::new(span, StmtKind::Validate(direction)),
+        Spanned::new(span, StmtKind::Assume(direction, invariant.clone())),
+    ]
+}
+
 /// Constant program which always evaluates to the given expression
 pub fn hey_const(
     enc_env: &EncodingEnvironment,
@@ -169,29 +185,6 @@ pub fn hey_const(
         Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
         Spanned::new(span, StmtKind::Assume(direction, extreme_lit)),
     ]
-}
-
-pub fn new_ident_with_name(tcx: &TyCtx, ty: &TyKind, span: Span, name: &str) -> Ident {
-    let new_ident = Ident {
-        name: Symbol::intern(name),
-        span,
-    };
-
-    // If the init_variable is not already defined.
-    if tcx.get(new_ident).is_none() {
-        let var_decl = VarDecl {
-            name: new_ident,
-            ty: ty.clone(),
-            kind: VarKind::Input,
-            init: None,
-            span,
-            created_from: None,
-        };
-        let decl = DeclRef::new(var_decl);
-        tcx.declare(DeclKind::VarDecl(decl));
-    }
-
-    new_ident
 }
 
 /// Get the init versions of the given idents and declare them

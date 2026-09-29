@@ -65,6 +65,61 @@ fn test_unsound_proof() {
 }
 
 #[test]
+fn test_ast_is_only_sound_for_lower_bounds() {
+    for (direction, expect_unsound) in [("proc", false), ("coproc", true)] {
+        let source = format!(
+            r#"
+                @wp {direction} main() -> ()
+                    pre 1
+                    post 1
+                {{
+                    @ast(true, 0, v, 1, 1)
+                    while false {{}}
+                }}
+            "#
+        );
+        let (result, mut server) = verify_test(&source);
+        assert!(result.unwrap(), "{source}");
+        let diagnostics = diagnostics_text(&mut server);
+        assert_eq!(
+            diagnostics.contains("Unsound verification"),
+            expect_unsound,
+            "{source}\n{diagnostics}"
+        );
+        if expect_unsound {
+            assert!(diagnostics.contains("under-approximated"), "{diagnostics}");
+        }
+    }
+}
+
+#[test]
+fn test_nested_ast_is_not_an_exact_loop_body() {
+    let source = r#"
+        @wp proc main() -> ()
+            pre 1
+            post 1
+        {
+            @ast(true, 0, v, 1, 1)
+            while false {
+                @ast(true, 0, w, 1, 1)
+                while false {}
+            }
+        }
+    "#;
+    let (result, mut server) = verify_test(source);
+    assert!(result.unwrap());
+    let diagnostics = diagnostics_text(&mut server);
+    assert!(
+        diagnostics.contains("Unsound verification"),
+        "{diagnostics}"
+    );
+    assert!(
+        diagnostics.contains("unknown approximation"),
+        "{diagnostics}"
+    );
+}
+
+#[test]
 fn test_unsound_refutation() {
     let source = r#"
     @wp

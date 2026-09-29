@@ -2,8 +2,6 @@
 
 // The "Demonically Fair Random Walk" example from the "A New Proof Rule for Almost-Sure Termination" paper, Section 5.2
 
-// WARNING: the encoding of the proof rule might be incorrect due to the nondeterminism, see Caesar issue
-
 proc demonically_fair() -> ()
     pre 1
     post 1
