@@ -128,6 +128,30 @@ impl ModelCheckingOptions {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+pub enum DafnyScope {
+    #[default]
+    Reachable,
+    All,
+}
+
+#[derive(Debug, Default, Clone, Args)]
+#[command(next_help_heading = "Dafny Options")]
+pub struct DafnyOptions {
+    /// Export translated declarations to Dafny files in the provided directory.
+    #[arg(long)]
+    pub dafny_dir: Option<PathBuf>,
+
+    /// Run `dafny verify` on each generated file.
+    #[arg(long)]
+    pub run_dafny: bool,
+
+    /// Choose whether to emit only declarations reachable from selected procs
+    /// or all locally translatable declarations from each selected file.
+    #[arg(long, default_value = "reachable")]
+    pub dafny_scope: DafnyScope,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
 pub enum QuantifierInstantiation {
     /// Use all available quantifier instantiation heuristics, in particular
     /// both e-matching and MBQI are enabled.

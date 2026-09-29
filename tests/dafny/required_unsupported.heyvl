@@ -1,0 +1,8 @@
+// RUN: bash -c 'out=$(@caesar dafny --filter "root$" @file --dafny-dir "$(mktemp -d)" 2>&1); status=$?; test $status -ne 0; printf "%s" "$out" | grep -q "intrinsic procedure"'
+
+proc root() -> (b: Bool)
+    pre ?(true)
+    post ?(b == true || b == false)
+{
+    b = flip(0.5)
+}

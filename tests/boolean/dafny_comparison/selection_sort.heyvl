@@ -1,0 +1,78 @@
+// RUN: @caesar @file
+// Invented for the Caesar/Dafny comparison corpus.
+// This file keeps a small selection-sort development over built-in lists.
+
+proc min_index_from(input: []Int, start: UInt) -> (index: UInt)
+    pre ?(start < len(input))
+    post ?(
+        (start <= index) &&
+        (index < len(input)) &&
+        (forall k: UInt.
+            ((start <= k) && (k < len(input))) ==> (select(input, index) <= select(input, k)))
+    )
+{
+    index = start
+    var j: UInt = start
+
+    @invariant(?(
+        (start <= index) &&
+        (index < len(input)) &&
+        (start <= j) &&
+        (j <= len(input)) &&
+        (forall k: UInt.
+            ((start <= k) && (k < j)) ==> (select(input, index) <= select(input, k)))
+    ))
+    while j < len(input) {
+        if select(input, j) < select(input, index) {
+            index = j
+        } else {}
+
+        j = j + 1
+    }
+}
+
+proc selection_sort(input: []Int) -> (sorted: []Int)
+    post ?(
+        (len(input) == len(sorted)) &&
+        (forall p: UInt, q: UInt.
+            ((p < q) && (q < len(sorted))) ==> (select(sorted, p) <= select(sorted, q)))
+    )
+{
+    sorted = input
+    var i: UInt = 0
+
+    @invariant(?(
+        (i <= len(sorted)) &&
+        (len(input) == len(sorted)) &&
+        (forall p: UInt, q: UInt.
+            ((p < q) && (q < i)) ==> (select(sorted, p) <= select(sorted, q))) &&
+        (forall p: UInt, q: UInt.
+            ((p < i) && (i <= q) && (q < len(sorted))) ==> (select(sorted, p) <= select(sorted, q)))
+    ))
+    while i < len(sorted) {
+        var min: UInt = min_index_from(sorted, i)
+        var first: Int = select(sorted, i)
+        var least: Int = select(sorted, min)
+        sorted = store(sorted, i, least)
+        sorted = store(sorted, min, first)
+        i = i + 1
+    }
+}
+
+proc selection_sort_example() -> ()
+{
+    var input: []Int
+    assume ?(len(input) == 5)
+    input = store(input, 0, 3)
+    input = store(input, 1, 2)
+    input = store(input, 2, 5)
+    input = store(input, 3, 1)
+    input = store(input, 4, 4)
+
+    var sorted: []Int = selection_sort(input)
+    assert ?(
+        forall p: UInt, q: UInt.
+            ((p < q) && (q < len(sorted))) ==> (select(sorted, p) <= select(sorted, q))
+    )
+    assert ?(len(sorted) == 5)
+}
