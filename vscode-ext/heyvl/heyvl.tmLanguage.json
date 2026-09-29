@@ -72,26 +72,6 @@
         }
       ]
     },
-    "paren-expr": {
-      "begin": "\\(",
-      "end": "\\)",
-      "beginCaptures": {
-        "0": {
-          "name": "punctuation.paren.open"
-        }
-      },
-      "endCaptures": {
-        "0": {
-          "name": "punctuation.paren.close"
-        }
-      },
-      "name": "expression.group",
-      "patterns": [
-        {
-          "include": "#expr"
-        }
-      ]
-    },
     "comments": {
       "patterns": [
         {
@@ -123,7 +103,8 @@
       "patterns": [
         {
           "name": "constant.numeric.heyvl",
-          "match": "\\b[0-9]+/[0-9]+"
+          "match": "\\b[0-9]+/[0-9]+(?![0-9.])",
+          "comment": "Highlight integer fractions as one number without consuming part of a decimal denominator."
         },
         {
           "name": "constant.numeric.heyvl",
