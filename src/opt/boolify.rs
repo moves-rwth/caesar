@@ -57,7 +57,8 @@ impl VisitorMut for Boolify {
                                     builder.top_lit(lhs.ty.as_ref().unwrap()),
                                 ))
                             }
-                            _ => None,
+                            // Both children have already been visited.
+                            _ => return Ok(()),
                         }
                     }
                     // match ?(b) <- rhs, equivalent to ite(b, \bot, rhs)
@@ -75,7 +76,8 @@ impl VisitorMut for Boolify {
                                     rhs.clone(),
                                 ))
                             }
-                            _ => None,
+                            // Both children have already been visited.
+                            _ => return Ok(()),
                         }
                     }
                     _ => None,
