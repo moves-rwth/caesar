@@ -54,7 +54,7 @@ function Infrastructure() {
               Caesar’s intermediate verification language, HeyVL, expresses probabilistic programs together with quantitative specifications and proof rules.
               New proof rules can be encoded in HeyVL without changing the verifier.
             </p>
-            <Link className={`button button--outline button--primary ${styles.paperOverview}`} to="https://arxiv.org/pdf/2605.15827">Read the CAV 2026 tool paper ↗</Link>
+            <Link className={`button button--outline button--primary ${styles.paperOverview}`} to="https://link.springer.com/content/pdf/10.1007/978-3-032-32537-2_27.pdf?pdf=inline%20link">Read the CAV 2026 tool paper ↗</Link>
           </div>
         </div>
         <figure className={styles.architecture}>

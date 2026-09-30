@@ -62,7 +62,7 @@ That is the advantage of using an intermediate verification language such as Hey
 :::info
 
 Our [OOPSLA '23 paper](../publications.md#oopsla-23) ([PDF](https://arxiv.org/pdf/2309.07781.pdf)) gives the formal foundations of HeyVL and explains how to prove that its encodings represent the intended verification problems.
-The [CAV 2026 tool paper](https://arxiv.org/pdf/2605.15827) describes Caesar's architecture and current capabilities.
+The [CAV 2026 tool paper](https://link.springer.com/content/pdf/10.1007/978-3-032-32537-2_27.pdf?pdf=inline%20link) describes Caesar's architecture and current capabilities.
 
 :::
 

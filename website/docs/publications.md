@@ -42,7 +42,8 @@ See also [our blog post about the paper](/blog/2026/07/22/itp26-securing-foundat
 
 The tool paper [_"Caesar: A Deductive Verifier for Probabilistic Programs"_](https://doi.org/10.1007/978-3-032-32537-2_27) by Philipp Schröer, Kevin Batz, Umut Yiğit Dural, Darion Haase, Benjamin Lucien Kaminski, Joost-Pieter Katoen, and Christoph Matheja was published at [CAV 2026](https://conferences.i-cav.org/2026/) in Lisbon, Portugal.
 
-The **preprint is available on arXiv**: [_"Caesar: A Deductive Verifier for Probabilistic Programs"_](https://arxiv.org/abs/2605.15827).
+The [published paper is available as an open-access PDF](https://link.springer.com/content/pdf/10.1007/978-3-032-32537-2_27.pdf?pdf=inline%20link).
+A [preprint is also available on arXiv](https://arxiv.org/abs/2605.15827).
 
 The paper reports on five years of Caesar development and presents Caesar as a deductive verifier for probabilistic programs: from its HeyVL/HeyLo foundations and SMT-based workflow via Z3 to the tooling and verification features that have been added around the core infrastructure.
 Compared to our [OOPSLA '23 paper](#oopsla-23), the tool paper focuses on Caesar as a usable verification tool and covers in particular the [*Caesar Verifier* VSCode extension](/docs/caesar/vscode-and-lsp), support for [limited functions and quantifier handling](/docs/caesar/debugging#function-encodings-and-limited-functions), the [model checking backend](/docs/model-checking), and stronger [soundness checks for proof rules](/docs/proof-rules/approximations#what-is-checked).

@@ -7,7 +7,7 @@ tags: [publications]
 Our tool paper [_"Caesar: A Deductive Verifier for Probabilistic Programs"_](https://doi.org/10.1007/978-3-032-32537-2_27) was accepted as a tool paper at [CAV 2026](https://conferences.i-cav.org/2026/), to be held in Lisbon, Portugal.
 The authors are Philipp Schröer, Kevin Batz, Umut Yiğit Dural, Darion Haase, Benjamin Lucien Kaminski, Joost-Pieter Katoen, and Christoph Matheja.
 
-The **preprint is available on arXiv**: [_"Caesar: A Deductive Verifier for Probabilistic Programs"_](https://arxiv.org/abs/2605.15827).
+The [published paper is available as an open-access PDF](https://link.springer.com/content/pdf/10.1007/978-3-032-32537-2_27.pdf?pdf=inline%20link).
 
 The paper reports on five years of Caesar development and presents Caesar as a deductive verifier for probabilistic programs in its current form: from the HeyVL/HeyLo core and the SMT-based pipeline via Z3 to the surrounding tooling and verification features.
 Compared to our earlier OOPSLA 2023 paper, which introduced the formal foundations of HeyVL and HeyLo, the new tool paper focuses on Caesar as a practical verification tool.
