@@ -1,11 +1,12 @@
 # Website
 
-This website is built using [Docusaurus 2](https://docusaurus.io/), a modern static website generator.
+This website is built using [Docusaurus 3](https://docusaurus.io/).
+Use Node.js 22.12 or newer (Node.js 24 is used in CI) and Yarn Classic 1.22.
 
 ### Installation
 
 ```
-$ yarn
+$ yarn install --frozen-lockfile
 ```
 
 ### Local Development
@@ -14,7 +15,8 @@ $ yarn
 $ yarn start
 ```
 
-This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
+This command starts a local development server and opens up a browser window.
+Most changes are reflected live without having to restart the server.
 
 ### Build
 

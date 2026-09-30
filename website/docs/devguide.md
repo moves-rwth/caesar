@@ -36,11 +36,12 @@ The idea is that this code is independent of Caesar itself and may be useful to 
 
 ## Website
 
-The documentation you are reading right now is built using [Docosaurus](https://docusaurus.io/) and lives in the [`website`](https://github.com/moves-rwth/caesar/tree/main/website) directory.
+The documentation you are reading right now is built using [Docusaurus 3](https://docusaurus.io/) and lives in the [`website`](https://github.com/moves-rwth/caesar/tree/main/website) directory.
 
-You can install it using `yarn` or `npm`: Run `yarn` or `npm install`.
+Use Node.js 24, as in CI, and Yarn Classic 1.22.
+Run `yarn install --frozen-lockfile` in `website` to install the dependencies from the committed lockfile.
 
-Then either run `yarn start` or `npm run start` to start a local development server and open the site in a browser window.
+Then run `yarn start` to start a local development server and open the site in a browser window.
 
 ## VSCode Extension
 
