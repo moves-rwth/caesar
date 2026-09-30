@@ -212,7 +212,10 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                         eq
                     }
                 }
-                BinOpKind::Impl => self.t_bool(lhs).implies(&self.t_bool(rhs)),
+                BinOpKind::Impl | BinOpKind::Compare => self.t_bool(lhs).implies(&self.t_bool(rhs)),
+                BinOpKind::CoImpl | BinOpKind::CoCompare => {
+                    Bool::and(self.ctx.ctx, &[&self.t_bool(lhs).not(), &self.t_bool(rhs)])
+                }
                 BinOpKind::Inf => self.t_bool(lhs).inf(&self.t_bool(rhs)),
                 BinOpKind::Sup => self.t_bool(lhs).sup(&self.t_bool(rhs)),
                 BinOpKind::Lt | BinOpKind::Le | BinOpKind::Ge | BinOpKind::Gt => {
@@ -225,6 +228,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
                     };
                     let t_pair = self.t_pair(lhs, rhs);
                     match t_pair {
+                        SymbolicPair::Bools(a, b) => a.smt_cmp(&b, smt_ordering),
                         SymbolicPair::Ints(a, b) => a.smt_cmp(&b, smt_ordering),
                         SymbolicPair::UInts(a, b) => a.smt_cmp(&b, smt_ordering),
                         SymbolicPair::Reals(a, b) => a.smt_cmp(&b, smt_ordering),
