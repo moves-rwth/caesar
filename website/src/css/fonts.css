@@ -46,3 +46,19 @@
   font-display: block;
   src: url('/fonts/source-code-pro/SourceCodePro-It.otf.woff2') format('woff2');
 }
+
+@font-face {
+  font-family: 'Source Code Pro';
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url('/fonts/source-code-pro/SourceCodePro-Medium.otf.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Source Code Pro';
+  font-style: italic;
+  font-weight: 500;
+  font-display: block;
+  src: url('/fonts/source-code-pro/SourceCodePro-MediumIt.otf.woff2') format('woff2');
+}

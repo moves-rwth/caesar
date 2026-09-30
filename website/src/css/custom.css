@@ -66,13 +66,189 @@
   --ifm-footer-link-hover-color: var(--caesar-footer-link-hover);
 }
 
+/* Keep callout colors local so proof and syntax colors retain their meaning. */
+.theme-admonition.alert {
+  --caesar-callout-fill: #f8faf8;
+  --caesar-callout-accent: var(--ifm-color-primary);
+  --ifm-alert-background-color: var(--caesar-callout-fill);
+  --ifm-alert-foreground-color: var(--ifm-font-color-base);
+  --ifm-alert-border-color: var(--caesar-callout-accent);
+  --ifm-link-color: var(--ifm-color-primary);
+  --ifm-link-hover-color: var(--ifm-color-primary);
+  border-width: 0;
+  border-left-width: 2px;
+  border-radius: 3px;
+  box-shadow: none;
+}
+
+.theme-admonition.alert--success {
+  --caesar-callout-accent: var(--ifm-color-primary);
+}
+
+.theme-admonition.alert--info {
+  --caesar-callout-accent: #247da8;
+}
+
+.theme-admonition.alert--warning {
+  --caesar-callout-accent: #b87510;
+}
+
+.theme-admonition.alert--danger {
+  --caesar-callout-accent: #b9473c;
+}
+
+:root[data-theme='dark'] .theme-admonition.alert {
+  --caesar-callout-fill: #222523;
+}
+
+:root[data-theme='dark'] .theme-admonition.alert--success {
+  --caesar-callout-accent: var(--ifm-color-primary);
+}
+
+:root[data-theme='dark'] .theme-admonition.alert--info {
+  --caesar-callout-accent: #63bceb;
+}
+
+:root[data-theme='dark'] .theme-admonition.alert--warning {
+  --caesar-callout-accent: #e3b34e;
+}
+
+:root[data-theme='dark'] .theme-admonition.alert--danger {
+  --caesar-callout-accent: #f08176;
+}
+
+.theme-admonition > [class*='admonitionHeading'] {
+  display: flow-root;
+  color: var(--ifm-font-color-base);
+  font-family: var(--ifm-heading-font-family);
+  font-weight: 600;
+  text-transform: none;
+}
+
+.theme-admonition > [class*='admonitionHeading']::first-letter {
+  text-transform: uppercase;
+}
+
+.theme-admonition > [class*='admonitionHeading'] > [class*='admonitionIcon'] {
+  float: left;
+  margin-top: 0.075em;
+}
+
+.theme-admonition > [class*='admonitionHeading'] > [class*='admonitionIcon'] svg {
+  display: block;
+  width: 1.1em;
+  height: 1.1em;
+  fill: var(--caesar-callout-accent);
+}
+
 pre,
 pre code {
   font-family: 'Source Code Pro', var(--ifm-font-family-monospace);
 }
 
+/* Separate documentation sections without adding visual rules. */
+.markdown {
+  --caesar-docs-code-background: var(--ifm-code-background);
+}
+
+.markdown h2 {
+  margin-top: 3.5rem;
+  font-size: 1.75rem;
+}
+
+.markdown h3 {
+  margin-top: 2.75rem;
+}
+
+.markdown h2 + h3 {
+  margin-top: 1.5rem;
+}
+
+/* Keep disclosures quiet when closed and mark the extent of expanded content. */
+.markdown details {
+  --docusaurus-details-decoration-color: var(--ifm-color-emphasis-600);
+  --ifm-alert-foreground-color: var(--ifm-font-color-base);
+  --ifm-alert-background-color: transparent;
+  --ifm-alert-background-color-highlight: var(--caesar-docs-code-background);
+  --ifm-code-background: var(--caesar-docs-code-background);
+  --ifm-link-color: var(--ifm-color-primary);
+  --ifm-link-hover-color: var(--ifm-color-primary-dark);
+  margin: 0 0 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ifm-font-color-base);
+}
+
+.markdown details + p {
+  margin-top: 1.5rem;
+}
+
+.markdown details > summary {
+  min-height: 2.75rem;
+  padding: 0.65rem 0.25rem 0.65rem 1.1rem;
+  color: var(--ifm-font-color-base);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.markdown details > summary::before {
+  top: 1.025rem;
+}
+
+.markdown details > summary:hover {
+  color: var(--ifm-color-primary);
+}
+
+.markdown details > summary:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
+}
+
+.markdown details > div > div {
+  margin: 0.25rem 0 1rem 1.1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-left: 2px solid var(--ifm-color-emphasis-400);
+  border-radius: 0 0.25rem 0.25rem 0;
+  background: var(--caesar-surface-hover);
+}
+
+@media (max-width: 600px) {
+  .markdown details > div > div {
+    margin-left: 0;
+    padding: 0.85rem;
+  }
+}
+
+/* Let documentation examples take only the width they need. */
+.markdown .theme-code-block {
+  width: fit-content;
+  min-width: min(100%, 24rem);
+  max-width: 100%;
+}
+
+.markdown .theme-code-block pre > code {
+  padding-inline-end: 3rem;
+}
+
+/* Keep inline code close to the surrounding text. */
+:not(pre) > code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: 'Source Code Pro', var(--ifm-font-family-monospace);
+  font-size: 0.9em;
+  font-weight: 500;
+  vertical-align: baseline;
+}
+
 /* Link decorations */
-a:any-link {
+a:any-link,
+.theme-admonition a:any-link {
   text-decoration-thickness: 1px;
   text-decoration-color: color-mix(in srgb, currentColor 65%, transparent);
   text-underline-offset: 0.18em;
@@ -80,7 +256,9 @@ a:any-link {
 }
 
 a:any-link:hover,
-a:any-link:focus-visible {
+a:any-link:focus-visible,
+.theme-admonition a:any-link:hover,
+.theme-admonition a:any-link:focus-visible {
   text-decoration-thickness: 1px;
   text-decoration-color: currentColor;
 }
