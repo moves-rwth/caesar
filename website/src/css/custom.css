@@ -1,3 +1,5 @@
+@import './fonts.css';
+
 /**
  * Any CSS included here will be global. The classic template
  * bundles Infima by default. Infima is a CSS framework designed to
@@ -6,6 +8,9 @@
 
 /* You can override the default Infima variables here. */
 :root {
+  --ifm-heading-font-family: 'IBM Plex Sans', var(--ifm-font-family-base);
+  --ifm-heading-font-weight: 600;
+
   --ifm-color-primary: #146c59;
   --ifm-color-primary-dark: #126150;
   --ifm-color-primary-darker: #115c4c;
@@ -38,6 +43,11 @@
   --ifm-color-primary-lighter: #32d8b4;
   --ifm-color-primary-lightest: #4fddbf;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+pre,
+pre code {
+  font-family: 'Source Code Pro', var(--ifm-font-family-monospace);
 }
 
 /* Link decorations */

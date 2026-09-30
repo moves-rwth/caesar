@@ -1,0 +1,48 @@
+/* Preload the main faces and wait briefly for the custom fonts before showing fallback text. */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url('/fonts/ibm-plex/IBMPlexSans-SemiBold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: italic;
+  font-weight: 600;
+  font-display: block;
+  src: url('/fonts/ibm-plex/IBMPlexSans-SemiBoldItalic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url('/fonts/ibm-plex/IBMPlexSans-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: italic;
+  font-weight: 700;
+  font-display: block;
+  src: url('/fonts/ibm-plex/IBMPlexSans-BoldItalic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Source Code Pro';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('/fonts/source-code-pro/SourceCodePro-Regular.otf.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Source Code Pro';
+  font-style: italic;
+  font-weight: 400;
+  font-display: block;
+  src: url('/fonts/source-code-pro/SourceCodePro-It.otf.woff2') format('woff2');
+}
