@@ -1,6 +1,6 @@
 //! Abstract representation of expressions.
 
-use std::{fmt, str::FromStr};
+use std::fmt;
 
 use num::{BigInt, BigRational, BigUint, One, Zero};
 use z3rro::eureal::ConcreteEUReal;
@@ -367,7 +367,7 @@ impl SimplePretty for Trigger {
 
 pub type Lit = Spanned<LitKind>;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum LitKind {
     /// A string literal (`"something"`).
     Str(Symbol),
@@ -411,14 +411,6 @@ impl LitKind {
             LitKind::Infinity => Some(ConcreteEUReal::Infinity),
             _ => None,
         }
-    }
-}
-
-impl FromStr for LitKind {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        crate::front::parser::parse_lit(s)
     }
 }
 

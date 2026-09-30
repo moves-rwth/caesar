@@ -10,9 +10,6 @@
 //!
 //! The module [`relational`] implements a simple visitor that reduces Gödel
 //! algebra operators used in comparisons to simpler Boolean expressions.
-//!
-//! The [`egraph`]-based optimization searches for minimal equivalent
-//! expressions by applying a set of rewrite rules repeatedly.
 
 use crate::ast::{
     visit::{walk_expr, VisitorMut},
@@ -21,7 +18,6 @@ use crate::ast::{
 
 pub mod boolify;
 pub mod constfold;
-pub mod egraph;
 #[cfg(test)]
 mod fuzz_test;
 pub mod qelim;

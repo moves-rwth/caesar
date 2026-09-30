@@ -36,7 +36,6 @@ num = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "^0.3.3", features = ["env-filter", "json"] }
 pathdiff = "0.2"
-egg = "0.11"
 tokio = { version = "1", features = ["time", "macros", "rt", "rt-multi-thread"] }
 hdrhistogram = "7.5"
 ariadne = "0.6"

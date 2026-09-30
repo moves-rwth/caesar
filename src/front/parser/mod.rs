@@ -9,9 +9,7 @@ use ariadne::ReportKind;
 use clap::ValueEnum;
 use tracing::instrument;
 
-use crate::ast::{
-    Block, DeclKind, Diagnostic, FileId, Label, LitKind, Span, SpanVariant, StoredFile,
-};
+use crate::ast::{Block, DeclKind, Diagnostic, FileId, Label, Span, SpanVariant, StoredFile};
 
 lalrpop_util::lalrpop_mod!(
     #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -243,13 +241,6 @@ fn parse_new_decl(file_id: FileId, source: &str) -> Result<DeclKind, ParseError>
     grammar::DeclParser::new()
         .parse(file_id, source)
         .map_err(|err| ParseError::from_grammar_parse_error(file_id, err))
-}
-
-/// Parse a literal. Used for the [`std::str::FromStr`] implementation of
-/// [`LitKind`].
-pub(crate) fn parse_lit(source: &str) -> Result<LitKind, ()> {
-    let parser = grammar::LitKindParser::new();
-    parser.parse(FileId::DUMMY, source).map_err(|_| ())
 }
 
 /// Return a string where all comments are replaced by whitespace. The result

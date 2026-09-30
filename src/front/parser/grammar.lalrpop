@@ -72,7 +72,7 @@ SymRightarrow: () = { "→", "==>" }
 SymLeftarrow: () = { "←", "<==" }
 SymInfty: () = { "∞", "\\infty" }
 
-pub LitKind: LitKind = {
+LitKind: LitKind = {
     <s:r#""[^"]*""#> => LitKind::Str(Symbol::intern(&s[1..s.len()-1])),
     <num: r"[0-9]+"> => LitKind::UInt(BigUint::from_str(num).unwrap()),
     <num: r"[0-9]+\.[0-9]+"> => LitKind::Frac(parse_decimal(num).unwrap()),

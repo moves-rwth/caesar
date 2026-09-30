@@ -12,8 +12,7 @@ use crate::{
     depgraph::Dependencies,
     driver::{commands::verify::VerifyCommand, error::CaesarError, item::SourceUnitName},
     opt::{
-        boolify::Boolify, egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder,
-        RemoveParens,
+        boolify::Boolify, qelim::Qelim, relational::Relational, unfolder::Unfolder, RemoveParens,
     },
     resource_limits::{LimitError, LimitsRef},
     smt::{funcs::axiomatic::AxiomaticFunctionEncoder, DepConfig, SmtCtx},
@@ -44,10 +43,6 @@ pub fn lower_quant_prove_task(
 
     // 3. Now turn this quantitative formula into a Boolean one
     let mut bool_task = quant_task.into_bool_vc();
-
-    if options.opt_options.egraph {
-        bool_task.egraph_simplify();
-    }
 
     // 4. Optimizations
     // 4.1. Remove parentheses if needed
@@ -166,12 +161,6 @@ pub struct BoolVcProveTask {
 }
 
 impl BoolVcProveTask {
-    /// E-Graph simplifications. They're not being used at the moment and are
-    /// very limited.
-    pub fn egraph_simplify(&self) {
-        egraph::simplify(&self.vc);
-    }
-
     /// Removing parentheses before optimizations.
     pub fn remove_parens(&mut self) {
         RemoveParens.visit_expr(&mut self.vc).unwrap();

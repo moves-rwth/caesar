@@ -187,11 +187,6 @@ pub struct OptimizationOptions {
     #[arg(long)]
     pub no_qelim: bool,
 
-    /// Do e-graph optimization of the generated verification conditions.
-    /// The result is not used at the moment.
-    #[arg(long)]
-    pub egraph: bool,
-
     /// Don't do SMT-powered reachability checks during unfolding of
     /// verification conditions to eliminate unreachable branches. Instead,
     /// unfold all branches.

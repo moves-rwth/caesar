@@ -13,7 +13,6 @@ See `--help` for more detailed information.
 
  * Disabling quantifier elimination: `--no-qelim`.
  * Strict verification condition unfolding: `--strict`.
- * Enable e-graph optimization: `--egraph`. The result is currently not used for the SMT encoding.
 
 ## Compilation Options
 
