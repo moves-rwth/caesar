@@ -17,6 +17,13 @@ impl VisitorMut for Relational {
     type Err = ();
 
     fn visit_expr(&mut self, expr: &mut Expr) -> Result<(), Self::Err> {
+        // The lattice rewrites below require EUReal operands.
+        if let ExprKind::Binary(_, lhs, _) = &expr.kind {
+            if lhs.ty.as_ref() != Some(&TyKind::EUReal) {
+                return walk_expr(self, expr);
+            }
+        }
+
         let span = expr.span;
         #[allow(clippy::single_match)]
         match &mut expr.kind {
