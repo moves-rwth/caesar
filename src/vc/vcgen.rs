@@ -148,9 +148,10 @@ impl<'tcx> Vcgen<'tcx> {
                     _ => {}
                 };
 
+                // Validation is double conegation; covalidation is double negation.
                 let un_op = match dir {
-                    Direction::Down => UnOpKind::Not,
-                    Direction::Up => UnOpKind::Non,
+                    Direction::Down => UnOpKind::Non,
+                    Direction::Up => UnOpKind::Not,
                 };
                 builder.unary(un_op, spec_ty.clone(), builder.unary(un_op, spec_ty, post))
             }
