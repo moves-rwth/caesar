@@ -126,7 +126,20 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
-      image: 'img/social-card.png',
+      image: 'img/social-card-v2.png',
+      metadata: [
+        {property: 'og:image:width', content: '1200'},
+        {property: 'og:image:height', content: '630'},
+        {property: 'og:image:type', content: 'image/png'},
+        {
+          property: 'og:image:alt',
+          content: 'Caesar, verification infrastructure for probabilistic programs, beside a coin-flip loop and the verified bound 𝔼[iterations] ≤ 2.',
+        },
+        {
+          name: 'twitter:image:alt',
+          content: 'Caesar, verification infrastructure for probabilistic programs, beside a coin-flip loop and the verified bound 𝔼[iterations] ≤ 2.',
+        },
+      ],
       navbar: {
         title: 'Caesar',
         logo: {
