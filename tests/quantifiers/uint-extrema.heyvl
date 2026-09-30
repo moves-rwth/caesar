@@ -1,0 +1,29 @@
+// RUN: @caesar @file
+
+// Rewards range over all EUReal values, including zero and infinity.
+proc threshold_infimum(t: UInt, f: EUReal) -> ()
+    pre 1
+    post ?((inf i: UInt. [t <= i] * f) == ite(t == 0, f, 0))
+{}
+
+proc fractional_threshold(r: UReal, f: EUReal) -> ()
+    pre 1
+    post ?((sup i: UInt. [i < r] * f) == ite(r > 0, f, 0))
+{}
+
+proc recursive_product_supremum(f: EUReal, g: EUReal, h: EUReal) -> ()
+    pre 1
+    post ?((sup i: UInt. f * (i * g + h)) == ite(f == 0, 0, ite(g == 0, f * h, ∞)))
+{}
+
+domain EmbeddedPredicates {
+    func holds(i: Int, b: Bool): Bool
+}
+
+proc embedded_multiple_binders() -> ()
+    pre 1
+    post ?(((sup i: Int, b: Bool @trigger(holds(i, b)). ?(holds(i, b)))
+            == ?(exists i: Int, b: Bool @trigger(holds(i, b)). holds(i, b)))
+        && ((inf i: Int, b: Bool @trigger(holds(i, b)). ?(holds(i, b)))
+            == ?(forall i: Int, b: Bool @trigger(holds(i, b)). holds(i, b))))
+{}

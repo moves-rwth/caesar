@@ -22,7 +22,7 @@
 //! unreachability. However, we must *never* falsely eliminate reachable
 //! parts of the expression.
 
-use std::ops::DerefMut;
+use std::{ops::DerefMut, time::Duration};
 
 use z3::SatResult;
 use z3rro::prover::{IncrementalMode, Prover};
@@ -40,6 +40,35 @@ use crate::{
 };
 
 use crate::smt::translate_exprs::TranslateExprs;
+
+/// Reachability checks are optional optimizations and should stay cheap.
+const REACHABILITY_TIMEOUT: Duration = Duration::from_millis(10);
+
+/// An assumed predicate on an expression's lattice value.
+enum Guard<'a> {
+    /// The expression equals top.
+    Top(&'a Expr),
+    /// The expression equals bottom.
+    Bot(&'a Expr),
+    /// The expression differs from bottom.
+    NonBot(&'a Expr),
+    /// The expression differs from top.
+    NonTop(&'a Expr),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum UnfoldResult {
+    /// Traversal completed, including when reachability was inconclusive.
+    Done,
+    /// The guard was proved impossible, so the expression was not visited.
+    Unreachable,
+}
+
+impl UnfoldResult {
+    fn is_unreachable(&self) -> bool {
+        matches!(self, Self::Unreachable)
+    }
+}
 
 pub struct Unfolder<'smt, 'ctx> {
     /// The expressions may contain substitutions. We keep track of those.
@@ -77,71 +106,113 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
         res
     }
 
-    /// Check whether `expr` is currently satisfiable. If `expr` is
-    /// unsatisfiable, return `None`. If it is satisfiable, then call `callback`
-    /// assuming `expr` is true.
-    fn with_sat<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
-        let expr_z3 = self.translate.t_bool(expr);
+    /// Return the local query budget, or `None` when too little time remains for a bounded Z3 call.
+    fn reachability_timeout(&self) -> Result<Option<Duration>, LimitError> {
+        let limits_ref = &self.subst.limits_ref;
+        limits_ref.check_limits()?;
+        let timeout = limits_ref
+            .time_left()
+            .map_or(REACHABILITY_TIMEOUT, |remaining| {
+                remaining.min(REACHABILITY_TIMEOUT)
+            });
 
-        // first add potential new assumptions obtained from `expr`'s
-        // translation to the solver.
+        // Z3 treats a timeout rounded down to zero milliseconds as unlimited.
+        if timeout < Duration::from_millis(1) {
+            limits_ref.check_limits()?;
+            tracing::trace!("skipping unfolder query with less than one millisecond remaining");
+            return Ok(None);
+        }
 
-        // TODO: the local scope is unnecessarily repeatedly added to the
-        // solver.
+        Ok(Some(timeout))
+    }
+
+    /// Check satisfiability of the current assumptions within the local time budget.
+    /// Propagate global resource-limit errors.
+    fn check_sat(&mut self) -> Result<SatResult, LimitError> {
+        let Some(timeout) = self.reachability_timeout()? else {
+            return Ok(SatResult::Unknown);
+        };
+        self.prover.set_timeout(timeout);
+        let result = self.prover.check_sat();
+        self.subst.limits_ref.check_limits()?;
+        if result == SatResult::Unknown {
+            tracing::trace!(reason = ?self.prover.get_reason_unknown(), "inconclusive unfolder query; retaining branch");
+        }
+        Ok(result)
+    }
+
+    /// Unfold `expr` using cheap facts implied by `guard`.
+    /// Return `Unreachable` without visiting `expr` only when the guard is proved impossible.
+    fn unfold_under(
+        &mut self,
+        expr: &mut Expr,
+        guard: Guard<'_>,
+    ) -> Result<UnfoldResult, LimitError> {
+        self.subst.limits_ref.check_limits()?;
+
+        // Extract a cheap Boolean condition, or rule out a contradictory literal guard.
+        let condition = match guard {
+            Guard::Top(value) => match &value.ty {
+                // Boolean top is true, so the value itself is the condition.
+                Some(TyKind::Bool) => Some(value.clone()),
+                _ => None,
+            },
+            Guard::Bot(value) => match &value.ty {
+                // Boolean bottom is false, so negate the value.
+                Some(TyKind::Bool) => Some(negate_expr(value.clone())),
+                _ => None,
+            },
+            Guard::NonBot(value) => {
+                if is_bot_lit(value) {
+                    return Ok(UnfoldResult::Unreachable);
+                }
+                match &value.kind {
+                    ExprKind::Unary(op, operand) => match op.node {
+                        // Both ?(b) and [b] are nonzero exactly when b is true.
+                        UnOpKind::Embed | UnOpKind::Iverson => Some(operand.clone()),
+                        _ => None,
+                    },
+                    _ => None,
+                }
+            }
+            Guard::NonTop(value) => {
+                if is_top_lit(value) {
+                    return Ok(UnfoldResult::Unreachable);
+                }
+                match &value.kind {
+                    ExprKind::Unary(op, operand) => match op.node {
+                        // ?(b) is below top exactly when b is false.
+                        UnOpKind::Embed => Some(negate_expr(operand.clone())),
+                        _ => None,
+                    },
+                    _ => None,
+                }
+            }
+        };
+
+        let Some(condition) = condition else {
+            self.visit_expr(expr)?;
+            return Ok(UnfoldResult::Done);
+        };
+        let condition_z3 = self.translate.t_bool(&condition);
+
+        // Add translation assumptions before the temporary guard scope.
+        // TODO: the local scope is unnecessarily repeatedly added to the solver.
         self.translate
             .local_scope()
             .add_assumptions_to_prover(&mut self.prover);
 
         self.with_prover_scope(|this| {
-            this.prover.add_assumption(&expr_z3);
-            tracing::trace!(expr_z3=%expr_z3, "added expr to unfolder solver");
-            // here we want to do a SAT check and not a proof search. if the
-            // expression is e.g. `false`, then we want to get `Unsat` from the
-            // solver and not `Proof`!
-            if this.prover.check_sat() == SatResult::Unsat {
-                tracing::trace!(solver=?this.prover, "eliminated zero expr");
-                None
+            this.prover.add_assumption(&condition_z3);
+            tracing::trace!(condition = %condition_z3, "added guard to unfolder solver");
+            if this.check_sat()? == SatResult::Unsat {
+                tracing::trace!(solver = ?this.prover, "skipping unreachable expression");
+                Ok(UnfoldResult::Unreachable)
             } else {
-                Some(callback(this))
+                this.visit_expr(expr)?;
+                Ok(UnfoldResult::Done)
             }
         })
-    }
-
-    /// With the knowledge that `expr` is not bottom, evaluate `callback`.
-    /// However, if `expr` can not be bottom, then return `None` and don't
-    /// evaluate the `callback`.
-    fn with_nonbot<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
-        match &expr.kind {
-            ExprKind::Unary(un_op, operand) => match un_op.node {
-                UnOpKind::Embed | UnOpKind::Iverson => {
-                    // If an embed or Iverson expression are nonzero, we know
-                    // the Boolean expression must be true.
-                    return self.with_sat(operand, callback);
-                }
-                _ => {}
-            },
-            _ if is_bot_lit(expr) => return None,
-            _ => {}
-        }
-        Some(callback(self))
-    }
-
-    /// With the knowledge that `expr` is not top, evaluate `callback`. However,
-    /// if `expr` can not be top, then return `None` and don't evaluate the
-    /// `callback`.
-    fn with_nontop<T>(&mut self, expr: &Expr, callback: impl FnOnce(&mut Self) -> T) -> Option<T> {
-        match &expr.kind {
-            ExprKind::Unary(un_op, operand) => {
-                if let UnOpKind::Embed = un_op.node {
-                    // If an embed expression is not top, then its Boolean
-                    // condition must be false.
-                    return self.with_sat(&negate_expr(operand.clone()), callback);
-                }
-            }
-            _ if is_top_lit(expr) => return None,
-            _ => {}
-        }
-        Some(callback(self))
     }
 }
 
@@ -163,43 +234,33 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
             ExprKind::Subst(ident, subst, expr) => {
                 self.visit_expr(subst)?;
                 self.subst.push_subst(*ident, subst.clone());
-                self.visit_expr(expr)?;
+                let result = self.visit_expr(expr);
                 self.subst.pop();
+                result?;
                 *e = expr.clone(); // TODO: this is an unnecessary clone
                 Ok(())
             }
             ExprKind::Ite(cond, lhs, rhs) => {
                 self.visit_expr(cond)?;
-                let notfalse_res = self.with_sat(cond, |this| this.visit_expr(lhs));
-                if let Some(res) = notfalse_res {
-                    res?;
-                    let neg_cond = negate_expr(cond.clone());
-                    let notfalse_res = self.with_sat(&neg_cond, |this| this.visit_expr(rhs));
-                    if let Some(res) = notfalse_res {
-                        res
-                    } else {
-                        *e = lhs.clone();
-                        Ok(())
-                    }
-                } else {
+                if self.unfold_under(lhs, Guard::Top(cond))?.is_unreachable() {
                     *e = rhs.clone();
-                    self.visit_expr(e)
+                    return self.visit_expr(e);
                 }
+                if self.unfold_under(rhs, Guard::Bot(cond))?.is_unreachable() {
+                    *e = lhs.clone();
+                }
+                Ok(())
             }
             ExprKind::Binary(bin_op, lhs, rhs) => match bin_op.node {
                 BinOpKind::Mul if matches!(ty, TyKind::Bool | TyKind::UReal | TyKind::EUReal) => {
                     // visit lhs normally first
                     self.visit_expr(lhs)?;
                     // visit the rhs with the knowledge that lhs will be nonzero
-                    let nonzero_res = self.with_nonbot(lhs, |this| this.visit_expr(rhs));
-                    // evaluate the res or set to constant bottom
-                    if let Some(res) = nonzero_res {
-                        res
-                    } else {
+                    if self.unfold_under(rhs, Guard::NonBot(lhs))?.is_unreachable() {
                         let builder = ExprBuilder::new(Span::dummy_span());
                         *e = builder.bot_lit(&ty);
-                        Ok(())
                     }
+                    Ok(())
                 }
                 BinOpKind::Impl | BinOpKind::Compare
                     if matches!(ty, TyKind::Bool | TyKind::EUReal) =>
@@ -207,15 +268,11 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                     // visit lhs normally first
                     self.visit_expr(lhs)?;
                     // visit the rhs with the knowledge that lhs will be not bottom
-                    let nonbot_res = self.with_nonbot(lhs, |this| this.visit_expr(rhs));
-                    // evaluate the res or set to constant top
-                    if let Some(res) = nonbot_res {
-                        res
-                    } else {
+                    if self.unfold_under(rhs, Guard::NonBot(lhs))?.is_unreachable() {
                         let builder = ExprBuilder::new(Span::dummy_span());
                         *e = builder.top_lit(&ty);
-                        Ok(())
                     }
+                    Ok(())
                 }
                 BinOpKind::CoImpl | BinOpKind::CoCompare
                     if matches!(ty, TyKind::Bool | TyKind::EUReal) =>
@@ -223,15 +280,11 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                     // visit lhs normally first
                     self.visit_expr(lhs)?;
                     // visit the rhs with the knowledge that lhs will be not top
-                    let nontop_res = self.with_nontop(lhs, |this| this.visit_expr(rhs));
-                    // evaluate the res or set to constant bot
-                    if let Some(res) = nontop_res {
-                        res
-                    } else {
+                    if self.unfold_under(rhs, Guard::NonTop(lhs))?.is_unreachable() {
                         let builder = ExprBuilder::new(Span::dummy_span());
                         *e = builder.bot_lit(&ty);
-                        Ok(())
                     }
+                    Ok(())
                 }
                 _ => walk_expr(self, e),
             },
@@ -254,12 +307,12 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                     self.translate.fresh(quant_var.name());
                 }
 
-                self.visit_expr(expr)?;
+                let result = self.visit_expr(expr);
 
                 self.translate.pop();
                 self.prover.pop();
                 self.subst.pop();
-                Ok(())
+                result
             }
             _ => walk_expr(self, e),
         }

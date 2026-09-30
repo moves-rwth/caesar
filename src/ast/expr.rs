@@ -528,10 +528,21 @@ impl ExprBuilder {
         operand: Expr,
     ) -> Expr {
         let quant_vars = idents.into_iter().map(QuantVar::Shadow).collect();
+        self.quant_with_bindings(kind, quant_vars, QuantAnn::default(), operand)
+    }
+
+    /// Construct a quantifier with the given bindings and annotations.
+    /// Its type is inherited from the operand.
+    pub fn quant_with_bindings(
+        &self,
+        kind: QuantOpKind,
+        vars: Vec<QuantVar>,
+        ann: QuantAnn,
+        operand: Expr,
+    ) -> Expr {
         let ty = operand.ty.clone();
-        let ann = QuantAnn::default();
         Shared::new(ExprData {
-            kind: ExprKind::Quant(Spanned::new(self.span, kind), quant_vars, ann, operand),
+            kind: ExprKind::Quant(Spanned::new(self.span, kind), vars, ann, operand),
             ty,
             span: self.span,
         })
@@ -660,12 +671,61 @@ impl ExprBuilder {
 
 #[cfg(test)]
 mod test {
-    use crate::{ast::FileId, front::parser, pretty::pretty_string};
+    use crate::{
+        ast::{FileId, SpanVariant, VarKind},
+        front::parser,
+        pretty::pretty_string,
+    };
+
+    use super::*;
 
     #[test]
     fn format_expr() {
         let expr = parser::parse_expr(FileId::DUMMY, "x + y * 17").unwrap();
         let text = pretty_string(&expr);
         assert_eq!(text, "(x + (y * 17))");
+    }
+
+    #[test]
+    fn quantifier_preserves_bindings_and_annotations() {
+        let span = Span::new(FileId::DUMMY, 3, 17, SpanVariant::Qelim);
+        let builder = ExprBuilder::new(span);
+        let fresh = Ident::with_dummy_span(Symbol::intern("fresh"));
+        let shadow = Ident::with_dummy_span(Symbol::intern("shadow"));
+        let vars = vec![
+            QuantVar::Fresh(DeclRef::new(VarDecl {
+                name: fresh,
+                ty: TyKind::Bool,
+                kind: VarKind::Quant,
+                init: None,
+                span: Span::dummy_span(),
+                created_from: None,
+            })),
+            QuantVar::Shadow(shadow),
+        ];
+        let operand = builder.var_ty(fresh, TyKind::Bool);
+        let trigger = Trigger::new(Span::dummy_span(), vec![operand.clone()]);
+        let ann = QuantAnn {
+            triggers: vec![trigger.clone()],
+        };
+        let expr =
+            builder.quant_with_bindings(QuantOpKind::Forall, vars.clone(), ann, operand.clone());
+
+        assert_eq!(expr.ty, operand.ty);
+        assert_eq!(expr.span, span);
+        let ExprKind::Quant(op, actual_vars, ann, actual_operand) = &expr.kind else {
+            panic!("expected a quantifier");
+        };
+        assert_eq!(op.node, QuantOpKind::Forall);
+        assert_eq!(op.span, span);
+        assert_eq!(actual_vars, &vars);
+        assert_eq!(Expr::as_ptr(actual_operand), Expr::as_ptr(&operand));
+        assert_eq!(ann.triggers.len(), 1);
+        assert_eq!(ann.triggers[0].span, trigger.span);
+        assert_eq!(ann.triggers[0].terms().len(), 1);
+        assert_eq!(
+            Expr::as_ptr(&ann.triggers[0].terms()[0]),
+            Expr::as_ptr(&trigger.terms()[0]),
+        );
     }
 }

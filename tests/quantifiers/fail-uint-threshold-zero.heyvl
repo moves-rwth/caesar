@@ -1,0 +1,7 @@
+// RUN: @caesar @file
+// XFAIL: The threshold can be zero, so the infimum is not always zero.
+
+proc infimum_zero(t: UInt, f: EUReal) -> ()
+    pre 1
+    post ?((inf i: UInt. [t <= i] * f) == 0)
+{}

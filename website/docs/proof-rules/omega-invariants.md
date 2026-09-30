@@ -77,10 +77,9 @@ Without a calculus annotation, `proc` selects least fixed-point semantics and `c
 
 :::warning
 
-The HeyVL encoding of the ω-invariant rule will generate a quantitative quantifier (infimum or supremum) that can not be eliminated by Caesar's quantifier elimination.
-It will be naively passed to the SMT solver, which often struggles with it.
-Learn more in the [*Debugging* section](../caesar/debugging.md).
-Therefore, we generally recommend to avoid the use of ω-invariants in practice.
+Caesar eliminates some of the quantifiers introduced by ω-invariants.
+For example, `sup n: UInt. [x <= n] * f` simplifies to `f` when `x: UInt` and `f: EUReal` are independent of `n`.
+Remaining quantifiers can make the SMT solver return `unknown` or time out; see [Debugging](../caesar/debugging.md) for help inspecting the verification condition.
 
 :::
 

@@ -1,0 +1,166 @@
+// RUN: @caesar verify @file --max-fuel 3 --quantifier-instantiation e-matching
+
+// P and Q each run in expected polynomial time, but P;Q has infinite expected runtime.
+//
+// P counts heads from fair coin tosses until the first tail, obtaining n.
+// It tosses n more fair coins, then sets k=1 and doubles k n times if all those tosses were heads.
+// Q takes k as input and prints k rows of k dots.
+//
+// Integers are stored in unary: P has no input and constant expected runtime; Q takes quadratic time in its input length.
+// Ordinary invariants prove the upper bounds, including unary copying costs.
+// Omega invariants prove the lower bounds using only print costs.
+
+domain Powers {
+    // This is 2^n-1; its UInt type guarantees that 1 + pow2_minus_one(n) is positive.
+    // The squared-size proof needs two unfoldings of the recurrence, hence --max-fuel 3.
+    func pow2_minus_one(n: UInt): UInt = ite(n == 0, 0, 1 + 2 * pow2_minus_one(n - 1))
+}
+
+// P = A;B;C, including unary copying and counter costs.
+@ert
+coproc p_upper() -> (n: UInt, b: Bool, k: UInt)
+    pre 19
+    post 0
+{
+    // A: count heads before the first tail.
+    n = 0
+    var a: Bool = flip(0.5)
+    tick 2
+    @invariant(4 + 2 * n * (n + 1) + 2 * n + [a] * (10 * n + 26))
+    while a {
+        tick n + 2
+        n = n + 1
+        a = flip(0.5)
+    }
+
+    // B: all n fresh coin flips must be heads to enable C's doublings.
+    b = true
+    var i: UInt = 0
+    tick n + 1
+    // After i tosses, the expected copying cost still to come is at most [b]*2^i.
+    // The !? term makes the bound infinite for unreachable states with i > n.
+    @invariant(
+        !?(i <= n)
+        + (n - i) * (n + 1)
+        + n + 2 + n * (n + 1)
+        + [b] * (1 + pow2_minus_one(i))
+    )
+    while i < n {
+        var coin: Bool = flip(0.5)
+        b = b && coin
+        i = i + 1
+        tick n + 1
+    }
+
+    // C: construct k=2^n if B succeeded, or k=1 otherwise.
+    k = 1
+    tick n + 2
+    if b {
+        var r: UInt = n
+        // With r doublings left, k*(2^r-1) pays for copying and r*(n+1) for counters.
+        @invariant(k * pow2_minus_one(r) + r * (n + 1))
+        while r > 0 {
+            tick k + n + 1
+            k = 2 * k
+            r = r - 1
+        }
+    } else {}
+}
+
+// Q uses one loop: i rows remain to be started, and j dots remain in the current row.
+@ert
+proc d_lower(k: UInt) -> ()
+    pre k * k
+    post 0
+{
+    var i: UInt = k
+    var j: UInt = 0
+    // There are i*k+j dots and i*(k+1)+j iterations left.
+    // The threshold includes all remaining prints once m covers those iterations, so the supremum is i*k+j.
+    @omega_invariant(m, [i * (k + 1) + j <= m] * (i * k + j))
+    while i > 0 || j > 0 {
+        if j > 0 {
+            tick 1 // Print one dot.
+            j = j - 1
+        } else {
+            i = i - 1
+            j = k
+        }
+    }
+}
+
+// Each dot costs 2 ticks; starting and printing a whole row costs 3*k+1 ticks.
+@ert
+coproc d_upper(k: UInt) -> ()
+    pre 3 * k * k + 2 * k + 1
+    post 0
+{
+    var i: UInt = k
+    var j: UInt = 0
+    tick k + 1
+    @invariant(i * (3 * k + 1) + 2 * j)
+    while i > 0 || j > 0 {
+        if j > 0 {
+            tick 2
+            j = j - 1
+        } else {
+            tick k + 1
+            i = i - 1
+            j = k
+        }
+    }
+}
+
+// C;D: when b is true, n doublings make Q print 4^n dots.
+// Keeping this bound as a separate lemma avoids a much larger SMT problem in pq_infinite.
+@ert
+proc cd_lower(n: UInt, b: Bool) -> (k: UInt)
+    pre [b] * (1 + pow2_minus_one(2 * n))
+    post 0
+{
+    k = 1
+    if b {
+        var r: UInt = n
+        // After r more doublings, Q will print (k*2^r)^2 dots.
+        // Taking the supremum over m removes [r <= m].
+        @omega_invariant(m, [r <= m] * k * k * (1 + pow2_minus_one(2 * r)))
+        while r > 0 {
+            k = 2 * k
+            r = r - 1
+        }
+    } else {}
+    d_lower(k)
+}
+
+// P;Q: choosing n has probability 2^(-(n+1)), and B;C;D prints at least 2^n dots in expectation.
+// Each n therefore contributes at least 1/2, and the omega family for A proves that the sum diverges.
+@ert
+proc pq_infinite() -> (n: UInt, b: Bool, k: UInt)
+    pre ∞
+    post 0
+{
+    // A: the fair coin cancels the doubling of 2^n, so the bound grows linearly in m.
+    n = 0
+    var a: Bool = flip(0.5)
+    @omega_invariant(m, ite(a, m * (1 + pow2_minus_one(n)), 1 + pow2_minus_one(n)))
+    while a {
+        n = n + 1
+        a = flip(0.5)
+    }
+
+    // B: the success probability 2^(-n) turns C;D's print count 4^n into 2^n.
+    b = true
+    var i: UInt = 0
+    // If b is still true after i tosses, the expected successful print count is 2^(-(n-i))*4^n = 2^(n+i).
+    @omega_invariant(
+        m,
+        [n - i <= m] * [i <= n] * [b] * (1 + pow2_minus_one(n + i))
+    )
+    while i < n {
+        var coin: Bool = flip(0.5)
+        b = b && coin
+        i = i + 1
+    }
+
+    k = cd_lower(n, b)
+}

@@ -12,8 +12,7 @@ use crate::{
     depgraph::Dependencies,
     driver::{commands::verify::VerifyCommand, error::CaesarError, item::SourceUnitName},
     opt::{
-        boolify::Boolify, egraph, qelim::Qelim, relational::Relational, unfolder::Unfolder,
-        RemoveParens,
+        boolify::Boolify, egraph, qelim, relational::Relational, unfolder::Unfolder, RemoveParens,
     },
     resource_limits::{LimitError, LimitsRef},
     smt::{funcs::axiomatic::AxiomaticFunctionEncoder, DepConfig, SmtCtx},
@@ -109,8 +108,7 @@ impl QuantVcProveTask {
 
     /// Apply quantitative quantifier elimination.
     pub fn qelim(&mut self, tcx: &mut TyCtx, limits_ref: &LimitsRef) -> Result<(), CaesarError> {
-        let mut qelim = Qelim::new(tcx);
-        qelim.qelim(self);
+        qelim::qelim(tcx, self);
         // Apply/eliminate substitutions again
         apply_subst(tcx, &mut self.expr, limits_ref)?;
         Ok(())
