@@ -1,0 +1,12 @@
+@ert
+coproc geo_expected_runtime() -> (done: Bool)
+    pre 2
+    post 0
+{
+    done = false
+    @invariant([!done] * 2)
+    while !done {
+        reward 1
+        done = flip(0.5)
+    }
+}

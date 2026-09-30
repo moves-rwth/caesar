@@ -1,21 +1,19 @@
 ---
-description: A guide to understanding and verifying HeyVL.
+description: A detailed introduction to quantitative specifications, proof annotations, and verification statements in HeyVL.
 sidebar_position: 2
 ---
 
 # Guide to HeyVL
 
 ```mdx-code-block
-import CodeBlock from '@theme/CodeBlock';
 import Link from '@docusaurus/Link';
 ```
 
-After [installing Caesar](./installation.mdx), we can start to use HeyVL with Caesar.
-In this guide, we'll go through the basics of HeyVL and how verification problems can be encoded in it.
-We'll use the *lossy list* example from our [home page](/) to understand HeyVL.
-On the next page, we present [a collection of HeyVL examples](./zoo-of-heyvl-examples.md).
+For a short introduction to running Caesar and interpreting a verification result, start with [First Example: Expected Runtime](./first-proof.mdx).
+This guide explains HeyVL in more detail, using a *lossy list traversal* to introduce user-defined types and functions, quantitative specifications, and loop invariants.
+It then explains the verification statements used to encode proofs in HeyVL.
 
-#### Contents of this guide
+#### Contents of This Guide
 
 ```mdx-code-block
 import TOCInline from '@theme/TOCInline';
@@ -23,7 +21,7 @@ import TOCInline from '@theme/TOCInline';
 <TOCInline toc={toc} />
 ```
 
-## What are HeyVL and Caesar?
+## What Are HeyVL and Caesar?
 
 ### Architecture
 
@@ -43,8 +41,8 @@ Intuitively, `assert` checks a condition and fails if it's not true.
 These can be used to encode proofs and proof rules into the IVL.
 HeyVL is a _quantitative_ IVL, meaning that its verification statements (`assert`, `assume`, `havoc`...) do not only reason about Boolean statements (`x = 3`), but rather about quantities such as expected values (`[x = 3] * 0.5`).
 
-The _verification condition generator_ (VC generator) takes a HeyVL program and converts it to _verification conditions_, which is a logical formula in our quantative logic *HeyLo*.
-This formula specifies logically whether a HeyVL program verifies or not.
+The _verification condition generator_ (VC generator) converts a HeyVL program to a formula in our quantitative logic *HeyLo*.
+This formula expresses the proof obligations of the HeyVL program.
 For example, `assume [x = 3]; assert 0.5` is converted to the HeyLo formula `[x = 3] → 0.5`.
 We will explain what this means later in this guide (see the section on [verification statements](#verification-statements)).
 At the end, Caesar converts the HeyLo formula into a problem for an *SMT solver*; currently we use [Z3](https://github.com/Z3Prover/z3).
@@ -53,7 +51,7 @@ If verification fails, then the SMT solver can often return a counter-example, i
 
 Caesar supports a number of proof rules out of the box (see [proof rules documentation](../proof-rules/)).
 For example, reasoning about *while loops* or recursion is done through proof rules.
-By adding an annotation such as [`@invariant`](../proof-rules/induction.md) to a while loop, you can instruct Caesar use the *Park induction* proof rule.
+By adding an annotation such as [`@invariant`](../proof-rules/induction.md) to a while loop, you instruct Caesar to use the *Park induction* proof rule.
 However, this will internally desugar into normal HeyVL code which means these proof rules are *not* magic built-ins, but just a convenience in Caesar.
 Thus, you can add your own proof rules with Caesar by encoding them in HeyVL.
 That is the advantage of using an intermediate verification language such as HeyVL.
@@ -63,10 +61,8 @@ That is the advantage of using an intermediate verification language such as Hey
 
 :::info
 
-The language HeyVL and the basics of Caesar are formally described in our [OOPLSA '23 publication _"A Deductive Verification Infrastructure for Probabilistic Programs"_](../publications.md#oopsla-23) ([direct link to extended version pdf](https://arxiv.org/pdf/2309.07781.pdf)).
-There, you can find rock-solid formal foundations for HeyVL and details on how to prove that HeyVL programs are *correct*, i.e. actually encode the desired verification problems.
-We highly recommend you take a look at it after reading this guide for a more rigorous treatment of HeyVL and Caesar.
-Refer to our [publications page](../publications.md#oopsla-23) for more details.
+Our [OOPSLA '23 paper](../publications.md#oopsla-23) ([PDF](https://arxiv.org/pdf/2309.07781.pdf)) gives the formal foundations of HeyVL and explains how to prove that its encodings represent the intended verification problems.
+The [CAV 2026 tool paper](https://arxiv.org/pdf/2605.15827) describes Caesar's architecture and current capabilities.
 
 :::
 
@@ -82,21 +78,22 @@ Here's an incomplete list of features:
     * has generalized quantitative verification statements `assume`, `assert`, `havoc`, and nondeterministic choice,
     * features dual *co*-versions of verification statements to reason about *upper bounds* of expected values (the non-`co` statements are used to reason about *lower bounds*),
     * and through these allows you to encode new proof rules and use Caesar as a verifier for them.
-* Leverage the power of modern SMT solvers to logically reason about infinite-state probabilistic systems with infinitely many inputs and outputs, and unbounded loops and recursion.
+* Use SMT solvers to reason symbolically about infinite-state probabilistic systems, unbounded loops, and recursion.
 * Compositionally reason about programs, building bigger verified programs out of smaller verified parts using procedures.
 * Define your own data types and define new functions in HeyVL, with support for *uninterpreted* definitions, i.e. those defined by logical *axioms* and thus may not even have an executable definition.
 * Formally correct reasoning with theoretical guarantees. We do not use sampling algorithms such as [MCMC](https://en.wikipedia.org/wiki/Markov_chain_Monte_Carlo), but instead use logical reasoning about programs.
 
 
-## Verifying Our First Program: Lossy List Traversal
+## Example: Lossy List Traversal {#verifying-our-first-program-lossy-list-traversal}
 
-Let us now go through the lossy list example in detail and step-by-step.
+The geometric loop in the [first example](./first-proof.mdx) uses a Boolean variable and a constant bound on expected runtime.
+Here, we introduce a list type and prove a bound on the probability that a traversal succeeds, expressed as a function of the list's length.
 The [full example can be found below](#full-example).
 
 ### The Probabilistic Program Itself
 
 Let us start with the probabilistic program itself, without any HeyVL annotations.
-`lossy_list` is a procedure that takes an input `init_L` of type `List` and returns an output list `l`.
+`lossy_list` is a procedure that takes an input `init_l` of type `List` and returns an output list `l`.
 `List` is a user-defined type [which we define below](#user-defined-datatypes-and-functions).
 
 ```heyvl
@@ -117,12 +114,12 @@ proc lossy_list(init_l: List) -> (l: List)
 The program is supposed to model a list traversal with a (rather alarming) 50% probability of memory faults during the traversal.
 For this guide, we want to prove a lower bound to the probability of a successful traversal.
 
-#### What does the program do?
+#### What Does the Program Do?
 
 1. We initialize the output `l` to the input.
 Note that it's forbidden in HeyVL to modify input variables.
 2. The main part of the code is the `while` loop.
-It runs as long as the list `l` is not zero.
+It runs as long as the length of `l` is nonzero.
 
    1. In the loop body, we have our *probabilistic statement*: The `flip(0.5)` expression does a coin flip and returns `true` or `false`, each with probability `0.5`.
    The result is saved in a newly declared variable `prob_choice` using the `var` statement.
@@ -133,17 +130,18 @@ It runs as long as the list `l` is not zero.
 
    3. If the coin flip resulted in `false`, then we simulate a memory fault using `assert [false]`.
 
-   4. <small>Note: In HeyVL, while loops always need invariant annotations. Therefore, this program is not yet valid HeyVL code. We'll add the annotation <Link to="#specifications">when we talk about specifications</Link>.</small>
+   4. <small>Deductive verification requires a proof-rule annotation for this loop.
+   We add an invariant in the section on <Link to="#specifications">specifications</Link>.</small>
 
 3. HeyVL does not have `return` statements. Every value to be returned by the procedure must be declared as an output variable in the procedure declaration. Here, the output variable `l` is automatically returned.
 
 There is more detailed documentation on HeyVL's [procedures](../heyvl/procs.md) and [statements](../heyvl/statements.md).
 
-#### What do we want to verify?
+#### What Do We Want to Verify?
 
 With Caesar, various properties of this program can be verified:
 
- * **In this guide, we'll only verify that he probability of a successful run without crashing is at least `0.5^len(init_l)`.**
+ * **In this guide, we'll only verify that the probability of a successful run without crashing is at least `0.5^len(init_l)`.**
  * We could verify probabilities of crashing at specific list lengths.
  * We could verify expected values of list lengths at crash time.
  * For the above, we can verify either *lower* or *upper bounds*.
@@ -154,7 +152,7 @@ With Caesar, various properties of this program can be verified:
 
 ### User-Defined Datatypes and Functions
 
-Our probbabilistic program above is incomplete: it's still missing a specification and a loop invariant annotation.
+Our probabilistic program above is incomplete: it's still missing a specification and a loop invariant annotation.
 In addition, the `List` type and the `exp` function need to be defined.
 They are not built-in into HeyVL, but must be *axiomatized* using user-defined domains and functions.
 
@@ -311,8 +309,7 @@ Refer to the [proof rules documentation](../proof-rules/) for more information o
 
 ### Running the Complete Example {#full-example}
 
-We can now run Caesar on the full example file.
-This file is also available in the [Github repository](https://github.com/moves-rwth/caesar) at `tests/domains/lossy_list.heyvl`.
+Save the complete program below as `lossy_list.heyvl`.
 
 ```heyvl
 domain Exponentials {
@@ -346,9 +343,10 @@ proc lossy_list(init_l: List) -> (l: List)
 }
 ```
 
-To verify this example using Caesar, simply run the following command in the Caesar source directory:
+Open the file in VS Code and save it to verify with the Caesar extension, or run:
+
 ```bash
-caesar verify tests/domains/lossy_list.heyvl
+caesar verify lossy_list.heyvl
 ```
 
 ### Reasoning About Upper Bounds (Coprocedures) {#upper-bounds}
@@ -371,7 +369,7 @@ coproc lossy_list_up(init_l: List) -> (l: List)
     post len(l)
 {
     l = init_l
-    @invariant(exp(0.5, len(l)))
+    @invariant(0)
     while len(l) > 0 {
         var prob_choice: Bool = flip(0.5)
         if prob_choice {
@@ -385,6 +383,7 @@ coproc lossy_list_up(init_l: List) -> (l: List)
 
 In this example, we prove an upper bound of zero to the expected value of `len(l)` on termination.
 For simplicity, we'll use [Park induction](../proof-rules/induction.md) again.
+The invariant is now `0`: it is preserved by each iteration and matches `len(l)` when the loop exits with an empty list.
 
 :::note
 
@@ -405,13 +404,13 @@ See the [proof rules documentation](../proof-rules/).
 In addition to HeyVL's "normal" programming constructs such as assignments `x = e`, `if (b) { ... } else { ... }`, Caesar has statements that are specific to program verification.
 There are `assert` statements which add proof obligations, `assume` statements which allow to add assumptions, and nondeterministic choices.
 
-In the following, we'll explain HeyVL's verification statements by explaining how the [lossy list example](#full-example) is internally rewritten to loop-free HeyVL code with verification statements.
+The following sections introduce these statements and the operations they perform on expectations.
+Proof rules use them to encode loop reasoning as loop-free verification problems.
 For reference-level documentation, refer to the [HeyVL statements documentation](../heyvl/statements.md).
 
 :::info
 
-Our [OOPLSA '23 publication _"A Deductive Verification Infrastructure for Probabilistic Programs"_](../publications.md#oopsla-23) ([direct link to extended version pdf](https://arxiv.org/pdf/2309.07781.pdf)) is a formal treatment of HeyVL's verification statements.
-It is a highly recommended read to understand HeyVL's verification statements in detail and from the bottom up.
+Our [OOPSLA '23 paper](../publications.md#oopsla-23) ([PDF](https://arxiv.org/pdf/2309.07781.pdf)) gives a formal treatment of HeyVL's verification statements.
 
 :::
 
@@ -419,7 +418,7 @@ It is a highly recommended read to understand HeyVL's verification statements in
 
 HeyVL's verification statements are quantitative generalizations of classical verification statements that can be found in deductive verifiers such as [Dafny](https://dafny.org/).
 This means that when we only reason about Boolean properties, i.e. whether a property holds in certain states or not (as opposed to expected values of such predicates), then HeyVL's verification statements behave *exactly* as their qualitative (Boolean) counterparts.
-This is why we'll start our explanation with non-probabilistic intuition before we delve into more detail about [*expectation-based reasoning*](#expectation-based-reasoning), the generalization to the quantitative setting.
+We start with Boolean properties before introducing [*expectation-based reasoning*](#expectation-based-reasoning).
 
 #### Embed Expressions
 
@@ -457,13 +456,60 @@ Note that `assume ?(false)` will assume `false`, i.e. everything following after
 
 ### Expectation-Based Reasoning
 
+An *expectation* assigns a nonnegative real number or infinity to each program state, using the specification type [`EUReal`](../stdlib/numbers.md#eureal).
+For example, `len(l)` measures a list's length, while the Iverson expression `[len(l) == 0]` is `1` for an empty list and `0` otherwise.
+The expected value of an Iverson expression gives a probability; the embed expression `?(b)` instead uses `0` and `∞` for Boolean verification.
 
+Caesar works backwards from the `post`, transforming an expectation through each statement to obtain a verification condition at the start of the body.
+A `proc` checks that `pre` is a lower bound on this condition; a `coproc` checks that it is an upper bound.
+For loops, [calculus annotations](../proof-rules/approximations.md#calculus-annotations) such as `@wp` and `@ert` make the intended semantics explicit, and [proof-rule annotations](../proof-rules/) provide the corresponding proof obligations.
 
 ### Assumptions and Assertions
 
+Let `f` be the verification condition for the statements that follow an assertion or assumption.
+The quantitative statements transform it as follows:
+
+* `assert e` produces `e ⊓ f`, the pointwise minimum of `e` and `f`.
+* `assume e` produces `e ==> f`, the quantitative implication, which is `∞` where `e <= f` and `f` otherwise.
+
+For example, `assert 0` makes the verification condition zero, as in the lossy list's crash branch.
+With Boolean embeddings, `assert ?(b)` retains `f` when `b` holds and produces zero otherwise, while `assume ?(b)` retains `f` when `b` holds and produces infinity otherwise.
+These are operations on proof obligations; an assumption does not itself establish that its expression holds.
+
+The dual statements `coassert e` and `coassume e` use the pointwise maximum and coimplication, respectively.
+See the [statement reference](../heyvl/statements.md#assert-and-assume) and [expression operators](../heyvl/expressions.md#expression-syntax) for the supported syntax.
+
 ### Havoc
+
+The statement `havoc x` forgets the current value of `x` by taking the infimum of the following verification condition over all values of `x`'s type.
+Thus, a lower bound established before `havoc x` must hold regardless of the value chosen for `x`.
+It does not sample `x` from a probability distribution.
+
+The dual statement `cohavoc x` takes a supremum instead.
+Both forms accept several variables, for example `havoc x, y`.
+Proof-rule encodings use these statements to reason about arbitrary values of variables modified by a loop or procedure call; see [Havoc](../heyvl/statements.md#havoc) and the [encoding of procedure calls](../heyvl/procs.md#assert-assume-understanding-of-procedure-calls).
 
 ### Nondeterministic Choice
 
+Nondeterministic choices combine two branches without assigning probabilities to them.
+Both branches are evaluated backwards from the same following verification condition:
+
+* `if ⊓ { ... } else { ... }` takes the minimum of the two resulting conditions (demonic choice).
+* `if ⊔ { ... } else { ... }` takes their maximum (angelic choice).
+* `if + { ... } else { ... }` adds them (additive choice).
+
+For example, establishing a lower bound before a demonic choice requires that bound to hold for both branches.
+A probabilistic choice made with `flip(0.5)` instead combines the branches with weights of `0.5` each.
+The [nondeterministic choice reference](../heyvl/statements.md#nondeterministic-choices) also lists alternatives to the Unicode syntax.
+
 ### Rewards
 
+The statement `reward e` adds `e` to the following verification condition: working backwards from `f` yields `e + f`.
+Rewards let you specify which operations contribute to the cost being measured.
+
+In the geometric loop from the [first example](./first-proof.mdx), `reward 1` counts one iteration, and `post 0` adds no cost after the loop terminates.
+The `@ert` annotation selects the expected runtime calculus; Caesar does not automatically charge for assignments or other statements.
+Together, these choices make the `pre 2` specification an upper bound on the expected number of iterations.
+
+Caesar also accepts `tick` as an alias for `reward`.
+See [Reward and Weigh](../heyvl/statements.md#reward-and-weigh) for the statement reference.

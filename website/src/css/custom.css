@@ -18,6 +18,17 @@
   --ifm-color-primary-light: #167762;
   --ifm-color-primary-lighter: #177c66;
   --ifm-color-primary-lightest: #1a8c74;
+
+  --caesar-surface-tint: #e9f1ec;
+  --caesar-surface-navigation: #f2f6f3;
+  --caesar-surface-active: #e9f1ec;
+  --caesar-surface-hover: #f2f6f3;
+  --caesar-surface-footer: #233c33;
+  --caesar-footer-link-hover: #bbd8c9;
+
+  --ifm-navbar-background-color: var(--caesar-surface-navigation);
+  --ifm-menu-color-background-active: var(--caesar-surface-active);
+  --ifm-menu-color-background-hover: var(--caesar-surface-hover);
 }
 
 /*
@@ -34,7 +45,7 @@
 } */
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
-[data-theme='dark'] {
+:root[data-theme='dark'] {
   --ifm-color-primary: #25c2a0;
   --ifm-color-primary-dark: #21af90;
   --ifm-color-primary-darker: #1fa588;
@@ -43,6 +54,16 @@
   --ifm-color-primary-lighter: #32d8b4;
   --ifm-color-primary-lightest: #4fddbf;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+
+  --caesar-surface-tint: #1b2722;
+  --caesar-surface-navigation: #202a25;
+  --caesar-surface-active: #2c4036;
+  --caesar-surface-hover: #24362d;
+}
+
+.footer--dark {
+  --ifm-footer-background-color: var(--caesar-surface-footer);
+  --ifm-footer-link-hover-color: var(--caesar-footer-link-hover);
 }
 
 pre,
@@ -51,26 +72,32 @@ pre code {
 }
 
 /* Link decorations */
-.markdown p a, .markdown ul a {
-  --ifm-link-decoration: underline;
+a:any-link {
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, currentColor 65%, transparent);
+  text-underline-offset: 0.18em;
+  text-decoration-skip-ink: auto;
 }
 
-.markdown p a:hover, .markdown ul a:hover {
-  text-decoration: none;
+a:any-link:hover,
+a:any-link:focus-visible {
+  text-decoration-thickness: 1px;
+  text-decoration-color: currentColor;
+}
+
+p a:not(.button),
+.markdown li a,
+.markdown td a,
+.markdown dd a {
+  --ifm-link-decoration: underline;
 }
 
 .markdown a.button {
   text-decoration: none;
 }
 
-/* external links are marked with dashed underlines.
-   we can spot them by the target="_blank" attribute that docusaurus adds. */
 article a[target="_blank"]:not(.button) {
-  text-decoration: dashed underline;
-}
-
-article a[target="_blank"]:not(.button):hover {
-  text-decoration: none;
+  text-decoration-line: underline;
 }
 
 /* fixing a bug in docosaurus: inline TOCs should be shown in print mode */

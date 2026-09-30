@@ -1,16 +1,25 @@
 ---
+description: Install Caesar, verify a first example, and learn HeyVL.
 sidebar_position: 2
+hide_table_of_contents: true
 ---
 
 # Getting Started
 
-Get started with Caesar & HeyVL by:
- 1. [Installing Caesar](./installation.mdx) on your computer,
- 2. reading the [guide to HeyVL](./heyvl-guide.md), and then
- 3. browsing through our [collection of HeyVL examples](./zoo-of-heyvl-examples.md).
+Start with a short example, then use the guide to learn how to express your own verification problems in HeyVL.
 
-```mdx-code-block
-import DocCardList from '@theme/DocCardList';
+1. ### [Install Caesar](./installation.mdx)
 
-<DocCardList />
-```
+   Use the VS Code extension or the command-line verifier.
+
+2. ### [Verify the First Example](./first-proof.mdx)
+
+   A short walkthrough of the geometric loop and its expected runtime bound.
+
+3. ### [Read the Guide to HeyVL](./heyvl-guide.md)
+
+   Specifications, invariants, types, functions, and verification statements in detail.
+
+4. ### [Explore More Examples](./zoo-of-heyvl-examples.md)
+
+   Worked examples of probability bounds, termination proofs, and model checking.

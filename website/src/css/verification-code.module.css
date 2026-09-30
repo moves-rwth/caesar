@@ -1,0 +1,47 @@
+.code {
+  --verification-keyword: #086f73;
+  --verification-builtin: #365fb8;
+  --verification-boolean: #a74343;
+  --verification-punctuation: #8840ad;
+}
+
+:global([data-theme='dark']) .code {
+  --verification-keyword: #c2ffdf;
+  --verification-builtin: #82aaff;
+  --verification-boolean: #ff8096;
+  --verification-punctuation: #c792ea;
+}
+
+/* Override Prism's inline colors, including on highlighted lines. */
+.code :global(.token.keyword),
+.code :global(.token.operator),
+.code :global(.token.annotation) {
+  color: var(--verification-keyword) !important;
+}
+
+.code :global(.token.builtin) {
+  color: var(--verification-builtin) !important;
+}
+
+.code :global(.token.boolean) {
+  color: var(--verification-boolean) !important;
+}
+
+.code :global(.token.punctuation) {
+  color: var(--verification-punctuation) !important;
+}
+
+.code [class*='codeLineNumber']::before {
+  opacity: 0.8;
+}
+
+.code :global(.theme-code-block:hover) button,
+.code :global(.theme-code-block:focus-within) button,
+.code:global(.theme-code-block:hover) button,
+.code:global(.theme-code-block:focus-within) button {
+  opacity: 1;
+}
+
+.code [class*='copyButtonSuccessIcon'] {
+  color: var(--ifm-color-primary);
+}

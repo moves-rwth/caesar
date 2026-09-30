@@ -1,55 +1,244 @@
-/**
- * CSS files with the .module.css suffix will be treated as CSS modules
- * and scoped locally.
- */
-
-.heroBanner {
-  padding: 4rem 0;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
+.homepage {
+  --landing-border: #cbdcd5;
+  --landing-control-border: #688678;
+  --landing-muted: #4d625a;
+  --landing-tint: var(--caesar-surface-tint);
+  --landing-paper: #fff;
+  --landing-language: #91452c;
+  --landing-logic: #245b83;
 }
 
-.heroBannerRow {
+:global([data-theme='dark']) .homepage {
+  --landing-border: #354c43;
+  --landing-control-border: #6c8e7d;
+  --landing-muted: #b5c8be;
+  --landing-paper: #202a25;
+  --landing-language: #efa183;
+  --landing-logic: #91c8ed;
+}
+
+.homepage a:focus-visible,
+.homepage button:focus-visible {
+  outline: 3px solid var(--ifm-color-primary);
+  outline-offset: 4px;
+}
+
+.hero {
+  padding: 4rem 0 3.5rem;
+  background: var(--landing-tint);
+  border-bottom: 1px solid var(--landing-border);
+}
+
+.heroGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 3.5rem;
   align-items: center;
-  grid-row-gap: 2em;
 }
 
-.heroTitle {
-  display: flex;
-  justify-content: center;
-}
-
-.heroLogo {
-  height: 1.6em;
-  padding-left: 0.3em;
-  padding-right: 0.3em;
-  vertical-align: middle;
-}
-
-.quickButtons {
+.brand {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 1.2rem;
+  color: var(--ifm-color-primary);
+  font-family: var(--ifm-heading-font-family);
+  font-size: clamp(2.25rem, 3vw, 2.75rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.hero h1 {
+  max-width: 22ch;
+  margin-bottom: 1.5rem;
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.16;
+  text-wrap: balance;
+}
+
+.introduction {
+  max-width: 65ch;
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+.introduction a {
+  text-decoration-line: underline;
+}
+
+.actions {
+  display: flex;
   flex-wrap: wrap;
-  gap: 1em;
-} 
+  gap: 0.75rem;
+  margin: 1.75rem 0 1rem;
+}
 
-@media only screen and (min-width: 600px) {
-  .quickButtons * {
-    --ifm-button-size-multiplier: 1.32;
+.capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.1rem;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.capabilities li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.capabilities li::before {
+  content: '·';
+  color: var(--landing-language);
+  font-weight: bold;
+}
+
+.capabilities a {
+  color: var(--landing-muted);
+  text-decoration-line: underline;
+}
+
+.capabilities a:hover {
+  color: var(--ifm-color-primary);
+}
+
+.release {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+}
+
+.releaseDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.program {
+  position: relative;
+  padding: 1.5rem;
+  background: var(--landing-paper);
+  border: 1px solid var(--landing-border);
+  border-top: 3px solid var(--ifm-color-primary);
+  border-radius: 3px;
+  box-shadow: 8px 8px 0 var(--landing-tint), 9px 9px 0 var(--landing-border);
+  min-width: 0;
+}
+
+.program h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.program > p {
+  margin-bottom: 1.25rem;
+  color: var(--landing-muted);
+  font-size: 0.9rem;
+}
+
+.program pre {
+  font-size: 0.85rem;
+  line-height: 1.8;
+}
+
+.program > div:has(pre) {
+  box-shadow: none;
+  border: 1px solid var(--landing-border);
+  margin-bottom: 0;
+}
+
+.proofStep {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 0;
+  color: var(--landing-muted);
+  font-size: 0.8rem;
+}
+
+.proofStep > span:first-child {
+  color: var(--ifm-color-primary);
+  font-size: 1.4rem;
+}
+
+.guarantee {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 1rem;
+  background: var(--landing-tint);
+  border-left: 2px solid var(--ifm-color-primary);
+}
+
+.guarantee strong {
+  display: block;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.guarantee .guaranteeFormula {
+  font-family: 'Cambria Math', 'STIX Two Math', Georgia, serif;
+  font-size: 1.45rem;
+  font-weight: 400;
+}
+
+.guaranteeDescription {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.guarantee a {
+  display: inline-block;
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.check {
+  color: var(--ifm-color-primary);
+  font-weight: bold;
+}
+
+@media (min-width: 997px) {
+  .heroGrid {
+    align-items: start;
   }
 }
 
-.heroImageWrapper {
-  display: grid;
+@media (max-width: 996px) {
+  .heroGrid {
+    gap: 2rem;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+  .program {
+    padding: 1.25rem;
+  }
 }
 
-.heroImageWrapper a {
-  justify-self: center;
-  align-self: center;
-  border-radius: 5px;
-  padding: 0.5em;
-  width: 100%;
-  max-width: 450px;
+@media (max-width: 760px) {
+  .hero {
+    padding: 2.25rem 0;
+  }
+  .heroGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2rem;
+  }
+  .hero h1 {
+    max-width: 25ch;
+  }
+  .program {
+    margin-right: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :global(html):has(.homepage) {
+    scroll-behavior: smooth;
+  }
 }

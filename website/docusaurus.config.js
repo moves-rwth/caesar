@@ -34,6 +34,7 @@ const config = {
     mermaid: true,
   },
   themes: ['@docusaurus/theme-mermaid'],
+  plugins: [require.resolve('./plugins/homepage-metadata')],
 
   presets: [
     [
@@ -117,7 +118,7 @@ const config = {
       tagName: 'meta',
       attributes: {
         name: 'theme-color',
-        content: '#2e8555',
+        content: '#146c59',
       },
     },
   ],

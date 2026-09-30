@@ -1,57 +1,42 @@
 ---
-description: You can install Caesar locally or build a Docker image.
+description: Install the VS Code extension or use Caesar from the command line.
 sidebar_position: 1
 ---
 
 # Installing Caesar
 
-Caesar can be used through our VSCode extension and as a command-line application.
-The required Caesar binary can be downloaded automatically by the VSCode extension.
-You can also [download binaries manually](#download-binaries), [pull a Docker image](#download-docker), or [build locally from source](#build-source).
+The VS Code extension installs Caesar and lets you verify HeyVL files in the editor.
+For command-line use, [download a binary](#download-binaries), [use Docker](#download-docker), or [build from source](#build-source).
 
 ```mdx-code-block
-import CodeBlock from '@theme/CodeBlock';
 import Link from '@docusaurus/Link';
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+import styles from './installation.module.css';
 ```
 
-## Option A: Download Caesar Verifier for VSCode (Recommended)
+## Option A: VS Code Extension (Recommended) {#option-a-download-caesar-verifier-for-vscode-recommended}
 
-<Link to="https://marketplace.visualstudio.com/items?itemName=rwth-moves.caesar">
-  <img src="/img/vc-demo.png" style={{"float": "right", "maxWidth": "350px", "marginLeft": "2em"}} className="item shadow--tl" />
-</Link>
+<a href="/img/vc-demo.png" className={styles.extensionScreenshot}>
+  <img src="/img/vc-demo.png" alt="Caesar in VS Code, showing a verified geometric loop and inline verification conditions." width="1214" height="972" />
+</a>
 
-Our *Caesar Verifier for VSCode* extension is the recommended way to install Caesar.
-The extension can automatically download and update the pre-built releases of Caesar.
+<p><Link className="button button--primary" to="https://marketplace.visualstudio.com/items?itemName=rwth-moves.caesar">Install Caesar for VS Code</Link></p>
 
-The extension is available in the VSCode and VSCodium extension marketplaces and can be installed by searching for *Caesar Verifier*.
+1. Install *Caesar Verifier* from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=rwth-moves.caesar) or, for [VSCodium](https://vscodium.com/), the [Open VSX Registry](https://open-vsx.org/extension/rwth-moves/caesar).
+2. Follow the extension's getting-started page to download the Caesar binary.
+   You can reopen it from the command palette with **Caesar: Show Getting Started**.
+3. Open the HeyVL file from [First Example: Expected Runtime](./first-proof.mdx) and save it to run verification.
 
-<Link class="button button--primary" to="https://marketplace.visualstudio.com/items?itemName=rwth-moves.caesar">Go to Caesar Verifier on VSCode Marketplace</Link>
+The extension shows verification results next to the code, reports diagnostics, and explains verification conditions inline.
+It also provides syntax highlighting, snippets, and automatic updates of Caesar.
+See the [extension documentation](../caesar/vscode-and-lsp.md) for its commands and settings.
 
-<br /><br />
+<div style={{clear: 'both'}} />
 
-**Features:**
- * Syntax highlighting and language configuration for HeyVL.
- * Snippets for HeyVL.
- * Verify HeyVL files on file save or on command.
- * Verification errors and successes are shown in the gutter via icons.
- * Diagnostics such as errors or warnings are shown in the code and in the "Problems" menu in VSCode.
- * Inline explanations of computed verification conditions.
- * Automatic installation and updating of Caesar.
+The following installation methods are alternatives for using Caesar from a terminal.
 
-**Installation:**
-After installing the extension in VSCode, a getting started page will open from where you can install the Caesar binaries (open manually with `Caesar: Open Getting Started` command).
-
-The extension is also [published on the Open VSX Registry](https://open-vsx.org/extension/rwth-moves/caesar) if you are using [VSCodium](https://vscodium.com/).
-
-<div style={{"clear": "both"}} />
-
-<div style={{ paddingTop: "3em" }} />
-
-## Options B: Download Pre-Built Releases
-
-If you do not want to use the automatic installation from our VSCode extension, you can download Caesar manually.
+## Option B: Download Pre-Built Releases {#options-b-download-pre-built-releases}
 
 ### Option B.1: Pre-Built Binary {#download-binaries}
 
@@ -59,10 +44,13 @@ If you do not want to use the automatic installation from our VSCode extension, 
 
 2. Extract the `caesar` binary from the downloaded archive.
 
-3. <div>
+3. Add its directory to your `PATH` to run `caesar` from any folder.
+   Alternatively, use `./caesar` from the extracted directory (`.\caesar.exe` in PowerShell).
+
+4. <div>
     <small>
     <p style={{marginBottom: "0"}}>
-      On MacOS, you may have to <Link to="https://support.apple.com/guide/mac-help/mh40616/mac">release the binary from quarantine</Link> to allow execution.
+      On macOS, you may have to <Link to="https://support.apple.com/guide/mac-help/mh40616/mac">release the binary from quarantine</Link> to allow execution.
     </p>
 
     ```bash
@@ -73,7 +61,7 @@ If you do not want to use the automatic installation from our VSCode extension, 
     </small>
     </div>
 
-<div style={{ paddingTop: "1em" }} />
+Continue with [First Example: Expected Runtime](./first-proof.mdx) to verify a program with `caesar verify`.
 
 ### Option B.2: Docker Image {#download-docker}
 
@@ -85,15 +73,15 @@ docker pull ghcr.io/moves-rwth/caesar:latest
 
 You can use this Docker image just like the `caesar` binary.
 To access files from your system you need to mount them as volumes.
-For example, if you want to verify a program in `./programs/example.heyvl`, the following command mounts the `./programs/` directory as `/root/caesar/programs/` inside the container and uses `caesar` to verify `example.heyvl`.
+For the [first example](./first-proof.mdx), save `geometric-runtime.heyvl` in a directory named `programs`, then run:
 
 ```bash
-docker run -it -v $PWD/programs:/root/caesar/programs/ ghcr.io/moves-rwth/caesar:latest /root/caesar/programs/example.heyvl
+docker run --rm -v "$PWD/programs:/programs" ghcr.io/moves-rwth/caesar:latest verify /programs/geometric-runtime.heyvl
 ```
 
-<div style={{ paddingTop: "3em" }} />
+This mounts the local `programs` directory at `/programs` inside the container.
 
-## Options C: Build From Source {#build-source}
+## Option C: Build From Source {#build-source}
 
 ### Option C.1: Compile Binary
 
@@ -103,7 +91,7 @@ Compiling Caesar requires a few dependencies.
 You can either
 1. install them manually (see below) or
 2. use the provided [DevContainer](https://code.visualstudio.com/docs/devcontainers/containers) configuration.
-  The DevContainer configuration is available in the `.devcontainer` folder and can be used with e.g. the DevContainer VSCode extension by running the "Dev Containers: Open Folder in Container..." command".
+  The configuration is in the `.devcontainer` folder and can be opened in VS Code with the **Dev Containers: Open Folder in Container...** command.
 
 **Rust:** To install [Rust](https://www.rust-lang.org/), we recommend [installation via rustup](https://rustup.rs/).
 You might need to restart your terminal after installing Rust.
@@ -160,17 +148,13 @@ You might need to restart your terminal after installing Rust.
   Because this will compile a large number of dependencies, this might take a couple of minutes (especially Z3 takes some time).
   Using `cargo install` makes `caesar` available on the command-line.
 
-Then, you can run an example:
+From the repository root, verify the [first example](./first-proof.mdx):
+
 ```bash
-caesar verify tests/zeroconf.heyvl
-```
-And this will print:
-```
-tests/zeroconf.heyvl::arp: Verified.
-tests/zeroconf.heyvl::zeroconf: Verified.
+caesar verify website/static/examples/geometric-runtime.heyvl
 ```
 
-<div style={{ paddingTop: "1em" }} />
+Caesar reports that `geo_expected_runtime` is verified.
 
 ### Option C.2: Build Docker Image
 
@@ -198,8 +182,10 @@ This does not require installing dependencies and will build and package the `ca
 
 With the Docker image `caesar` built, you can use it just like the `caesar` binary.
 To access files from your system you need to mount them as volumes.
-For example, if you want to verify a program in `./programs/example.heyvl`, the following command mounts the `./programs/` directory as `/root/caesar/programs/` inside the container and uses `caesar` to verify `example.heyvl`.
+From the repository root, verify the same example by mounting its directory into the container:
 
 ```bash
-docker run -it -v $PWD/programs:/root/caesar/programs/ caesar /root/caesar/programs/example.heyvl
+docker run --rm -v "$PWD/website/static/examples:/examples" caesar verify /examples/geometric-runtime.heyvl
 ```
+
+Continue with [First Example: Expected Runtime](./first-proof.mdx) for an explanation of the program, its annotations, and the verification result.

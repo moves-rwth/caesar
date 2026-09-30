@@ -1,0 +1,21 @@
+.extensionScreenshot {
+  float: right;
+  width: 45%;
+  max-width: 350px;
+  margin: 0 0 1rem 2rem;
+}
+
+.extensionScreenshot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+@media (max-width: 600px) {
+  .extensionScreenshot {
+    float: none;
+    display: block;
+    width: 100%;
+    margin: 1rem auto;
+  }
+}

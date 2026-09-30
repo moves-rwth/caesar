@@ -1,0 +1,48 @@
+---
+description: Verify an upper bound on the expected number of iterations of a geometric loop.
+sidebar_position: 1.5
+---
+
+# First Example: Expected Runtime
+
+This short walkthrough verifies that a geometric loop takes at most 2 iterations in expectation.
+The [Guide to HeyVL](./heyvl-guide.md) explains the language and quantitative specifications in more detail.
+
+import CodeBlock from '@theme/CodeBlock';
+import geometricRuntime from '@site/static/examples/geometric-runtime.heyvl?raw';
+import codeStyles from '@site/src/css/verification-code.module.css';
+
+## Run the Example
+
+[Install Caesar](./installation.mdx), then <a href="/examples/geometric-runtime.heyvl" download>download geometric-runtime.heyvl</a>:
+
+<CodeBlock className={codeStyles.code} language="heyvl" title="geometric-runtime.heyvl" showLineNumbers>{geometricRuntime}</CodeBlock>
+
+Open the file in VS Code with the Caesar extension installed and save it to run verification.
+If you installed the command-line verifier separately and added it to your `PATH`, run this command in the directory containing the file:
+
+```bash
+caesar verify geometric-runtime.heyvl
+```
+
+Caesar reports that `geo_expected_runtime` is verified.
+
+## The Bound and Its Proof
+
+The loop repeatedly flips a fair coin until `done` becomes true.
+Each `reward 1` counts one iteration; no other statement contributes to the cost.
+
+The [`@ert` annotation](../proof-rules/approximations.md#calculus-annotations) selects the expected runtime calculus.
+The [`coproc` declaration](../heyvl/procs.md) checks an upper bound: `pre 2` bounds the expected cost by 2, and `post 0` adds no cost after termination.
+
+We supply `[!done] * 2` as a loop invariant bounding the remaining expected cost.
+The [Iverson bracket](../heyvl/expressions.md) `[!done]` is 1 when `done` is false and 0 otherwise, giving a bound of 2 before success and 0 afterward.
+One iteration costs 1, then either terminates or leaves an expected cost bounded by 2, each with probability ½:
+
+$$
+1 + \tfrac{1}{2} \cdot 0 + \tfrac{1}{2} \cdot 2 = 2.
+$$
+
+Caesar checks that the loop body preserves this bound and that it agrees with the precondition before the loop and the postcondition on exit.
+The [`@invariant` proof rule](../proof-rules/induction.md) establishes the bound for infinitely many possible execution paths.
+Individual executions can exceed two iterations; the bound concerns their probability-weighted average.

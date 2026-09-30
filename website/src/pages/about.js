@@ -29,7 +29,7 @@ export default function About() {
         </p>
 
         <p>
-          Caesar is an open-source project from <Link to="https://moves.rwth-aachen.de/">RWTH Aachen University (MOVES group)</Link>, <Link to="https://quave.cs.uni-saarland.de/">Saarland University (QUAVE group)</Link>, <Link to="https://www.compute.dtu.dk/english/research/research-sections/software-systems-engineering">Denmark Technical University (SSE section)</Link>, and <Link to="http://pplv.cs.ucl.ac.uk/welcome/">University College London (PPLV group)</Link>.
+          Caesar is an open-source project from <Link to="https://moves.rwth-aachen.de/">RWTH Aachen University (MOVES group)</Link>, <Link to="https://quave.cs.uni-saarland.de/">Saarland University (QUAVE group)</Link>, <Link to="https://www.compute.dtu.dk/english/research/research-sections/software-systems-engineering">Technical University of Denmark (SSE section)</Link>, <Link to="http://pplv.cs.ucl.ac.uk/welcome/">University College London (PPLV group)</Link>, and <Link to="https://uol.de/en/computingscience/groups/theorie-korrekter-systeme">University of Oldenburg (Theory of Correct Systems group)</Link>.
           The <Link to="https://www.github.com/moves-rwth/caesar">source code is available on GitHub</Link>.
           The name "Caesar" comes from "veni, vidi, vc", where we let "vc" stand for "verification conditions".
         </p>
