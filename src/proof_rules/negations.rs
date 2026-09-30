@@ -58,7 +58,7 @@ impl DirectionTracker {
                 (Direction::Down, Direction::Up) => self.0 = Direction::Down,
                 // If a `conegate` statement is followed by under-approximation,
                 // then the previous direction is over-approximation.
-                (Direction::Up, Direction::Up) => self.0 = Direction::Down,
+                (Direction::Up, Direction::Down) => self.0 = Direction::Up,
                 // The other combinations are not allowed.
                 _ => {
                     return Err(DirectionError {
