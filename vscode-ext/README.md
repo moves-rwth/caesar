@@ -22,6 +22,7 @@ The command palette can be opened with Shift + Command + P (Mac) / Ctrl + Shift 
 
  * Syntax highlighting and language configuration for HeyVL.
  * Snippets for HeyVL.
+ * Reference hovers for HeyVL language tokens, available without the server.
  * Verify HeyVL files on file save or on command.
  * Verification errors and successes are shown in the gutter via icons.
  * Diagnostics such as errors or warnings are shown in the code and in the "Problems" menu in VSCode.

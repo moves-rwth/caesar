@@ -1,4 +1,6 @@
 const esbuild = require("esbuild");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const production = process.argv.includes("--production");
 const watch = process.argv.includes("--watch");
@@ -16,6 +18,8 @@ const buildOptions = {
 };
 
 async function run() {
+    fs.mkdirSync(path.join(__dirname, "dist"), { recursive: true });
+    fs.copyFileSync(require.resolve("vscode-oniguruma/release/onig.wasm"), path.join(__dirname, "dist/onig.wasm"));
     if (watch) {
         const context = await esbuild.context(buildOptions);
         await context.watch();

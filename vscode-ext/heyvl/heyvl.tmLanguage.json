@@ -3,10 +3,16 @@
   "name": "HeyVL",
   "patterns": [
     {
-      "include": "#keywords"
+      "include": "#comments"
     },
     {
-      "include": "#comments"
+      "include": "#strings"
+    },
+    {
+      "include": "#annotations"
+    },
+    {
+      "include": "#keywords"
     },
     {
       "include": "#type"
@@ -15,7 +21,7 @@
       "include": "#constant"
     },
     {
-      "include": "#annotations"
+      "include": "#identifiers"
     }
   ],
   "repository": {
@@ -23,7 +29,12 @@
       "patterns": [
         {
           "name": "keyword.control.heyvl",
-          "match": "\\b(var|(co)?assume|(co)?assert|(co)?negate|(co)?validate|if( (\\\\cap|\\\\cup))?|else|(co)?proc|pre|post|(co)?compare|tick|reward|weigh|while|(co)?havoc|domain|func|axiom)\\b"
+          "match": "if(?![_a-zA-Z0-9'])[ \\t]*(?:\\+|⊕|⊓|⊔|\\\\(?:oplus|cap|cup)(?![_a-zA-Z0-9']))",
+          "comment": "Keep the choice symbol with if so its hover explains the whole construct, including spellings without a space."
+        },
+        {
+          "name": "keyword.control.heyvl",
+          "match": "(?:var|(?:co)?assume|(?:co)?assert|(?:co)?negate|(?:co)?validate|if|else|(?:co)?proc|pre|post|(?:co)?compare|tick|reward|weigh|while|(?:co)?havoc|domain|func|axiom)(?![_a-zA-Z0-9'])"
         },
         {
           "name": "keyword.control.heyvl",
@@ -31,51 +42,33 @@
         },
         {
           "name": "keyword.operator.heyvl",
-          "match": "\\b(forall|exists|inf|sup|ite|let)\\b"
+          "match": "(?:forall|exists|inf|sup|ite|let)(?![_a-zA-Z0-9'])"
         },
         {
           "name": "keyword.operator.heyvl",
-          "match": "!|\\+|\\*|-|/(?![/\\*])|==>|==|<=|<|>=|&&|\\|\\|"
+          "match": "![ \\t]*\\?|==>|<==|!=|==|<=|>=|&&|\\|\\||[!?~+*%<>=→←↘↖⊓⊔⊕]|-|/(?![/\\*])|\\[(?!\\])|\\]"
         },
         {
           "name": "keyword.operator.heyvl",
-          "match": "(\\\\cup|\\\\cap)\\b"
+          "match": "\\\\(?:cup|cap|oplus)(?![_a-zA-Z0-9'])"
         },
         {
           "name": "support.function.builtin",
-          "match": "\\bflip\\b"
+          "match": "flip(?![_a-zA-Z0-9'])"
         }
-      ]
+      ],
+      "comment": "Guard keyword suffixes, including apostrophes, because keyword matches take priority over the identifier fallback at the same position."
     },
     "type": {
       "patterns": [
         {
           "name": "entity.name.type",
-          "match": "(\\[\\])+[a-zA-Z]+\\b"
+          "match": "\\[\\]",
+          "comment": "Tokenize each list prefix separately from the element type so []UInt and [condition] have distinct hover targets."
         },
         {
           "name": "entity.name.type",
-          "match": "\\b(Bool|Int|UInt|Real|UReal|EUReal)\\b"
-        }
-      ]
-    },
-    "paren-expr": {
-      "begin": "\\(",
-      "end": "\\)",
-      "beginCaptures": {
-        "0": {
-          "name": "punctuation.paren.open"
-        }
-      },
-      "endCaptures": {
-        "0": {
-          "name": "punctuation.paren.close"
-        }
-      },
-      "name": "expression.group",
-      "patterns": [
-        {
-          "include": "#expr"
+          "match": "(?:Bool|Int|UInt|Uint|Real|UReal|EUReal|Realplus)(?![_a-zA-Z0-9'])"
         }
       ]
     },
@@ -86,17 +79,32 @@
           "name": "comment.single.heyvl"
         },
         {
-          "begin": "/\\*",
-          "end": "\\*/",
-          "name": "comment.block.heyvl"
+          "include": "#block-comment"
         }
       ]
+    },
+    "block-comment": {
+      "begin": "/\\*",
+      "end": "\\*/",
+      "name": "comment.block.heyvl",
+      "patterns": [
+        {
+          "include": "#block-comment"
+        }
+      ],
+      "comment": "HeyVL permits nested block comments; retain their scopes until the matching outer terminator."
+    },
+    "strings": {
+      "name": "string.heyvl",
+      "begin": "\"",
+      "end": "\""
     },
     "constant": {
       "patterns": [
         {
           "name": "constant.numeric.heyvl",
-          "match": "\\b[0-9]+/[0-9]+"
+          "match": "\\b[0-9]+/[0-9]+(?![0-9.])",
+          "comment": "Highlight integer fractions as one number without consuming part of a decimal denominator."
         },
         {
           "name": "constant.numeric.heyvl",
@@ -104,16 +112,12 @@
         },
         {
           "name": "constant.numeric.heyvl",
-          "match": "∞|\\\\infty\\b"
+          "match": "∞|\\\\infty(?![_a-zA-Z0-9'])"
         },
         {
           "name": "constant.language.heyvl",
-          "match": "\\b(true|false)\\b"
-        },
-        {
-          "name": "string.heyvl",
-          "begin": "\"",
-          "end": "\""
+          "match": "(?:true|false)(?![_a-zA-Z0-9'])",
+          "comment": "Keep true' and false' as identifiers by guarding apostrophes as well as the usual word characters."
         }
       ]
     },
@@ -121,10 +125,20 @@
       "patterns": [
         {
           "name": "entity.name.tag",
-          "match": "@\\w+\\b"
+          "match": "@[ \\t]*[_a-zA-Z][_a-zA-Z0-9']*"
         }
       ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "meta.identifier.heyvl",
+          "match": "\\\\?[_a-zA-Z][_a-zA-Z0-9']*"
+        }
+      ],
+      "comment": "Consume unknown identifiers and backslash aliases as complete tokens without keyword coloring to prevent matching embedded keywords."
     }
   },
-  "scopeName": "source.heyvl"
+  "scopeName": "source.heyvl",
+  "comment": "Token boundaries shared by syntax highlighting and offline reference hovers must stay aligned with src/front/parser/grammar.lalrpop."
 }

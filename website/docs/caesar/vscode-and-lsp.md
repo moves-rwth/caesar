@@ -13,6 +13,7 @@ You can also find it in the _Extensions_ menu in VSCode by the name _Caesar Veri
 
  * Syntax highlighting and language configuration for HeyVL.
  * Snippets for HeyVL.
+ * Reference hovers for HeyVL keywords, operators, types, and supported proof annotations.
  * Verify HeyVL files on file save or on command.
  * Verification errors and successes are shown in the gutter via icons.
  * Diagnostics such as errors or warnings are shown in the code and in the "Problems" menu in VSCode.
