@@ -3,7 +3,7 @@
 src/**
 .gitignore
 .yarnrc
-vsc-extension-quickstart.md
+DEVELOPMENT.md
 eslint.config.mjs
 esbuild.js
 *.vsix

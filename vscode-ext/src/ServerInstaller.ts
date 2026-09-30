@@ -2,9 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as  tar from 'tar';
 import { ExtensionContext, Progress, ProgressLocation, Uri, commands, env, window } from 'vscode';
-import { Octokit } from '@octokit/rest';
 import AdmZip from "adm-zip";
-import got from 'got';
 import { InstallerConfig } from './Config';
 import { Verifier } from './Verifier';
 import * as semver from 'semver';
@@ -165,6 +163,7 @@ export class ServerInstaller {
 
         await fs.mkdir(this.installRoot, { recursive: true });
         // TODO: this will load the file first completely into memory
+        const { default: got } = await import('got');
         const response = await got.get(release.url, {
             headers: {
                 // must be set to download the binary, otherwise we get release JSON info
@@ -221,6 +220,7 @@ export class ServerInstaller {
     async getLatestReleaseAsset(prerelease: boolean, assetNameIncludes: string): Promise<ReleaseAsset | null> {
         const currentSemver = getExtensionVersion(this.context);
 
+        const { Octokit } = await import('@octokit/rest');
         const octokit = new Octokit();
 
         try {

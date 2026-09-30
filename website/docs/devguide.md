@@ -46,15 +46,7 @@ Then run `yarn start` to start a local development server and open the site in a
 ## VSCode Extension
 
 [Caesar's VSCode extension](./caesar/vscode-and-lsp.md) lives in the [`vscode-ext/` directory](https://github.com/moves-rwth/caesar/tree/main/vscode-ext).
-The [`vscode-ext/vsc-extension-quickstart.md`](https://github.com/moves-rwth/caesar/blob/main/vscode-ext/vsc-extension-quickstart.md) document explains the basics of how to develop and debug the binary.
-
-Here, we use `yarn` for package management.
- * `yarn install` to install the necessary dependencies.
- * `yarn compile` to compile the extension.
- * `yarn watch` to start a TypeScript compiler server that recompiles when changes are made.
- * `yarn lint` to run the linter.
- * `yarn run verify` to run both compilation and linting.
- * `yarn vscode:prepublish` runs the same checks used before packaging the extension.
+See [`vscode-ext/DEVELOPMENT.md`](https://github.com/moves-rwth/caesar/blob/main/vscode-ext/DEVELOPMENT.md) for setup, debugging, tests, and packaging.
 
 ## pgcl2heyvl
 
