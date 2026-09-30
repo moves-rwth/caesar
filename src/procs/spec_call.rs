@@ -93,6 +93,8 @@ impl<'tcx> VisitorMut for SpecCall<'tcx> {
     }
 
     fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
+        // Check calls before lowering assignments or variable initializers.
+        walk_stmt(self, s)?;
         match &mut s.node {
             StmtKind::Var(decl_ref) => {
                 let decl = decl_ref.borrow();
@@ -113,8 +115,6 @@ impl<'tcx> VisitorMut for SpecCall<'tcx> {
                 }
             }
             StmtKind::Assign(lhses, rhs) => {
-                // Visit the right-hand side first to ensure that the procedure call is valid.
-                self.visit_expr(rhs)?;
                 if let Some(block) = self.encode_assign(s.span, lhses, rhs) {
                     s.span = block.span;
                     s.node = StmtKind::Seq(block.node);
@@ -123,7 +123,7 @@ impl<'tcx> VisitorMut for SpecCall<'tcx> {
             }
             _ => {}
         };
-        walk_stmt(self, s)
+        Ok(())
     }
 }
 
