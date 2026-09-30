@@ -30,7 +30,7 @@ impl VisitorMut for ConstFold {
             ExprKind::Binary(op, lhs, rhs) => {
                 match op.node {
                     BinOpKind::Add | BinOpKind::Sub => {
-                        if is_zero_lit(lhs) {
+                        if op.node == BinOpKind::Add && is_zero_lit(lhs) {
                             *e = rhs.clone();
                         } else if is_zero_lit(rhs) {
                             *e = lhs.clone();
