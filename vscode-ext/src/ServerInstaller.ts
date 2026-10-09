@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as  tar from 'tar';
+import * as tar from 'tar';
 import { ExtensionContext, Progress, ProgressLocation, Uri, commands, env, window } from 'vscode';
 import AdmZip from "adm-zip";
 import { InstallerConfig } from './Config';
@@ -21,7 +21,7 @@ export class ServerInstaller {
     public constructor(context: ExtensionContext, verifier: Verifier) {
         this.context = context;
         this.verifier = verifier;
-        this.installRoot = path.join(context.globalStoragePath, this.GLOBAL_STORAGE_DIR);
+        this.installRoot = path.join(context.globalStorageUri.fsPath, this.GLOBAL_STORAGE_DIR);
 
         commands.registerCommand('caesar.checkUpdate', async () => {
             try {
@@ -74,7 +74,6 @@ export class ServerInstaller {
         } catch (err) {
             this.verifier.logger.info(`Installer: failed to access server executable at ${binaryPath}.`, err);
             if (!(err instanceof Error)) { throw err; }
-            await this.uninstall(false);
             return null;
         }
     }
@@ -108,7 +107,8 @@ export class ServerInstaller {
         }
 
         const currentVersion: string | undefined = this.context.globalState.get("installedVersion");
-        if (currentVersion === hashRelease(release)) {
+        const isInstalled = (await this.getServerExecutable()) !== null;
+        if (isInstalled && currentVersion === hashRelease(release)) {
             this.verifier.logger.info(`Installer: Current version ${currentVersion} is up to date with ${release.releaseName}.`);
             if (notifyNoNewVersion) {
                 void window.showInformationMessage(`No new version of Caesar available. You're up to date with ${release.releaseName} (${release.date}).`);
@@ -116,7 +116,6 @@ export class ServerInstaller {
             return;
         }
         this.verifier.logger.info(`Installer: Current version ${currentVersion} can be updated to new version ${release.releaseName}.`);
-        const isInstalled = (await this.getServerExecutable()) !== null;
         const message = isInstalled ? `New version of Caesar available: ${release.releaseName} (${release.date})` : `Do you want to install Caesar (${release.releaseName}, ${release.date})?`;
         const button = isInstalled ? "Update" : "Install";
         const selected = await window.showInformationMessage(message, button);
@@ -155,54 +154,64 @@ export class ServerInstaller {
     }
 
     private async installAssetWithProgress(release: ReleaseAsset, progress: Progress<{ increment: number, message?: string }>) {
-        progress.report({ increment: 0, message: "Cleaning up old installation..." });
-        await this.uninstall(false);
-
         this.verifier.logger.info(`Installer: downloading ${release.releaseName} (${release.url})`);
         progress.report({ increment: 25, message: "Downloading..." });
 
-        await fs.mkdir(this.installRoot, { recursive: true });
-        // TODO: this will load the file first completely into memory
-        const { default: got } = await import('got');
-        const response = await got.get(release.url, {
-            headers: {
-                // must be set to download the binary, otherwise we get release JSON info
-                Accept: 'application/octet-stream',
-            },
-        });
+        // Stage outside the installation directory so other windows cannot remove the download.
+        const storageRoot = this.context.globalStorageUri.fsPath;
+        await fs.mkdir(storageRoot, { recursive: true });
+        const stagingRoot = await fs.mkdtemp(path.join(storageRoot, "caesar-install-"));
+        try {
+            const { default: got } = await import('got');
+            const data = await got.get(release.url, {
+                headers: {
+                    // must be set to download the binary, otherwise we get release JSON info
+                    Accept: 'application/octet-stream',
+                },
+            }).buffer();
 
-        const assetPath = path.join(this.installRoot, `asset.${release.extension}`);
-        const data = response.rawBody;
-        await fs.writeFile(assetPath, new Uint8Array(data));
+            const assetPath = path.join(stagingRoot, `asset.${release.extension}`);
+            await fs.writeFile(assetPath, data);
 
-        this.verifier.logger.info(`Installer: downloaded release. extracting ${assetPath}`);
-        progress.report({ increment: 40, message: "Unpacking..." });
+            this.verifier.logger.info(`Installer: downloaded release. extracting ${assetPath}`);
+            progress.report({ increment: 40, message: "Unpacking..." });
 
-        if (release.extension === "zip") {
-            const zip = new AdmZip(assetPath);
-            await new Promise<void>((resolve, reject) =>
-                zip.extractAllToAsync(this.installRoot, true, true, (error) => {
-                    if (error) {
-                        reject(error);
-                    } else {
-                        resolve();
-                    }
-                }
-                ));
-        } else if (release.extension === "tar.gz") {
-            await tar.extract({
-                file: assetPath,
-                cwd: this.installRoot,
-                strip: 1,
-            });
-        } else {
-            throw new Error("unknown ending");
+            if (release.extension === "zip") {
+                const zip = new AdmZip(assetPath);
+                await zip.extractAllToAsync(stagingRoot, true, true);
+            } else if (release.extension === "tar.gz") {
+                await tar.extract({
+                    file: assetPath,
+                    cwd: stagingRoot,
+                    strip: 1,
+                });
+            } else {
+                throw new Error(`Unsupported archive type: ${release.extension}`);
+            }
+
+            const binaryName = getPlatformAssetExecutableName();
+            if (binaryName === null) {
+                throw new Error("No Caesar binary available for this platform");
+            }
+            const stagedBinary = path.join(stagingRoot, binaryName);
+            await fs.access(stagedBinary, fs.constants.X_OK);
+
+            // Keep the old binary until its replacement is ready, then publish it in one rename.
+            await this.verifier.client.stop();
+            await fs.mkdir(this.installRoot, { recursive: true });
+            await fs.rename(stagedBinary, path.join(this.installRoot, binaryName));
+            await this.context.globalState.update("installedVersion", hashRelease(release));
+        } finally {
+            try {
+                await fs.rm(stagingRoot, { recursive: true, force: true, maxRetries: 5 });
+            } catch (err) {
+                this.verifier.logger.error(`Installer: failed to remove temporary directory ${stagingRoot}.`, err);
+            }
         }
 
         this.verifier.logger.info(`Installer: extraction done, starting server.`);
         progress.report({ increment: 25, message: "Starting server..." });
 
-        await this.context.globalState.update("installedVersion", hashRelease(release));
         const success = await this.verifier.client.start(false);
 
         if (success) {
