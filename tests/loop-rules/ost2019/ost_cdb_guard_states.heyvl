@@ -1,0 +1,25 @@
+// RUN: @caesar @file
+
+// Conditional difference boundedness only needs to hold on states satisfying
+// the loop guard. Outside the guard, the invariant equals x, so no constant c
+// could bound its change there. (BiasDir from the EXIST benchmarks.)
+
+proc biasdir(init_x: UInt, init_y: UInt) -> (x: UInt, y: UInt)
+    pre ite(init_x == init_y && init_x <= 1, 1/2, init_x)
+    post x
+{
+    x = init_x
+    y = init_y
+    @ost(
+        /* invariant */ ite(x == y && x <= 1, 1/2, x),
+        /* past_invariant */ ite(x == y && x <= 1, 2, 0),
+        /* cdb */ 1,
+        /* post */ x
+    )
+    while x == y && x <= 1 && y <= 1 {
+        var c1: Bool = flip(1/2)
+        if c1 { x = 1 } else { x = 0 }
+        var c2: Bool = flip(1/2)
+        if c2 { y = 1 } else { y = 0 }
+    }
+}

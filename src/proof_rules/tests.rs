@@ -603,9 +603,13 @@ fn test_ost_transform() {
                 a = init_a
                 b = init_b
                 k = init_k
-                prob_choice = flip(((cast(UReal, 1) / cast(UReal, 2))))
-                if prob_choice { a = false } else { b = (b + 1) }
-                k = (k + 1)
+                if a {
+                    prob_choice = flip(((cast(UReal, 1) / cast(UReal, 2))))
+                    if prob_choice { a = false } else { b = (b + 1) }
+                    k = (k + 1)
+                } else {
+
+                }
             }
             proc optional_stopping_harmonize_I_f_0(a: Bool, b: UInt) -> () {
                 assert ?((! (a) → ((cast(EUReal, b) + [a]) == cast(EUReal, b))))

@@ -145,8 +145,8 @@ impl Encoding for OSTAnnotation {
         let modified_vars =
             ModifiedVariableCollector::from_stmt(inner_stmt).modified_outside_declarations();
 
-        let (loop_guard, loop_body) = if let StmtKind::While(guard, body) = &inner_stmt.node {
-            (guard, body)
+        let loop_guard = if let StmtKind::While(guard, _) = &inner_stmt.node {
+            guard
         } else {
             return Err(AnnotationError::NotOnWhile {
                 span: annotation_span,
@@ -241,9 +241,9 @@ impl Encoding for OSTAnnotation {
         };
         let cond2_proc = generate_proc(annotation_span, cond2_proc_info, base_proc_ident, tcx);
 
-        // Init assigns followed by the loop body
+        // Condition 3: for all s, ([G] * wp[Body](|I - I(s)|))(s) <= c
         let mut cond3_body = init_assigns.clone();
-        cond3_body.extend(loop_body.node.clone());
+        cond3_body.push(encode_iter(&enc_env, inner_stmt, vec![]).unwrap());
 
         // Encode |I(s)-I| as ite(I(s) <= I, I - I(s), I(s) - I)
         let cond3_post = builder.ite(

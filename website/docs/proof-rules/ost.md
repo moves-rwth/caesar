@@ -105,7 +105,7 @@ such that all the following conditions are fulfilled:
 
     </p>
     </details>
-5. `I` is _conditionally difference bounded_ by `c`: the absolute change of `I` by one loop iteration is at most `c`.
+5. `I` is _conditionally difference bounded_ by `c`: from every state that satisfies the loop guard `G`, the expected absolute change of `I` by one loop iteration is at most `c`. States that do not satisfy `G` leave `vars` unchanged, so the condition holds trivially there.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
@@ -117,7 +117,9 @@ such that all the following conditions are fulfilled:
         post ite(I(init_vars) <= I(vars), I(vars) - I(init_vars), I(init_vars) - I(vars)) // |I(vars) - I(init_vars)|
     {
         vars = init_vars // set current state to input values
-        Body
+        if G {
+            Body
+        } else {}
     }
     ```
 
