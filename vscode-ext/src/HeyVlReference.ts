@@ -442,10 +442,10 @@ export const HEYVL_REFERENCE: Readonly<Record<string, ReferenceEntry>> = {
     "@ost": {
         title: "@ost(invariant, past_invariant, cdb, post) — optional stopping",
         description: "Proves that `invariant` is a lower bound on the loop's `wp` using the Optional Stopping Theorem.",
-        details: "- `invariant`: the candidate lower bound, which agrees with `post` on loop exit.\n" +
-            "- `past_invariant`: an invariant bounding the expected number of loop iterations.\n" +
-            "- `cdb`: a bound on the expected absolute change in `invariant` per iteration.\n" +
-            "- `post`: the loop's post-expectation.",
+        details: "- `invariant`: a finite candidate lower bound that does not decrease in expectation during an iteration and is at most `post` on loop exit.\n" +
+            "- `past_invariant`: a finite invariant bounding the expected number of loop iterations.\n" +
+            "- `cdb`: a `UReal` literal bounding the expected absolute change in `invariant` per iteration.\n" +
+            "- `post`: the loop's post-expectation, which may be infinite.",
         documentation: `${docs}proof-rules/ost/#usage`,
     },
     "@past": {
