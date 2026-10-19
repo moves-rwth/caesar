@@ -302,7 +302,7 @@ fn encode_decrease(
         encode_iter(
             enc_env,
             loop_stmt,
-            hey_const(enc_env, inv, Direction::Down, tcx),
+            hey_const(span, inv, Direction::Down, tcx).into(),
         )
         .unwrap(),
     );

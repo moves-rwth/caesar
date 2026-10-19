@@ -20,9 +20,11 @@ Program statements
 
 - [Blocks](#blocks) · [Variables](#variable-declarations)
 - [Assignments and calls](#assignments)
-- [Boolean choices](#boolean-choices) · [Nondeterministic choices](#nondeterministic-choices)
-- [While loops](#while-loops) · [Sampling and weights](#sampling-and-weights)
-- [Rewards](#reward-and-weigh) · [Weights](#weigh)
+- [Boolean choices](#boolean-choices)
+- [Nondeterministic choices](#nondeterministic-choices)
+- [While loops](#while-loops)
+- [Rewards](#reward-and-weigh)
+- [Weights](#weigh)
 
 </div>
 <div>
@@ -124,6 +126,11 @@ Distribution calls must appear directly on the right-hand side of an assignment 
 `flip` accepts symbolic arguments.
 The other distributions require numeric literals.
 
+Arbitrary finite discrete probabilistic choices can be implemented using only fair binary probabilistic choice (`flip(0.5)`) and iteration (`while` loops)[^sampling-with-just-flips].
+You can also use [`weigh`] statements and the additive choice statement (`if +`) to implement any finite discrete distribution, as shown in the [example below](#sampling-with-weights).
+
+[^sampling-with-just-flips]: See [_Correctness by construction for probabilistic programs_ by McIver and Morgan](https://doi.org/10.1007/978-3-030-61362-4_12), Section 4.
+
 <div className={styles.syntax}>
 
 A [procedure call](./procs.md#calling-procedures) assigns its outputs to a list of variables.
@@ -185,7 +192,9 @@ while cont {
 For verification, while loops need [proof-rule annotations](../proof-rules/) such as the [`@invariant(...)` annotation](../proof-rules/induction.md) in the example.
 If a while loop does not have a proof-rule annotation, Caesar cannot verify the program and will show an error.
 
-Proof-rule annotations also determine whether the loop has least or greatest fixpoint semantics.
+Proof-rule annotations also determine which fixpoint semantics to use for the loop.
+This can be least fixpoint, or bounded or unbounded greatest fixpoint.
+The fixpoint semantics determines which reward is collected for executions which do not terminate.
 Use [calculus annotations](../proof-rules/approximations.md#calculus-annotations) on procedures to make this choice explicit.
 
 With the [model-checking translation](../model-checking.md), proof-rule annotations are not necessary.
@@ -226,7 +235,7 @@ The weight `e` must be non-negative.
 For example, `weigh 0.5; reward 2` contributes $1$ with `post 0`, while `reward 2; weigh 0.5` contributes $2$.
 
 Combine `weigh` with additive choice `if +` to weight each branch and sum the results.
-The [example below](#sampling-and-weights) uses this to express a probabilistic choice.
+The [example below](#sampling-with-weights) uses this to express a probabilistic choice.
 
 ### Nondeterministic Choices
 
@@ -281,56 +290,34 @@ $8$, the sum of both rewards.
 
 </dl>
 
-A fair probabilistic choice between these rewards has expectation $4$.
-The [example below](#sampling-and-weights) expresses it with sampling and a Boolean `if`.
 For ASCII spellings, use `\cap` for `⊓`, `\cup` for `⊔`, and `\oplus` for `+`.
 Additive choice also accepts `⊕`.
 
-<details id="sampling-and-weights">
-<summary id="examples">Probabilistic choice, using sampling or weights</summary>
+One can use the additive choice operator and the [`weigh`](#weights) statement to implement any sampling from finite discrete distributions.
+The [example below](#sampling-with-weights) applies this to implement a `x = flip(0.3)` assignment.
 
-The comments show the expected reward from each point onward.
+<details id="sampling-with-weights">
+<summary id="examples">Probabilistic choice implemented with additive choice and weights</summary>
+
+The example below implements a `x = flip(0.3)` assignment using additive choice and weights.
+We just need to weigh the branches of the additive choice according to the desired probabilities.
 
 ```heyvl
-coproc expected_reward() -> ()
-    pre 4
-    post 0
+proc expected_reward() -> (x: Bool)
+    pre 0.3
+    post [x]
 {
-    // 4
-    var b: Bool = flip(0.5)
-    // ite(b, 2, 6)
-    if b {
-        // 2
-        reward 2
+    if + {
+        weigh 0.3
+        x = true
     } else {
-        // 6
-        reward 6
+        weigh 0.7
+        x = false
     }
 }
 ```
 
-This verifies because the expected reward is $\tfrac12\cdot2+\tfrac12\cdot6=4$.
-Replacing `coproc` by `proc` verifies the matching lower bound.
-An upper bound of `3` or a lower bound of `5` fails verification.
-
-Weights and additive choice give the same result:
-
-```heyvl
-// 4
-if + {
-    // 1
-    weigh 0.5
-    // 2
-    reward 2
-} else {
-    // 3
-    weigh 0.5
-    // 6
-    reward 6
-}
-```
-
-Each branch contributes half its value, so the sum is again $4$ with `post 0`.
+This approach can be easily generalized to implement any finite discrete distribution.
 
 </details>
 
@@ -777,10 +764,10 @@ The *remaining game value* is the expected reward still to come, accounting for 
 **Assertions.**
 At `assert e`, the demonic player may stop for reward `e` or continue.
 `coassert e` gives this choice to the angelic player.
-Stopping keeps earlier rewards and replaces future rewards, including `post`.[^assertion-game]
+Stopping keeps earlier rewards and does not collect future rewards, including `post`.[^assertion-game]
 
 **Assumptions.**
-A referee evaluates this remaining game value.
+A referee evaluates the value of the remaining game.
 For `assume e`, it ends play with reward $\infty$ when that value is at least `e`.
 For `coassume e`, it ends play with reward $0$ when the value is at most `e`.
 Otherwise, play continues.

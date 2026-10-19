@@ -220,7 +220,7 @@ fn encode_base_case(
     let iteration = encode_iter(
         enc_env,
         loop_stmt,
-        hey_const(enc_env, terminator, direction, tcx),
+        hey_const(span, terminator, direction, tcx).into(),
     )
     .unwrap();
 
@@ -255,7 +255,7 @@ fn encode_induction_step(
     let iteration = encode_iter(
         enc_env,
         loop_stmt,
-        hey_const(enc_env, invariant, direction, tcx),
+        hey_const(span, invariant, direction, tcx).into(),
     )
     .unwrap();
 

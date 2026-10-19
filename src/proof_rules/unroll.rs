@@ -20,6 +20,7 @@ use crate::{
         tycheck_annotation_call_with_optional_args, AnnotationDecl, AnnotationError, Calculus,
     },
     proof_rules::calculus::{ApproximationKind, FixpointKind},
+    slicing::wrap_with_error_message,
     tyctx::TyCtx,
 };
 
@@ -118,13 +119,12 @@ impl Encoding for UnrollAnnotation {
         let diagnostic =
             terminator_mismatch_diagnostic(self.name(), semantics, explicit_terminator, builder);
 
-        // Extend the loop k times without asserts (unlike k-induction) because bmc flag is set
-        let buf = encode_unroll(
-            &enc_env,
-            inner_stmt,
-            k,
-            hey_const(&enc_env, &terminator, enc_env.direction, tcx),
-        );
+        let error_msg = format!("loop unrolling limit might be reached (k = {k})");
+        let [assert, assume] = hey_const(enc_env.call_span, &terminator, enc_env.direction, tcx);
+        let terminator_stmts = vec![wrap_with_error_message(assert, &error_msg), assume];
+
+        // Extend the loop k times without intermediate assertions.
+        let buf = encode_unroll(&enc_env, inner_stmt, k, terminator_stmts);
 
         Ok(GeneratedEncoding {
             block: Spanned::new(enc_env.stmt_span, buf),

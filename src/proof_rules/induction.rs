@@ -11,8 +11,8 @@ use std::{any::Any, fmt};
 
 use crate::{
     ast::{
-        util::VariableCollector, visit::VisitorMut, Direction, Expr, ExprBuilder, Files, Ident,
-        SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol, TyKind,
+        util::VariableCollector, visit::VisitorMut, Direction, Expr, Files, Ident, SourceFilePath,
+        Span, Spanned, Stmt, Symbol, TyKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -26,7 +26,8 @@ use crate::{
 
 use super::{
     util::{
-        encode_extend, encode_iter, encode_loop_spec, intrinsic_param, lit_u128, one_arg, two_args,
+        encode_extend, encode_iter, encode_loop_spec, hey_const, intrinsic_param, lit_u128,
+        one_arg, two_args,
     },
     Encoding, EncodingEnvironment, GeneratedEncoding,
 };
@@ -263,7 +264,7 @@ fn transform_k_induction(
     let terminator = if k == 1 {
         park_iteration_terminator(annotation_span, invariant, direction, tcx)
     } else {
-        iteration_terminator(annotation_span, invariant, direction, tcx)
+        hey_const(annotation_span, invariant, direction, tcx).into()
     };
 
     // Extend the loop k-1 times with the opposite direction
@@ -307,8 +308,7 @@ fn encode_induction_spec(
     ]
 }
 
-/// For Park induction only: HeyVL statements which always evaluate to `expr`,
-/// used as terminating statements in the loop iteration.
+/// For Park induction only: HeyVL statements which always evaluate to `expr`, used as terminating statements in the loop iteration.
 fn park_iteration_terminator(
     span: Span,
     expr: &Expr,
@@ -320,35 +320,9 @@ fn park_iteration_terminator(
         Direction::Up => "I ≱ 𝚽(I)",
     };
     let error_msg = format!("invariant might not be inductive ({error_condition})");
-    let builder = ExprBuilder::new(span);
-    let extreme_lit = match direction {
-        Direction::Up => builder.top_lit(tcx.spec_ty()),
-        Direction::Down => builder.bot_lit(tcx.spec_ty()),
-    };
+    let [assert, assume] = hey_const(span, expr, direction, tcx);
     vec![
-        wrap_with_error_message(
-            Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
-            &error_msg,
-        ),
-        wrap_with_success_message(
-            Spanned::new(span, StmtKind::Assume(direction, extreme_lit)),
-            "while could be an if statement",
-        ),
-    ]
-}
-
-/// HeyVL statements which always evaluate to `expr`, used as terminating
-/// statements in the loop iteration. This is like
-/// [`park_iteration_terminator`], but without the error messages. It is used
-/// for k-Induction.
-fn iteration_terminator(span: Span, expr: &Expr, direction: Direction, tcx: &TyCtx) -> Vec<Stmt> {
-    let builder = ExprBuilder::new(span);
-    let extreme_lit = match direction {
-        Direction::Up => builder.top_lit(tcx.spec_ty()),
-        Direction::Down => builder.bot_lit(tcx.spec_ty()),
-    };
-    vec![
-        Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
-        Spanned::new(span, StmtKind::Assume(direction, extreme_lit)),
+        wrap_with_error_message(assert, &error_msg),
+        wrap_with_success_message(assume, "while could be an if statement"),
     ]
 }

@@ -282,7 +282,7 @@ impl<'a> OstEncoding<'a> {
             span,
             StmtKind::Tick(builder.cast(TyKind::EUReal, builder.uint(1))),
         )];
-        next_iteration.extend(hey_const(self.env, invariant, Direction::Up, self.tcx));
+        next_iteration.extend(hey_const(span, invariant, Direction::Up, self.tcx));
         generate_proc(
             span,
             ProcInfo {
@@ -367,12 +367,8 @@ impl<'a> OstEncoding<'a> {
                     ProcSpec::Requires(initial_invariant),
                     ProcSpec::Ensures(post.clone()),
                 ],
-                body: self.iteration_body(hey_const(
-                    self.env,
-                    invariant,
-                    Direction::Down,
-                    self.tcx,
-                )),
+                body: self
+                    .iteration_body(hey_const(span, invariant, Direction::Down, self.tcx).into()),
                 direction: Direction::Down,
             },
             self.env.base_proc_ident,

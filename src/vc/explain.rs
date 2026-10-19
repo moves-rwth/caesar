@@ -335,7 +335,7 @@ fn vcgen_unroll(
         enc_env,
         loop_stmt,
         k,
-        hey_const(enc_env, terminator, enc_env.direction, vcgen.tcx),
+        hey_const(enc_env.call_span, terminator, enc_env.direction, vcgen.tcx).into(),
     );
     let unrolled_block = Spanned::new(enc_env.stmt_span, unrolled_stmts);
     temp_vcgen.vcgen_block(&unrolled_block, post.clone())
