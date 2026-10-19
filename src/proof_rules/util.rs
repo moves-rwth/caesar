@@ -168,20 +168,15 @@ pub fn encode_loop_spec(
     ]
 }
 
-/// Constant program which always evaluates to the given expression
-pub fn hey_const(
-    enc_env: &EncodingEnvironment,
-    expr: &Expr,
-    direction: Direction,
-    tcx: &TyCtx,
-) -> Vec<Stmt> {
-    let span = enc_env.call_span;
+/// Constant program which always evaluates to the given expression.
+/// Return `[assert, assume]` so callers can attach diagnostic messages to either statement.
+pub fn hey_const(span: Span, expr: &Expr, direction: Direction, tcx: &TyCtx) -> [Stmt; 2] {
     let builder = ExprBuilder::new(span);
     let extreme_lit = match direction {
         Direction::Up => builder.top_lit(tcx.spec_ty()),
         Direction::Down => builder.bot_lit(tcx.spec_ty()),
     };
-    vec![
+    [
         Spanned::new(span, StmtKind::Assert(direction, expr.clone())),
         Spanned::new(span, StmtKind::Assume(direction, extreme_lit)),
     ]

@@ -223,7 +223,7 @@ impl Encoding for OSTAnnotation {
             annotation_span,
             StmtKind::Tick(builder.cast(TyKind::EUReal, builder.uint(1))),
         )];
-        cond2_next_iter.extend(hey_const(&enc_env, past_inv, Direction::Up, tcx));
+        cond2_next_iter.extend(hey_const(annotation_span, past_inv, Direction::Up, tcx));
         // Condition 2 : \Phi_{0}(past_I) <= past_I, so ert[P](0) <= past_I
         let mut cond2_body = init_assigns.clone();
         cond2_body.push(encode_iter(&enc_env, inner_stmt, cond2_next_iter).unwrap());
@@ -318,7 +318,7 @@ impl Encoding for OSTAnnotation {
             encode_iter(
                 &enc_env,
                 inner_stmt,
-                hey_const(&enc_env, inv, Direction::Up, tcx),
+                hey_const(annotation_span, inv, Direction::Up, tcx).into(),
             )
             .unwrap(),
         ]);
@@ -342,7 +342,7 @@ impl Encoding for OSTAnnotation {
             encode_iter(
                 &enc_env,
                 inner_stmt,
-                hey_const(&enc_env, inv, Direction::Down, tcx),
+                hey_const(annotation_span, inv, Direction::Down, tcx).into(),
             )
             .unwrap(),
         );

@@ -103,6 +103,7 @@ fn test_unroll_transform() {
                 {
                     if (1 <= x) {
                         x = (x - 1)
+                        @error_msg("loop unrolling limit might be reached (k = 1)")
                         assert cast(EUReal, 1)
                         assume cast(EUReal, 0)
                     } else {
