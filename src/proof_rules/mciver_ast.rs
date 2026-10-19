@@ -11,11 +11,10 @@
 use std::{any::Any, fmt};
 
 use ariadne::ReportKind;
-use indexmap::IndexSet;
 
 use crate::{
     ast::{
-        util::{FreeVariableCollector, ModifiedVariableCollector},
+        util::VariableCollector,
         visit::{walk_expr, walk_stmt, VisitorMut},
         BinOpKind, Block, DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprBuilder, ExprKind,
         Files, Ident, Label, ProcSpec, SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol,
@@ -143,10 +142,9 @@ impl Encoding for ASTAnnotation {
             let ExprKind::Var(free_var) = &free_var.kind else {
                 unreachable!("free variable has been resolved");
             };
-            let modified = ModifiedVariableCollector::from_stmt(inner_stmt);
-            let mut free_variables = FreeVariableCollector::new();
+            let modified = VariableCollector::from_stmt(inner_stmt);
             for (name, expr) in [("prob", prob), ("decrease", decrease)] {
-                for variable in free_variables.collect_and_clear(&mut expr.clone()) {
+                for variable in VariableCollector::from_expr(expr).used_variables {
                     if variable != *free_var && modified.modified_variables.contains(&variable) {
                         return Err(AnnotationError::WrongArgument {
                             span: call_span,
@@ -213,41 +211,17 @@ impl Encoding for ASTAnnotation {
             unreachable!("error should have been caught during resolve")
         };
 
-        // Collect modified variables (exclude the variables that are declared in the loop)
-        let visitor = ModifiedVariableCollector::from_stmt(inner_stmt);
-        let modified_vars = visitor.modified_outside_declarations();
-
-        let mut free_variables = FreeVariableCollector::new();
-        free_variables.visit_stmt(&mut inner_stmt.clone()).unwrap();
+        let mut variables = VariableCollector::from_stmt(inner_stmt);
         for expr in [invariant, variant, prob, decrease] {
-            free_variables.visit_expr(&mut expr.clone()).unwrap();
+            variables.add_expr(expr);
         }
-        free_variables.variables.shift_remove(&free_var);
+        variables.declared_variables.insert(free_var);
+        let modified_vars: Vec<Ident> = variables.free_modified().collect();
+        let (mut input_init_vars, init_assigns) =
+            encode_initial_state(tcx, annotation_span, &modified_vars);
 
-        // Get the "init_{}" versions of the variable identifiers and declare them
-        let init_idents = get_init_idents(tcx, annotation_span, &modified_vars);
-
-        // Variables that are used but not modified or declared in the loop (These won't be transformed into an init version)
-        let only_used_idents: Vec<Ident> = (&free_variables.variables
-            - &visitor
-                .declared_variables
-                .union(&visitor.modified_variables)
-                .cloned()
-                .collect::<IndexSet<Ident>>())
-            .into_iter()
-            .collect();
-
-        // init version of variables and only-used variables without "init_"
-        let mut input_init_vars = init_idents.clone();
-        input_init_vars.extend(only_used_idents);
-
-        // Transform the [`Ident`]s into [`Expr`]s for assignments.
-        let init_exprs = init_idents
-            .iter()
-            .map(|ident| ident_to_expr(tcx, annotation_span, *ident))
-            .collect();
-
-        let init_assigns = multiple_assign(annotation_span, modified_vars.clone(), init_exprs);
+        // Pass unchanged variables directly after the init_ inputs.
+        input_init_vars.extend(variables.free_read_only());
 
         let encoding = AstEncoding {
             tcx,
@@ -321,13 +295,13 @@ impl AstEncoding<'_> {
         let b_ident = self.tcx.clone_var(self.free_var, span, VarKind::Input);
         let b_expr = ident_to_expr(self.tcx, span, b_ident);
 
-        let mut function_variables = FreeVariableCollector::new();
+        let mut function_variables = VariableCollector::new();
         for expr in [self.invariant, self.prob, self.decrease] {
-            function_variables.visit_expr(&mut expr.clone()).unwrap();
+            function_variables.add_expr(expr);
         }
-        function_variables.variables.shift_remove(&self.free_var);
+        function_variables.declared_variables.insert(self.free_var);
         let mut function_inputs = vec![a_ident, b_ident];
-        function_inputs.extend(function_variables.variables);
+        function_inputs.extend(function_variables.free_read_only());
 
         // ?(I && a <= b)
         let pre = builder.unary(

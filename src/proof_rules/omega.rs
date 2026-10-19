@@ -11,9 +11,9 @@ use std::{any::Any, fmt};
 
 use crate::{
     ast::{
-        util::ModifiedVariableCollector, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef,
-        Direction, Expr, ExprBuilder, ExprKind, Files, Ident, QuantOpKind, SourceFilePath, Span,
-        Spanned, Stmt, StmtKind, Symbol, TyKind, VarDecl, VarKind,
+        util::VariableCollector, visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Direction,
+        Expr, ExprBuilder, ExprKind, Files, Ident, QuantOpKind, SourceFilePath, Span, Spanned,
+        Stmt, StmtKind, Symbol, TyKind, VarDecl, VarKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -155,8 +155,9 @@ impl Encoding for OmegaInvAnnotation {
         };
         enc_env.direction = direction;
 
-        let havoc_vars =
-            ModifiedVariableCollector::from_stmt(inner_stmt).modified_outside_declarations();
+        let havoc_vars = VariableCollector::from_stmt(inner_stmt)
+            .free_modified()
+            .collect();
 
         let builder = ExprBuilder::new(span);
         let terminator = select_terminator(semantics, explicit_terminator, builder);

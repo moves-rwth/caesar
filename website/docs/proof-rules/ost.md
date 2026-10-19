@@ -5,30 +5,24 @@ description: Proof rule for lower bounds on least fixpoints.
 
 # Optional Stopping Theorem
 
-For the analysis of loops, the [induction proof rule](induction) allows obtaining upper bounds on the `wp`-semantics through superinvariants.
-Under certain additional conditions, subinvariants `I` can also provide valid lower bounds on the `wp`-semantics (`I <= wp[C](f)`).
-The Optional Stopping Theorem identifies conditions ensuring _uniform integrability_ of the subinvariant as one such constraint.
+The `@ost` annotation proves lower bounds on the expected result of a loop: `I <= wp[while G { Body }](f)`.
+The candidate bound `I` must be finite, must not decrease in expectation during an iteration, and must be at most the postexpectation `f` on exit.
+The rule also requires a finite expected number of iterations and a constant bound on the expected absolute change of `I` in each iteration.
 
-Intuitively, the proof rule requires that the loop executes finitely many iterations in expectation (e.g. that the loop is [PAST](past)) and that one can find a constant that bounds the expected change of the subinvariant by one loop iteration.
-
-Caesar supports the "Optional Stopping Theorem for Weakest Preexpectation Reasoning" by Hark et al. as a built-in encoding.[^1]
-You can find the [extended version of the paper on arxiv](https://arxiv.org/abs/1904.01117).
-The paper was [published at POPL 2020](https://doi.org/10.1145/3371105).
+The rule is based on the "Optional Stopping Theorem for Weakest Preexpectation Reasoning" by [Hark et al. (POPL 2020)](https://doi.org/10.1145/3371105).
+For upper bounds on expected results, use [induction](./induction.md).
 
 ## Formal Theorem
 
-Consider a loop `while G { Body }` whose `Body` is [AST](ast).
-The loop's used and modified variables, except the ones declared within the loop, are referred to as `vars`.
-Give
+Consider a loop `while G { Body }` whose `Body` is purely probabilistic (without nondeterministic choices) and [AST](./ast.md).
+Choose finite expectations `I` and `PAST_I`, a nonnegative postexpectation `f` that may take the value infinity, and a finite constant $c \geq 0$.
+In the encodings below, `vars` denotes the variables used by the loop or annotation, excluding loop-local variables.
 
-- `I`, a function assigning a value $\mathbb{R}_{\geq 0}$ to every state,
-- `PAST_I`, a function assigning a value $\mathbb{R}_{\geq 0}$ to every state,
-- `c` $\in \mathbb{R}_{\geq 0}$,
-- `f`, a function assigning a value $\mathbb{R}_{\geq 0}$ to every state,
+Caesar checks the following four conditions:
 
-such that all the following conditions are fulfilled:
-
-1. `I` is a `wp`-subinvariant of `while G { Body }` with respect to `f`,
+1. `I` is a `wp`-subinvariant of the loop with postexpectation `f`.
+    This means that `I <= wp[Body](I)` under `G` and `I <= f` under `!G`.
+    When the loop exits, `I` may be strictly smaller than `f`.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
@@ -49,12 +43,19 @@ such that all the following conditions are fulfilled:
 
     </p>
     </details>
-2. `while G { Body }` performs finitely many loop iterations in expectation: `PAST_I` $< \infty$ is a `wp`-superinvariant[^modified-ert] of `while G { Body; tick 1 }` with respect to `PAST_I`,
+2. `PAST_I` is finite and bounds the expected looping time (the expected number of loop iterations).
+    It counts executions of `Body`, independently of the runtime of `Body`.
+    It is a superinvariant for counting iterations, with `tick 1` added after `Body`.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
 
     ```heyvl
+    @wp
+    proc PAST_I_finite(vars: ...) -> () {
+        assert ?(PAST_I(vars) < ∞)
+    }
+
     @wp
     coproc PAST_I_ert_superinvariant(init_vars: ...) -> (vars: ...)
         pre PAST_I(init_vars)
@@ -70,42 +71,21 @@ such that all the following conditions are fulfilled:
 
     </p>
     </details>
-3. `I` harmonizes with `f`: $\neg\mathtt{G} \implies (\mathtt{I} = \mathtt{f})$, i.e. `I` and `f` are equal on states that do not fulfill the loop guard `G`,
+3. `I` is finite in every state: `I < ∞`.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
 
     ```heyvl
-    proc I_harmonizes_with_post(vars: ...) -> ()
-        pre ?(!G(vars))
-        post ?(I(vars) == f(vars))
-    {}
-    ```
-
-    </p>
-    </details>
-4. The expected value of `I` after one loop iteration is finite,[^inv-iter-finite]
-    <details>
-    <summary>HeyVL Encoding</summary>
-    <p>
-
-    ```heyvl
-    @wp
-    coproc I_iter_finite(init_vars: ...) -> (vars: ...)
-        pre 0
-        post I(vars)
-    {
-        vars = init_vars // set current state to input values
-        validate // maps finite expectation to 0, ∞ to ∞
-        if G {
-            Body
-        } else {}
+    proc I_finite(vars: ...) -> () {
+        assert ?(I(vars) < ∞)
     }
     ```
 
     </p>
     </details>
-5. `I` is _conditionally difference bounded_ by `c`: the absolute change of `I` by one loop iteration is at most `c`.
+4. Under `G`, the expected absolute change of `I` after `Body` is at most `c` (_conditional difference boundedness_).
+    This includes iterations that exit the loop.
     <details>
     <summary>HeyVL Encoding</summary>
     <p>
@@ -117,23 +97,27 @@ such that all the following conditions are fulfilled:
         post ite(I(init_vars) <= I(vars), I(vars) - I(init_vars), I(init_vars) - I(vars)) // |I(vars) - I(init_vars)|
     {
         vars = init_vars // set current state to input values
-        Body
+        if G {
+            Body
+        } else {}
     }
     ```
 
     </p>
     </details>
 
-Then, `I <= wp[while G { Body }](f)` holds.
+If these conditions hold, `I <= wp[while G { Body }](f)`.
 
 ## Usage
 
-By applying the `@ost` annotation to a loop, Caesar will check the above requirements for a given invariant, PAST invariant, constant and post-expectation.
-Below is the encoding of [Example 39 from the paper](https://dl.acm.org/doi/pdf/10.1145/3371105#page=18).
-It is a _geometric loop_ program, which increments a counter `b` with probability $0.5$ or stops (setting `a = false`).
-The HeyVL program uses the `@ost` annotation that proves a lower bound of `b + [a]` on the expected value of `b`.
+Use `@ost(I, PAST_I, c, f)` to check the four conditions above.
+Caesar generates five procedures because it checks finiteness of `PAST_I` separately from its superinvariant condition.
+
+The following [geometric loop](https://arxiv.org/pdf/1904.01117v3#page=19) stops with probability $0.5$ in each iteration and otherwise increments `b`.
+The invariant `b + [a]` gives a lower bound on the expected final value of `b`.
 
 ```heyvl
+@wp
 proc ost_geo_loop_example(init_a: Bool, init_b: UInt, init_k: UInt) -> (a: Bool, b: UInt, k: UInt)
     pre init_b + [init_a]
     post b
@@ -162,20 +146,72 @@ proc ost_geo_loop_example(init_a: Bool, init_b: UInt, init_k: UInt) -> (a: Bool,
 
 ### Inputs
 
-You can see all four parameters are passed to the `@ost` annotation in sequence:
+The four parameters are:
 
-- `invariant`: The quantitative subinvariant which should lower bound the `wp`-semantics. Must harmonize with `post`.
-- `past_invariant`: The quantitative invariant used to proof PAST.
-- `cdb`: A constant of type `UReal` specifying the conditional difference bound for the `invariant`.
-- `post`: The post-expectation after the loop.
+- `invariant`: The finite subinvariant `I`.
+- `past_invariant`: The superinvariant `PAST_I` for counting iterations.
+- `cdb`: The bound `c`, given as a `UReal` literal.
+- `post`: The postexpectation `f`, which may take the value infinity.
 
-:::warning
+Use `@ost` with `@wp` and an [exact loop-body encoding](./approximations.md#proof-rule-approximations).
+The annotated loop must be the last statement of its procedure.
 
-All parameters must be finite, i.e. cannot evaluate to $\infty$.
-Currently, this is only checked by Caesar for `past_invariant` and `cdb`.
+## Soundness
 
-:::
+The theorem assumes that `Body` terminates almost surely and contains no nondeterminism.
+Caesar does not check these assumptions.
+Caesar checks finiteness of `I` and `PAST_I` directly; `f` need not be finite.
 
-[^1]: We present the conditions from the paper's Theorem 37 (b), as used by the built-in encoding to ensure uniform integrability of the subinvariant. Currently, using the paper's alternative conditions (a) or (c) requires a manual encoding.
-[^modified-ert]: Our `PAST_I` condition effectively encodes an `ert`-superinvariant, where `ert` is a modified [expected runtime calculus](./approximations#calculus-annotations) which counts the number of loop iterations of `while G { Body }` and does not count any nested loop iterations in `Body`.
-[^inv-iter-finite]: In the paper, the condition to check is $\Phi_{\mathtt{f}}(\mathtt{I}) < \infty$. With the additional constraint that `I` harmonizes with `f`, we instead check the simpler but equivalent condition that $\Phi_{\mathtt{I}}(\mathtt{I}) < \infty$ holds.
+The proof rule generalizes [Hark et al., Theorem 38(b)](https://arxiv.org/pdf/1904.01117v3#page=17), and simplifies the OST encoding in [Schröer et al., *A Deductive Verification Infrastructure for Probabilistic Programs*, Appendix C.5](https://arxiv.org/pdf/2309.07781v3#page=43).
+Cases (a) and (c) require a manual encoding.
+
+<details>
+<summary>Differences from the published formulations</summary>
+
+Compared with [Hark et al., Theorem 38(b) in the extended paper](https://arxiv.org/pdf/1904.01117v3#page=17) (Theorem 37(b) in the published paper):
+
+- Caesar drops harmonization (`I = f` on exit).
+  The exit inequality `I <= f` already follows from subinvariance.
+- The postexpectation `f` may take the value infinity.
+- Caesar checks `I < ∞` instead of $\Phi_f(I)<\infty$, where $\Phi_f$ is the loop characteristic function on nonnegative expectations with postexpectation $f$.
+
+<details>
+<summary>Justification of these simplifications</summary>
+
+These simplifications follow by applying Theorem 38(b) with finite $I$ as both candidate and postexpectation.
+Its harmonization premise is then $I=I$.
+Conditional difference boundedness gives $\Phi_I(I)\leq I+c<\infty$, as required by the theorem.
+
+The exit condition $I\leq f$ gives $\Phi_I(X)\leq\Phi_f(X)$ for every nonnegative expectation $X$.
+For the annotated loop $C$, the theorem and monotonicity of least fixed points therefore give
+$$
+\begin{aligned}
+    I
+        &\leq\mathrm{wp}\llbracket C\rrbracket(I)
+        &&\text{(Theorem 38(b))}\\
+        &\leq\mathrm{wp}\llbracket C\rrbracket(f).
+        &&\text{(monotonicity)}
+\end{aligned}
+$$
+The comparison with $f$ holds for nonnegative extended expectations, so $f$ may take infinite values.
+
+</details>
+
+Compared with the [Encoding of the Optional Stopping Theorem for wp (Appendix C.5)](https://arxiv.org/pdf/2309.07781v3#page=43):
+
+- Caesar drops harmonization and checks `I < ∞` directly in place of the finiteness condition on $\Phi_f(I)$.
+- Caesar checks conditional difference boundedness only for states satisfying `G`, as in [Hark et al.'s Definition 35](https://arxiv.org/pdf/1904.01117v3#page=16).
+  The unguarded check in Appendix C.5 can reject valid invariants whose change is unbounded outside the guard.
+- Appendix C.5 requires [finite expected runtime](https://arxiv.org/pdf/2309.07781v3#page=23) of the whole loop.
+  Here, `Body` may have infinite expected runtime, provided it is AST and the expected number of outer-loop iterations is finite.
+
+#### Rewards and expected runtimes
+
+For a purely probabilistic program $P$ and a nonnegative expectation $X$, [Hark et al., Section 8](https://arxiv.org/pdf/1904.01117v3#page=22) give
+$$
+\mathrm{ert}\llbracket P\rrbracket(X)
+=\mathrm{ert}\llbracket P\rrbracket(0)+\mathrm{wp}\llbracket P\rrbracket(X).
+$$
+For nonnegative rewards, retain the cost term in subinvariance and use ordinary $\mathrm{wp}$ for iteration counts and absolute changes.
+
+</details>

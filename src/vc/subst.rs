@@ -11,7 +11,7 @@ use tracing::instrument;
 
 use crate::{
     ast::{
-        util::FreeVariableCollector,
+        util::VariableCollector,
         visit::{walk_expr, VisitorMut},
         Expr, ExprBuilder, ExprKind, Ident, QuantVar, Span, SpanVariant, VarKind,
     },
@@ -48,11 +48,11 @@ impl<'a> Subst<'a> {
     }
 
     /// Push the stack and add a substitution.
-    pub fn push_subst(&mut self, ident: Ident, mut expr: Expr) {
+    pub fn push_subst(&mut self, ident: Ident, expr: Expr) {
         self.stack.push(self.cur.clone());
-        let mut free_var_collector = FreeVariableCollector::new();
-        free_var_collector.visit_expr(&mut expr).unwrap();
-        self.cur.free_vars.extend(free_var_collector.variables);
+        self.cur
+            .free_vars
+            .extend(VariableCollector::from_expr(&expr).used_variables);
         self.cur.substs.insert(ident, expr);
     }
 

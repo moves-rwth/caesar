@@ -12,10 +12,9 @@ use std::{any::Any, fmt};
 
 use crate::{
     ast::{
-        util::{FreeVariableCollector, ModifiedVariableCollector},
-        visit::VisitorMut,
-        BinOpKind, DeclKind, Direction, Expr, ExprBuilder, Files, Ident, ProcSpec, SourceFilePath,
-        Span, Spanned, Stmt, StmtKind, Symbol, TyKind, UnOpKind,
+        util::VariableCollector, visit::VisitorMut, BinOpKind, DeclKind, Direction, Expr,
+        ExprBuilder, Files, Ident, ProcSpec, SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol,
+        TyKind, UnOpKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -192,9 +191,8 @@ fn encode_exit_bound(
         ),
     );
 
-    let mut free_var_collector = FreeVariableCollector::new();
-    let variables = free_var_collector
-        .collect_and_clear(&mut condition.clone())
+    let variables = VariableCollector::from_expr(&condition)
+        .used_variables
         .into_iter()
         .collect();
     let proc_info = ProcInfo {
@@ -252,9 +250,8 @@ fn encode_continuation_bound(
         ),
     );
 
-    let mut free_var_collector = FreeVariableCollector::new();
-    let variables = free_var_collector
-        .collect_and_clear(&mut condition.clone())
+    let variables = VariableCollector::from_expr(&condition)
+        .used_variables
         .into_iter()
         .collect();
     let proc_info = ProcInfo {
@@ -286,23 +283,20 @@ fn encode_decrease(
     let span = enc_env.call_span;
     let builder = ExprBuilder::new(span);
 
-    // Collect modified variables, excluding those declared within the loop.
-    let modified_vars =
-        ModifiedVariableCollector::from_stmt(loop_stmt).modified_outside_declarations();
+    let mut variables = VariableCollector::from_stmt(loop_stmt);
+    variables.add_expr(inv);
+    let modified_vars: Vec<Ident> = variables.free_modified().collect();
 
-    let mut free_var_collector = FreeVariableCollector::new();
-    let inv_variables: Vec<Ident> = free_var_collector
-        .collect_and_clear(&mut inv.clone())
+    // Substitute initial values only for modified variables, in expression order.
+    let inv_variables: Vec<Ident> = VariableCollector::from_expr(inv)
+        .used_variables
         .into_iter()
+        .filter(|ident| modified_vars.contains(ident))
         .collect();
 
     // Initialize modified variables from the inputs of the generated procedure.
-    let init_idents = get_init_idents(tcx, span, &modified_vars);
-    let init_exprs = init_idents
-        .iter()
-        .map(|ident| ident_to_expr(tcx, span, *ident))
-        .collect();
-    let mut body = multiple_assign(span, modified_vars.clone(), init_exprs);
+    let (mut input_init_vars, mut body) = encode_initial_state(tcx, span, &modified_vars);
+    input_init_vars.extend(variables.free_read_only());
     let init_inv = to_init_expr(tcx, span, inv, &inv_variables);
     body.push(
         encode_iter(
@@ -324,7 +318,7 @@ fn encode_decrease(
 
     let proc_info = ProcInfo {
         name: "past_decreases".to_string(),
-        inputs: params_from_idents(init_idents, tcx),
+        inputs: params_from_idents(input_init_vars, tcx),
         outputs: params_from_idents(modified_vars, tcx),
         spec: vec![
             ProcSpec::Requires(pre),
