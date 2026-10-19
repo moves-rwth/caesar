@@ -8,7 +8,7 @@ use replace_with::replace_with_or_abort;
 
 use crate::{
     ast::{
-        util::FreeVariableCollector,
+        util::VariableCollector,
         visit::{walk_expr, walk_func, walk_quant_ann, walk_stmt, VisitorMut},
         AxiomDecl, BinOpKind, DeclKind, DeclRef, Diagnostic, Expr, ExprData, ExprKind, FuncDecl,
         Ident, Label, Param, ProcDecl, ProcSpec, QuantOpKind, QuantVar, Shared, Span, SpanVariant,
@@ -777,15 +777,15 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
                 }
                 // check that triggers contain all quantified variables
                 let quantified: IndexSet<Ident> = idents.iter().map(QuantVar::name).collect();
-                for trigger in &mut ann.triggers {
-                    let mut captured = FreeVariableCollector::default();
-                    for term in trigger.terms_mut() {
-                        captured.visit_expr(term).unwrap();
+                for trigger in &ann.triggers {
+                    let mut captured = VariableCollector::default();
+                    for term in trigger.terms() {
+                        captured.add_expr(term);
                     }
-                    if !quantified.is_subset(&captured.variables) {
+                    if !quantified.is_subset(&captured.used_variables) {
                         return Err(TycheckError::TriggerCapture {
                             span: trigger.span,
-                            captured: captured.variables,
+                            captured: captured.used_variables,
                         });
                     }
                 }

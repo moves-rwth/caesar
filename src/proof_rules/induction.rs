@@ -11,8 +11,8 @@ use std::{any::Any, fmt};
 
 use crate::{
     ast::{
-        util::ModifiedVariableCollector, visit::VisitorMut, Direction, Expr, ExprBuilder, Files,
-        Ident, SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol, TyKind,
+        util::VariableCollector, visit::VisitorMut, Direction, Expr, ExprBuilder, Files, Ident,
+        SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol, TyKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -244,7 +244,7 @@ fn transform_k_induction(
     let annotation_span = enc_env.call_span;
     let direction = enc_env.direction;
 
-    let visitor = ModifiedVariableCollector::from_stmt(inner_stmt);
+    let visitor = VariableCollector::from_stmt(inner_stmt);
     let havoc_vars = visitor.modified_variables.into_iter().collect();
 
     let mut buf = vec![];

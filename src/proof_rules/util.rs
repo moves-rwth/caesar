@@ -221,6 +221,22 @@ pub fn get_init_idents(tcx: &TyCtx, span: Span, idents: &[Ident]) -> Vec<Ident> 
     new_idents
 }
 
+/// Declare the init_ inputs for the modified variables.
+/// Return these inputs and the assignments initializing the modified variables.
+pub fn encode_initial_state(
+    tcx: &TyCtx,
+    span: Span,
+    variables: &[Ident],
+) -> (Vec<Ident>, Vec<Stmt>) {
+    let inputs = get_init_idents(tcx, span, variables);
+    let values = inputs
+        .iter()
+        .map(|ident| ident_to_expr(tcx, span, *ident))
+        .collect();
+    let assignments = multiple_assign(span, variables.to_vec(), values);
+    (inputs, assignments)
+}
+
 /// Construct multiple [`StmtKind::Assign`] expressions sequentially
 pub fn multiple_assign(span: Span, lhses: Vec<Ident>, rhses: Vec<Expr>) -> Vec<Stmt> {
     assert_eq!(lhses.len(), rhses.len());

@@ -10,8 +10,8 @@ use z3::{
 
 use crate::{
     ast::{
-        util::FreeVariableCollector, BinOpKind, DeclKind, Expr, ExprKind, Ident, LitKind,
-        QuantOpKind, QuantVar, Shared, Trigger, TyKind, UnOpKind,
+        util::VariableCollector, BinOpKind, DeclKind, Expr, ExprKind, Ident, LitKind, QuantOpKind,
+        QuantVar, Shared, Trigger, TyKind, UnOpKind,
     },
     scope_map::ScopeMap,
     smt::funcs::fuel::literals::LiteralExprSet,
@@ -143,8 +143,7 @@ impl<'smt, 'ctx> TranslateExprs<'smt, 'ctx> {
     /// Materialize free variables before entering the quantifier-local scope.
     /// This keeps later occurrences from getting fresh SMT symbols.
     fn init_quantifier_free_vars(&mut self, operand: &Expr, quant_vars: &[QuantVar]) {
-        let mut operand = operand.clone(); // TODO: unnecessary clone
-        let mut free_vars = FreeVariableCollector::new().collect_and_clear(&mut operand);
+        let mut free_vars = VariableCollector::from_expr(operand).used_variables;
         free_vars.retain(|ident| !quant_vars.iter().any(|var| var.name() == *ident));
         for ident in free_vars {
             self.get_local(ident);

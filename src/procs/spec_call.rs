@@ -6,7 +6,7 @@ use ariadne::ReportKind;
 
 use crate::{
     ast::{
-        util::FreeVariableCollector,
+        util::VariableCollector,
         visit::{walk_stmt, VisitorMut},
         Block, DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprData, ExprKind, Ident, Label,
         Param, ProcSpec, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind, Symbol, VarDecl,
@@ -162,13 +162,10 @@ impl<'tcx> SpecCall<'tcx> {
                 // that also occur in the requires specs. we don't want
                 // their values to be destroyed by the havoc.
                 let stable_inputs: Vec<(&Param, Expr)> = {
-                    let mut visitor = FreeVariableCollector::new();
+                    let mut visitor = VariableCollector::new();
                     for spec in &proc.spec {
                         if let ProcSpec::Ensures(expr) = &spec {
-                            // the clone is only necessary because
-                            // visit_expr requires a mutable reference
-                            // (unnecessarily)
-                            visitor.visit_expr(&mut expr.clone()).unwrap();
+                            visitor.add_expr(expr);
                         }
                     }
                     proc.inputs
@@ -176,7 +173,7 @@ impl<'tcx> SpecCall<'tcx> {
                         .iter()
                         .zip(args)
                         .map(|(input, arg)| {
-                            if visitor.variables.contains(&input.name) {
+                            if visitor.used_variables.contains(&input.name) {
                                 let (stmt, expr) = self.assign_to_temp(input, arg.clone());
                                 buf.push(stmt);
                                 (input, expr)

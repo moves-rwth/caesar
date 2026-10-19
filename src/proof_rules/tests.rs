@@ -611,30 +611,8 @@ fn test_ost_transform() {
 
                 }
             }
-            proc optional_stopping_harmonize_I_f_0(a: Bool, b: UInt) -> () {
-                assert ?((! (a) → ((cast(EUReal, b) + [a]) == cast(EUReal, b))))
-            }
-            coproc optional_stopping_loopiter_lt_infty_0(
-                init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt
-            ) -> (prob_choice: Bool, a: Bool, b: UInt, k: UInt)
-                pre cast(EUReal, 0)
-                post cast(EUReal, b)
-            {
-                prob_choice = init_prob_choice
-                a = init_a
-                b = init_b
-                k = init_k
-                validate
-                assume ∞
-                if a {
-                    prob_choice = flip(((cast(UReal, 1) / cast(UReal, 2))))
-                    if prob_choice { a = false } else { b = (b + 1) }
-                    k = (k + 1)
-                    coassert (cast(EUReal, b) + [a])
-                    coassume ∞
-                } else {
-
-                }
+            proc optional_stopping_invariant_finite_0(b: UInt, a: Bool) -> () {
+                assert ?(((cast(EUReal, b) + [a]) < ∞))
             }
             proc optional_stopping_lower_bound_0(
                 init_prob_choice: Bool, init_a: Bool, init_b: UInt, init_k: UInt
@@ -685,6 +663,74 @@ fn test_ost_transform() {
     remove_whitespace(&mut test_string);
     remove_whitespace(&mut res);
     assert_eq!(test_string, res);
+}
+
+#[test]
+fn test_ost_conditions() {
+    for (invariant, post, increment, expected) in [
+        ("1", "2", 0, true),
+        ("1", "0", 0, false),
+        ("∞", "∞", 0, false),
+        ("1", "∞", 0, true),
+        ("x", "x", 1, false),
+    ] {
+        let source = format!(
+            r#"
+                @wp
+                proc main() -> (x: UInt)
+                    pre 0
+                    post {post}
+                {{
+                    x = 0
+                    var a: Bool = true
+                    @ost({invariant}, [a], 0, {post})
+                    while a {{
+                        x = x + {increment}
+                        a = false
+                    }}
+                }}
+            "#
+        );
+        let (result, server) = verify_test(&source);
+        assert_eq!(result.unwrap(), expected, "{source}");
+        if expected {
+            assert!(server.diagnostics.is_empty(), "{source}");
+        } else {
+            assert_eq!(
+                server
+                    .diagnostics
+                    .iter()
+                    .filter(|diagnostic| diagnostic.to_string().contains("Counter-example to"))
+                    .count(),
+                1,
+                "{source}"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_ost_passes_unchanged_parameters_to_generated_procedures() {
+    for (invariant, iteration_bound) in [("n", "(n + 1) * [a]"), ("1", "[a]")] {
+        let source = format!(
+            r#"
+                @wp
+                proc main(n: UInt) -> ()
+                    pre {invariant}
+                    post n + 1
+                {{
+                    var a: Bool = true
+                    @ost({invariant}, {iteration_bound}, 0, n + 1)
+                    while a {{
+                        a = false
+                    }}
+                }}
+            "#
+        );
+        let (result, server) = verify_test(&source);
+        assert!(result.unwrap(), "{source}");
+        assert!(server.diagnostics.is_empty(), "{source}");
+    }
 }
 
 #[test]
@@ -783,6 +829,28 @@ fn test_past_accepts_deterministic_countdown() {
         }
     "#;
     assert!(verify_test(source).0.unwrap());
+}
+
+#[test]
+fn test_past_passes_unchanged_parameters_to_generated_procedures() {
+    for (invariant, decrement) in [("(n + 1) * x + 2", "1"), ("x + 2", "n + 1")] {
+        let source = format!(
+            r#"
+                @ert
+                proc main(n: UInt) -> ()
+                {{
+                    var x: UInt = 2
+                    @past({invariant}, 1, 2)
+                    while x > 0 {{
+                        x = x - ({decrement})
+                    }}
+                }}
+            "#
+        );
+        let (result, server) = verify_test(&source);
+        assert!(result.unwrap(), "{source}");
+        assert!(server.diagnostics.is_empty(), "{source}");
+    }
 }
 
 #[test]

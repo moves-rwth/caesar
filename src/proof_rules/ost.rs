@@ -1,4 +1,5 @@
-//! Encode the proof for a lower bound to the wp of a program using the optional stopping theorem from Aiming Low is Harder paper.
+//! Encode a lower-bound rule based on case (b) of the optional stopping theorem in Aiming Low Is Harder.
+//! Subinvariance supplies the exit condition `I <= post`.
 //!
 //! @ost takes the arguments:
 //!
@@ -11,10 +12,9 @@ use std::{any::Any, fmt};
 
 use crate::{
     ast::{
-        util::{FreeVariableCollector, ModifiedVariableCollector},
-        visit::VisitorMut,
-        BinOpKind, Direction, Expr, ExprBuilder, Files, Ident, ProcSpec, SourceFilePath, Span,
-        Spanned, Stmt, StmtKind, Symbol, TyKind, UnOpKind,
+        util::VariableCollector, visit::VisitorMut, BinOpKind, Block, DeclKind, Direction, Expr,
+        ExprBuilder, Files, Ident, ProcSpec, SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol,
+        TyKind, UnOpKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
@@ -120,265 +120,49 @@ impl Encoding for OSTAnnotation {
         inner_stmt: &Stmt,
         enc_env: EncodingEnvironment,
     ) -> Result<GeneratedEncoding, AnnotationError> {
-        // Unpack values from struct
-        let annotation_span = enc_env.call_span;
-        let base_proc_ident = enc_env.base_proc_ident;
-
-        let [inv, past_inv, c, post] = four_args(args);
-
-        let builder = ExprBuilder::new(annotation_span);
-        let mut free_var_collector = FreeVariableCollector::new();
-
-        // Collect and store the variables from the invariant
-        let inv_variables: Vec<Ident> = free_var_collector
-            .collect_and_clear(&mut inv.clone())
-            .into_iter()
-            .collect();
-
-        // Collect and store the variables from the past_invariant
-        let past_inv_variables: Vec<Ident> = free_var_collector
-            .collect_and_clear(&mut past_inv.clone())
-            .into_iter()
-            .collect();
-
-        // Collect modified variables for havoc (exclude the variables that are declared in the loop)
-        let modified_vars =
-            ModifiedVariableCollector::from_stmt(inner_stmt).modified_outside_declarations();
-
-        let loop_guard = if let StmtKind::While(guard, _) = &inner_stmt.node {
-            guard
-        } else {
+        if !matches!(&inner_stmt.node, StmtKind::While(_, _)) {
             return Err(AnnotationError::NotOnWhile {
-                span: annotation_span,
+                span: enc_env.call_span,
                 annotation_name: self.name(),
                 annotated: Box::new(inner_stmt.clone()),
             });
-        };
+        }
 
-        // Get the "init_{}" versions of the variable identifiers and declare them
-        let init_idents = get_init_idents(tcx, annotation_span, &modified_vars);
-
-        // Transform the [`Ident`]s into [`Expr`]s for assignments.
-        let init_exprs = init_idents
-            .iter()
-            .map(|ident| ident_to_expr(tcx, annotation_span, *ident))
-            .collect();
-
-        let init_assigns = multiple_assign(annotation_span, modified_vars.clone(), init_exprs);
-
-        // Replace all variables with the init versions in the invariant
-        let init_inv = to_init_expr(tcx, annotation_span, inv, &inv_variables);
-
-        // Replace all variables with the init versions in the past-invariant
-        let init_past_inv = to_init_expr(tcx, annotation_span, past_inv, &past_inv_variables);
-
-        // Construct ?(past_I < ∞)
-        let cond1_assert = builder.unary(
-            UnOpKind::Embed,
-            Some(TyKind::EUReal),
-            builder.binary(
-                BinOpKind::Lt,
-                Some(TyKind::Bool),
-                past_inv.clone(),
-                builder.top_lit(&tcx.spec_ty().clone()),
-            ),
-        );
-
-        // ?(!guard ==> (I=f))
-        let harmonize_expr = builder.unary(
-            UnOpKind::Embed,
-            Some(tcx.spec_ty().clone()),
-            builder.binary(
-                BinOpKind::Impl,
-                Some(TyKind::Bool),
-                builder.unary(UnOpKind::Not, Some(TyKind::Bool), loop_guard.clone()),
-                builder.binary(BinOpKind::Eq, Some(TyKind::Bool), inv.clone(), post.clone()),
-            ),
-        );
-
-        // Collect variables used in the harmonization condition
-        let harmonize_expr_vars: Vec<Ident> = free_var_collector
-            .collect_and_clear(&mut harmonize_expr.clone())
+        let [invariant, iteration_bound, difference_bound, post] = four_args(args);
+        let encoding = OstEncoding::new(tcx, &enc_env, inner_stmt, args);
+        let invariant_variables: Vec<Ident> = VariableCollector::from_expr(invariant)
+            .used_variables
             .into_iter()
             .collect();
+        let iteration_bound_variables: Vec<Ident> = VariableCollector::from_expr(iteration_bound)
+            .used_variables
+            .into_iter()
+            .collect();
+        let initial_invariant = encoding.snapshot(invariant, &invariant_variables);
+        let initial_iteration_bound =
+            encoding.snapshot(iteration_bound, &iteration_bound_variables);
 
-        // Condition 1: past_I < ∞
-        let cond1_proc_info = ProcInfo {
-            name: "lt_infinity".to_string(),
-            inputs: params_from_idents(past_inv_variables, tcx),
-            outputs: vec![],
-            spec: vec![],
-            body: Spanned::new(
-                annotation_span,
-                vec![Spanned::new(
-                    annotation_span,
-                    StmtKind::Assert(Direction::Down, cond1_assert),
-                )],
-            ),
-            direction: Direction::Down,
-        };
-        let cond1_proc = generate_proc(annotation_span, cond1_proc_info, base_proc_ident, tcx);
-
-        let mut cond2_next_iter = vec![Spanned::new(
-            annotation_span,
-            StmtKind::Tick(builder.cast(TyKind::EUReal, builder.uint(1))),
-        )];
-        cond2_next_iter.extend(hey_const(&enc_env, past_inv, Direction::Up, tcx));
-        // Condition 2 : \Phi_{0}(past_I) <= past_I, so ert[P](0) <= past_I
-        let mut cond2_body = init_assigns.clone();
-        cond2_body.push(encode_iter(&enc_env, inner_stmt, cond2_next_iter).unwrap());
-
-        let cond2_proc_info = ProcInfo {
-            name: "past".to_string(),
-            inputs: params_from_idents(init_idents.clone(), tcx),
-            outputs: params_from_idents(modified_vars.clone(), tcx),
-            spec: vec![
-                ProcSpec::Requires(init_past_inv),
-                ProcSpec::Ensures(builder.cast(TyKind::EUReal, builder.uint(0))),
-            ],
-            body: Spanned::new(annotation_span, cond2_body),
-            direction: Direction::Up,
-        };
-        let cond2_proc = generate_proc(annotation_span, cond2_proc_info, base_proc_ident, tcx);
-
-        // Condition 3: for all s, ([G] * wp[Body](|I - I(s)|))(s) <= c
-        let mut cond3_body = init_assigns.clone();
-        cond3_body.push(encode_iter(&enc_env, inner_stmt, vec![]).unwrap());
-
-        // Encode |I(s)-I| as ite(I(s) <= I, I - I(s), I(s) - I)
-        let cond3_post = builder.ite(
-            Some(TyKind::EUReal),
-            builder.binary(
-                BinOpKind::Le,
-                Some(TyKind::Bool),
-                init_inv.clone(),
-                inv.clone(),
-            ),
-            builder.binary(
-                BinOpKind::Sub,
-                Some(TyKind::EUReal),
-                inv.clone(),
-                init_inv.clone(),
-            ),
-            builder.binary(
-                BinOpKind::Sub,
-                Some(TyKind::EUReal),
-                init_inv.clone(),
-                inv.clone(),
-            ),
-        );
-        let cond3_proc_info = ProcInfo {
-            name: "conditional_difference_bounded".to_string(),
-            inputs: params_from_idents(init_idents.clone(), tcx),
-            outputs: params_from_idents(modified_vars.clone(), tcx),
-            spec: vec![
-                // Cast c to EUReal otherwise the type is not a complete lattice
-                ProcSpec::Requires(builder.cast(TyKind::EUReal, c.clone())),
-                ProcSpec::Ensures(cond3_post),
-            ],
-            body: Spanned::new(annotation_span, cond3_body),
-            direction: Direction::Up,
-        };
-
-        let cond3_proc = generate_proc(annotation_span, cond3_proc_info, base_proc_ident, tcx);
-
-        // Condition 4: !guard ==> (I = f)
-        let cond4_proc_info = ProcInfo {
-            name: "harmonize_I_f".to_string(),
-            inputs: params_from_idents(harmonize_expr_vars, tcx),
-            outputs: vec![],
-            spec: vec![],
-            body: Spanned::new(
-                annotation_span,
-                vec![Spanned::new(
-                    annotation_span,
-                    StmtKind::Assert(Direction::Down, harmonize_expr),
-                )],
-            ),
-            direction: Direction::Down,
-        };
-
-        let cond4_proc = generate_proc(annotation_span, cond4_proc_info, base_proc_ident, tcx);
-
-        // Condition 5: \Phi_f(I) < ∞
-        // The following block should be inserted before the iter encoding to check Phi < ∞
-        // instead of Phi <= ∞ which we normally achieve with just the coassume:
-        // coassume 0
-        // validate
-        // assume ∞
-
-        // Insert init assignments at the beginning
-        let mut cond5_body = init_assigns.clone();
-        cond5_body.extend(vec![
-            Spanned::new(annotation_span, StmtKind::Validate(Direction::Down)),
-            Spanned::new(
-                annotation_span,
-                StmtKind::Assume(Direction::Down, builder.top_lit(&TyKind::EUReal)),
-            ),
-            encode_iter(
-                &enc_env,
-                inner_stmt,
-                hey_const(&enc_env, inv, Direction::Up, tcx),
-            )
-            .unwrap(),
-        ]);
-
-        let cond5_proc_info = ProcInfo {
-            name: "loopiter_lt_infty".to_string(),
-            inputs: params_from_idents(init_idents.clone(), tcx),
-            outputs: params_from_idents(modified_vars.clone(), tcx),
-            spec: vec![
-                ProcSpec::Requires(builder.cast(TyKind::EUReal, builder.uint(0))),
-                ProcSpec::Ensures(post.clone()),
-            ],
-            body: Spanned::new(annotation_span, cond5_body),
-            direction: Direction::Up,
-        };
-        let cond5_proc = generate_proc(annotation_span, cond5_proc_info, base_proc_ident, tcx);
-
-        // Condition 6: I <= \Phi_{post}(I)
-        let mut cond6_body = init_assigns;
-        cond6_body.push(
-            encode_iter(
-                &enc_env,
-                inner_stmt,
-                hey_const(&enc_env, inv, Direction::Down, tcx),
-            )
-            .unwrap(),
-        );
-
-        let cond6_proc_info = ProcInfo {
-            name: "lower_bound".to_string(),
-            inputs: params_from_idents(init_idents, tcx),
-            outputs: params_from_idents(modified_vars.clone(), tcx),
-            spec: vec![
-                ProcSpec::Requires(init_inv),
-                ProcSpec::Ensures(post.clone()),
-            ],
-            body: Spanned::new(annotation_span, cond6_body),
-            direction: Direction::Down,
-        };
-        let cond6_proc = generate_proc(annotation_span, cond6_proc_info, base_proc_ident, tcx);
-
-        // Call to the lower_bound proc from Condition 6
-        let proc_call = builder.call(
-            cond6_proc.name(),
-            modified_vars
-                .iter()
-                .map(|ident| ident_to_expr(tcx, annotation_span, *ident)),
-            tcx,
-        );
-
-        // Assign variables to return values of the "lower_bound" proc call
-        let buf = vec![Spanned::new(
-            annotation_span,
-            StmtKind::Assign(modified_vars, proc_call),
-        )];
+        let iteration_bound_finite =
+            encoding.encode_finiteness("lt_infinity", iteration_bound, iteration_bound_variables);
+        let expected_iterations =
+            encoding.encode_iteration_bound(iteration_bound, initial_iteration_bound);
+        let difference_bounded =
+            encoding.encode_difference_bound(invariant, &initial_invariant, difference_bound);
+        // I < infinity and CDB give Phi_I(I) <= I + c < infinity.
+        // Apply OST with postexpectation I, then use I <= post at loop exit.
+        let invariant_finite =
+            encoding.encode_finiteness("invariant_finite", invariant, invariant_variables);
+        let subinvariant = encoding.encode_subinvariant(invariant, initial_invariant, post);
+        let block = encoding.encode_call(&subinvariant);
 
         Ok(GeneratedEncoding {
-            block: Spanned::new(annotation_span, buf),
+            block,
             decls: Some(vec![
-                cond1_proc, cond2_proc, cond3_proc, cond4_proc, cond5_proc, cond6_proc,
+                iteration_bound_finite,
+                expected_iterations,
+                difference_bounded,
+                invariant_finite,
+                subinvariant,
             ]),
             diagnostics: vec![],
         })
@@ -390,5 +174,228 @@ impl Encoding for OSTAnnotation {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+struct OstEncoding<'a> {
+    tcx: &'a TyCtx,
+    env: &'a EncodingEnvironment,
+    loop_stmt: &'a Stmt,
+    modified_variables: Vec<Ident>,
+    procedure_inputs: Vec<Ident>,
+    call_inputs: Vec<Ident>,
+    initialization: Vec<Stmt>,
+}
+
+impl<'a> OstEncoding<'a> {
+    fn new(
+        tcx: &'a TyCtx,
+        env: &'a EncodingEnvironment,
+        loop_stmt: &'a Stmt,
+        args: &[Expr],
+    ) -> Self {
+        let mut variables = VariableCollector::from_stmt(loop_stmt);
+        for arg in args {
+            variables.add_expr(arg);
+        }
+        let modified_variables: Vec<Ident> = variables.free_modified().collect();
+        let (mut procedure_inputs, initialization) =
+            encode_initial_state(tcx, env.call_span, &modified_variables);
+        let mut call_inputs = modified_variables.clone();
+        for variable in variables.free_read_only() {
+            procedure_inputs.push(variable);
+            call_inputs.push(variable);
+        }
+
+        Self {
+            tcx,
+            env,
+            loop_stmt,
+            modified_variables,
+            procedure_inputs,
+            call_inputs,
+            initialization,
+        }
+    }
+
+    /// Replace modified free variables with their initial values, in expression order.
+    fn snapshot(&self, expression: &Expr, variables: &[Ident]) -> Expr {
+        let modified_variables: Vec<Ident> = variables
+            .iter()
+            .filter(|ident| self.modified_variables.contains(ident))
+            .copied()
+            .collect();
+        to_init_expr(
+            self.tcx,
+            self.env.call_span,
+            expression,
+            &modified_variables,
+        )
+    }
+
+    fn iteration_body(&self, next_iteration: Vec<Stmt>) -> Block {
+        let mut body = self.initialization.clone();
+        body.push(encode_iter(self.env, self.loop_stmt, next_iteration).unwrap());
+        Spanned::new(self.env.call_span, body)
+    }
+
+    /// Check that the expectation is finite in every state.
+    fn encode_finiteness(&self, name: &str, expression: &Expr, variables: Vec<Ident>) -> DeclKind {
+        let span = self.env.call_span;
+        let builder = ExprBuilder::new(span);
+        let condition = builder.unary(
+            UnOpKind::Embed,
+            Some(self.tcx.spec_ty().clone()),
+            builder.binary(
+                BinOpKind::Lt,
+                Some(TyKind::Bool),
+                expression.clone(),
+                builder.top_lit(self.tcx.spec_ty()),
+            ),
+        );
+        generate_proc(
+            span,
+            ProcInfo {
+                name: name.to_owned(),
+                inputs: params_from_idents(variables, self.tcx),
+                outputs: vec![],
+                spec: vec![],
+                body: Spanned::new(
+                    span,
+                    vec![Spanned::new(
+                        span,
+                        StmtKind::Assert(Direction::Down, condition),
+                    )],
+                ),
+                direction: Direction::Down,
+            },
+            self.env.base_proc_ident,
+            self.tcx,
+        )
+    }
+
+    /// Check the upper bound on the expected number of iterations.
+    fn encode_iteration_bound(&self, invariant: &Expr, initial_invariant: Expr) -> DeclKind {
+        let span = self.env.call_span;
+        let builder = ExprBuilder::new(span);
+        let mut next_iteration = vec![Spanned::new(
+            span,
+            StmtKind::Tick(builder.cast(TyKind::EUReal, builder.uint(1))),
+        )];
+        next_iteration.extend(hey_const(self.env, invariant, Direction::Up, self.tcx));
+        generate_proc(
+            span,
+            ProcInfo {
+                name: "past".to_owned(),
+                inputs: params_from_idents(self.procedure_inputs.clone(), self.tcx),
+                outputs: params_from_idents(self.modified_variables.clone(), self.tcx),
+                spec: vec![
+                    ProcSpec::Requires(initial_invariant),
+                    ProcSpec::Ensures(builder.cast(TyKind::EUReal, builder.uint(0))),
+                ],
+                body: self.iteration_body(next_iteration),
+                direction: Direction::Up,
+            },
+            self.env.base_proc_ident,
+            self.tcx,
+        )
+    }
+
+    /// Bound the expected absolute change of I over one iteration, including exit.
+    fn encode_difference_bound(
+        &self,
+        invariant: &Expr,
+        initial_invariant: &Expr,
+        bound: &Expr,
+    ) -> DeclKind {
+        let span = self.env.call_span;
+        let builder = ExprBuilder::new(span);
+        let difference = builder.ite(
+            Some(TyKind::EUReal),
+            builder.binary(
+                BinOpKind::Le,
+                Some(TyKind::Bool),
+                initial_invariant.clone(),
+                invariant.clone(),
+            ),
+            builder.binary(
+                BinOpKind::Sub,
+                Some(TyKind::EUReal),
+                invariant.clone(),
+                initial_invariant.clone(),
+            ),
+            builder.binary(
+                BinOpKind::Sub,
+                Some(TyKind::EUReal),
+                initial_invariant.clone(),
+                invariant.clone(),
+            ),
+        );
+        generate_proc(
+            span,
+            ProcInfo {
+                name: "conditional_difference_bounded".to_owned(),
+                inputs: params_from_idents(self.procedure_inputs.clone(), self.tcx),
+                outputs: params_from_idents(self.modified_variables.clone(), self.tcx),
+                spec: vec![
+                    ProcSpec::Requires(builder.cast(TyKind::EUReal, bound.clone())),
+                    ProcSpec::Ensures(difference),
+                ],
+                body: self.iteration_body(vec![]),
+                direction: Direction::Up,
+            },
+            self.env.base_proc_ident,
+            self.tcx,
+        )
+    }
+
+    /// Check `I <= Phi_post(I)`, including `I <= post` at loop exit.
+    fn encode_subinvariant(
+        &self,
+        invariant: &Expr,
+        initial_invariant: Expr,
+        post: &Expr,
+    ) -> DeclKind {
+        let span = self.env.call_span;
+        generate_proc(
+            span,
+            ProcInfo {
+                name: "lower_bound".to_owned(),
+                inputs: params_from_idents(self.procedure_inputs.clone(), self.tcx),
+                outputs: params_from_idents(self.modified_variables.clone(), self.tcx),
+                spec: vec![
+                    ProcSpec::Requires(initial_invariant),
+                    ProcSpec::Ensures(post.clone()),
+                ],
+                body: self.iteration_body(hey_const(
+                    self.env,
+                    invariant,
+                    Direction::Down,
+                    self.tcx,
+                )),
+                direction: Direction::Down,
+            },
+            self.env.base_proc_ident,
+            self.tcx,
+        )
+    }
+
+    fn encode_call(&self, subinvariant: &DeclKind) -> Block {
+        let span = self.env.call_span;
+        let builder = ExprBuilder::new(span);
+        let call = builder.call(
+            subinvariant.name(),
+            self.call_inputs
+                .iter()
+                .map(|ident| ident_to_expr(self.tcx, span, *ident)),
+            self.tcx,
+        );
+        Spanned::new(
+            span,
+            vec![Spanned::new(
+                span,
+                StmtKind::Assign(self.modified_variables.clone(), call),
+            )],
+        )
     }
 }
