@@ -42,9 +42,12 @@ impl<'tcx> Vcgen<'tcx> {
     pub fn vcgen_block(&mut self, block: &Block, post: Expr) -> Result<Expr, CaesarError> {
         let prev_block_span = if let Some(ref mut explanation) = self.explanation {
             let prev_block_span = explanation.set_block_span(Some(block.span));
-            let mut end_span = block.span;
-            end_span.start = end_span.end - 1;
-            explanation.add_expr(end_span, post.clone(), true);
+            // Zero-width spans have no closing brace to explain.
+            if block.span.start < block.span.end {
+                let mut end_span = block.span;
+                end_span.start = end_span.end - 1;
+                explanation.add_expr(end_span, post.clone(), true);
+            }
             prev_block_span
         } else {
             None

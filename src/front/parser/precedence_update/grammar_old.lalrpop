@@ -216,7 +216,10 @@ StmtKind: StmtKind = {
     "if" SymOplus <block1: Block> "else" <block2: Block> => StmtKind::Additive(block1, block2),
     "if" SymCap <block1: Block> "else" <block2: Block> => StmtKind::Demonic(block1, block2),
     "if" SymCup <block1: Block> "else" <block2: Block> => StmtKind::Angelic(block1, block2),
-    "if" <cond: Expr> <block1: Block> "else" <block2: Block> => StmtKind::If(cond, block1, block2),
+    "if" <cond: Expr> <block1: Block> <block2: ("else" <Block>)?> => {
+        let block2 = block2.unwrap_or_else(|| spanned(file, block1.span.end, block1.span.end, vec![]));
+        StmtKind::If(cond, block1, block2)
+    },
     "while" <cond: Expr> <block1: Block> => StmtKind::While(cond, block1),
     <l: @L> "@" <ident: Ident> <inputs: AnnotationInputs?> <r: @R> <stmt: Stmt> => StmtKind::Annotation(span(file, l, r), ident, inputs.unwrap_or_default(), Box::new(stmt)),
     "label" <ident: Ident> => StmtKind::Label(ident),

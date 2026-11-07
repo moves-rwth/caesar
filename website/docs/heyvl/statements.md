@@ -162,10 +162,11 @@ This decrements `x` if it is positive:
 ```heyvl
 if x > 0 {
     x = x - 1
-} else {}
+}
 ```
 
-The `else` block is required, but may be empty.
+The `else` block is optional.
+Omitting it is equivalent to writing `else {}`.
 
 ### While Loops
 
