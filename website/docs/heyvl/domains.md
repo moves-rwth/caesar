@@ -49,7 +49,7 @@ proc ohfive_6() -> ()
 
 
 The domain `Exponentials` contains one func declaration `exp_05` with one parameter, `exponent` of type `UInt`.
-It returns a value of type `UInt`, and its recursive definition is given after the equality sign.
+It returns a value of type `UReal`, and its recursive definition is given after the equality sign.
 
 :::note Function Encodings
 
@@ -105,10 +105,10 @@ domain Exponentials {
 ### Axioms for Hints
 
 Axioms can be used for both definitional functions and for uninterpreted functions.
-For example, the verifier might need to know the fact that `exp_05(x) >= 1` always holds.
+For example, the verifier might need to know the fact that `exp_05(x) <= 1` always holds.
 We can add the following axiom for both of the above definitions to let Caesar know this fact:
 ```heyvl
-axiom exp_05_one forall exponent: UInt. exp_05(exponent) >= 1
+axiom exp_05_one forall exponent: UInt. exp_05(exponent) <= 1
 ```
 
 ### Axioms as Assumptions
@@ -159,7 +159,7 @@ When using [limited functions](../caesar/debugging.md#function-encodings-and-lim
 At the moment, Caesar will *only* define the axiom with one specific fuel value, which is the maximum defined by the `--max-fuel` command-line option (default: 2).
 For example, the axiom from above would be translated to:
 ```heyvl
-axiom exp_05_one forall exponent: UInt. exp_05($S($S($Z)), exponent) >= 1
+axiom exp_05_one forall exponent: UInt. exp_05($S($S($Z)), exponent) <= 1
 ```
 where `$S($S($Z))` represents the fuel value of 2.
 This behavior has implications with respect to [triggers](./expressions.md#triggers): the quantifier will only be instantiated by e-matching for the specific fuel value of 2.

@@ -26,19 +26,20 @@ In addition to theoretical results such as convergence and completeness of the a
 The HeyVL encoding of the Riemann sum approximation is simple.
 Consider sampling the variable `x` from the *continuous* uniform distribution over the $[0,1]$.
 
-The original sampling interval $[0,1]$ is divided into $N+1$ subintervals, where $N$ has to be a chosen integer literal.
-Then, the encoding looks as follows:
+The original sampling interval $[0,1]$ is divided into $N$ equally sized subintervals, where $N\ge1$.
+For example, the following encoding uses $N=8$:
 ```heyvl
+var N: UInt = 8
 var x: UReal
-var j: UInt = unif(0, N)
+var j: UInt = unif(0, 7)
 cohavoc x
 coassume ?!(j / N <= x && x <= (j+1) / N)
 ```
 
-We sample a random integer $j$ from the *discrete* uniform distribution over $[0,N)$ using the [built-in `unif` distribution](/docs/stdlib/distributions).
-The sampled integer $j$ is then used to select the subinterval $I = [j/N, (j+1)/N)$.
-To overapproximate the expected value on the subinterval $I$, we *nondeterministically* select a value $x \in I$ such that the expected value is maximized.
-This is done using the `cohavoc` and `coassume` statements.
+We sample a random integer $j$ uniformly from $0$ through $N-1$ using the [built-in `unif` distribution](/docs/stdlib/distributions).
+Its bounds must be integer literals, so the code uses `unif(0, 7)`.
+The sampled integer $j$ is then used to select the closed subinterval $I = [j/N, (j+1)/N]$.
+The `cohavoc` and `coassume` statements take the supremum of the postexpectation over all values $x\in I$, giving an upper approximation on that subinterval.
 
 Increasing the parameter $N$ leads to a more precise approximation of the expected value, but incurs a slowdown in the verification time.
 
@@ -46,7 +47,7 @@ The above encodes the Riemann sum over-approximation of the expected value of a 
 Formally:
 
 $$
-\int_0^1 f(x) \, dx \quad\leq\quad \sum_{j=0}^N \frac{1}{N+1} \cdot \sup_{ j \in [j/N, (j+1)/N) } f\left(\frac{j}{N+1}\right)
+\int_0^1 f(x) \, dx \quad\leq\quad \frac{1}{N} \sum_{j=0}^{N-1} \sup_{x \in [j/N, (j+1)/N]} f(x)
 $$
 
 A dual version of the encoding can be used to obtain an *under*-approximation of the expected value.
