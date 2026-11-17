@@ -25,7 +25,7 @@
 use std::ops::DerefMut;
 
 use z3::SatResult;
-use z3rro::prover::{IncrementalMode, Prover};
+use z3rro::solver::{IncrementalMode, SolverSession};
 
 use crate::{
     ast::{
@@ -48,11 +48,9 @@ pub struct Unfolder<'smt, 'ctx> {
     /// Context to translate to SMT.
     translate: TranslateExprs<'smt, 'ctx>,
 
-    /// The prover keeps track of the conditions to reach the current
-    /// sub-expression. The proof check returns `Proof` if it's unreachable.
-    /// Since the conditions are not complete, a result of `Counterexample` does
-    /// not prove that a sub-expression is guaranteed to be reachable.
-    prover: Prover<'ctx>,
+    /// The solver tracks necessary conditions for reaching the current sub-expression.
+    /// Only `Unsat` establishes that the sub-expression is unreachable.
+    solver: SolverSession<'ctx>,
 }
 
 impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
@@ -60,20 +58,20 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
         // it's important that we use the native incremental mode here, because
         // the performance benefit from the unfolder relies on many very fast
         // SAT checks.
-        let prover = Prover::new(ctx.ctx(), IncrementalMode::Native);
+        let solver = SolverSession::new(ctx.ctx(), IncrementalMode::Native);
 
         Unfolder {
             subst: Subst::new(ctx.tcx(), &limits_ref),
             translate: TranslateExprs::new(ctx),
-            prover,
+            solver,
         }
     }
 
-    /// Call `f` surrounded by `push()` and `pop()` calls to the prover.
-    fn with_prover_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        self.prover.push();
+    /// Call `f` surrounded by `push()` and `pop()` calls to the solver.
+    fn with_solver_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.solver.push();
         let res = f(self);
-        self.prover.pop();
+        self.solver.pop();
         res
     }
 
@@ -88,18 +86,13 @@ impl<'smt, 'ctx> Unfolder<'smt, 'ctx> {
 
         // TODO: the local scope is unnecessarily repeatedly added to the
         // solver.
-        self.translate
-            .local_scope()
-            .add_assumptions_to_prover(&mut self.prover);
+        self.translate.local_scope().assert_into(&mut self.solver);
 
-        self.with_prover_scope(|this| {
-            this.prover.add_assumption(&expr_z3);
+        self.with_solver_scope(|this| {
+            this.solver.assert(&expr_z3);
             tracing::trace!(expr_z3=%expr_z3, "added expr to unfolder solver");
-            // here we want to do a SAT check and not a proof search. if the
-            // expression is e.g. `false`, then we want to get `Unsat` from the
-            // solver and not `Proof`!
-            if this.prover.check_sat() == SatResult::Unsat {
-                tracing::trace!(solver=?this.prover, "eliminated zero expr");
+            if this.solver.check() == SatResult::Unsat {
+                tracing::trace!(solver=?this.solver, "eliminated zero expr");
                 None
             } else {
                 Some(callback(this))
@@ -243,12 +236,9 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                 );
                 let scope = self.translate.push();
 
-                self.prover.push();
-                // we could also add the assumptions before the prover.push()
-                // call, but then we're risking re-adding the same assumptions
-                // over and over again. The SmtScope structure doesn't
-                // deduplicate those yet and I'm not sure Z3 does either.
-                scope.add_assumptions_to_prover(&mut self.prover);
+                self.solver.push();
+                // Add constraints inside the scope so they are removed when it is popped.
+                scope.assert_into(&mut self.solver);
 
                 for quant_var in quant_vars {
                     self.translate.fresh(quant_var.name());
@@ -257,7 +247,7 @@ impl<'smt, 'ctx> VisitorMut for Unfolder<'smt, 'ctx> {
                 self.visit_expr(expr)?;
 
                 self.translate.pop();
-                self.prover.pop();
+                self.solver.pop();
                 self.subst.pop();
                 Ok(())
             }

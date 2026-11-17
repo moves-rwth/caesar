@@ -2,7 +2,10 @@ use proptest::{
     prelude::*,
     test_runner::{TestCaseResult, TestRunner},
 };
-use z3rro::prover::{IncrementalMode, ProveResult, Prover};
+use z3rro::{
+    prover::{ProveResult, Prover},
+    solver::IncrementalMode,
+};
 
 use crate::{
     ast::{

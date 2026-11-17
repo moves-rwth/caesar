@@ -3,7 +3,8 @@
 use itertools::Itertools;
 use z3rro::{
     model::SmtEval,
-    prover::{IncrementalMode, ProveResult, Prover},
+    prover::{ProveResult, Prover},
+    solver::IncrementalMode,
 };
 
 use super::{

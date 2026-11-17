@@ -4,12 +4,13 @@ use indexmap::IndexSet;
 use itertools::Itertools;
 use tracing::{debug, info, info_span, instrument, warn};
 use z3::{
-    ast::{Bool, Dynamic},
+    ast::{forall_const, Ast, Bool, Dynamic},
     SatResult, Statistics,
 };
 use z3rro::{
     model::{InstrumentedModel, ModelConsistency},
     prover::{ProveResult, Prover},
+    solver::{IncrementalMode, SolverSession},
     util::ReasonUnknown,
 };
 
@@ -132,7 +133,7 @@ impl<'ctx> SmtSliceStmts<'ctx> {
 /// slicing by doing a binary search of upper bounds on the number of statements
 /// we're keeping in the program.
 pub struct SliceSolver<'ctx> {
-    prover: Prover<'ctx>,
+    solver: SolverSession<'ctx>,
     slice_stmts: SmtSliceStmts<'ctx>,
     universally_bound: Vec<Dynamic<'ctx>>,
 }
@@ -141,16 +142,17 @@ impl<'ctx> SliceSolver<'ctx> {
     pub fn new<'smt>(
         slice_stmts: SliceStmts,
         translate: &mut TranslateExprs<'smt, 'ctx>,
-        mut prover: Prover<'ctx>,
+        prover: Prover<'ctx>,
     ) -> Self {
         let slice_stmts = SmtSliceStmts::new(slice_stmts, translate);
         let universally_bound = slice_stmts.universally_bound(translate);
 
-        prover.push();
-        prover.push();
+        let mut solver = prover.into_proof_query();
+        solver.push();
+        solver.push();
 
         SliceSolver {
-            prover,
+            solver,
             slice_stmts,
             universally_bound,
         }
@@ -160,7 +162,7 @@ impl<'ctx> SliceSolver<'ctx> {
         let (active, inactive) = self.slice_stmts.split_by_selection(selection);
 
         // inactive statements must be enabled in the slice
-        let inactive_formula = Bool::and(self.prover.get_context(), &inactive);
+        let inactive_formula = Bool::and(self.solver.get_context(), &inactive);
 
         debug!(
             active = active.len(),
@@ -171,23 +173,6 @@ impl<'ctx> SliceSolver<'ctx> {
         (active, inactive_formula)
     }
 
-    /*
-    /// Run [`check_original_proof`] on the original query, without slicing anything.
-    pub fn check_original_proof(&mut self) -> ProveResult<'ctx> {
-        self.prover.pop();
-        self.prover.push();
-        let active_toggle_values: Vec<_> = self
-            .slice_stmts
-            .iter()
-            .map(|(_, value)| value.clone())
-            .collect();
-        self.prover.add_assumption(&Bool::and(
-            self.prover.solver().get_context(),
-            &active_toggle_values,
-        ));
-        self.prover.check_proof()
-    } */
-
     /// Minimize the number of statements while the program still verifies using
     /// an exists-forall encoding.
     #[instrument(level = "info", skip_all)]
@@ -196,19 +181,19 @@ impl<'ctx> SliceSolver<'ctx> {
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
     ) -> Result<Option<SliceModel>, LimitError> {
-        assert_eq!(self.prover.level(), 2);
-        self.prover.pop();
-        self.prover.pop();
-        self.prover.push();
+        assert_eq!(self.solver.level(), 2);
+        self.solver.pop();
+        self.solver.pop();
+        self.solver.push();
 
         let selection = SliceSelection::VERIFIED_SELECTION;
         let (active_toggle_values, inactive_formula) = self.translate_selection(&selection);
 
-        let (prover, universally_bound) = (&mut self.prover, &self.universally_bound);
+        let (solver, universally_bound) = (&mut self.solver, &self.universally_bound);
 
-        prover.add_assumption(&self.slice_stmts.constraints);
-        let mut exists_forall_solver = prover.to_exists_forall(universally_bound);
-        exists_forall_solver.add_assumption(&inactive_formula);
+        solver.assert(&self.slice_stmts.constraints);
+        let mut exists_forall_solver = exists_forall_query(solver, universally_bound);
+        exists_forall_solver.assert(&inactive_formula);
         exists_forall_solver.push();
         exists_forall_solver.push();
         slice_sat_binary_search(
@@ -233,29 +218,26 @@ impl<'ctx> SliceSolver<'ctx> {
         &mut self,
         limits_ref: &LimitsRef,
     ) -> Result<Option<SliceModel>, LimitError> {
-        assert_eq!(self.prover.level(), 2);
-        self.prover.pop();
-        self.prover.pop();
-        self.prover.push();
+        assert_eq!(self.solver.level(), 2);
+        self.solver.pop();
+        self.solver.pop();
+        self.solver.push();
 
         let selection = SliceSelection::VERIFIED_SELECTION;
         let (active_toggle_values, inactive_formula) = self.translate_selection(&selection);
 
         if let Some(timeout) = limits_ref.time_left() {
-            self.prover.set_timeout(timeout);
+            self.solver.set_timeout(timeout);
         }
 
-        self.prover.add_assumption(&self.slice_stmts.constraints);
-        self.prover.add_assumption(&inactive_formula);
-        let res = check_proof_assuming_interruptibly(
-            &mut self.prover,
-            limits_ref,
-            &active_toggle_values,
-        )?;
+        self.solver.assert(&self.slice_stmts.constraints);
+        self.solver.assert(&inactive_formula);
+        let res =
+            check_sat_assuming_interruptibly(&mut self.solver, limits_ref, &active_toggle_values)?;
 
         let mut slice_searcher = SliceModelSearch::new(active_toggle_values.clone());
-        if let ProveResult::Proof = res {
-            slice_searcher.found_active(self.prover.get_unsat_core());
+        if let SatResult::Unsat = res {
+            slice_searcher.found_active(self.solver.get_unsat_core());
         }
 
         Ok(slice_searcher.finish().map(|minimal_unsat| {
@@ -276,19 +258,19 @@ impl<'ctx> SliceSolver<'ctx> {
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
     ) -> Result<Option<SliceModel>, LimitError> {
-        assert_eq!(self.prover.level(), 2);
-        self.prover.pop();
-        self.prover.pop();
-        self.prover.push();
+        assert_eq!(self.solver.level(), 2);
+        self.solver.pop();
+        self.solver.pop();
+        self.solver.push();
 
         let selection = SliceSelection::VERIFIED_SELECTION;
         let (active_toggle_values, inactive_formula) = self.translate_selection(&selection);
 
-        self.prover.add_assumption(&self.slice_stmts.constraints);
-        self.prover.add_assumption(&inactive_formula);
+        self.solver.assert(&self.slice_stmts.constraints);
+        self.solver.assert(&inactive_formula);
 
         // TODO: re-use the unsat core from the proof instead of starting fresh
-        let context = self.prover.get_context();
+        let context = self.solver.get_context();
         let mut subset_explorer = {
             let active_toggle_values = active_toggle_values.iter().cloned().collect();
             let extensive: IndexSet<Bool<'_>> = self
@@ -318,7 +300,7 @@ impl<'ctx> SliceSolver<'ctx> {
             SubsetExploration::new(context, active_toggle_values, extensive, reductive)
         };
 
-        let res = slice_unsat_search(&mut subset_explorer, &mut self.prover, options, limits_ref)?;
+        let res = slice_unsat_search(&mut subset_explorer, &mut self.solver, options, limits_ref)?;
 
         Ok(res.map(|minimal_unsat| {
             SliceModel::from_enabled(
@@ -337,25 +319,25 @@ impl<'ctx> SliceSolver<'ctx> {
         options: &SliceSolveOptions,
         limits_ref: &LimitsRef,
     ) -> Result<(ProveResult, Option<(InstrumentedModel<'ctx>, SliceModel)>), LimitError> {
-        if !self.prover.has_provables() {
-            return Ok((ProveResult::Proof, None));
-        }
-
-        assert_eq!(self.prover.level(), 2);
-        self.prover.pop();
-        self.prover.pop();
-        self.prover.push();
+        assert_eq!(self.solver.level(), 2);
+        self.solver.pop();
+        self.solver.pop();
+        self.solver.push();
 
         let selection = SliceSelection::FAILURE_SELECTION;
         let (active_toggle_values, inactive_formula) = self.translate_selection(&selection);
 
-        self.prover.add_assumption(&self.slice_stmts.constraints);
-        self.prover.add_assumption(&inactive_formula);
-        self.prover.push();
+        self.solver.assert(&self.slice_stmts.constraints);
+        self.solver.assert(&inactive_formula);
+        self.solver.push();
 
-        slice_sat_binary_search(&mut self.prover, &active_toggle_values, options, limits_ref)?;
-        let res = check_proof_interruptibly(&mut self.prover, limits_ref)?;
-        let model = if let Some(model) = self.prover.get_model() {
+        slice_sat_binary_search(&mut self.solver, &active_toggle_values, options, limits_ref)?;
+        let res = match check_sat_interruptibly(&mut self.solver, limits_ref)? {
+            SatResult::Unsat => ProveResult::Proof,
+            SatResult::Sat => ProveResult::Counterexample,
+            SatResult::Unknown => ProveResult::Unknown(self.solver.get_reason_unknown().unwrap()),
+        };
+        let model = if let Some(model) = self.solver.get_model() {
             assert!(matches!(
                 res,
                 ProveResult::Counterexample | ProveResult::Unknown(_)
@@ -369,9 +351,9 @@ impl<'ctx> SliceSolver<'ctx> {
         Ok((res, model))
     }
 
-    /// Retrieve the underlying prover's statistics.
+    /// Retrieve the solver session's statistics.
     pub fn get_statistics(&self) -> Statistics<'ctx> {
-        self.prover.get_statistics()
+        self.solver.get_statistics()
     }
 }
 
@@ -453,27 +435,45 @@ impl<'ctx> SliceModelSearch<'ctx> {
     }
 }
 
-/// Slice on the provided prover with the given slice variables while the solver
-/// returns SAT. We do a kind of binary search on the number of enabled slice
-/// variables using Z3's `pb_le` constraint (at most n true).
+/// Universally quantify the negation of the counterexample query over program variables.
+fn exists_forall_query<'ctx>(
+    solver: &SolverSession<'ctx>,
+    universal: &[Dynamic<'ctx>],
+) -> SolverSession<'ctx> {
+    let ctx = solver.get_context();
+    let universal: Vec<&dyn Ast<'ctx>> =
+        universal.iter().map(|var| var as &dyn Ast<'ctx>).collect();
+    let theorem = forall_const(
+        ctx,
+        &universal,
+        &[],
+        &Bool::and(ctx, &solver.get_assertions()).not(),
+    );
+    let mut result = SolverSession::new(ctx, IncrementalMode::Native);
+    result.assert(&theorem);
+    result
+}
+
+/// Slice on the provided solver with the given slice variables while the solver returns SAT.
+/// Search for the number of enabled slice variables using Z3's `pb_le` constraint (at most n true).
 fn slice_sat_binary_search<'ctx>(
-    prover: &mut Prover<'ctx>,
+    solver: &mut SolverSession<'ctx>,
     active_slice_vars: &[Bool<'ctx>],
     options: &SliceSolveOptions,
     limits_ref: &LimitsRef,
 ) -> Result<(), LimitError> {
-    assert_eq!(prover.level(), 2);
+    assert_eq!(solver.level(), 2);
 
     let slice_vars: Vec<(&Bool<'ctx>, i32)> =
         active_slice_vars.iter().map(|value| (value, 1)).collect();
 
-    let set_at_most_true = |prover: &mut Prover<'ctx>, at_most_n: usize| {
-        prover.pop();
-        prover.push();
+    let set_at_most_true = |solver: &mut SolverSession<'ctx>, at_most_n: usize| {
+        solver.pop();
+        solver.push();
 
-        let ctx = prover.get_context();
+        let ctx = solver.get_context();
         let at_most_n_true = Bool::pb_le(ctx, &slice_vars, at_most_n as i32);
-        prover.add_assumption(&at_most_n_true);
+        solver.assert(&at_most_n_true);
     };
 
     // TODO: we could have min_least_bound set to 1 if we could conclude for
@@ -505,16 +505,16 @@ fn slice_sat_binary_search<'ctx>(
         )
         .entered();
 
-        set_at_most_true(prover, n);
+        set_at_most_true(solver, n);
         if let Some(timeout) = limits_ref.time_left() {
-            prover.set_timeout(timeout);
+            solver.set_timeout(timeout);
         }
-        let res = check_sat_interruptibly(prover, limits_ref)?;
+        let res = check_sat_interruptibly(solver, limits_ref)?;
 
         entered.record("res", tracing::field::debug(res));
 
         let mut done = false;
-        if let Some(model) = prover.get_model() {
+        if let Some(model) = solver.get_model() {
             if model.consistency() == ModelConsistency::Consistent
                 || options.unknown == UnknownHandling::Accept
             {
@@ -566,11 +566,11 @@ fn slice_sat_binary_search<'ctx>(
     if let Some(cur_solver_n) = cur_solver_n {
         // only reset if the solver isn't already in the correct state
         if cur_solver_n != enabled {
-            set_at_most_true(prover, enabled);
+            set_at_most_true(solver, enabled);
             if let Some(timeout) = limits_ref.time_left() {
-                prover.set_timeout(timeout);
+                solver.set_timeout(timeout);
             }
-            let res = check_sat_interruptibly(prover, limits_ref)?;
+            let res = check_sat_interruptibly(solver, limits_ref)?;
             if minimize.min_accept().is_some() {
                 assert!(res == SatResult::Sat || res == SatResult::Unknown);
             } else if minimize.max_reject().is_some() {
@@ -581,7 +581,7 @@ fn slice_sat_binary_search<'ctx>(
         }
     }
 
-    assert_eq!(prover.level(), 2);
+    assert_eq!(solver.level(), 2);
     Ok(())
 }
 
@@ -589,7 +589,7 @@ fn slice_sat_binary_search<'ctx>(
 #[instrument(level = "trace", skip_all)]
 pub fn slice_unsat_search<'ctx>(
     exploration: &mut SubsetExploration<'ctx>,
-    prover: &mut Prover<'ctx>,
+    solver: &mut SolverSession<'ctx>,
     options: &SliceSolveOptions,
     limits_ref: &LimitsRef,
 ) -> Result<Option<Vec<Bool<'ctx>>>, LimitError> {
@@ -600,14 +600,14 @@ pub fn slice_unsat_search<'ctx>(
     while let Some(seed) = exploration.next_set() {
         limits_ref.check_limits()?;
 
-        match check_proof_seed(&all_variables, prover, limits_ref, &seed)? {
-            ProveResult::Proof => {
+        match check_seed(&all_variables, solver, limits_ref, &seed)? {
+            SatResult::Unsat => {
                 // now start the shrinking, then block up
                 let res = exploration.shrink_block_unsat(seed, |seed| -> Result<_, LimitError> {
                     Ok(
-                        match check_proof_seed(&all_variables, prover, limits_ref, seed)? {
-                            ProveResult::Proof => Some(unsat_core_to_seed(prover, &all_variables)),
-                            ProveResult::Counterexample | ProveResult::Unknown(_) => None,
+                        match check_seed(&all_variables, solver, limits_ref, seed)? {
+                            SatResult::Unsat => Some(unsat_core_to_seed(solver, &all_variables)),
+                            SatResult::Sat | SatResult::Unknown => None,
                         },
                     )
                 });
@@ -622,16 +622,16 @@ pub fn slice_unsat_search<'ctx>(
                     SliceMinimality::Size => exploration.block_at_least(res.len()),
                 }
             }
-            ProveResult::Counterexample => {
+            SatResult::Sat => {
                 // grow the counterexample and then block down
                 exploration.grow_block_sat(seed, |seed| -> Result<_, LimitError> {
                     Ok(matches!(
-                        check_proof_seed(&all_variables, prover, limits_ref, seed)?,
-                        ProveResult::Counterexample
+                        check_seed(&all_variables, solver, limits_ref, seed)?,
+                        SatResult::Sat
                     ))
                 })?;
             }
-            ProveResult::Unknown(_) => {
+            SatResult::Unknown => {
                 exploration.block_this(&seed);
 
                 match options.unknown {
@@ -652,18 +652,18 @@ pub fn slice_unsat_search<'ctx>(
 }
 
 #[instrument(level = "trace", skip_all, ret)]
-fn check_proof_seed<'ctx>(
+fn check_seed<'ctx>(
     all_variables: &IndexSet<Bool<'ctx>>,
-    prover: &mut Prover<'ctx>,
+    solver: &mut SolverSession<'ctx>,
     limits_ref: &LimitsRef,
     seed: &IndexSet<Bool<'ctx>>,
-) -> Result<ProveResult, LimitError> {
+) -> Result<SatResult, LimitError> {
     let mut timeout = Duration::from_millis(100);
     if let Some(time_left) = limits_ref.time_left() {
         timeout = timeout.min(time_left);
     }
 
-    prover.set_timeout(timeout);
+    solver.set_timeout(timeout);
 
     let (all_on, all_off): (IndexSet<_>, IndexSet<_>) = all_variables
         .iter()
@@ -673,74 +673,44 @@ fn check_proof_seed<'ctx>(
     let all_off_assumptions = all_off.iter().map(Bool::not);
     let all_assumptions = all_on_assumptions.chain(all_off_assumptions).collect_vec();
 
-    // prover.push();
-    check_proof_assuming_interruptibly(prover, limits_ref, &all_assumptions)
-    // prover.pop();
+    check_sat_assuming_interruptibly(solver, limits_ref, &all_assumptions)
 }
 
 fn unsat_core_to_seed<'ctx>(
-    prover: &mut Prover<'ctx>,
+    solver: &mut SolverSession<'ctx>,
     all_variables: &IndexSet<Bool<'ctx>>,
 ) -> IndexSet<Bool<'ctx>> {
-    let unsat_core: IndexSet<Bool<'ctx>> = prover.get_unsat_core().into_iter().collect();
+    let unsat_core: IndexSet<Bool<'ctx>> = solver.get_unsat_core().into_iter().collect();
     all_variables.intersection(&unsat_core).cloned().collect()
 }
 
 fn check_sat_interruptibly<'ctx>(
-    prover: &mut Prover<'ctx>,
+    solver: &mut SolverSession<'ctx>,
     limits_ref: &LimitsRef,
 ) -> Result<SatResult, LimitError> {
-    let result = run_prover_interruptibly(prover, limits_ref, Prover::check_sat);
-    if matches!(result, SatResult::Unknown)
-        && prover.get_reason_unknown() == Some(ReasonUnknown::Interrupted)
+    check_sat_assuming_interruptibly(solver, limits_ref, &[])
+}
+
+fn check_sat_assuming_interruptibly<'ctx>(
+    solver: &mut SolverSession<'ctx>,
+    limits_ref: &LimitsRef,
+    assumptions: &[Bool<'ctx>],
+) -> Result<SatResult, LimitError> {
+    let handle = solver.get_context().handle();
+    let result = thread::scope(|scope| {
+        let done_sender = limits_ref.spawn_until_stopped_or_done(scope, move || {
+            handle.interrupt();
+        });
+
+        let result = solver.check_assuming(assumptions);
+        let _ = done_sender.send(());
+        result
+    });
+    if result == SatResult::Unknown
+        && solver.get_reason_unknown() == Some(ReasonUnknown::Interrupted)
     {
         Err(limits_ref.interrupted_error())
     } else {
         Ok(result)
     }
-}
-
-fn check_proof_interruptibly<'ctx>(
-    prover: &mut Prover<'ctx>,
-    limits_ref: &LimitsRef,
-) -> Result<ProveResult, LimitError> {
-    let result = run_prover_interruptibly(prover, limits_ref, Prover::check_proof);
-    if matches!(result, ProveResult::Unknown(ReasonUnknown::Interrupted)) {
-        Err(limits_ref.interrupted_error())
-    } else {
-        Ok(result)
-    }
-}
-
-fn check_proof_assuming_interruptibly<'ctx>(
-    prover: &mut Prover<'ctx>,
-    limits_ref: &LimitsRef,
-    assumptions: &[Bool<'ctx>],
-) -> Result<ProveResult, LimitError> {
-    let result = run_prover_interruptibly(prover, limits_ref, |prover| {
-        prover.check_proof_assuming(assumptions)
-    });
-    if matches!(result, ProveResult::Unknown(ReasonUnknown::Interrupted)) {
-        Err(limits_ref.interrupted_error())
-    } else {
-        Ok(result)
-    }
-}
-
-fn run_prover_interruptibly<'ctx, T>(
-    prover: &mut Prover<'ctx>,
-    limits_ref: &LimitsRef,
-    check: impl FnOnce(&mut Prover<'ctx>) -> T,
-) -> T {
-    let handle = prover.get_context().handle();
-
-    thread::scope(|scope| {
-        let done_sender = limits_ref.spawn_until_stopped_or_done(scope, move || {
-            handle.interrupt();
-        });
-
-        let result = check(prover);
-        let _ = done_sender.send(());
-        result
-    })
 }

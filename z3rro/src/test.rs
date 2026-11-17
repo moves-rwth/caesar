@@ -4,7 +4,10 @@
 
 use z3::{ast::Bool, Config, Context, SatResult};
 
-use crate::prover::{IncrementalMode, ProveResult, Prover};
+use crate::{
+    prover::{ProveResult, Prover},
+    solver::{IncrementalMode, SolverSession},
+};
 
 use super::scope::SmtScope;
 
@@ -18,14 +21,12 @@ pub fn test_prove(f: impl for<'ctx> FnOnce(&'ctx Context, &mut SmtScope<'ctx>) -
     let mut scope = SmtScope::new();
     let theorem = f(&ctx, &mut scope);
 
+    let mut session = SolverSession::new(&ctx, IncrementalMode::Native);
+    scope.assert_into(&mut session);
+    assert_eq!(session.check(), SatResult::Sat, "SmtScope is inconsistent");
+
     let mut prover = Prover::new(&ctx, IncrementalMode::Native);
     scope.add_assumptions_to_prover(&mut prover);
-    assert_eq!(
-        prover.check_sat(),
-        SatResult::Sat,
-        "SmtScope is inconsistent"
-    );
-
     prover.add_provable(&theorem);
     match prover.check_proof() {
         ProveResult::Counterexample => panic!(

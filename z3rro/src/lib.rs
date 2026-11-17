@@ -31,6 +31,7 @@ pub mod probes;
 pub mod prover;
 pub mod quantifiers;
 pub mod smtlib;
+pub mod solver;
 mod uint;
 pub use uint::UInt;
 mod ureal;

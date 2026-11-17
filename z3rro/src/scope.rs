@@ -15,6 +15,7 @@ use z3::{
 use crate::{
     prover::Prover,
     quantifiers::{mk_quantifier, QuantifierMeta, QuantifierType},
+    solver::SolverSession,
     Factory, SmtFactory, SmtInvariant,
 };
 
@@ -69,6 +70,13 @@ impl<'ctx> SmtScope<'ctx> {
         // quantified by Z3.
         for constraint in &self.constraints {
             prover.add_assumption(constraint);
+        }
+    }
+
+    /// Assert this scope's constraints into a solver session.
+    pub fn assert_into(&self, session: &mut SolverSession<'ctx>) {
+        for constraint in &self.constraints {
+            session.assert(constraint);
         }
     }
 

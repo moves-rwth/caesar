@@ -15,8 +15,9 @@ use z3rro::quantifiers::QuantifierMeta;
 use z3rro::{
     model::InstrumentedModel,
     probes::ProbeSummary,
-    prover::{IncrementalMode, ProveResult, Prover},
+    prover::{ProveResult, Prover},
     smtlib::Smtlib,
+    solver::IncrementalMode,
     util::{PrefixWriter, ReasonUnknown},
 };
 
