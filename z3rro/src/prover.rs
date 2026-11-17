@@ -50,6 +50,8 @@ enum StackSolver<'ctx> {
 
 #[derive(Debug)]
 struct LastSatResult {
+    /// Whether the last check used temporary assumptions, so its result cannot be reused for an assumption-free check.
+    has_assumptions: bool,
     /// Whether the current model is consistent with the assertions. If the SMT
     /// solver returned [`SatResult::Unknown`], it is
     /// [`ModelConsistency::Unknown`].
@@ -125,6 +127,13 @@ impl<'ctx> Prover<'ctx> {
     pub fn set_timeout(&mut self, duration: Duration) {
         self.timeout = Some(duration);
         set_solver_timeout(self.get_solver(), duration);
+        if self
+            .last_result
+            .as_ref()
+            .is_some_and(|result| result.last_result == SatResult::Unknown)
+        {
+            self.last_result = None;
+        }
     }
 
     /// Add an assumption to this prover.
@@ -164,18 +173,12 @@ impl<'ctx> Prover<'ctx> {
             return ProveResult::Proof;
         }
 
-        let res = match &self.last_result {
-            Some(cached_result) if assumptions.is_empty() => cached_result.last_result,
-            _ => {
-                let solver = self.get_solver();
-                let res = if assumptions.is_empty() {
-                    solver.check()
-                } else {
-                    solver.check_assumptions(assumptions)
-                };
-                self.cache_result(res);
-                res
-            }
+        let res = if assumptions.is_empty() {
+            self.check_sat()
+        } else {
+            let res = self.get_solver().check_assumptions(assumptions);
+            self.cache_result(res, true);
+            res
         };
         match res {
             SatResult::Unsat => ProveResult::Proof,
@@ -194,22 +197,27 @@ impl<'ctx> Prover<'ctx> {
 
     /// Do the regular SAT check.
     pub fn check_sat(&mut self) -> SatResult {
-        if let Some(cached_result) = &self.last_result {
+        if let Some(cached_result) = self
+            .last_result
+            .as_ref()
+            .filter(|result| !result.has_assumptions)
+        {
             return cached_result.last_result;
         }
         let res = self.get_solver().check();
-        self.cache_result(res);
+        self.cache_result(res, false);
         res
     }
 
     /// Save the result of the last SAT/proof check.
-    fn cache_result(&mut self, sat_result: SatResult) {
+    fn cache_result(&mut self, sat_result: SatResult, has_assumptions: bool) {
         let model_consistency = match sat_result {
             SatResult::Sat => Some(ModelConsistency::Consistent),
             SatResult::Unknown => Some(ModelConsistency::Unknown),
             SatResult::Unsat => None,
         };
         self.last_result = Some(LastSatResult {
+            has_assumptions,
             model_consistency,
             last_result: sat_result,
         });
