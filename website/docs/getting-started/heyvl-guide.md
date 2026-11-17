@@ -25,7 +25,7 @@ import TOCInline from '@theme/TOCInline';
 
 ### Architecture
 
-<figure style={{"maxWidth": "400px", "float": "right", "width": "100%", "border": "1px solid gray", "padding": "1em", "borderRadius": "5px"}}>
+<figure style={{"maxWidth": "400px", "float": "right", "width": "100%", "margin": "1em 0 1em 1.5em", "border": "1px solid gray", "padding": "1em", "borderRadius": "5px"}}>
     <h3 style={{"textAlign": "center"}}>Architecture of Caesar</h3>
     <img src="/img/architecture-oopsla23.svg" />
 </figure>

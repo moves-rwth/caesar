@@ -1,4 +1,5 @@
 @import './fonts.css';
+@import './docs.css';
 
 /**
  * Any CSS included here will be global. The classic template
@@ -146,21 +147,21 @@ pre code {
   font-family: 'Source Code Pro', var(--ifm-font-family-monospace);
 }
 
-/* Separate documentation sections without adding visual rules. */
 .markdown {
   --caesar-docs-code-background: var(--ifm-code-background);
 }
 
-.markdown h2 {
+/* Keep the existing typography on Markdown pages outside the documentation. */
+.markdown:not(.theme-doc-markdown) h2.anchor {
+  --ifm-h2-font-size: 1.75rem;
   margin-top: 3.5rem;
-  font-size: 1.75rem;
 }
 
-.markdown h3 {
+.markdown:not(.theme-doc-markdown) h3.anchor {
   margin-top: 2.75rem;
 }
 
-.markdown h2 + h3 {
+.markdown:not(.theme-doc-markdown) h2.anchor + h3.anchor {
   margin-top: 1.5rem;
 }
 
