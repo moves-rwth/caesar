@@ -67,7 +67,7 @@ impl<'ctx> QuantifierMeta<'ctx> {
         }
         qid.push_str(&self.user_name);
         if let Some(ref variant) = self.variant {
-            writeln!(&mut qid, "_{variant}").unwrap();
+            write!(&mut qid, "_{variant}").unwrap();
         }
         qid
     }
