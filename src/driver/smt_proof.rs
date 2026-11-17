@@ -186,6 +186,7 @@ pub fn mk_function_encoder<'ctx>(
     } else {
         PartialEncoding::StrengthenToTotal
     };
+    let mut uses_recursive_fuel = false;
     let function_encoding = match fe_opt {
         FunctionEncodingOption::Axiomatic => {
             AxiomaticFunctionEncoder::new(AxiomInstantiation::Bidirectional, partial_encoding)
@@ -199,7 +200,7 @@ pub fn mk_function_encoder<'ctx>(
         | FunctionEncodingOption::FuelParam
         | FunctionEncodingOption::FuelMonoComputation
         | FunctionEncodingOption::FuelParamComputation => {
-            let fuel_functions = tcx
+            let fuel_functions: std::collections::HashSet<_> = tcx
                 .get_function_decls()
                 .into_iter()
                 .filter(|f| {
@@ -208,6 +209,7 @@ pub fn mk_function_encoder<'ctx>(
                 })
                 .map(|f| f.borrow().name)
                 .collect();
+            uses_recursive_fuel = !fuel_functions.is_empty();
             tracing::debug!("Using fuel encoding for functions: {:?}", fuel_functions);
             let fuel_options = FuelEncodingOptions {
                 fuel_functions,
@@ -243,12 +245,14 @@ pub fn mk_function_encoder<'ctx>(
     // Warn if using fuel encoding with non-ematching quantifier
     // instantiation. The exception is the [`FuelEncodingOption::FuelMono`]
     // encoding, which does not rely on Z3 not creating new terms for termination.
-    if matches!(
-        options.opt_options.function_encoding,
-        FunctionEncodingOption::FuelParam
-            | FunctionEncodingOption::FuelMonoComputation
-            | FunctionEncodingOption::FuelParamComputation
-    ) && options.opt_options.quantifier_instantiation != QuantifierInstantiation::EMatching
+    if uses_recursive_fuel
+        && matches!(
+            options.opt_options.function_encoding,
+            FunctionEncodingOption::FuelParam
+                | FunctionEncodingOption::FuelMonoComputation
+                | FunctionEncodingOption::FuelParamComputation
+        )
+        && options.opt_options.quantifier_instantiation != QuantifierInstantiation::EMatching
     {
         tracing::warn!(
             "Using fuel function encoding with MBQI still enabled does not guarantee termination. Set the `--quantifier-instantiation e-matching` option to use the fuel encoding without MBQI.",
