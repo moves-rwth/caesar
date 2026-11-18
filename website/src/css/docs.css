@@ -1,3 +1,64 @@
+:root {
+  /* Use the body font's measure for headings and code as well as prose. */
+  --caesar-docs-reading-width: 70rch;
+  --caesar-docs-code-width: var(--caesar-docs-reading-width);
+}
+
+article:has(> .theme-doc-markdown) {
+  container-type: inline-size;
+}
+
+.theme-doc-markdown {
+  max-inline-size: var(--caesar-docs-reading-width);
+  margin-inline: auto;
+}
+
+/* The gallery explicitly opts into the wider article layout. */
+.theme-doc-markdown:has(> .docs-wide) {
+  max-inline-size: none;
+}
+
+.theme-doc-markdown h1 {
+  text-wrap: balance;
+  position: relative;
+  inset-inline-start: 50%;
+  inline-size: 100cqw;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.theme-doc-markdown :where(h2, h3, h4, h5, h6, p, ul, ol, dl, blockquote, details, hr, .theme-admonition),
+.theme-doc-breadcrumbs,
+.theme-doc-toc-mobile,
+.theme-doc-footer,
+article:has(> .theme-doc-markdown) + .pagination-nav {
+  max-inline-size: var(--caesar-docs-reading-width);
+  margin-inline: auto;
+}
+
+/* Keep navigation card text aligned and wrap it within the card. */
+.theme-doc-markdown .card > :where(h2, p) {
+  min-inline-size: 0;
+  margin-inline: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Keep examples within the reading column, including their headers and controls. */
+.markdown.theme-doc-markdown .theme-code-block {
+  max-inline-size: min(100%, var(--caesar-docs-code-width));
+}
+
+.theme-doc-markdown :where(table, figure, .katex-display) {
+  max-inline-size: 100%;
+  margin-inline: auto;
+}
+
+.theme-doc-markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 /* Style anchored Markdown headings so card and figure titles keep their own typography. */
 .theme-doc-markdown h2.anchor {
   --ifm-h2-font-size: 1.5rem;
@@ -36,9 +97,6 @@
   margin-top: 1.5rem;
 }
 
-.theme-doc-markdown strong,
-.theme-doc-toc-desktop .table-of-contents > li > a,
-.theme-doc-toc-mobile .table-of-contents > li > a,
-.theme-doc-markdown .table-of-contents > li > a {
+.theme-doc-markdown strong {
   font-weight: var(--ifm-heading-font-weight);
 }

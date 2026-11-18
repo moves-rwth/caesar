@@ -290,6 +290,12 @@ article a[target="_blank"]:not(.button) {
 math to nicely be contained in the surrounding text. */
 .katex { font-size: 1em !important; }
 
+.token.comment {
+  color: color-mix(in srgb, var(--ifm-font-color-base) 85%, var(--ifm-background-color)) !important;
+  font-style: normal !important;
+  opacity: 1;
+}
+
 .float-right-responsive {
   float: right;
   margin: 0 0 1rem 1rem;
