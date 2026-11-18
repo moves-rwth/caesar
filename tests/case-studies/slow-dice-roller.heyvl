@@ -1,0 +1,229 @@
+// RUN: @caesar @file --timeout 30 --max-fuel 4 --quantifier-instantiation e-matching --werr
+
+// Matching probability bounds establish uniformity for every positive range size n.
+// The finite expected-bit certificate and terminating preparation establish almost-sure termination.
+
+// BEGIN slow-dice-roller-definitions
+domain SlowBinaryRange {
+    func max_value(m: UInt): UInt =
+        ite(m == 0, 0, 2 * max_value(m - 1) + 1)
+
+    func pow2(m: UInt): UInt = max_value(m) + 1
+
+    // Count the completed candidates outside 0 through n - 1.
+    func slow_rejected(n: UInt, result: UInt, left: UInt): UInt =
+        ((result + 1) * pow2(left) - n) ⊓ pow2(left)
+
+
+}
+// END slow-dice-roller-definitions
+
+// Each fair bit splits the possible completions into two equally sized blocks.
+@wp
+coproc slow_block_probability_split(n: UInt, k: UInt, start: UReal, half: UReal, bound: UReal) -> ()
+    pre !?(n >= 1 && half >= 1)
+    pre bound
+    post !?(
+        ite(start <= k && k < start + 2 * half, 1 / (2 * half), 0)
+            + ((((start + 2 * half) - n) ⊓ (2 * half)) / (2 * half)) / n ==
+        (ite(start <= k && k < start + half, 1 / half, 0)
+            + ((((start + half) - n) ⊓ half) / half) / n
+            + ite(start + half <= k && k < start + 2 * half, 1 / half, 0)
+            + ((((start + 2 * half) - n) ⊓ half) / half) / n) / 2)
+    post bound
+{}
+
+@wp
+coproc pow2_step(left: UInt, bound: UReal) -> ()
+    pre !?(left > 0)
+    pre bound
+    post !?(pow2(left) == 2 * pow2(left - 1) && pow2(left - 1) >= 1)
+    post bound
+{}
+
+// Each fair bit splits the possible completions into two equally sized blocks.
+@wlp
+proc slow_block_probability_split_lower(n: UInt, k: UInt, start: UReal, half: UReal, bound: UReal) -> ()
+    pre ?(n >= 1 && half >= 1)
+    pre bound
+    post ?(
+        ite(start <= k && k < start + 2 * half, 1 / (2 * half), 0)
+            + ((((start + 2 * half) - n) ⊓ (2 * half)) / (2 * half)) / n ==
+        (ite(start <= k && k < start + half, 1 / half, 0)
+            + ((((start + half) - n) ⊓ half) / half) / n
+            + ite(start + half <= k && k < start + 2 * half, 1 / half, 0)
+            + ((((start + 2 * half) - n) ⊓ half) / half) / n) / 2)
+    post bound
+{}
+
+@wlp
+proc pow2_step_lower(left: UInt, bound: UReal) -> ()
+    pre ?(left > 0)
+    pre bound
+    post ?(pow2(left) == 2 * pow2(left - 1) && pow2(left - 1) >= 1)
+    post bound
+{}
+
+// BEGIN slow-dice-roller-upper
+@wp
+coproc slow_probability_upper(n: UInt, k: UInt) -> (result: UInt)
+    pre !?(n >= 1 && k < n)
+    pre 1/n
+    post [result == k]
+{
+    var width: UInt = 1
+    var bits: UInt = 0
+    @invariant(
+        !?(n >= 1 && k < n && width == pow2(bits) && width >= bits + 1 && bits <= n)
+        ⊔ (1/n)
+    )
+    while width < n {
+        width = 2 * width
+        bits = bits + 1
+    }
+    result = 0
+    var done: Bool = false
+    @invariant(
+        !?(n >= 1 && k < n && width >= n && width == pow2(bits))
+        ⊔ ite(done, [result == k], 1/n)
+    )
+    while !done {
+        result = 0
+        var left: UInt = bits
+        // block = 2^left is the number of completions of the current prefix.
+        var block: UReal = width
+        // Output k contributes 1/block; each rejected completion contributes 1/(n*block).
+        @invariant(
+            !?(n >= 1 && k < n && block == pow2(left))
+            ⊔ (ite(result * block <= k && k < (result + 1) * block, 1/block, 0)
+                + (((((result + 1) * block) - n) ⊓ block) / block) / n)
+        )
+        while left > 0 {
+            var bound: UReal = (ite(result * block <= k && k < (result + 1) * block, 1/block, 0)
+                + (((((result + 1) * block) - n) ⊓ block) / block) / n)
+            pow2_step(left, bound)
+            slow_block_probability_split(n, k, result * block, block/2, bound)
+            var bit: Bool = flip(1/2)
+            result = 2 * result + ite(bit, 1, 0)
+            left = left - 1
+            block = block/2
+        }
+        if result < n {
+            done = true
+        } else {}
+    }
+}
+// END slow-dice-roller-upper
+
+// BEGIN slow-dice-roller-lower
+@wlp
+proc slow_probability_lower(n: UInt, k: UInt) -> (result: UInt)
+    pre ?(n >= 1 && k < n)
+    pre 1/n
+    post [result == k]
+{
+    var width: UInt = 1
+    var bits: UInt = 0
+    @invariant(
+        ?(n >= 1 && k < n && width == pow2(bits) && width >= bits + 1 && bits <= n)
+        ⊓ (1/n)
+    )
+    while width < n {
+        width = 2 * width
+        bits = bits + 1
+    }
+    result = 0
+    var done: Bool = false
+    @invariant(
+        ?(n >= 1 && k < n && width >= n && width == pow2(bits))
+        ⊓ ite(done, [result == k], 1/n)
+    )
+    while !done {
+        result = 0
+        var left: UInt = bits
+        // block = 2^left is the number of completions of the current prefix.
+        var block: UReal = width
+        // Output k contributes 1/block; each rejected completion contributes 1/(n*block).
+        @invariant(
+            ?(n >= 1 && k < n && block == pow2(left))
+            ⊓ (ite(result * block <= k && k < (result + 1) * block, 1/block, 0)
+                + (((((result + 1) * block) - n) ⊓ block) / block) / n)
+        )
+        while left > 0 {
+            var bound: UReal = (ite(result * block <= k && k < (result + 1) * block, 1/block, 0)
+                + (((((result + 1) * block) - n) ⊓ block) / block) / n)
+            pow2_step_lower(left, bound)
+            slow_block_probability_split_lower(n, k, result * block, block/2, bound)
+            var bit: Bool = flip(1/2)
+            result = 2 * result + ite(bit, 1, 0)
+            left = left - 1
+            block = block/2
+        }
+        if result < n {
+            done = true
+        } else {}
+    }
+}
+// END slow-dice-roller-lower
+
+// BEGIN slow-dice-roller-prepare-termination
+@wp
+proc slow_prepare_terminates(n: UInt) -> (width: UInt, bits: UInt)
+    pre ?(n >= 1)
+    pre 1
+    post 1
+{
+    width = 1
+    bits = 0
+    @ast(n >= 1 && width >= 1 && width == pow2(bits) && width < 2*n && bits <= width && bits <= n,
+        n - width, variant_value, 1, 1)
+    while width < n {
+        width = 2*width
+        bits = bits + 1
+    }
+}
+// END slow-dice-roller-prepare-termination
+
+// BEGIN slow-dice-roller-expected-bits
+@wp
+coproc slow_expected_bits_all_inputs(n: UInt) -> (result: UInt)
+    pre !?(n >= 1)
+    pre 2*n
+    post 0
+{
+    var width: UInt = 1
+    var bits: UInt = 0
+    @invariant(
+        !?(n >= 1 && width >= 1 && width == pow2(bits) && width < 2*n && bits <= width && bits <= n)
+        ⊔ 2*n
+    )
+    while width < n {
+        width = 2*width
+        bits = bits + 1
+    }
+
+    var done: Bool = false
+    result = 0
+    @invariant(
+        !?(n >= 1 && width == pow2(bits) && n <= width && width < 2*n)
+        ⊔ ite(done, 0, 2*bits)
+    )
+    while !done {
+        result = 0
+        var left: UInt = bits
+        @invariant(
+            !?(left <= bits)
+            ⊔ (left + 2*bits*(slow_rejected(n, result, left)/pow2(left)))
+        )
+        while left > 0 {
+            reward 1
+            var bit: Bool = flip(1/2)
+            result = 2*result + ite(bit, 1, 0)
+            left = left - 1
+        }
+        if result < n {
+            done = true
+        } else {}
+    }
+}
+// END slow-dice-roller-expected-bits

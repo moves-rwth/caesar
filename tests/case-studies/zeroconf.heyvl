@@ -1,25 +1,31 @@
-// RUN: @caesar @file
+// RUN: @caesar @file --quantifier-instantiation e-matching
 
 domain Arith {
-    func exp(b: UReal, i: UInt): UReal = ite(i == 0, 1, b * exp(b, i - 1))
-    axiom exp_bounded forall b: UReal, i: UInt @trigger(exp(b, i)). (b <= 1) ==> (exp(b, i) <= 1)
+    func exp(base: UReal, exponent: UInt): UReal =
+        ite(exponent == 0, 1, base * exp(base, exponent - 1))
+    // Powers of probabilities remain probabilities.
+    axiom exp_bounded forall base: UReal, exponent: UInt @trigger(exp(base, exponent)).
+        (base <= 1) ==> (exp(base, exponent) <= 1)
 }
 
 domain Constants {
-    func probCollision(): UReal // this is often called q
+    func probCollision(): UReal // Probability that the chosen address is already in use.
     axiom collisionProb probCollision() <= 1
-    func probMessageLost(): UReal // this is often called p
+    func probMessageLost(): UReal // Probability that a detection message is lost.
     axiom messageLostProb probMessageLost() <= 1
-    func maxTries(): UInt // this is often called N
+    func maxTries(): UInt // Maximum number of detection attempts.
 }
 
+@wp
 coproc arp(triesRemaining: UInt) -> (success: Bool)
     pre 1 - exp(probMessageLost(), triesRemaining)
     post [success]
 {
     if triesRemaining == 0 {
+        // With no probes remaining, the collision cannot be detected.
         success = false
     } else {
+        // A delivered probe detects the collision; a lost probe leaves one fewer attempt.
         var messageLost: Bool = flip(probMessageLost())
         if messageLost {
             success = arp(triesRemaining - 1)
@@ -29,14 +35,16 @@ coproc arp(triesRemaining: UInt) -> (success: Bool)
     }
 }
 
+@wp
 coproc zeroconf() -> (success: Bool)
-    pre probCollision() * (1 - exp(probMessageLost(), maxTries())) + (1-probCollision())
+    pre probCollision() * (1 - exp(probMessageLost(), maxTries())) + (1 - probCollision())
     post [success]
 {
     var collision: Bool = flip(probCollision())
     if collision {
+        // Try at most maxTries() probes to detect this collision.
         success = arp(maxTries())
     } else {
-        success = true // no collision, no erroneous allocation
+        success = true
     }
 }

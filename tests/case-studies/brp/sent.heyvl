@@ -1,0 +1,38 @@
+// RUN: @caesar @file
+
+// Copyright 2025 Franka van Jaarsveld.
+// SPDX-License-Identifier: CC-BY-4.0
+// License: https://creativecommons.org/licenses/by/4.0/
+// Adapted from "Practical Probabilistic Program Verification using Caesar" (University of Twente, 2025).
+// Artifact: https://doi.org/10.5281/zenodo.15408743 (FvJ_Thesis/brp/sent.heyvl).
+// Thesis: https://purl.utwente.nl/essays/106318
+// Changes: retained the upper bound and removed the trivial lower bound.
+// Removed unused constants, power functions, outputs, and counters.
+// Combined delivered packets and the remaining allowance using minimum and a Boolean embedding.
+
+domain Constants {
+    func s(): UReal
+    axiom packet_probability s() <= 1
+}
+
+@wp
+coproc BRP(N: UInt) -> (sent: UInt)
+    pre s() * N
+    post sent
+{
+    sent = 0
+    var success: Bool = true
+
+    // Keep the delivered packets, adding s() for each of at most N-sent further packet attempts.
+    @invariant(
+        sent + (?(success) ⊓ (s() * (N - sent)))
+    )
+    while sent < N && success {
+        // With probability s(), this attempt delivers one packet and reduces the number still to send.
+        // Otherwise the loop exits with sent unchanged, matching the postexpectation.
+        success = flip(s())
+        if success {
+            sent = sent + 1
+        } else {}
+    }
+}

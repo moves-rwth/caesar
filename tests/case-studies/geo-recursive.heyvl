@@ -1,20 +1,21 @@
 // RUN: @caesar @file
 
-// Verifying wp[geo1](c) <= [f = 1] * (c + 1) + [f != 1] * c
-coproc geo1(init_c: UInt, init_f: UInt) -> (c: UInt, f: UInt)
-    pre [init_f == 1] * (init_c + 1) + [init_f != 1] * init_c
-    post c
+// Verify wp[geometric](count) <= init_count + [init_running].
+@wp
+coproc geometric(init_count: UInt, init_running: Bool) -> (count: UInt, running: Bool)
+    pre init_count + [init_running]
+    post count
 {
-    var prob_choice: Bool
-    c = init_c
-    f = init_f
-    if f == 1 {
-        prob_choice = flip(0.5)
-        if prob_choice {
-            f = 0
+    count = init_count
+    running = init_running
+    if running {
+        var stop: Bool = flip(0.5)
+        if stop {
+            running = false
         } else {
-            c = c + 1
+            count = count + 1
         }
-        c, f = geo1(c, f)
+        // Apply the same specification to the recursive call with the updated arguments.
+        count, running = geometric(count, running)
     } else {}
 }

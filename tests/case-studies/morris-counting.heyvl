@@ -1,0 +1,31 @@
+// RUN: @caesar @file
+
+// Morris counting records each event with a probability that decreases as the counter grows.
+// Adapted from the Caesar ROCKS 2026 tutorial's Morris showcase and SSFT 2025 exercise solution.
+
+domain Exponentials {
+    func exp2(c: UInt): UReal
+    axiom exp2_base exp2(0) == 1
+    axiom exp2_step forall c: UInt. exp2(c + 1) == 2 * exp2(c)
+    axiom exp2_at_least_one forall c: UInt. exp2(c) >= 1
+}
+
+@wp coproc morris(n: UInt) -> (c: UInt)
+    pre n + 1
+    post exp2(c)
+{
+    c = 0
+    var remaining: UInt = n
+
+    @invariant(exp2(c) + remaining)
+    while remaining > 0 {
+        var increment: Bool = flip(1/exp2(c))
+        if increment { c = c + 1 } else {}
+        remaining = remaining - 1
+    }
+}
+
+// The estimate of the event count is 2^c - 1.
+// Each event increases 2^c by 2^c with probability 1/2^c, an expected increase of one.
+// Decreasing remaining by one preserves exp2(c) + remaining in expectation.
+// This specification establishes E[2^c] <= n + 1, hence E[2^c - 1] <= n.

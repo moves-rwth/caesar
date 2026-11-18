@@ -1,0 +1,68 @@
+// RUN: @caesar @file
+
+// Copyright 2025 Franka van Jaarsveld.
+// SPDX-License-Identifier: CC-BY-4.0
+// License: https://creativecommons.org/licenses/by/4.0/
+// Adapted from "Practical Probabilistic Program Verification using Caesar" (University of Twente, 2025).
+// Artifact: https://doi.org/10.5281/zenodo.15408743 (FvJ_Thesis/brp/failed.heyvl).
+// Thesis: https://purl.utwente.nl/essays/106318
+// Changes: retained the upper bounds and removed the trivial lower bounds.
+// Removed unused power functions and made auxiliary variables local.
+// Combined the accumulated counter and remaining allowance using minimum and Boolean embeddings.
+
+domain Constants {
+    func p(): UReal
+    axiom transmission_probability p() <= 1
+    func MAX(): UInt
+
+    func s(): UReal
+    axiom packet_probability s() <= 1
+    func f(): UInt // Fixed increment to totalFailed in the sequence model.
+}
+
+// Bound the expected number of failed transmissions for one packet.
+@wp
+coproc sendPacket() -> (failed: UInt)
+    pre MAX() * (1 - p())
+    post failed
+{
+    failed = 0
+    var success: Bool = false
+
+    // At exit, use failed itself; while retrying, add (1-p()) per remaining possible attempt.
+    @invariant(
+        failed + (?(!success) ⊓ ((1 - p()) * (MAX() - failed)))
+    )
+    while failed < MAX() && !success {
+        success = flip(p())
+        if !success {
+            // This failed attempt is now included in failed, with one fewer attempt available.
+            failed = failed + 1
+        } else {}
+    }
+}
+
+// Bound the expected value of totalFailed on termination in the sequence model.
+@wp
+coproc BRP(N: UInt) -> (totalFailed: UInt)
+    pre f() * N
+    post totalFailed
+{
+    var sent: UInt = 0
+    var success: Bool = true
+    totalFailed = 0
+
+    // At most N-sent packet attempts remain, each adding exactly f() to totalFailed.
+    @invariant(
+        totalFailed + (?(success) ⊓ (f() * (N - sent)))
+    )
+    while sent < N && success {
+        success = flip(s())
+        // Charge f() for this attempt, including an attempt that fails to deliver a packet.
+        totalFailed = totalFailed + f()
+        if success {
+            // The increment reduces the remaining allowance f()*(N-sent) by the amount just charged.
+            sent = sent + 1
+        } else {}
+    }
+}

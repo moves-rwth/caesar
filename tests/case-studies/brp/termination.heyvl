@@ -1,0 +1,63 @@
+// RUN: @caesar @file
+
+// Copyright 2025 Franka van Jaarsveld.
+// SPDX-License-Identifier: CC-BY-4.0
+// License: https://creativecommons.org/licenses/by/4.0/
+// Adapted from "Practical Probabilistic Program Verification using Caesar" (University of Twente, 2025).
+// Artifact: https://doi.org/10.5281/zenodo.15408743 (FvJ_Thesis/brp/termination.heyvl).
+// Thesis: https://purl.utwente.nl/essays/106318
+// Changes: removed unused outputs, constants, and counters.
+// Tightened the invariants by removing their unnecessary constant one.
+// Combined the deterministic retry limits with the geometric bounds using minimum.
+// Used Boolean embeddings to restrict the remaining cost to successful or pending delivery.
+
+domain Constants {
+    func p(): UReal
+    axiom transmission_probability 0 < p() && p() <= 1
+    func MAX(): UInt
+
+    func s(): UReal
+    axiom packet_probability s() < 1
+}
+
+// Count transmission attempts for one packet.
+@ert
+coproc sendPacket() -> ()
+    pre MAX() ⊓ (1 / p())
+    post 0
+{
+    var failed: UInt = 0
+    var success: Bool = false
+
+    // Remaining attempts are bounded by both the retry limit and the geometric waiting time.
+    @invariant(?(!success) ⊓ ((MAX() - failed) ⊓ (1 / p())))
+    while failed < MAX() && !success {
+        // Each transmission attempt costs one reward unit, and failure leaves further attempts possible.
+        success = flip(p())
+        if !success {
+            failed = failed + 1
+        } else {}
+        reward 1
+    }
+}
+
+// Count packet attempts in the sequence model.
+@ert
+coproc BRP(N: UInt) -> ()
+    pre N ⊓ (1 / (1 - s()))
+    post 0
+{
+    var sent: UInt = 0
+    var success: Bool = true
+
+    // Remaining attempts are bounded by both the unsent packets and the wait for failed delivery.
+    @invariant(?(success) ⊓ ((N - sent) ⊓ (1 / (1 - s()))))
+    while sent < N && success {
+        // Each packet attempt costs one reward unit and permits another attempt after successful delivery.
+        success = flip(s())
+        if success {
+            sent = sent + 1
+        } else {}
+        reward 1
+    }
+}

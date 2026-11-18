@@ -1,16 +1,19 @@
 // RUN: @caesar @file
 
-proc main() -> ()
+@wp
+proc parity_walk(init_x: UInt) -> (x: UInt)
     pre 1
     post 1
 {
-    var x: UInt
-    // invariant = true variant = (3 * [!(x % 2 == 0)]) + ite(x >= 10, x - 10, 10 - x), probability function = 0.5, decrease function = 2
-    @ast(true, (3 * ite(!(x % 2 == 0), 1, 0)) + ite(x >= 10, x - 10, 10 - x), v, 0.5, 2)
+    x = init_x
+    // Measure the distance from ten, adding three at odd positions.
+    // Its expected value does not increase, and a decrease of at least two has probability at least 0.5.
+    // The additional three covers the deterministic step from an odd to an even position.
+    @ast(true, 3 * ite(x % 2 != 0, 1, 0) + ite(x >= 10, x - 10, 10 - x), v, 0.5, 2)
     while x != 10 {
-        if x % 2 == 0{
-            var prob_choice: Bool = flip(1/2)
-            if prob_choice {
+        if x % 2 == 0 {
+            var down: Bool = flip(0.5)
+            if down {
                 x = x - 2
             } else {
                 x = x + 2

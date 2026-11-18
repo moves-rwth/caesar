@@ -1,0 +1,20 @@
+// RUN: @caesar @file
+
+@wp
+coproc geometric(init_count: UInt, init_running: Bool) -> (count: UInt, running: Bool)
+    pre init_count + [init_running]
+    post count
+{
+    count = init_count
+    running = init_running
+    // An active loop adds at most one flip showing tails in expectation.
+    @invariant(count + [running])
+    while running {
+        var stop: Bool = flip(0.5)
+        if stop {
+            running = false
+        } else {
+            count = count + 1
+        }
+    }
+}

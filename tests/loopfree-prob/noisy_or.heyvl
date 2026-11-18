@@ -1,10 +1,16 @@
 // RUN: @caesar @file
 
-proc noisy_or(what_n3: Bool) -> (n3: Bool)
-    pre [what_n3] * (130307/160000) + [!what_n3] * (29693/160000)
-    post [n3 == what_n3]
+@wp
+proc noisy_or(target: Bool) -> (n3: Bool)
+    pre [target] * (130307/160000) + [!target] * (29693/160000)
+    post [n3 == target]
 {
-    var n1: Bool = false; var n21: Bool = false; var n22: Bool = false; var n31: Bool = false; var n32: Bool = false; var n33: Bool = false;
+    var n1: Bool
+    var n21: Bool
+    var n22: Bool
+    var n31: Bool
+    var n32: Bool
+    var n33: Bool
     var n0: Bool = flip(1/2)
     var n4: Bool = flip(1/2)
     if n0 {

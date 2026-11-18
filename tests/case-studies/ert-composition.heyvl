@@ -1,0 +1,54 @@
+// RUN: @caesar verify @file --werr --quantifier-instantiation mbqi --timeout 10
+
+// The generator and countdown each have finite expected runtime.
+// Their composition has infinite expected runtime but terminates almost surely.
+// Each tick counts one coin flip or countdown decrement.
+// Integers are unbounded, and arithmetic adds no runtime steps.
+
+@ert
+coproc generator() -> (stake: UInt)
+    pre 2
+    post 0
+{
+    stake = 1
+    var more: Bool = true
+    @invariant(2 * [more])
+    while more {
+        tick 1
+        more = flip(0.5)
+        stake = 2 * stake
+    }
+}
+
+@ert
+coproc countdown(init_stake: UInt) -> (stake: UInt)
+    pre init_stake
+    post 0
+{
+    stake = init_stake
+    @invariant(stake)
+    while stake > 0 {
+        tick 1
+        stake = stake - 1
+    }
+}
+
+@ert
+proc composition(target: UInt) -> (stake: UInt)
+    pre target
+    post 0
+{
+    stake = 1
+    var more: Bool = true
+    @omega_invariant(n, ite(more, stake * (n ⊓ target), stake))
+    while more {
+        tick 1
+        more = flip(0.5)
+        stake = 2 * stake
+    }
+    @omega_invariant(n, n ⊓ stake)
+    while stake > 0 {
+        tick 1
+        stake = stake - 1
+    }
+}

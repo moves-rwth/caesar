@@ -1,0 +1,44 @@
+// RUN: @caesar @file --function-encoding fuel-param --quantifier-instantiation e-matching
+
+domain Harmonic {
+    func harmonic(n: UInt): UReal = ite(n == 0, 0, harmonic(n - 1) + 1 / n)
+}
+
+@ert
+coproc coupon_collector(N: UInt) -> ()
+    pre !?(N > 0)
+    pre N * harmonic(N)
+    post 0
+{
+    var x: UInt = N
+    @invariant(!?(x <= N) ⊔ N * harmonic(x))
+    while x > 0 {
+        var found_new: Bool = false
+        @invariant(ite(found_new, 0, N / x) + N * harmonic(x - 1))
+        while !found_new {
+            // Count one coupon draw without charging for the sampler's internal steps.
+            tick 1
+            // Draw an index uniformly from 1 through N.
+            var coupon: UInt = N
+            var chosen: Bool = false
+            @invariant(
+                !?(1 <= coupon && coupon <= N)
+                ⊔ (
+                    ite(chosen, [coupon > x],
+                        ite(coupon > x, (coupon - x) / coupon, 0)
+                    ) * (N / x)
+                    + N * harmonic(x - 1)
+                )
+            )
+            while !chosen && coupon > 1 {
+                chosen = flip(1 / coupon)
+                if !chosen {
+                    coupon = coupon - 1
+                } else {}
+            }
+            // Labels 1 through x represent the currently missing coupons.
+            found_new = coupon <= x
+        }
+        x = x - 1
+    }
+}

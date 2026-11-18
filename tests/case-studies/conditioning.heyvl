@@ -1,0 +1,52 @@
+// RUN: @caesar verify @file --werr --max-fuel 4 --quantifier-instantiation e-matching
+
+// Queue with arrivals, service, and failure; stopped at emptying or first failure.
+// Queueing context: Paz and Yechiali, APJOR 2014, Section 2.
+// https://doi.org/10.1142/S021759591450016X
+
+domain QueueConditioning {
+    // The minimum exposes the bound <= 1 to the solver.
+    // It does not change the value 2^(-n).
+    func success_probability(n: UInt): UReal =
+        ite(n == 0, 1, (success_probability(n - 1)/2) ⊓ (1/2))
+}
+
+@wlp
+proc evidence_lower(initial: UInt) -> (pending: UInt, rounds: UInt, healthy: Bool)
+    pre success_probability(initial)
+    post 1
+{
+    pending = initial
+    rounds = 0
+    healthy = true
+    @invariant(ite(healthy, success_probability(pending), 0))
+    while pending > 0 && healthy {
+        rounds = rounds + 1
+        healthy = flip(4/5)
+        if healthy {
+            var arrival: Bool = flip(1/2)
+            if arrival { pending = pending + 1 } else { pending = pending - 1 }
+        }
+    }
+    assert ?(healthy)
+}
+
+@wp
+coproc rounds_upper(initial: UInt) -> (pending: UInt, rounds: UInt, healthy: Bool)
+    pre success_probability(initial) * ((5*initial)/3)
+    post rounds
+{
+    pending = initial
+    rounds = 0
+    healthy = true
+    @invariant(ite(healthy, success_probability(pending) * (rounds + (5*pending)/3), 0))
+    while pending > 0 && healthy {
+        rounds = rounds + 1
+        healthy = flip(4/5)
+        if healthy {
+            var arrival: Bool = flip(1/2)
+            if arrival { pending = pending + 1 } else { pending = pending - 1 }
+        }
+    }
+    assert ?(healthy)
+}

@@ -1,0 +1,63 @@
+// RUN: @caesar @file
+
+// From Schroer and Katoen, Highly Incremental (FM 2026), Appendix B.2.
+// Each request costs one second, and caching costs another half second at startup.
+
+@wp
+coproc retry_mean() -> (done: Bool)
+    pre 2
+    post 0
+{
+    done = false
+    @invariant([!done] * 2)
+    while !done {
+        reward 1
+        done = flip(0.5)
+    }
+}
+
+@wp
+coproc cached_retry_mean() -> (done: Bool)
+    pre 2
+    post 0
+{
+    done = false
+    reward 0.5
+    @invariant([!done] * 1.5)
+    while !done {
+        reward 1
+        done = flip(2/3)
+    }
+}
+
+// Incremental squared costs also account for executions that never finish.
+@wp
+coproc retry_second_moment() -> (done: Bool)
+    pre 6
+    post 0
+{
+    done = false
+    var tau: UInt = 0
+    @invariant([!done] * (6 + 4 * tau))
+    while !done {
+        reward 2 * tau + 1
+        tau = tau + 1
+        done = flip(0.5)
+    }
+}
+
+@wp
+coproc cached_retry_second_moment() -> (done: Bool)
+    pre 4.75
+    post 0
+{
+    done = false
+    var tau: UReal = 0.5
+    reward 0.25
+    @invariant([!done] * (4.5 + 3 * (tau - 0.5)))
+    while !done {
+        reward 2 * tau + 1
+        tau = tau + 1
+        done = flip(2/3)
+    }
+}

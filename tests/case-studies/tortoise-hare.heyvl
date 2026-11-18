@@ -1,0 +1,32 @@
+// RUN: @caesar @file
+
+// Adapted from Batz et al. (OOPSLA 2025), Sections 9.2.3 and 9.3 and Appendix C.24.
+// https://arxiv.org/abs/2502.19388
+// The eight-interval approximation follows Caesar's accompanying blog post.
+
+@wp
+coproc tortoise_hare(init_h: UReal, init_t: UReal) -> (count: UReal)
+    pre 3.38 * ((init_t - init_h) + 2)
+    post count
+{
+    var h: UReal = init_h
+    var t: UReal = init_t
+    count = 0
+
+    // Bound the final round count by rounds so far plus a bound for the remaining gap.
+    @invariant(ite(h <= t, count + 3.38 * ((t - h) + 2), count))
+    while h <= t {
+        var choice: Bool = flip(0.5)
+        if choice {
+            var inc: UReal
+            var N: UInt = 8
+            var j: UInt = unif(0, 7)
+            // Upper Riemann sum: choose any point in the sampled interval.
+            cohavoc inc
+            coassume !?(j / N <= inc && inc <= (j + 1) / N)
+            h = h + 10 * inc
+        } else {}
+        t = t + 1
+        count = count + 1
+    }
+}

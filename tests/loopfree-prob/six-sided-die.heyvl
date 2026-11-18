@@ -1,5 +1,7 @@
 // RUN: @caesar @file
 
+// Bound the unnormalized expected die result after discarding outcomes 7 and 8.
+@wp
 coproc die_wp() -> (r: EUReal)
     pre 2.625
     post r
@@ -11,6 +13,8 @@ coproc die_wp() -> (r: EUReal)
     assert ?(r <= 6)
 }
 
+// Bound the probability that the sampled outcome is retained.
+@wlp
 proc die_wlp() -> (r: EUReal)
     pre 6/8
     post 1

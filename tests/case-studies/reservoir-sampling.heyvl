@@ -1,0 +1,56 @@
+// RUN: @caesar @file
+
+// Algorithm R samples one stream position using only the current sample and index.
+// Adapted from the Caesar ROCKS 2026 tutorial's Algorithm R showcase.
+// Background: Vitter, Random Sampling with a Reservoir (1985), Section 2.
+
+@wp coproc algorithm_r(n: UInt, x: UInt) -> (c: UInt)
+    pre !?(1 <= x && x <= n)
+    pre 1/n
+    post [c == x]
+{
+    c = 0
+    var i: UInt = 1
+
+    @invariant(!?(1 <= i && i <= n + 1 && c < i) ⊔ ite(i <= x, 1/n, ((i - 1)/n) * [c == x]))
+    while i <= n {
+        var take: Bool = flip(1/i)
+        if take { c = i } else {}
+        i = i + 1
+    }
+}
+
+@wlp proc algorithm_r_lower(n: UInt, x: UInt) -> (c: UInt)
+    pre ?(1 <= x && x <= n)
+    pre 1/n
+    post [c == x]
+{
+    c = 0
+    var i: UInt = 1
+
+    @invariant(?(1 <= i && i <= n + 1) ⊓ ite(i <= x, 1/n, ((i - 1)/n) * [c == x]))
+    while i <= n {
+        var take: Bool = flip(1/i)
+        if take { c = i } else {}
+        i = i + 1
+    }
+}
+
+@wp proc algorithm_r_terminates(n: UInt) -> (c: UInt)
+    pre 1
+    post 1
+{
+    c = 0
+    var i: UInt = 1
+
+    @ast(1 <= i && i <= n + 1, (n + 1) - i, v, 1, 1)
+    while i <= n {
+        var take: Bool = flip(1/i)
+        if take { c = i } else {}
+        i = i + 1
+    }
+}
+
+// Before position x is processed, its final selection probability is 1/n.
+// Afterwards, a selected x survives the remaining replacements with probability (i - 1)/n.
+// The wp upper bound and wlp lower bound coincide because the loop terminates almost surely.

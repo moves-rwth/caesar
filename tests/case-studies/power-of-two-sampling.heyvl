@@ -1,0 +1,78 @@
+// RUN: @caesar @file --timeout 20 --max-fuel 4 --quantifier-instantiation e-matching --werr
+
+// Appending m independent fair bits samples uniformly from 0 through 2^m - 1.
+// pow2(m) represents 2^m and is positive by construction.
+// BEGIN power-of-two-definition
+domain BinaryRange {
+    func max_value(m: UInt): UInt =
+        ite(m == 0, 0, 2 * max_value(m - 1) + 1)
+
+    func pow2(m: UInt): UInt = max_value(m) + 1
+}
+// END power-of-two-definition
+
+// BEGIN power-of-two-upper
+@wp
+coproc uniform_bits_upper(m: UInt, k: UInt) -> (result: UInt)
+    pre !?(k < pow2(m))
+    pre 1 / pow2(m)
+    post [result == k]
+{
+    result = 0
+    var left: UInt = m
+
+    @invariant(
+        [result * pow2(left) <= k && k < (result + 1) * pow2(left)]
+        * (1 / pow2(left))
+    )
+    while left > 0 {
+        var bit: Bool = flip(1/2)
+        result = 2 * result + ite(bit, 1, 0)
+        left = left - 1
+    }
+}
+// END power-of-two-upper
+
+// BEGIN power-of-two-lower
+@wlp
+proc uniform_bits_lower(m: UInt, k: UInt) -> (result: UInt)
+    pre ?(k < pow2(m))
+    pre 1 / pow2(m)
+    post [result == k]
+{
+    result = 0
+    var left: UInt = m
+
+    @invariant(
+        [result * pow2(left) <= k && k < (result + 1) * pow2(left)]
+        * (1 / pow2(left))
+    )
+    while left > 0 {
+        var bit: Bool = flip(1/2)
+        result = 2 * result + ite(bit, 1, 0)
+        left = left - 1
+    }
+}
+// END power-of-two-lower
+
+// BEGIN power-of-two-termination
+@wp
+proc uniform_bits_terminates(m: UInt) -> (result: UInt)
+    pre 1
+    post 1
+{
+    result = 0
+    var left: UInt = m
+
+    @ast(true, left, variant_value, 1, 1)
+    while left > 0 {
+        var bit: Bool = flip(1/2)
+        result = 2 * result + ite(bit, 1, 0)
+        left = left - 1
+    }
+}
+// END power-of-two-termination
+
+// With left bits remaining, the current prefix can reach an interval of 2^left values.
+// The invariant is zero outside that interval and 1/2^left for each output inside it.
+// Termination makes wp and wlp agree, so the matching bounds give exact uniformity.

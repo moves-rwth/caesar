@@ -1,0 +1,79 @@
+// RUN: @caesar @file --quantifier-instantiation e-matching
+
+// Copyright 2025 Franka van Jaarsveld.
+// SPDX-License-Identifier: CC-BY-4.0
+// License: https://creativecommons.org/licenses/by/4.0/
+// Adapted from "Practical Probabilistic Program Verification using Caesar" (University of Twente, 2025).
+// Artifact: https://doi.org/10.5281/zenodo.15408743 (FvJ_Thesis/brp/success.heyvl).
+// Thesis: https://purl.utwente.nl/essays/106318
+// Changes: replaced the manually fueled power function with an ordinary recursive definition.
+// Implemented the packet retries inside the sequence model and derived its success bound.
+// Removed independent abstract constants and unused counters.
+// Expressed delivery probabilities with explicit numeric cases.
+
+domain Exponentials {
+    func pow(base: UReal, exponent: UInt): UReal =
+        ite(exponent == 0, 1, base * pow(base, exponent - 1))
+}
+
+domain Constants {
+    func p(): UReal
+    axiom transmission_probability p() <= 1
+    func MAX(): UInt
+    func packet_success(): UReal = 1 - pow(1 - p(), MAX())
+}
+
+@wlp
+proc sendPacket() -> (success: Bool)
+    pre packet_success()
+    post [success]
+{
+    var failed: UInt = 0
+    success = false
+
+    // Use probability 1 after delivery, or the delivery probability within the remaining attempts.
+    @invariant(
+        ite(success, 1, 1 - pow(1 - p(), MAX() - failed))
+    )
+    while failed < MAX() && !success {
+        // Either this attempt succeeds, or a failure leaves one fewer attempt.
+        success = flip(p())
+        if !success {
+            failed = failed + 1
+        } else {}
+    }
+}
+
+@wlp
+proc BRP(N: UInt) -> (success: Bool)
+    pre pow(packet_success(), N)
+    post [success]
+{
+    var sent: UInt = 0
+    success = true
+
+    // Each remaining packet contributes a factor packet_success() to sequence delivery.
+    @invariant(
+        ite(success, pow(packet_success(), N - sent), 0)
+    )
+    while sent < N && success {
+        var failed: UInt = 0
+        success = false
+        // Multiply this packet's delivery probability by the factor for all later packets.
+        @invariant(
+            ite(success, 1, 1 - pow(1 - p(), MAX() - failed))
+            * pow(packet_success(), (N - sent) - 1)
+        )
+        // Initially this agrees with the outer annotation for all packets still to send.
+        while failed < MAX() && !success {
+            // Either this attempt succeeds, or a failure leaves one fewer attempt.
+            success = flip(p())
+            if !success {
+                failed = failed + 1
+            } else {}
+        }
+        if success {
+            sent = sent + 1
+        } else {}
+    }
+}

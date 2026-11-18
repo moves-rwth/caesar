@@ -1,0 +1,164 @@
+// RUN: @caesar verify @file --timeout 30 --max-fuel 4 --quantifier-instantiation e-matching --werr
+
+// Fast Dice Roller returns each k < n with probability 1/n, for every n >= 1.
+// fdr_probability_upper and fdr_probability_lower bound the same shifted postexpectation.
+// fdr_terminates checks almost-sure termination of the same sampler.
+// Termination equates the wp and wlp values, yielding the exact probability by linearity.
+// Caesar checks that the natural-number rank n-(v-c) decreases in both recursive branches.
+// This decrease establishes well-foundedness of prefix.
+// Explanation: https://www.caesarverifier.org/docs/getting-started/zoo/fast-dice-roller
+
+domain FDRProof {
+    // prefix(n, v, c, k) is a candidate sum of return probabilities from starting values 0 through c-1.
+    // The endpoint values are 0 at c == 0 and v/n at c == v.
+    // Every recursive call doubles the positive gap v-c < n, decreasing the natural rank n-(v-c).
+    func prefix(n: UInt, v: UInt, c: UInt, k: UInt): UReal =
+        ite(n >= 2 && v < n && c <= v && k < n,
+            ite(c == v, v/n,
+                ite(c == 0, 0,
+                    ite(2*v < n, prefix(n, 2*v, 2*c, k)/2,
+                        ite(2*c < n, ite(k < 2*c, 1/2, 0),
+                            (1 + prefix(n, 2*v-n, 2*c-n, k))/2)))),
+            0) ⊓ 1
+}
+
+// The recurrence also holds at both endpoints, and the clamp to one is redundant.
+// The finite bound preserves the quantitative postexpectation at each helper call.
+@wp
+coproc prefix_recurrence_upper(n: UInt, v: UInt, c: UInt, k: UInt, bound: UReal) -> ()
+    pre !?(n >= 2 && v < n && c <= v && k < n)
+    pre bound
+    post !?(2 * prefix(n, v, c, k) ==
+        ite(2*v < n, prefix(n, 2*v, 2*c, k),
+            ite(2*c < n, ite(k < 2*c, 1, 0),
+                1 + prefix(n, 2*v-n, 2*c-n, k))))
+    post bound
+{}
+
+@wlp
+proc prefix_recurrence_lower(n: UInt, v: UInt, c: UInt, k: UInt, bound: UReal) -> ()
+    pre ?(n >= 2 && v < n && c <= v && k < n)
+    pre bound
+    post ?(2 * prefix(n, v, c, k) ==
+        ite(2*v < n, prefix(n, 2*v, 2*c, k),
+            ite(2*c < n, ite(k < 2*c, 1, 0),
+                1 + prefix(n, 2*v-n, 2*c-n, k))))
+    post bound
+{}
+
+// Both recursive branches preserve the guarded domain and strictly decrease n-(v-c).
+@wp
+coproc prefix_recursion_decreases(n: UInt, v: UInt, c: UInt) -> ()
+    pre !?(n >= 2 && v < n && 0 < c && c < v && (2*v < n || 2*c >= n))
+    pre 0
+    post !?(
+        ite(2*v < n,
+            2*v < n && 2*c <= 2*v && n - (2*v - 2*c) < n - (v-c),
+            2*v-n < n && 2*c-n <= 2*v-n && n - ((2*v-n) - (2*c-n)) < n - (v-c))
+    )
+{}
+
+// The prefix recurrence makes the signed difference equal the average of the two successor values.
+// Shifting and scaling the difference gives the same [0,1]-valued invariant for both bounds.
+@wp
+coproc fdr_probability_upper(n: UInt, k: UInt) -> (result: UInt)
+    pre !?(n >= 1 && k < n)
+    pre (1 + 1/n)/2
+    post (1 + [result == k]) * (1/2)
+{
+    var v: UInt = 1
+    var c: UInt = 0
+    var done: Bool = n == 1
+    result = 0
+    @invariant(
+        !?(n >= 1 && k < n && v >= 1 && c < v && (done || v < n))
+        ⊔ ite(done, (1 + [result == k]) * (1/2),
+            ((1 + prefix(n, v, c+1, k)) - prefix(n, v, c, k))/2)
+    )
+    while !done {
+        var bound: UReal = ((1 + prefix(n, v, c+1, k)) - prefix(n, v, c, k))/2
+        prefix_recurrence_upper(n, v, c, k, bound)
+        prefix_recurrence_upper(n, v, c+1, k, bound)
+        v = 2 * v
+        var bit: Bool = flip(1/2)
+        c = 2 * c + ite(bit, 1, 0)
+        if v >= n {
+            if c < n {
+                result = c
+                done = true
+            } else {
+                v = v - n
+                c = c - n
+            }
+        } else {}
+    }
+}
+
+@wlp
+proc fdr_probability_lower(n: UInt, k: UInt) -> (result: UInt)
+    pre ?(n >= 1 && k < n)
+    pre (1 + 1/n)/2
+    post (1 + [result == k]) * (1/2)
+{
+    var v: UInt = 1
+    var c: UInt = 0
+    var done: Bool = n == 1
+    result = 0
+    @invariant(
+        ?(n >= 1 && k < n && v >= 1 && c < v && (done || v < n))
+        ⊓ ite(done, (1 + [result == k]) * (1/2),
+            ((1 + prefix(n, v, c+1, k)) - prefix(n, v, c, k))/2)
+    )
+    while !done {
+        var bound: UReal = ((1 + prefix(n, v, c+1, k)) - prefix(n, v, c, k))/2
+        prefix_recurrence_lower(n, v, c, k, bound)
+        prefix_recurrence_lower(n, v, c+1, k, bound)
+        v = 2 * v
+        var bit: Bool = flip(1/2)
+        c = 2 * c + ite(bit, 1, 0)
+        if v >= n {
+            if c < n {
+                result = c
+                done = true
+            } else {
+                v = v - n
+                c = c - n
+            }
+        } else {}
+    }
+}
+
+// Appending a bit changes v-c to 2*(v-c)-bit, and recycling preserves v-c.
+// On a zero bit, the loop either exits or n-(v-c) decreases by at least one.
+@wp
+proc fdr_terminates(n: UInt) -> (result: UInt)
+    pre ?(n >= 1)
+    pre 1
+    post 1
+{
+    var v: UInt = 1
+    var c: UInt = 0
+    var done: Bool = n == 1
+    result = 0
+    @ast(
+        done || (c < v && v < n),
+        n - (v - c),
+        _,
+        1/2,
+        1
+    )
+    while !done {
+        v = 2 * v
+        var bit: Bool = flip(1/2)
+        c = 2 * c + ite(bit, 1, 0)
+        if v >= n {
+            if c < n {
+                result = c
+                done = true
+            } else {
+                v = v - n
+                c = c - n
+            }
+        } else {}
+    }
+}
