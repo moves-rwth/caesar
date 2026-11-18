@@ -213,14 +213,12 @@ impl<T: SimplePretty> SimplePretty for DeclRef<T> {
     }
 }
 
-/// A variable declaration consists of a name, a type, and a mutability kind, and
-/// an optional initial expression.
+/// A variable declaration records the name, type, and kind of a binding.
 #[derive(Debug, Clone)]
 pub struct VarDecl {
     pub name: Ident,
     pub ty: TyKind,
     pub kind: VarKind,
-    pub init: Option<Expr>,
     pub span: Span,
     /// If this declaration was created by cloning another variable declaration,
     /// we track the original name here.
@@ -234,7 +232,6 @@ impl VarDecl {
             name: param.name,
             ty: *param.ty.clone(),
             kind,
-            init: None,
             span: param.span,
             created_from: None,
         };
@@ -250,17 +247,12 @@ impl VarDecl {
     }
 
     fn pretty_with_kind(&self, kind: &'static str) -> Doc {
-        let res = Doc::text(kind)
+        Doc::text(kind)
             .append(Doc::space())
             .append(Doc::text(self.name.name.to_string()))
             .append(Doc::text(":"))
             .append(Doc::space())
-            .append(self.ty.pretty());
-        if let Some(init) = &self.init {
-            res.append(Doc::text(" = ")).append(init.pretty())
-        } else {
-            res
-        }
+            .append(self.ty.pretty())
     }
 
     /// The original name of this declaration, i.e. `created_from` if it is

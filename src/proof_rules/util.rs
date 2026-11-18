@@ -204,7 +204,6 @@ pub fn get_init_idents(tcx: &TyCtx, span: Span, idents: &[Ident]) -> Vec<Ident> 
                 name: new_ident,
                 ty: ty.clone(),
                 kind: VarKind::Input,
-                init: None,
                 span,
                 created_from: Some(*ident),
             };

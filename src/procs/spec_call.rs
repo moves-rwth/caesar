@@ -1,16 +1,14 @@
 //! Replacement of calls to procedures by their specification.
 
-use std::ops::DerefMut;
-
 use ariadne::ReportKind;
+use replace_with::replace_with_or_abort;
 
 use crate::{
     ast::{
         util::VariableCollector,
         visit::{walk_stmt, VisitorMut},
-        Block, DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprData, ExprKind, Ident, Label,
-        Param, ProcSpec, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind, Symbol, VarDecl,
-        VarKind,
+        DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprData, ExprKind, Ident, Label, Param,
+        ProcSpec, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind, Symbol, VarDecl, VarKind,
     },
     slicing::{wrap_with_error_message, wrap_with_success_message},
     tyctx::TyCtx,
@@ -71,7 +69,7 @@ impl<'tcx> VisitorMut for SpecCall<'tcx> {
     type Err = SpecCallError;
 
     fn visit_expr(&mut self, e: &mut Expr) -> Result<(), Self::Err> {
-        if let ExprKind::Call(ref ident, _) = e.deref_mut().kind {
+        if let ExprKind::Call(ident, _) = &e.kind {
             if let DeclKind::ProcDecl(proc_ref) = self.tcx.get(*ident).unwrap().as_ref() {
                 let proc_ref = proc_ref.clone(); // lose the reference to &mut self
                 let proc = proc_ref.borrow();
@@ -92,43 +90,56 @@ impl<'tcx> VisitorMut for SpecCall<'tcx> {
         Ok(())
     }
 
-    fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
-        // Check calls before lowering assignments or variable initializers.
-        walk_stmt(self, s)?;
-        match &mut s.node {
-            StmtKind::Var(decl_ref) => {
-                let decl = decl_ref.borrow();
-                if let Some(rhs) = &decl.init {
-                    if let Some(mut block) = self.encode_assign(s.span, &[decl.name], rhs) {
-                        drop(decl);
-                        {
-                            let mut decl = decl_ref.borrow_mut();
-                            decl.init = None;
-                        }
-                        block
-                            .node
-                            .insert(0, Spanned::new(block.span, StmtKind::Var(decl_ref.clone())));
-                        s.span = block.span;
-                        s.node = StmtKind::Seq(block.node);
-                        return Ok(());
-                    }
-                }
+    fn visit_stmts(&mut self, stmts: &mut Vec<Stmt>) -> Result<(), Self::Err> {
+        let mut index = 0;
+        while let Some(stmt) = stmts.get_mut(index) {
+            index += 1;
+            if let Some(call) = self.lower_stmt(stmt)? {
+                // Keep the declaration in scope for the rest of the block.
+                stmts.insert(index, call);
+                index += 1;
             }
-            StmtKind::Assign(lhses, rhs) => {
-                if let Some(block) = self.encode_assign(s.span, lhses, rhs) {
-                    s.span = block.span;
-                    s.node = StmtKind::Seq(block.node);
-                    return Ok(());
-                }
-            }
-            _ => {}
-        };
+        }
+        Ok(())
+    }
+
+    fn visit_stmt(&mut self, stmt: &mut Stmt) -> Result<(), Self::Err> {
+        // An annotation gives its statement a scope for both the declaration and the call.
+        if let Some(call) = self.lower_stmt(stmt)? {
+            replace_with_or_abort(stmt, |stmt| {
+                Spanned::new(stmt.span, StmtKind::Seq(vec![stmt, call]))
+            });
+        }
         Ok(())
     }
 }
 
 impl<'tcx> SpecCall<'tcx> {
-    fn encode_assign(&mut self, span: Span, lhses: &[Ident], rhs: &Expr) -> Option<Block> {
+    /// Lower calls and return a separate statement for a lowered initializer.
+    fn lower_stmt(&mut self, stmt: &mut Stmt) -> Result<Option<Stmt>, SpecCallError> {
+        // Check calls before lowering assignments or variable initializers.
+        walk_stmt(self, stmt)?;
+        match &mut stmt.node {
+            StmtKind::Var(decl, init) => {
+                let call = init
+                    .as_ref()
+                    .and_then(|rhs| self.encode_assign(stmt.span, &[decl.borrow().name], rhs));
+                if call.is_some() {
+                    *init = None;
+                }
+                return Ok(call);
+            }
+            StmtKind::Assign(lhses, rhs) => {
+                if let Some(call) = self.encode_assign(stmt.span, lhses, rhs) {
+                    *stmt = call;
+                }
+            }
+            _ => {}
+        }
+        Ok(None)
+    }
+
+    fn encode_assign(&mut self, span: Span, lhses: &[Ident], rhs: &Expr) -> Option<Stmt> {
         if let ExprKind::Call(ident, args) = &rhs.kind {
             if let DeclKind::ProcDecl(proc_ref) = self.tcx.get(*ident).unwrap().as_ref() {
                 let proc_ref = proc_ref.clone(); // lose the reference to &mut self
@@ -158,9 +169,7 @@ impl<'tcx> SpecCall<'tcx> {
                     }
                 }
 
-                // collect "old" values, these are the input variables
-                // that also occur in the requires specs. we don't want
-                // their values to be destroyed by the havoc.
+                // Save arguments used in postconditions before havocing the outputs.
                 let stable_inputs: Vec<(&Param, Expr)> = {
                     let mut visitor = VariableCollector::new();
                     for spec in &proc.spec {
@@ -174,7 +183,7 @@ impl<'tcx> SpecCall<'tcx> {
                         .zip(args)
                         .map(|(input, arg)| {
                             if visitor.used_variables.contains(&input.name) {
-                                let (stmt, expr) = self.assign_to_temp(input, arg.clone());
+                                let (stmt, expr) = self.save_argument(input, arg.clone());
                                 buf.push(stmt);
                                 (input, expr)
                             } else {
@@ -209,47 +218,30 @@ impl<'tcx> SpecCall<'tcx> {
                         };
                     }
                 }
-                return Some(Spanned::new(span, buf));
+                return Some(Spanned::new(span, StmtKind::Seq(buf)));
             }
         }
         None
     }
-}
 
-impl<'tcx> SpecCall<'tcx> {
-    /// Assign to a temporary variable for this parameter.
-    fn assign_to_temp(&mut self, param: &Param, value: Expr) -> (Stmt, Expr) {
+    /// Declare a fresh local variable for the saved argument.
+    fn save_argument(&mut self, param: &Param, value: Expr) -> (Stmt, Expr) {
         let span = param.span.variant(SpanVariant::SpecCall);
-        let name = Ident {
+        let base = Ident {
             name: Symbol::intern(&format!("old_{}", param.name)),
             span,
         };
-        // Reuse an existing declaration if possible.
-        if let Some(_decl) = self.tcx.get(name).as_deref() {
-            let stmt = Spanned::new(span, StmtKind::Assign(vec![name], value));
-            (stmt, ident_to_expr(self.tcx, span, name))
-        } else {
-            // TODO: creating a variable declaration only for the first
-            // assignment to a temp for this parameter may generate invalid
-            // code. the declaration will only be created in the first procedure
-            // it's required in, but a second procedure won't have this
-            // declaration. so technically there should be a variable
-            // declaration there as well. this is not a problem for us now,
-            // because we don't look for declarations locally anymore, but it's
-            // annoying if one looks at the intermediate representations.
-            let var_decl = VarDecl {
-                name,
-                ty: *param.ty.clone(),
-                kind: VarKind::Mut, // we might use the variable again in another proc call
-                init: Some(value),
-                span,
-                created_from: Some(param.name),
-            };
-            let decl = DeclRef::new(var_decl);
-            self.tcx.declare(DeclKind::VarDecl(decl.clone()));
-            let stmt = Spanned::new(span, StmtKind::Var(decl));
-            (stmt, ident_to_expr(self.tcx, span, name))
-        }
+        let name = self.tcx.fresh_ident(base, span);
+        let decl = DeclRef::new(VarDecl {
+            name,
+            ty: *param.ty.clone(),
+            kind: VarKind::Mut,
+            span,
+            created_from: Some(param.name),
+        });
+        self.tcx.declare(DeclKind::VarDecl(decl.clone()));
+        let stmt = Spanned::new(span, StmtKind::Var(decl, Some(value)));
+        (stmt, ident_to_expr(self.tcx, span, name))
     }
 }
 
@@ -319,5 +311,27 @@ mod test {
             err.to_string(),
             "Error: The direction of 'proc <builtin>::test2' does not match with the direction of the 'coproc test1'."
         );
+    }
+
+    #[test]
+    fn test_call_initializer_in_unroll() {
+        let source = r#"
+            proc dec(a: UInt) -> (r: UInt)
+                pre 1
+                post [r == a - 1]
+
+            @wp proc countdown() -> (x: UInt)
+                pre 1
+                post [x == 0]
+            {
+                x = 2
+                @unroll(3, 0)
+                while x > 0 {
+                    var y: UInt = dec(x)
+                    x = y
+                }
+            }
+        "#;
+        assert!(verify_test(source).0.unwrap());
     }
 }

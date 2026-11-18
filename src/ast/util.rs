@@ -40,10 +40,9 @@ impl VariableCollector {
     pub fn add_stmt(&mut self, stmt: &Stmt) {
         match &stmt.node {
             StmtKind::Seq(stmts) => self.add_stmts(stmts),
-            StmtKind::Var(var) => {
-                let var = var.borrow();
-                self.declared_variables.insert(var.name);
-                if let Some(init) = &var.init {
+            StmtKind::Var(decl, init) => {
+                self.declared_variables.insert(decl.borrow().name);
+                if let Some(init) = init {
                     self.add_expr(init);
                 }
             }
@@ -264,7 +263,6 @@ mod test {
             name: local,
             ty: TyKind::Bool,
             kind: VarKind::Mut,
-            init: None,
             span,
             created_from: None,
         });
@@ -280,7 +278,7 @@ mod test {
             ))),
         ));
         let program = stmt(StmtKind::Seq(vec![
-            stmt(StmtKind::Var(local_decl)),
+            stmt(StmtKind::Var(local_decl, None)),
             stmt(StmtKind::Havoc(Direction::Down, vec![x])),
             stmt(StmtKind::Havoc(Direction::Up, vec![y, local])),
             annotated,

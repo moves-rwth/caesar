@@ -23,9 +23,9 @@ use lsp_types::NumberOrString;
 use crate::{
     ast::{
         util::{is_bot_lit, is_top_lit},
-        visit::VisitorMut,
-        BinOpKind, DeclKind, DeclRef, Diagnostic, Expr, ExprBuilder, ExprData, ExprKind, Ident,
-        Label, LitKind, ProcDecl, Shared, Span, Spanned, Stmt, TyKind, UnOpKind, VarDecl,
+        visit::{walk_stmt, VisitorMut},
+        BinOpKind, Block, DeclKind, Diagnostic, Expr, ExprBuilder, ExprData, ExprKind, Ident,
+        Label, LitKind, ProcDecl, Shared, Span, Spanned, Stmt, StmtKind, TyKind, UnOpKind,
     },
     driver::commands::options::ModelCheckingOptions,
     procs::proc_verify::encode_proc_verify,
@@ -154,7 +154,7 @@ pub fn proc_to_model(
     let mut op_automaton = OpAutomaton::new(&expr_translator, spec_part);
 
     // translate the variables
-    let (constants, variables) = translate_var_decls(options, &expr_translator, proc)?;
+    let (constants, variables) = translate_var_decls(options, &expr_translator, proc, &mut block)?;
     op_automaton.variables.extend(variables);
 
     // translate the statements
@@ -240,8 +240,9 @@ fn translate_var_decls(
     options: &ModelCheckingOptions,
     expr_translator: &ExprTranslator<'_>,
     proc: &ProcDecl,
+    body: &mut Block,
 ) -> Result<(Vec<ConstantDeclaration>, Vec<VariableDeclaration>), JaniConversionError> {
-    let mut vars = translate_local_decls(expr_translator, proc)?;
+    let mut vars = translate_local_decls(expr_translator, body)?;
 
     // by default, proc inputs are translated as constants
     let mut constants = vec![];
@@ -286,7 +287,7 @@ fn translate_var_decls(
 /// Create variable declarations for the local variables of a procedure.
 fn translate_local_decls(
     expr_translator: &ExprTranslator<'_>,
-    proc: &ProcDecl,
+    body: &mut Block,
 ) -> Result<Vec<VariableDeclaration>, JaniConversionError> {
     struct VarDeclCollector<'a> {
         expr_translator: &'a ExprTranslator<'a>,
@@ -295,10 +296,13 @@ fn translate_local_decls(
     impl<'a> VisitorMut for VarDeclCollector<'a> {
         type Err = JaniConversionError;
 
-        fn visit_var_decl(&mut self, var_ref: &mut DeclRef<VarDecl>) -> Result<(), Self::Err> {
-            let decl = var_ref.borrow();
+        fn visit_stmt(&mut self, stmt: &mut Stmt) -> Result<(), Self::Err> {
+            let StmtKind::Var(decl, init) = &stmt.node else {
+                return walk_stmt(self, stmt);
+            };
+            let decl = decl.borrow();
             let mut comment = None;
-            let initial_value = if let Some(initial_expr) = &decl.init {
+            let initial_value = if let Some(initial_expr) = init {
                 if is_constant(initial_expr) {
                     Some(self.expr_translator.translate(initial_expr)?)
                 } else {
@@ -322,12 +326,16 @@ fn translate_local_decls(
             });
             Ok(())
         }
+
+        fn visit_expr(&mut self, _: &mut Expr) -> Result<(), Self::Err> {
+            Ok(())
+        }
     }
     let mut collector = VarDeclCollector {
         expr_translator,
         decls: Vec::new(),
     };
-    collector.visit_proc(&mut DeclRef::new(proc.clone()))?;
+    collector.visit_block(body)?;
     Ok(collector.decls)
 }
 

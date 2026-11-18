@@ -91,7 +91,6 @@ impl Encoding for OmegaInvAnnotation {
                         name: *var_ref,
                         ty: TyKind::UInt,
                         kind: VarKind::Mut,
-                        init: None,
                         span: call_span,
                         created_from: None,
                     };

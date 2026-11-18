@@ -135,7 +135,6 @@ impl<'tcx> StmtSliceVisitor<'tcx> {
             name: ident,
             ty: TyKind::Bool,
             kind: VarKind::Slice,
-            init: None,
             span,
             created_from: None,
         })));

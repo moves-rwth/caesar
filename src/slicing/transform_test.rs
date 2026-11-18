@@ -88,7 +88,6 @@ impl TransformTestCtx {
                 name: *name,
                 ty: TyKind::EUReal,
                 kind: VarKind::Input,
-                init: None,
                 span: Span::dummy_span(),
                 created_from: None,
             })))

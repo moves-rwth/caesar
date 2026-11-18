@@ -191,12 +191,6 @@ fn collect_decls_exprs(decls: &[DeclKind], out: &mut Vec<ExprSnapshot>) {
 
 fn collect_decl_exprs(decl: &DeclKind, out: &mut Vec<ExprSnapshot>) {
     match decl {
-        DeclKind::VarDecl(var_decl) => {
-            let var_decl = var_decl.borrow();
-            if let Some(init) = var_decl.init.as_ref() {
-                collect_expr(init, out);
-            }
-        }
         DeclKind::ProcDecl(proc_decl) => {
             let proc_decl = proc_decl.borrow();
             for spec in &proc_decl.spec {
@@ -235,7 +229,8 @@ fn collect_decl_exprs(decl: &DeclKind, out: &mut Vec<ExprSnapshot>) {
         DeclKind::AxiomDecl(axiom_decl) => {
             collect_expr(&axiom_decl.borrow().axiom, out);
         }
-        DeclKind::ProcIntrin(_)
+        DeclKind::VarDecl(_)
+        | DeclKind::ProcIntrin(_)
         | DeclKind::FuncIntrin(_)
         | DeclKind::LabelDecl(_)
         | DeclKind::AnnotationDecl(_) => {}
@@ -255,9 +250,8 @@ fn collect_stmt_exprs(stmt: &Stmt, out: &mut Vec<ExprSnapshot>) {
                 collect_stmt_exprs(stmt, out);
             }
         }
-        StmtKind::Var(var_decl) => {
-            let var_decl = var_decl.borrow();
-            if let Some(init) = var_decl.init.as_ref() {
+        StmtKind::Var(_, init) => {
+            if let Some(init) = init {
                 collect_expr(init, out);
             }
         }

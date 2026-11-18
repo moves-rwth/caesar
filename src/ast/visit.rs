@@ -33,9 +33,6 @@ pub trait VisitorMut: Sized {
         let mut var_decl = var_ref.borrow_mut();
         self.visit_ident(&mut var_decl.name)?;
         self.visit_ty(&mut var_decl.ty)?;
-        if let Some(ref mut init) = &mut var_decl.init {
-            self.visit_expr(init)?;
-        }
         Ok(())
     }
 
@@ -57,7 +54,7 @@ pub trait VisitorMut: Sized {
         self.visit_expr(&mut axiom_decl.axiom)
     }
 
-    fn visit_stmts(&mut self, stmts: &mut [Stmt]) -> Result<(), Self::Err> {
+    fn visit_stmts(&mut self, stmts: &mut Vec<Stmt>) -> Result<(), Self::Err> {
         for s in stmts {
             self.visit_stmt(s)?;
         }
@@ -226,8 +223,12 @@ pub fn walk_stmt<V: VisitorMut>(visitor: &mut V, s: &mut Stmt) -> Result<(), V::
         StmtKind::Seq(ref mut block) => {
             visitor.visit_stmts(block)?;
         }
-        StmtKind::Var(decl_ref) => {
-            visitor.visit_var_decl(decl_ref)?;
+        StmtKind::Var(decl, init) => {
+            // Visit the initializer before the declaration can shadow an outer binding.
+            if let Some(init) = init {
+                visitor.visit_expr(init)?;
+            }
+            visitor.visit_var_decl(decl)?;
         }
         StmtKind::Assign(ref mut lhses, ref mut rhs) => {
             for lhs in lhses {

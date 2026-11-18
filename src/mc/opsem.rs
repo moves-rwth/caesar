@@ -90,9 +90,9 @@ fn translate_stmt(
 ) -> Result<Identifier, JaniConversionError> {
     match &stmt.node {
         StmtKind::Seq(block) => translate_stmts(automaton, block, next),
-        StmtKind::Var(decl_ref) => {
-            let decl = decl_ref.borrow();
-            match &decl.init {
+        StmtKind::Var(decl, init) => {
+            let decl = decl.borrow();
+            match init {
                 Some(init) if !is_constant(init) => {
                     translate_assign(automaton, translate_ident(decl.name), init, next)
                 }

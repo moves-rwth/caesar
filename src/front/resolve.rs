@@ -107,14 +107,7 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
     }
 
     fn visit_var_decl(&mut self, var_ref: &mut DeclRef<VarDecl>) -> Result<(), ResolveError> {
-        let mut var_decl = var_ref.borrow_mut();
-
-        // first visit the initializer
-        if let Some(ref mut init) = &mut var_decl.init {
-            self.visit_expr(init)?;
-        }
-        self.visit_ty(&mut var_decl.ty)?;
-        drop(var_decl);
+        self.visit_ty(&mut var_ref.borrow_mut().ty)?;
         self.declare(DeclKind::VarDecl(var_ref.clone()))
     }
 
@@ -280,7 +273,6 @@ impl<'tcx> VisitorMut for Resolve<'tcx> {
                     name: *ident,
                     ty: TyKind::None,
                     kind: VarKind::Subst,
-                    init: Some(val.clone()),
                     span,
                     created_from: None,
                 }));

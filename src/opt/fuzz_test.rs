@@ -68,7 +68,6 @@ impl ExprGen {
                     name: *name,
                     ty,
                     kind: VarKind::Input,
-                    init: None,
                     span: Span::dummy_span(),
                     created_from: None,
                 })))

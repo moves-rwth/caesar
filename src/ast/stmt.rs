@@ -29,8 +29,8 @@ impl Display for Stmt {
 pub enum StmtKind {
     /// A sequence of statements.
     Seq(Vec<Stmt>),
-    /// A variable declaration.
-    Var(DeclRef<VarDecl>),
+    /// A variable declaration with an optional initializer.
+    Var(DeclRef<VarDecl>, Option<Expr>),
     /// An assignment.
     Assign(Vec<Ident>, Expr),
     /// A havoc statement.
@@ -105,7 +105,13 @@ impl SimplePretty for StmtKind {
 
         let res = match self {
             StmtKind::Seq(stmts) => pretty_block(stmts.pretty()),
-            StmtKind::Var(decl_ref) => decl_ref.borrow().pretty_stmt(),
+            StmtKind::Var(decl, init) => {
+                let var = decl.borrow().pretty_stmt();
+                match init {
+                    Some(init) => var.append(Doc::text(" = ")).append(init.pretty()),
+                    None => var,
+                }
+            }
             StmtKind::Assign(lhs, rhs) => Doc::intersperse(
                 lhs.iter().map(|lhs| Doc::as_string(lhs.name)),
                 Doc::text(", "),

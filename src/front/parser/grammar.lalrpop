@@ -171,7 +171,7 @@ QuantOp: QuantOp = {
 
 QuantVar: QuantVar = {
     <l: @L> <name: Ident> ":" <ty: Ty> <r: @R>
-        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty, kind: VarKind::Quant, init: None, span: span(file, l, r), created_from: None }))
+        => QuantVar::Fresh(DeclRef::new(VarDecl { name, ty, kind: VarKind::Quant, span: span(file, l, r), created_from: None }))
 }
 
 QuantAnn: QuantAnn = {
@@ -200,9 +200,9 @@ pub SpannedStmts: Spanned<Vec<Stmt>> = {
 StmtKind: StmtKind = {
     <block: Block> => StmtKind::Seq(block.node),
     <l: @L> "var" <ident: Ident> ":" <ty: Ty> "=" <rhs: Expr> <r: @R>
-        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: Some(rhs), span: span(file, l, r), created_from: None })),
+        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, span: span(file, l, r), created_from: None }), Some(rhs)),
     <l: @L> "var" <ident: Ident> ":" <ty: Ty> <r: @R>
-        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, init: None, span: span(file, l, r), created_from: None })),
+        => StmtKind::Var(DeclRef::new(VarDecl { name: ident, ty, kind: VarKind::Mut, span: span(file, l, r), created_from: None }), None),
     <lhs: CommaPlus<Ident>> "=" <rhs: Expr> => StmtKind::Assign(lhs, rhs),
     <l: @L> <ident: Ident> "(" <args: Comma<Expr>> ")" <r: @R> => {
         let call = Shared::new(ExprData {

@@ -73,10 +73,9 @@ impl<'tcx> Vcgen<'tcx> {
         let spec_ty = Some(self.tcx.spec_ty().clone());
         let res = match &stmt.node {
             StmtKind::Seq(block) => self.vcgen_stmts(block, post)?,
-            StmtKind::Var(var_def) => {
-                let var_def = var_def.borrow();
-                if let Some(init) = &var_def.init {
-                    self.generate_assign(stmt.span, init, builder, &[var_def.name], post)?
+            StmtKind::Var(decl, init) => {
+                if let Some(init) = init {
+                    self.generate_assign(stmt.span, init, builder, &[decl.borrow().name], post)?
                 } else {
                     post
                 }

@@ -1,6 +1,6 @@
 //! Type checking and type inference happens here.
 
-use std::{cmp::Ordering, ops::DerefMut, rc::Rc};
+use std::{cmp::Ordering, rc::Rc};
 
 use ariadne::ReportKind;
 use indexmap::IndexSet;
@@ -426,29 +426,6 @@ macro_rules! ops_ty_check {
 impl<'tcx> VisitorMut for Tycheck<'tcx> {
     type Err = TycheckError;
 
-    fn visit_var_decl(&mut self, var_ref: &mut DeclRef<VarDecl>) -> Result<(), Self::Err> {
-        let mut var_decl = var_ref.borrow_mut();
-        let var_decl = var_decl.deref_mut();
-        if let Some(init) = &mut var_decl.init {
-            self.allow_impure_calls = true;
-            self.visit_expr(init)?;
-            self.allow_impure_calls = false;
-
-            // try to unpack a tuple first
-            let init_ty = init.ty.as_ref().unwrap();
-            if let TyKind::Tuple(tys) = init_ty {
-                if let [lhs_ty] = tys.as_slice() {
-                    if lhs_ty == &var_decl.ty {
-                        return Ok(());
-                    }
-                }
-            }
-            // only if unpacking the tuple failed, try a normal assignment
-            self.try_cast(init.span, &var_decl.ty, init)?;
-        }
-        Ok(())
-    }
-
     fn visit_proc(&mut self, proc_ref: &mut DeclRef<ProcDecl>) -> Result<(), Self::Err> {
         let mut proc = proc_ref.borrow_mut();
         for spec in &mut proc.spec {
@@ -496,14 +473,23 @@ impl<'tcx> VisitorMut for Tycheck<'tcx> {
     fn visit_stmt(&mut self, s: &mut Stmt) -> Result<(), Self::Err> {
         // first, walk recursive statements/expressions, and allow impure calls
         // (e.g. procs) when in variable declarations or assignments.
-        self.allow_impure_calls = matches!(s.node, StmtKind::Var(_) | StmtKind::Assign(_, _));
+        self.allow_impure_calls = matches!(s.node, StmtKind::Var(_, _) | StmtKind::Assign(_, _));
         walk_stmt(self, s)?;
         self.allow_impure_calls = false;
 
         match &mut s.node {
             StmtKind::Seq(_) => {}
-            StmtKind::Var(var_decl) => {
-                self.visit_var_decl(var_decl)?;
+            StmtKind::Var(decl, init) => {
+                if let Some(init) = init {
+                    let decl = decl.borrow();
+                    // Procedure calls have tuple types even when they return one value.
+                    if let TyKind::Tuple(tys) = init.ty.as_ref().unwrap() {
+                        if tys.as_slice() == std::slice::from_ref(&decl.ty) {
+                            return Ok(());
+                        }
+                    }
+                    self.try_cast(init.span, &decl.ty, init)?;
+                }
             }
             StmtKind::Assign(lhses, ref mut rhs) => {
                 // TODO: handle mutability on LHS
@@ -850,7 +836,7 @@ mod test {
             var ureal2: EUReal = uint;
         "#;
         let block = parse_block_and_tycheck(source).unwrap();
-        assert!(matches!(block.node[0].node, StmtKind::Var(_)));
+        assert!(matches!(block.node[0].node, StmtKind::Var(_, _)));
 
         let source = r#"
             var eureal: EUReal;

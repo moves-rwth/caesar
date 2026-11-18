@@ -99,7 +99,6 @@ impl Encoding for ASTAnnotation {
                     name: *var_ref,
                     ty: TyKind::UReal,
                     kind: VarKind::Mut,
-                    init: None,
                     span: call_span,
                     created_from: None,
                 };
@@ -601,7 +600,7 @@ impl VisitorMut for AstBodyValidator<'_> {
                 }
                 None
             }
-            StmtKind::Var(var) if var.borrow().init.is_none() => Some((
+            StmtKind::Var(_, None) => Some((
                 "Loop-local variables must be initialized.",
                 Some("`@ast` requires explicit `havoc` for demonic nondeterminism."),
             )),

@@ -259,7 +259,7 @@ impl VisitorMut for PastBodyValidator<'_> {
     fn visit_stmt(&mut self, stmt: &mut Stmt) -> Result<(), Self::Err> {
         match &stmt.node {
             StmtKind::Seq(_)
-            | StmtKind::Var(_)
+            | StmtKind::Var(..)
             | StmtKind::Assign(_, _)
             | StmtKind::Tick(_)
             | StmtKind::If(_, _, _)
