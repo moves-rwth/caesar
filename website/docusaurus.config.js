@@ -279,6 +279,10 @@ const config = {
                 to: '/about',
               },
               {
+                label: 'Cite and Share',
+                to: '/about#cite-and-share',
+              },
+              {
                 label: 'News',
                 to: '/blog',
               },

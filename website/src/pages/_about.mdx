@@ -1,0 +1,84 @@
+import CaesarCitation from '../components/CaesarCitation';
+import CaesarDownloads from '../components/CaesarDownloads';
+
+# About Caesar
+
+Caesar is a deductive verification infrastructure specifically designed for probabilistic programs.
+That means it is a tool to provide formal guarantees for programs that incorporate probabilistic behaviours, such as drawing random numbers or making random choices.
+
+For BibTeX, logos, and the website QR code, see [Cite and Share](#cite-and-share).
+
+Probabilistic programs can be found in randomized algorithms, communication protocols, machine learning models, and many other domains.
+When designing or analyzing such programs, many questions can be formulated with respect to some kind of *expected value*, such as the probability of reaching a certain state, the expected number of steps until a certain event occurs, or the expected value of some variable at the end of the program.
+We support the use of different proof rules, from areas such as martingale analysis or domain theory, thus enabling reasoning about programs with infinite state spaces and unbounded loops.
+
+Caesar aims to be a *verification infrastructure* that combines many different techniques to formally reason about such expected values.
+We want to provide a tool that automates the verification process as much as possible, while still allowing the user to guide the verification process and provide additional information when needed.
+This differs from *probabilistic model checkers* such as [Storm](https://www.stormchecker.org/) or [PRISM](https://www.prismmodelchecker.org/), which are more "push-button" approaches that require less user interaction but struggle with e.g. infinite state spaces.
+
+Caesar is an open-source project from [RWTH Aachen University (MOVES group)](https://moves.rwth-aachen.de/), [Saarland University (QUAVE group)](https://quave.cs.uni-saarland.de/), [Technical University of Denmark (SSE section)](https://www.compute.dtu.dk/english/research/research-sections/software-systems-engineering), [University College London (PPLV group)](http://pplv.cs.ucl.ac.uk/welcome/), and [University of Oldenburg (Theory of Correct Systems group)](https://uol.de/en/computingscience/groups/theorie-korrekter-systeme).
+The [source code is available on GitHub](https://www.github.com/moves-rwth/caesar).
+The name "Caesar" comes from "veni, vidi, vc", where we let "vc" stand for "verification conditions".
+
+## Cite and Share {#cite-and-share}
+
+### Cite Caesar
+
+<CaesarCitation />
+
+### Describe Caesar
+
+Caesar is an open-source deductive verifier for probabilistic programs.
+
+[caesarverifier.org](https://www.caesarverifier.org/)
+
+### Logos and QR Code
+
+<CaesarDownloads />
+
+## Main Features
+
+- Verification of expected values in probabilistic programs
+- Support for infinite state spaces, unbounded loops, and recursion
+- Support for different proof rules, such as from martingale analysis or domain theory
+- Integration with SMT solvers and probabilistic model checkers
+- Program slicing for error localization and hints
+- Integration with Visual Studio Code
+
+## Key Components
+
+### HeyVL
+
+The architecture of Caesar is inspired by modern program verifiers that use an *intermediate verification language* (IVL) to encode a program, its specification, and proof rules into a common representation.
+Our *quantitative* IVL is called [*HeyVL*](/docs/heyvl/).
+HeyVL generalizes classical IVLs to the quantitative setting through *HeyLo*, our new quantitative logic developed for Caesar.
+The names come from [Heyting algebras](https://en.wikipedia.org/wiki/Heyting_algebra), which underlie the logic.
+
+In Caesar, HeyVL also has high-level constructs such as loops or procedure calls, but these are all encoded into a smaller core language.
+This core language and many encodings are described in our [OOPSLA 2023 publication *"A Deductive Verification Infrastructure for Probabilistic Programs"*](/docs/publications#oopsla-23).
+
+### SMT Solving and Probabilistic Model Checking {#verification-backends}
+
+Caesar uses the [Z3 SMT solver](https://www.microsoft.com/en-us/research/project/z3-3/) to reason about HeyVL programs.
+This allows Caesar to use symbolic reasoning to prove properties of probabilistic programs, enabling reasoning about infinite state spaces and unbounded loops.
+It is also possible to use other SMT solvers ([by emitting SMT-LIB](/docs/caesar/)).
+
+In addition, Caesar has [a model checking backend](/docs/model-checking) that emits files in the [JANI format](https://jani-spec.org/), a JSON-based interchange format for probabilistic models.
+This is possible for an "executable" subset of HeyVL programs that can be translated into JANI models.
+The result can be fed into probabilistic model checkers such as [Storm](https://www.stormchecker.org/).
+
+### Slicing for Error Localization and Hints {#slicing}
+
+Caesar includes a [*program slicing* engine called *Brutus*](/docs/caesar/slicing) (get it?) that reduces HeyVL programs with respect to certain properties.
+Slicing is Caesar's theoretical and practical foundation for error localization and hints.
+For example, by removing assertions from the program, we can find out the remaining assertions which must cause a verification failure.
+
+### Visual Studio Code Integration {#vs-code-integration}
+
+We value usability and user-friendliness highly and want to make Caesar as easy to use as possible.
+It is our belief that UX is a key factor in making formal verification succeed in practice.
+This is why we put a lot of effort into [integrating Caesar with Visual Studio Code](/docs/caesar/vscode-and-lsp/) with our [Caesar for VSCode extension](https://marketplace.visualstudio.com/items?itemName=rwth-moves.caesar).
+
+## Other Tools Named Caesar
+
+Caesar should not be confused with the set of tools in the [CADP toolbox](https://cadp.inria.fr/) by INRIA, which includes tools like the CAESAR or CAESAR.ADT compilers, or the OPEN/CAESAR software architecture.

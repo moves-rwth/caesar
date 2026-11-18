@@ -24,6 +24,8 @@ If you are interested in collaborations or simply have some questions, please re
 For Caesar as a verifier, cite the [CAV 2026 tool paper](#cav-26-caesar-a-deductive-verifier-for-probabilistic-programs) ([BibTeX](https://dblp.org/rec/conf/cav/SchroerBDHKKM26.html?view=bibtex)).
 For HeyVL and the foundations of the verification infrastructure, cite the [OOPSLA 2023 paper](#oopsla-23) ([BibTeX](https://dblp.org/rec/journals/pacmpl/SchroerBKKM23.html?view=bibtex)).
 
+Copy the BibTeX entries or download the logo and QR code from [Cite and Share](/about#cite-and-share).
+
 :::
 
 **Overview:**

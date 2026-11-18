@@ -1,0 +1,32 @@
+.article {
+  min-width: 0;
+}
+
+.desktopContents {
+  display: none;
+}
+
+.about :is(h2, h3)[id] {
+  scroll-margin-top: calc(var(--ifm-navbar-height) + 1rem);
+}
+
+@media (min-width: 997px) {
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) minmax(0, var(--caesar-docs-reading-width)) minmax(12rem, 1fr);
+    column-gap: var(--ifm-spacing-horizontal);
+  }
+
+  .article {
+    grid-column: 2;
+  }
+
+  .article .mobileContents {
+    display: none;
+  }
+
+  .desktopContents {
+    display: block;
+    grid-column: 3;
+  }
+}
