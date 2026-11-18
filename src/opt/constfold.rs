@@ -56,9 +56,7 @@ impl VisitorMut for ConstFold {
                         }
                     }
                     BinOpKind::Div => {
-                        if is_zero_lit(lhs) {
-                            *e = builder.zero_lit(e.ty.as_ref().unwrap());
-                        } else if is_one_lit(rhs) {
+                        if is_one_lit(rhs) {
                             *e = lhs.clone();
                         }
                     }
