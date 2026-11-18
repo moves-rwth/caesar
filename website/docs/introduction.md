@@ -1,41 +1,44 @@
 ---
+description: Learn what Caesar can verify, run a first proof in HeyVL, and find the language and tool references.
 sidebar_position: 1
 slug: /
 ---
 
 # Introduction
 
-```mdx-code-block
-import Citation from '@site/src/components/Citation';
-import {references as sources} from '@site/src/data/references';
+Caesar is a deductive verifier for probabilistic programs.
+It can prove bounds on the probability that a protocol abandons a message or on the expected number of steps in a randomized algorithm.
+It also checks whether a program terminates with probability one and whether it satisfies Boolean specifications, such as returning a sorted list whenever it terminates.
 
-export const references = {
-  oopsla: sources.heyvl2023,
-};
-```
+## Getting Started {#overview}
 
-Hello and welcome!
-This is the user documentation for [_Caesar_](https://github.com/moves-rwth/caesar), a deductive verification framework for probabilistic programs.
+[Install Caesar](./getting-started/installation.mdx) to verify programs in VS Code or from the command line.
+In the [first example](./getting-started/first-proof.mdx), you verify that a loop that flips a fair coin until heads takes at most two iterations in expectation.
 
-### Overview
+The [Guide to HeyVL](./getting-started/heyvl-guide.md) shows how to write your own programs and specifications.
+Browse [HeyVL Examples](./getting-started/zoo.md) for worked proofs and downloadable programs, from sorting and sampling algorithms to random walks and communication protocols.
 
-After [installing Caesar](./getting-started/installation.mdx), continue with our [getting started guide](./getting-started/) to learn the basics of HeyVL and Caesar.
+## How Verification Works
 
-The language is documented in the [HeyVL language section](./heyvl/).
-Built-in functions and types are documented in the [standard library section](./stdlib/).
+You write the program and its specification in HeyVL, Caesar's verification language.
+For each loop, you select a proof rule and supply the information it needs, such as a loop invariant.
+Caesar generates verification conditions and checks them with the Z3 SMT solver.
+This lets you reason symbolically about unbounded loops and programs with infinitely many possible states.
 
-In the [Caesar section](./caesar/), we have documentation for the Caesar tool, its command-line interface and the VSCode extension, as well as for our slicing algorithm.
+## Reference
 
-### Our Theory Paper
+- [HeyVL](./heyvl/) documents the language, and the [standard library](./stdlib/) documents built-in types, functions, and distributions.
+- [Proof Rules](./proof-rules/) covers loop annotations, their assumptions, and the guarantees they establish.
+- [The Caesar Tool](./caesar/) covers the command line, VS Code integration, and diagnostics for debugging proofs.
+- [Model Checking](./model-checking.md) explains how to export supported HeyVL programs to JANI and analyze them with Storm.
 
-Our OOPSLA 2023 paper introduces Caesar and its theory.
+## Research and Citation {#our-theory-paper}
 
-<Citation {...references.oopsla} variant="full" />
+Read about Caesar's verification workflow and tooling in the [CAV 2026 tool paper](./publications.md#cav-26-caesar-a-deductive-verifier-for-probabilistic-programs).
+For the design of HeyVL and the theory behind the verifier, see the [OOPSLA 2023 paper](./publications.md#oopsla-23).
+See [Publications](./publications.md) for related work and BibTeX entries.
 
-You can [find the preprint on arxiv](https://arxiv.org/abs/2309.07781).
-More information on the [publications page](./publications.md).
+## Questions and Feedback {#contact-us}
 
-### Contact Us!
-
-**This is research software**, so it's not bug-free and there may be missing documentation in places.
-Please open [start a discussion in our forum](https://github.com/moves-rwth/caesar/discussions), [open an issue](https://github.com/moves-rwth/caesar/issues), or send an email to [phisch@cs.rwth-aachen.de](mailto:phisch@cs.rwth-aachen.de) with questions or ideas.
+Ask a question in [GitHub Discussions](https://github.com/moves-rwth/caesar/discussions) or [open an issue](https://github.com/moves-rwth/caesar/issues) to report a bug.
+For research questions or collaboration, email [Philipp Schroer](mailto:phisch@cs.rwth-aachen.de).
