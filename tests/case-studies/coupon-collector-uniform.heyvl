@@ -1,4 +1,4 @@
-// RUN: @caesar @file --function-encoding fuel-param --quantifier-instantiation e-matching
+// RUN: @caesar @file --function-encoding fuel-mono --max-fuel 1 --quantifier-instantiation e-matching --strict
 
 domain Harmonic {
     func harmonic(n: UInt): UReal = ite(n == 0, 0, harmonic(n - 1) + 1 / n)
@@ -18,35 +18,27 @@ coproc coupon_collector(N: UInt) -> ()
         while !found_new {
             // Count one coupon draw without charging for the sampler's internal steps.
             tick 1
-            var coupon: UInt = draw_coupon(N, x, N * harmonic(x - 1))
+            // Draw an index uniformly from 1 through N.
+            var coupon: UInt = N
+            var chosen: Bool = false
+            @invariant(
+                !?(1 <= coupon && coupon <= N)
+                ⊔ (
+                    ite(chosen, [coupon > x],
+                        ite(coupon > x, (coupon - x) / coupon, 0)
+                    ) * (N / x)
+                    + N * harmonic(x - 1)
+                )
+            )
+            while !chosen && coupon > 1 {
+                chosen = flip(1 / coupon)
+                if !chosen {
+                    coupon = coupon - 1
+                } else {}
+            }
+            // Labels 1 through x represent the currently missing coupons.
             found_new = coupon <= x
         }
         x = x - 1
-    }
-}
-
-@ert
-coproc draw_coupon(N: UInt, x: UInt, remaining: UReal) -> (coupon: UInt)
-    pre !?(0 < x && x <= N)
-    pre (N - x) / x + remaining
-    post ite(coupon <= x, 0, N / x) + remaining
-{
-    // Draw an index uniformly from 1 through N.
-    coupon = N
-    var chosen: Bool = false
-    @invariant(
-        !?(1 <= coupon && coupon <= N)
-        ⊔ (
-            ite(chosen, [coupon > x],
-                (coupon - x) / coupon
-            ) * (N / x)
-            + remaining
-        )
-    )
-    while !chosen && coupon > 1 {
-        chosen = flip(1 / coupon)
-        if !chosen {
-            coupon = coupon - 1
-        } else {}
     }
 }

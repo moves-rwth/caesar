@@ -113,7 +113,7 @@ export const examples = [
     detailSlug: 'coupon-collector',
     variants: [
       variant('main', 'Expected draws: simplified sampling', 'tests/case-studies/coupon-collector.heyvl', ['invariants'], [...fuel, ...eMatching]),
-      variant('uniform', 'Expected draws: explicit uniform sampling', 'tests/case-studies/coupon-collector-uniform.heyvl', ['invariants'], [...fuel, ...eMatching]),
+      variant('uniform', 'Expected draws: explicit uniform sampling', 'tests/case-studies/coupon-collector-uniform.heyvl', ['invariants'], ['--function-encoding', 'fuel-mono', '--max-fuel', '1', ...eMatching, '--strict']),
     ],
   },
   {

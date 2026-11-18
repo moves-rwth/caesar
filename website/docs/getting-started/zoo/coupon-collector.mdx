@@ -109,28 +109,26 @@ Updating `x` to `x - 1` makes this the outer invariant for the new value of `x`.
 
 ## Explicit Uniform Draws {#uniform-draws}
 
-The collector calls `draw_coupon` to draw an index uniformly from `1` through `N`.
-Labels `1` through `x` represent the missing coupons, so the collector uses `found_new = coupon <= x` to tell whether the draw is new.
-It charges one `tick 1` per call to the sampler.
+We replace `flip(x / N)` with a sampler that draws uniformly from `1` through `N`.
+Labels `1` through `x` represent the missing coupons, so `found_new = coupon <= x` records whether the draw is new.
+The surrounding collection loops are unchanged, so the excerpt shows only one draw and its sampling loop.
 
 <ExampleSources exampleId="coupon-collector" sources={[{
   variantId: 'uniform', code: uniformSource, downloadUrl: uniformDownload,
-  title: 'Uniform sampler and its specification',
-  start: '@ert\ncoproc draw_coupon(', highlight: '3-5,13-16',
+  title: 'Explicit uniform sampling and its invariant',
+  start: '            tick 1', end: '\n        }\n        x = x - 1', highlight: '5-14',
 }]} />
 
 Starting at `coupon = N`, the sampler accepts each candidate with probability `1 / coupon` and otherwise tries the next smaller index, with `1` as the fallback.
 For each index $j$, reaching it has probability $j/N$, so selecting it has probability $(j/N)\cdot(1/j)=1/N$.
 Its internal flips add no ticks, so the same $N\cdot H_N$ bound still counts coupon draws.
 
-The sampler's `post` adds `N / x` to the bound when it returns a duplicate, accounting for the draws still needed to find a new coupon.
-The collector supplies `N * harmonic(x - 1)` for `remaining`, which bounds the draws after the next new coupon.
+The term `N / x` bounds the further draws needed after a duplicate, while `N * harmonic(x - 1)` covers the draws after the next new coupon.
 Before selection, $\max(\mathtt{coupon}-x,0)/\mathtt{coupon}$ is the fraction of remaining indices that are duplicates.
 After selection, `[coupon > x]` records whether the drawn index is a duplicate.
 
-The sampler's `pre` bounds the expected cost by $(N-x)/x$ plus `remaining`.
-Adding the tick before the call gives $1+(N-x)/x=N/x$, the waiting cost before a draw.
-After the call, `found_new = coupon <= x` restores the invariant for finding the next new coupon.
+At `coupon = N`, adding the preceding tick gives $1+(N-x)/x=N/x$, recovering the waiting cost.
+At sampler exit, assigning `found_new = coupon <= x` recovers the invariant for finding the next new coupon.
 
 ## Earlier Version {#original-proof}
 
