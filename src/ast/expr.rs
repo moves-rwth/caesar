@@ -608,7 +608,7 @@ impl ExprBuilder {
         match ty {
             TyKind::Bool | TyKind::UInt | TyKind::UReal | TyKind::EUReal => self.bot_lit(ty),
             TyKind::Int => self.cast(TyKind::Int, self.uint(0)),
-            TyKind::Real => self.cast(TyKind::Real, self.frac_lit(Zero::zero())),
+            TyKind::Real => self.cast(TyKind::Real, self.uint(0)),
             _ => panic!("type {ty} has no zero element"),
         }
     }
