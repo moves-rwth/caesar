@@ -6,21 +6,26 @@
 //! - `eps`: a positive real number used for the epsilon value from the proof rule, must be a literal
 //! - `k`: a positive real number used for the k value from the proof rule, must be a literal
 //!
-//! Note that eps must be smaller than k!
+//! The decrease must be positive and smaller than k.
 //!
 use std::{any::Any, fmt};
 
+use num::Zero;
+
 use crate::{
     ast::{
-        util::VariableCollector, visit::VisitorMut, BinOpKind, DeclKind, Direction, Expr,
-        ExprBuilder, Files, Ident, ProcSpec, SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol,
-        TyKind, UnOpKind,
+        util::VariableCollector,
+        visit::{walk_expr, walk_stmt, VisitorMut},
+        BinOpKind, DeclKind, Diagnostic, Direction, Expr, ExprBuilder, ExprKind, Files, Ident,
+        ProcSpec, SourceFilePath, Span, Spanned, Stmt, StmtKind, Symbol, TyKind, UnOpKind,
     },
     front::{
         resolve::{Resolve, ResolveError},
         tycheck::{Tycheck, TycheckError},
     },
-    intrinsic::annotations::{tycheck_annotation_call, AnnotationDecl, AnnotationError, Calculus},
+    intrinsic::annotations::{
+        tycheck_annotation_call, AnnotationDecl, AnnotationError, AnnotationKind, Calculus,
+    },
     proof_rules::calculus::{ApproximationKind, CalculusType, FixpointKind},
     tyctx::TyCtx,
 };
@@ -83,6 +88,24 @@ impl Encoding for PASTAnnotation {
         Ok(())
     }
 
+    fn validate(
+        &self,
+        tcx: &TyCtx,
+        call_span: Span,
+        _args: &[Expr],
+        inner_stmt: &Stmt,
+    ) -> Result<Vec<Diagnostic>, AnnotationError> {
+        if let StmtKind::While(_, body) = &inner_stmt.node {
+            PastBodyValidator {
+                tcx,
+                annotation_name: self.name(),
+                call_span,
+            }
+            .visit_block(&mut body.clone())?;
+        }
+        Ok(vec![])
+    }
+
     fn get_approximation(
         &self,
         fixpoint_kind: FixpointKind,
@@ -96,7 +119,7 @@ impl Encoding for PASTAnnotation {
             }
         }
         match (fixpoint_kind, inner_approximation_kind) {
-            (FixpointKind::Least, ApproximationKind::EXACT) => ApproximationKind::EXACT,
+            (FixpointKind::Least, ApproximationKind::EXACT) => ApproximationKind::OVER,
             _ => ApproximationKind::UNKNOWN,
         }
     }
@@ -114,16 +137,24 @@ impl Encoding for PASTAnnotation {
     ) -> Result<GeneratedEncoding, AnnotationError> {
         let annotation_span = enc_env.call_span;
 
+        if enc_env.direction != Direction::Up {
+            return Err(AnnotationError::WrongProcedureDirection {
+                span: annotation_span,
+                annotation_name: self.name(),
+                required: Direction::Up,
+            });
+        }
+
         let [inv, eps, k] = three_args(args);
         let builder = ExprBuilder::new(annotation_span);
 
         let eps_val = lit_rational(eps);
         let k_val = lit_rational(k);
-        if eps_val >= k_val {
+        if eps_val.is_zero() || eps_val >= k_val {
             return Err(AnnotationError::WrongArgument {
                 span: annotation_span,
                 arg: eps.clone(),
-                message: String::from("eps must be smaller than k."),
+                message: String::from("epsilon must be positive and smaller than k."),
             });
         }
 
@@ -143,10 +174,19 @@ impl Encoding for PASTAnnotation {
 
         let bounded_on_exit = encode_exit_bound(tcx, &enc_env, loop_guard, inv, &k);
         let k_bounded_by_invariant = encode_continuation_bound(tcx, &enc_env, loop_guard, inv, &k);
-        let decreases = encode_decrease(tcx, &enc_env, inner_stmt, loop_guard, inv, &eps);
+        let mut variables = VariableCollector::from_stmt(inner_stmt);
+        variables.add_expr(inv);
+        let decreases =
+            encode_decrease(tcx, &enc_env, inner_stmt, loop_guard, inv, &eps, &variables);
+        let summary = encode_summary(
+            annotation_span,
+            loop_guard,
+            inv,
+            variables.free_modified().collect(),
+        );
 
         Ok(GeneratedEncoding {
-            block: Spanned::new(annotation_span, vec![]),
+            block: Spanned::new(annotation_span, vec![summary]),
             decls: Some(vec![bounded_on_exit, k_bounded_by_invariant, decreases]),
             diagnostics: vec![],
         })
@@ -158,6 +198,92 @@ impl Encoding for PASTAnnotation {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+/// Summarize the loop using its possible exit states and an upper bound on its expected reward.
+///
+/// ```text
+/// if G { tick I; cohavoc modified; coassume ?(G) } else {}
+/// ```
+///
+/// `modified` consists of the variables modified by the body and visible after it.
+/// The summary charges the ranking `I` from the entry state.
+fn encode_summary(span: Span, guard: &Expr, invariant: &Expr, modified_vars: Vec<Ident>) -> Stmt {
+    let builder = ExprBuilder::new(span);
+    let mut body = vec![Spanned::new(span, StmtKind::Tick(invariant.clone()))];
+    if !modified_vars.is_empty() {
+        body.push(Spanned::new(
+            span,
+            StmtKind::Havoc(Direction::Up, modified_vars),
+        ));
+    }
+    let condition = builder.unary(UnOpKind::Embed, Some(TyKind::EUReal), guard.clone());
+    body.push(Spanned::new(
+        span,
+        StmtKind::Assume(Direction::Up, condition),
+    ));
+
+    Spanned::new(
+        span,
+        StmtKind::If(
+            guard.clone(),
+            Spanned::new(span, body),
+            Spanned::new(span, vec![]),
+        ),
+    )
+}
+
+/// The ranking argument needs a terminating probabilistic transition for each body execution.
+struct PastBodyValidator<'tcx> {
+    tcx: &'tcx TyCtx,
+    annotation_name: Ident,
+    call_span: Span,
+}
+
+impl PastBodyValidator<'_> {
+    fn unsupported(&self, span: Span, message: &str) -> AnnotationError {
+        AnnotationError::UnsupportedStatement {
+            span: self.call_span,
+            annotation_name: self.annotation_name,
+            statement_span: span,
+            message: message.to_owned(),
+            note: Some("`@past` requires a loop-free probabilistic body."),
+        }
+    }
+}
+
+impl VisitorMut for PastBodyValidator<'_> {
+    type Err = AnnotationError;
+
+    fn visit_stmt(&mut self, stmt: &mut Stmt) -> Result<(), Self::Err> {
+        match &stmt.node {
+            StmtKind::Seq(_)
+            | StmtKind::Var(_)
+            | StmtKind::Assign(_, _)
+            | StmtKind::Tick(_)
+            | StmtKind::If(_, _, _)
+            | StmtKind::Label(_) => {}
+            StmtKind::Annotation(_, name, _, _)
+                if matches!(
+                    self.tcx.get(*name).unwrap().as_ref(),
+                    DeclKind::AnnotationDecl(AnnotationKind::Slicing(_))
+                ) => {}
+            _ => return Err(self.unsupported(stmt.span, "Unsupported statement in the loop body.")),
+        }
+        walk_stmt(self, stmt)
+    }
+
+    fn visit_expr(&mut self, expr: &mut Expr) -> Result<(), Self::Err> {
+        if let ExprKind::Call(ident, _) = &expr.kind {
+            if matches!(
+                self.tcx.get(*ident).unwrap().as_ref(),
+                DeclKind::ProcDecl(_)
+            ) {
+                return Err(self.unsupported(expr.span, "Procedure calls are not supported."));
+            }
+        }
+        walk_expr(self, expr)
     }
 }
 
@@ -212,7 +338,7 @@ fn encode_exit_bound(
     generate_proc(span, proc_info, enc_env.base_proc_ident, tcx)
 }
 
-/// Check `[G] * K <= [G] * I + [!G]` on continuing states.
+/// Check finiteness of the ranking and `[G] * K <= [G] * I + [!G]`.
 fn encode_continuation_bound(
     tcx: &TyCtx,
     enc_env: &EncodingEnvironment,
@@ -250,6 +376,14 @@ fn encode_continuation_bound(
         ),
     );
 
+    let finite = builder.binary(
+        BinOpKind::Lt,
+        Some(TyKind::Bool),
+        inv.clone(),
+        builder.infinity_lit(),
+    );
+    let condition = builder.binary(BinOpKind::And, Some(TyKind::Bool), finite, condition);
+    let condition = builder.unary(UnOpKind::Embed, Some(TyKind::EUReal), condition);
     let variables = VariableCollector::from_expr(&condition)
         .used_variables
         .into_iter()
@@ -279,12 +413,11 @@ fn encode_decrease(
     loop_guard: &Expr,
     inv: &Expr,
     eps: &Expr,
+    variables: &VariableCollector,
 ) -> DeclKind {
     let span = enc_env.call_span;
     let builder = ExprBuilder::new(span);
 
-    let mut variables = VariableCollector::from_stmt(loop_stmt);
-    variables.add_expr(inv);
     let modified_vars: Vec<Ident> = variables.free_modified().collect();
 
     // Substitute initial values only for modified variables, in expression order.

@@ -768,19 +768,29 @@ fn test_ost_expected_runtime() {
 fn test_past_transform() {
     let mut test_string = String::from(
         r#"
-            proc main() -> () {
+            coproc main() -> () {
                 var x: UInt
-                {  }
+                {
+                    if (1 <= x) {
+                        tick cast(EUReal, (x + 1))
+                        cohavoc x
+                        coassume ?((1 <= x))
+                    } else {
+
+                    }
+                }
             }
             proc main_past_bounded_on_exit_0(x: UInt) -> () {
                 assert ?((([! ((1 <= x))] * cast(EUReal, (x + 1))) <= cast(EUReal, 10/10)))
             }
             proc main_past_k_bounded_by_invariant_0(x: UInt) -> () {
-                assert (
-                    ([(1 <= x)] * cast(EUReal, 10/10)) <= (
-                        ([(1 <= x)] * cast(EUReal, (x + 1))) + [! ((1 <= x))]
+                assert ?((
+                    (cast(EUReal, (x + 1)) < ∞) && (
+                        ([(1 <= x)] * cast(EUReal, 10/10)) <= (
+                            ([(1 <= x)] * cast(EUReal, (x + 1))) + [! ((1 <= x))]
+                        )
                     )
-                )
+                ))
             }
             coproc main_past_decreases_0(init_x: UInt) -> (x: UInt)
                 pre (
@@ -802,7 +812,7 @@ fn test_past_transform() {
         "#,
     );
     let source = r#"
-            proc main() -> () {
+            coproc main() -> () {
                 var x: UInt
                 @past(x+1, 0.5, 1.0)
                 while 1 <= x {
@@ -819,14 +829,14 @@ fn test_past_transform() {
 #[test]
 fn test_past_rejects_infinite_loop() {
     // Issue #122 also fails without tick, isolating the required decrease.
-    for body in ["tick 1", ""] {
+    for (rank, body) in [("1", "tick 1"), ("1", ""), ("∞", "")] {
         let source = format!(
             r#"
                 @ert coproc main() -> ()
                     pre 0
                     post 0
                 {{
-                    @past(1, 0.5, 1)
+                    @past({rank}, 0.5, 1)
                     while true {{ {body} }}
                 }}
             "#
@@ -848,18 +858,48 @@ fn test_past_rejects_infinite_loop() {
 }
 
 #[test]
-fn test_past_accepts_deterministic_countdown() {
-    let source = r#"
-        proc main(init_x: UInt) -> (x: UInt)
-        {
-            x = init_x
-            @past(x + 1, 0.5, 1)
-            while 0 < x {
-                x = x - 1
-            }
+fn test_past_requires_coproc() {
+    let source = "@ert proc main() -> () { @past(1, 0.5, 1) while false {} }";
+    let error = verify_test(source).0.unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("`@past` requires an enclosing `coproc`"));
+}
+
+#[test]
+fn test_past_summarizes_tick_cost() {
+    for (pre, post, expected) in [
+        ("ite(n > 0, 2 * n + 1, 0)", "[x > 0]", true),
+        ("0", "0", false),
+    ] {
+        let source = format!(
+            r#"
+                @ert coproc main(n: UInt) -> (x: UInt)
+                    pre {pre}
+                    post {post}
+                {{
+                    x = n
+                    @past(2 * x + 1, 0.5, 1)
+                    while x > 0 {{
+                        tick 1
+                        x = x - 1
+                    }}
+                }}
+            "#
+        );
+        let (result, server) = verify_test(&source);
+        assert_eq!(result.unwrap(), expected, "{source}");
+        if expected {
+            assert!(server.diagnostics.is_empty(), "{source}");
         }
-    "#;
-    assert!(verify_test(source).0.unwrap());
+    }
+}
+
+#[test]
+fn test_past_requires_positive_epsilon() {
+    let source = "@ert coproc main() -> () { @past(1, 0, 1) while true {} }";
+    let error = verify_test(source).0.unwrap_err();
+    assert!(error.to_string().contains("epsilon must be positive"));
 }
 
 #[test]
@@ -868,7 +908,9 @@ fn test_past_passes_unchanged_parameters_to_generated_procedures() {
         let source = format!(
             r#"
                 @ert
-                proc main(n: UInt) -> ()
+                coproc main(n: UInt) -> ()
+                    pre 2 * (n + 1) + 2
+                    post 0
                 {{
                     var x: UInt = 2
                     @past({invariant}, 1, 2)
@@ -887,7 +929,9 @@ fn test_past_passes_unchanged_parameters_to_generated_procedures() {
 #[test]
 fn test_past_accepts_probabilistic_countdown() {
     let source = r#"
-        proc main(init_x: UInt) -> (x: UInt)
+        coproc main(init_x: UInt) -> (x: UInt)
+            pre init_x + 1
+            post 0
         {
             var prob_choice: Bool
             x = init_x
@@ -1402,7 +1446,7 @@ fn test_k_induction_nested_transform() {
 #[test]
 fn test_past_not_on_while() {
     let source = r#"
-    proc main() -> () {
+    coproc main() -> () {
         var x: UInt
         @past(x+1, 0.5, 1.0)
         x= x+1;

@@ -31,7 +31,7 @@ const inductionCases: readonly BoundCase[] = [
   { fixedPoint: greatest.id, calculi: greatest.calculi, approximation: 'Under' },
 ];
 
-type RuleId = 'induction' | 'unroll' | 'omega' | 'ast' | 'ost' | 'calls';
+type RuleId = 'induction' | 'unroll' | 'omega' | 'ast' | 'past' | 'ost' | 'calls';
 
 export const PROOF_RULES: Record<RuleId, Rule> = {
   induction: {
@@ -57,6 +57,12 @@ export const PROOF_RULES: Record<RuleId, Rule> = {
     href: '/docs/proof-rules/ast#new-proof-rule',
     annotations: ['@ast'],
     cases: [{ fixedPoint: least.id, calculi: ['@wp'], approximation: 'Under' }],
+  },
+  past: {
+    title: 'Positive Almost-Sure Termination',
+    href: '/docs/proof-rules/past#past-from-ranking-superinvariants',
+    annotations: ['@past'],
+    cases: [{ fixedPoint: least.id, calculi: ['@ert'], approximation: 'Over' }],
   },
   ost: {
     title: 'Optional Stopping Theorem',

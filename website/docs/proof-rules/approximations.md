@@ -395,8 +395,6 @@ See the [Quick Overview](#quick-overview) for supported refutations.
   </tbody>
 </table>
 
-The [`@past` annotation](./past#past-from-ranking-superinvariants) checks positive almost-sure termination.
-
 For loops, the loop-body approximation must be compatible with the chosen rule.
 For example, for k-Induction under <TokLFP />, the loop body must be <TokOver /> so the whole loop is <TokOver />.
 Additionally, the rules [Almost-Sure Termination Rule](./ast#new-proof-rule), [Positive Almost-Sure Termination Rule](./past#past-from-ranking-superinvariants), and [Optional Stopping Theorem](./ost) require the loop body to be <TokExact />.

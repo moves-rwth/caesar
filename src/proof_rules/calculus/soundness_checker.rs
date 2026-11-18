@@ -266,7 +266,8 @@ fn track_approximation_in_statement(
             .collect(),
         StmtKind::If(_, ref block1, ref block2)
         | StmtKind::Demonic(ref block1, ref block2)
-        | StmtKind::Angelic(ref block1, ref block2) => {
+        | StmtKind::Angelic(ref block1, ref block2)
+        | StmtKind::Additive(ref block1, ref block2) => {
             let mut acc = track_approximation_in_block(block1, direction, calculus, tcx);
             acc.extend(track_approximation_in_block(
                 block2, direction, calculus, tcx,

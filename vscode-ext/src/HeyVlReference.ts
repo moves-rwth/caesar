@@ -450,8 +450,9 @@ export const HEYVL_REFERENCE: Readonly<Record<string, ReferenceEntry>> = {
     },
     "@past": {
         title: "@past(invariant, epsilon, K) — positive almost-sure termination",
-        description: "Proves that a loop terminates in a finite expected number of iterations.",
-        details: "The non-negative expression `invariant` measures the work remaining and must decrease in expectation by at least `epsilon` per iteration. " +
+        description: "In an `@ert coproc`, proves that a loop terminates in a finite expected number of iterations and bounds its expected reward.",
+        details: "Use `post 0` and a finite upper bound on the procedure's expected reward in `pre`.\n\n" +
+            "The finite, non-negative expression `invariant` must decrease in expectation by at least `epsilon` per iteration after accounting for rewards. " +
             "Its value must be at least `K` while the guard holds, and at most `K` on exit.\n\n" +
             "`epsilon` and `K` are `UReal` literals with `0 < epsilon < K`.",
         documentation: `${docs}proof-rules/past/#past-from-ranking-superinvariants`,

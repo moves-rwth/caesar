@@ -1,0 +1,21 @@
+// RUN: @caesar @file
+
+// A fair coin either decreases the counter or leaves it unchanged.
+// The ranking superinvariant proves positive almost-sure termination.
+@ert
+coproc countdown(init_x: UInt) -> (x: UInt)
+    pre 3 * init_x + 1
+    post 0
+{
+    x = init_x
+    // The ranking expression 3 * x + 1 decreases by 0.5 in expectation after paying for the flip.
+    // The threshold 1 bounds the expression from below while x > 0 and from above at exit.
+    @past(3 * x + 1, 0.5, 1)
+    while x > 0 {
+        reward 1
+        var step: Bool = flip(0.5)
+        if step {
+            x = x - 1
+        } else {}
+    }
+}

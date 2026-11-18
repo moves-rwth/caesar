@@ -331,18 +331,17 @@ def encode_past(program: Program, invariant: Expr, eps: Expr,
     hey_instrs = _encode_instrs(program.instructions)
 
     annotated_block = _annotate_heyblock(hey_instrs, [(Encoding.PAST, hey_arg_list)])
-            
-    return_object = _encode_proc(name="main",
-                     body=  prob_choice_decl + _encode_init_assign(program) + annotated_block,
-                     input=_encode_var_dict(_get_init_vars(program)),
-                     output=_encode_var_dict(program.variables),
-                     direction=_encode_direction,
-                    )
-    
 
-    return [
-        return_object
-    ]
+    return [HeyProc(
+        direction=Direction.UP,
+        proc_name="main",
+        param=_encode_var_dict(_get_init_vars(program)),
+        out=_encode_var_dict(program.variables),
+        body=prob_choice_decl + _encode_init_assign(program) + annotated_block,
+        pre=HeyExpr("∞"),
+        post=HeyExpr("0"),
+        comment="",
+    )]
 
 
 def encode_optional_stopping(program: Program, post: Expr, invariant: Expr,

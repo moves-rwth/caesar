@@ -15,6 +15,7 @@ const bodyRequirements = {
   omega: compatibleBody,
   ast: { label: <TokExact />, href: '#soundness' },
   ost: { label: <TokExact />, href: '#soundness' },
+  past: { label: 'Loop-free, probabilistic', href: '#formal-theorem' },
 };
 
 const lower = <>Lower bounds <code>proc</code></>;

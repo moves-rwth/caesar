@@ -34,6 +34,11 @@ pub enum AnnotationError {
         span: Span,
         annotation_name: Ident,
     },
+    WrongProcedureDirection {
+        span: Span,
+        annotation_name: Ident,
+        required: Direction,
+    },
     NotOnWhile {
         span: Span,
         annotation_name: Ident,
@@ -86,6 +91,16 @@ impl AnnotationError {
                     "The annotation `{annotation_name}` can only be used inside a procedure."
                 ))
                 .with_label(Label::new(annotation_name.span).with_message("here")),
+            AnnotationError::WrongProcedureDirection {
+                span,
+                annotation_name,
+                required,
+            } => Diagnostic::new(ReportKind::Error, span)
+                .with_message(format!(
+                    "`@{annotation_name}` requires an enclosing `{}`.",
+                    required.prefix("proc")
+                ))
+                .with_label(Label::new(span).with_message("Proof rule applied here")),
             AnnotationError::NotOnWhile {
                 span,
                 annotation_name,

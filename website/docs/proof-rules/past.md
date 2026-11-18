@@ -4,111 +4,103 @@ sidebar_position: 6
 
 # Positive Almost-Sure Termination
 
-_Positive almost-sure termination_ (PAST for short) means that a program [terminates almost-surely](./ast.md) and the expected runtime to termination is finite.
-In terms of the [expected runtime calculus](./approximations.md#calculus-annotations), this means that `ert[C](0) < ∞` holds for a program `C`.
+```mdx-code-block
+import ProofRuleGuarantee from '@site/src/components/ProofRuleGuarantee';
+import TOCInline from '@theme/TOCInline';
+```
 
-In Caesar, there are several ways to prove PAST:
+<ProofRuleGuarantee rule="past" />
+
+_Positive almost-sure termination_ (PAST for short) means that a program [terminates almost surely](./ast.md) and the expected runtime to termination is finite.
+In HeyVL, [`reward` statements](../heyvl/statements.md#reward-and-weigh) model the cost measured by the expected runtime calculus.
+`tick` is an alias for `reward`.
 
 ```mdx-code-block
-import TOCInline from '@theme/TOCInline';
-
 <TOCInline toc={toc} maxHeadingLevel="2" />
 ```
 
-## Upper Bounds on ert
+## Upper Bounds on `ert`
 
-The simplest way to prove positive almost-sure termination is by proving a finite upper bound $g$ on the expected runtime of a program using the expected runtime calculus, i.e. $\mathrm{ert}\llbracket C \rrbracket(0) \leq g$.
-The upper bound $g$ must be finite: for every state $s$, $g(s) < \infty$ must hold.
-
-Upper bounds on the expected runtime can be shown with [Park induction](./induction.md).
-The ranking-superinvariant rule below can be viewed as a derived way of constructing such an `ert`-superinvariant.
+[Park induction](./induction.md) suffices to prove PAST when every nonterminating execution accumulates infinite total reward.
+A finite upper bound $\mathrm{ert}\llbracket C \rrbracket(0) \leq g < \infty$ then establishes both almost-sure termination and finite expected reward.
+If each execution of the loop body terminates, adding `reward 1` per iteration makes the iteration count at most the total reward.
 
 ## PAST from Ranking Superinvariants
 
-Caesar supports proofs of PAST using *ranking superinvariants*, also called *ranking supermartingales*.
-We use the `wp`-based formulation of [Theorem 6.3 in Benjamin Kaminski's PhD thesis](http://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=143).
-Closely related statements also appear as:
+In an `@ert coproc`, `@past(I, epsilon, K)` proves that a loop terminates almost surely using a *ranking superinvariant* $I$.
+From an initial state $s$, it bounds the expected number of iterations by $I(s) / \epsilon$ and the expected sum of the loop's rewards by $I(s)$.
+The [soundness proof](#past-via-ert-superinvariants) derives these guarantees by Park induction.
 
-- Theorem 4 of [„*Probabilistic Program Analysis with Martingales*“](https://doi.org/10.1007/978-3-642-39799-8_34) by Chakarov and Sankaranarayanan (CAV 2013).
-- Theorem 5.6 of [„*Probabilistic Termination: Soundness, Completeness, and Compositionality*“](https://doi.org/10.1145/2775051.2677001) by Fioriti and Hermanns (POPL 2015).
+If the `coproc` omits its calculus annotation, `@past` selects least-fixed-point semantics.
 
-Ranking superinvariants are supported via Caesar's built-in `@past` annotation on `while` loops.
+The rule follows the ranking-superinvariant argument in [Kaminski (2019), Theorem 6.3](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=143).
+Related results use the term *ranking supermartingale* [Chakarov and Sankaranarayanan (2013), Theorem 4](https://doi.org/10.1007/978-3-642-39799-8_34) and [Ferrer Fioriti and Hermanns (2015), Theorem 5.6](https://doi.org/10.1145/2676726.2677001).
 
-### Formal Theorem
+### Verification Conditions {#formal-theorem}
 
-Consider a loop `while G { Body }` whose `Body` is exact.[^exact-body]
-The loop's used and modified variables, except the ones declared within the loop, are referred to as `vars`.
-Let
+Let $L$ be a loop `while G { Body }` with a loop-free probabilistic body and valid sampling parameters.
+The body may use local declarations, assignments, conditionals, built-in sampling, and rewards.
+The constants $\epsilon$ and $K$ are `UReal` literals with $0 < \epsilon < K$.
 
-- $I$, a function assigning a value $\mathbb{R}_{\geq 0}$ to every state,
-- $\epsilon \in \mathbb{R}_{> 0}$,
-- $K \in \mathbb{R}_{\geq 0}$,
+1. **Exit.** $I \leq K$ when $G$ is false.
+2. **Ranking.** $I < \infty$ in every state and $K \leq I$ when $G$ is true.
+3. **Decrease.** $\mathrm{ert}\llbracket \mathtt{Body} \rrbracket(I) \leq I - \epsilon$ when $G$ is true.
 
-such that all the following conditions are fulfilled:
+In the decrease check, $\mathrm{ert}$ adds the body's expected reward to the expected value of $I$ after the iteration.
+The sum must be at least $\epsilon$ below the entry value of $I$.
 
-1. $I$ is bounded on terminating states: $[\neg G] \cdot I \leq K$,
-    <details>
-    <summary>HeyVL Encoding</summary>
+<details>
+<summary>Generated HeyVL checks</summary>
 
-    ```heyvl
-    proc I_bounded_on_exit(vars: ...) -> ()
-    {
-        assert ?(([!G(vars)] * I(vars)) <= K)
-    }
-    ```
+Here `vars` denotes the variables used by the loop or annotation, excluding loop-local variables.
 
-    </details>
-2. $K$ is small enough on states where the loop continues: $[G] \cdot K \leq [G] \cdot I + [\neg G]$,
-    <details>
-    <summary>HeyVL Encoding</summary>
+```heyvl
+proc I_bounded_on_exit(vars: ...) -> ()
+{
+    assert ?(([!G(vars)] * I(vars)) <= K)
+}
 
-    ```heyvl
-    proc K_bounded_by_I(vars: ...) -> ()
-    {
-        assert ?(([G(vars)] * K) <= (([G(vars)] * I(vars)) + [!G(vars)]))
-    }
-    ```
+proc K_bounded_by_I(vars: ...) -> ()
+{
+    assert ?(I(vars) < ∞ && ([G(vars)] * K <= [G(vars)] * I(vars) + [!G(vars)]))
+}
 
-    </details>
-3. $I$ decreases in expectation by at least $\epsilon$ in each loop iteration:
-    $[G] \cdot \mathrm{wp}\llbracket Body \rrbracket(I) \leq [G] \cdot (I - \epsilon)$,[^literature-condition-3]
-    <details>
-    <summary>HeyVL Encoding</summary>
+coproc I_decreases(init_vars: ...) -> (vars: ...)
+    pre [G(init_vars)] * (I(init_vars) - epsilon)
+    post 0
+{
+    vars = init_vars
+    if G {
+        Body
+        assert I(vars)
+        assume 0
+    } else {}
+}
+```
 
-    ```heyvl
-    coproc I_decreases(init_vars: ...) -> (vars: ...)
-        pre [G(init_vars)] * (I(init_vars) - epsilon)
-        post 0
-    {
-        vars = init_vars // set current state to input values
-        if G {
-            Body
-            assert I(vars)
-            assume 0
-        } else {}
-    }
-    ```
-
-    </details>
-
-Then `while G { Body }` is universally positively almost-surely terminating, i.e. `ert[while G { Body }](0) < ∞`.
+</details>
 
 ### Usage
 
-Consider the following example, where we have a loop that decrements a variable `x` with probability `0.5` in each iteration.
-The loop terminates with probability `1` and the expected number of iterations is finite.
-We show this by using the `@past` annotation on the loop.
+To bound the procedure's expected reward, set `post 0` and give a finite upper bound in `pre`.
+
+The countdown charges one reward per coin flip and decrements `x` on heads.
+Caesar verifies almost-sure termination and an upper bound of $3 \cdot \mathtt{init\_x} + 1$ on the expected number of flips.
 
 ```heyvl
-proc main(init_x: UInt) -> (x: UInt)
+@ert
+coproc main(init_x: UInt) -> (x: UInt)
+    pre 3 * init_x + 1
+    post 0
 {
     var prob_choice: Bool
     x = init_x
     @past(
-        /* invariant: */ x + 1,
+        /* invariant: */ 3 * x + 1,
         /* epsilon:   */ 0.5,
         /* K:         */ 1)
     while 0 < x {
+        reward 1
         prob_choice = flip(0.5)
         if prob_choice {
             x = x - 1
@@ -117,70 +109,53 @@ proc main(init_x: UInt) -> (x: UInt)
 }
 ```
 
-**Inputs:**
+On heads, $3 \cdot x + 1$ drops by $3$, so the expected drop after charging the reward is $\tfrac12 \cdot 3 - 1 = \tfrac12$.
 
-- `invariant`: The ranking superinvariant.
-- `epsilon`: The expected decrease of the ranking superinvariant in one loop iteration.
-- `K`: The constant from Conditions 1 and 2.
+### Loop Summary
 
-:::note
+The summary adds the reward bound $I$, evaluated at entry, to the supremum of the postexpectation over states that satisfy $\neg G$ and agree with the entry state outside `modified`.
+Here `modified` lists the variables assigned by the body that remain in scope after the loop.
+When $G$ is false on entry, the summary acts as `skip`.
 
-Mathematically, the rule requires $\epsilon > 0$.
-Currently, Caesar requires `epsilon` and `K` to be literal `UReal` expressions and checks $\epsilon < K$.
+```heyvl
+if G {
+    tick I
+    cohavoc modified
+    coassume ?(G)
+} else {}
+```
 
-:::
+This [over-approximation](./approximations.md#kinds-of-approximations) can yield spurious counterexamples.
 
-### PAST via `ert` Superinvariants
+### Soundness {#past-via-ert-superinvariants}
 
-Every use of `@past` can be replaced by a proof via an `ert`-superinvariant.
-
-Let `L = while G { Body }`.
-Assume that $\mathrm{ert}\llbracket Body \rrbracket(0) = 0$ and that the decrease premise of `@past` holds for some $V \colon \mathrm{States} \to \mathbb{R}_{\geq 0}$ and some $\epsilon > 0$, i.e. $[G] \cdot \mathrm{wp}\llbracket Body \rrbracket(V) \leq [G] \cdot (V - \epsilon)$.
-
-Then the following expectation is an `ert`-superinvariant of $L$ with respect to postexpectation $0$:
-$$
-    J = 1 + [G] \cdot \frac{V}{\epsilon}
-$$
-Hence, by [Park induction](./induction.md), $\mathrm{ert}\llbracket L \rrbracket(0) \leq J$.
-In particular, $L$ is PAST since $J$ is finite.
-
-<details>
-<summary>Generalization and Proof</summary>
-
-More generally, assume that $\mathrm{ert}\llbracket Body \rrbracket(0) \leq c$ holds for some constant $c \in \mathbb{R}_{\geq 0}$.
-Then
+We prove that the [verification conditions](#formal-theorem) imply almost-sure termination and bound the expected number of iterations and the expected reward.
+Under $G$, the parameter and ranking checks give $\epsilon < K \leq I < \infty$.
+Starting from the decrease check, we derive a bound for `Body; reward epsilon`, which charges an extra $\epsilon$ per completed iteration.
 
 $$
-    J = 1 + [G] \cdot \frac{c + 1}{\epsilon} \cdot V
+\begin{aligned}
+    &\mathrm{ert}\llbracket \mathtt{Body} \rrbracket(I) \leq I - \epsilon
+        && \text{(decrease check)} \\
+    \iff{} &\mathrm{ert}\llbracket \mathtt{Body} \rrbracket(I) + \epsilon \leq I
+        && \text{(add }\epsilon\text{)} \\
+    \iff{} &\mathrm{ert}\llbracket \mathtt{Body} \rrbracket(I + \epsilon) \leq I
+        && \text{(the body terminates)} \\
+    \iff{} &\mathrm{ert}\llbracket \mathtt{Body};\,\mathtt{reward}\,\epsilon \rrbracket(I) \leq I
+        && \text{(composition).}
+\end{aligned}
 $$
 
-is an `ert`-superinvariant of $L$.
-The theorem above is the special case $c = 0$.
-
-Write $\Phi_0$ for the `ert` loop-characteristic function of $L$ with postexpectation $0$.
-Then
+The last inequality and $0 \leq I$ when $G$ is false give the [Park induction](./induction.md) premises for `while G { Body; reward epsilon }` with postexpectation $0$.
+For a run with $T$ iterations the extra reward contributes $\epsilon \cdot T$, so from an initial state $s$ we have
 
 $$
-\begin{align*}
-    \Phi_0(J)
-        &= 1 + [\neg G] \cdot 0 + [G] \cdot \mathrm{ert}\llbracket Body \rrbracket(J) \tag{definition} \\
-        &= 1 + [G] \cdot \left(\mathrm{ert}\llbracket Body \rrbracket(0) + \mathrm{wp}\llbracket Body \rrbracket(J)\right) \tag{ert decomposition} \\
-        &= 1 + [G] \cdot \left(\mathrm{ert}\llbracket Body \rrbracket(0) + \mathrm{wp}\llbracket Body \rrbracket\left(1 + \frac{c + 1}{\epsilon} \cdot [G] \cdot V\right)\right) \tag{definition of $J$} \\
-        &= 1 + [G] \cdot \left(\mathrm{ert}\llbracket Body \rrbracket(0) + \mathrm{wp}\llbracket Body \rrbracket(1) + \mathrm{wp}\llbracket Body \rrbracket\left(\frac{c + 1}{\epsilon} \cdot [G] \cdot V\right)\right) \tag{linearity of wp} \\
-        &= 1 + [G] \cdot \left(\mathrm{ert}\llbracket Body \rrbracket(0) + \mathrm{wp}\llbracket Body \rrbracket(1) + \frac{c + 1}{\epsilon} \cdot \mathrm{wp}\llbracket Body \rrbracket([G] \cdot V)\right) \tag{homogeneity of wp} \\
-        &\leq 1 + [G] \cdot \left(c + \mathrm{wp}\llbracket Body \rrbracket(1) + \frac{c + 1}{\epsilon} \cdot \mathrm{wp}\llbracket Body \rrbracket([G] \cdot V)\right) \tag{$\mathrm{ert}\llbracket Body \rrbracket(0) \leq c$} \\
-        &\leq 1 + [G] \cdot \left(c + 1 + \frac{c + 1}{\epsilon} \cdot \mathrm{wp}\llbracket Body \rrbracket([G] \cdot V)\right) \tag{feasibility} \\
-        &\leq 1 + [G] \cdot \left(c + 1 + \frac{c + 1}{\epsilon} \cdot \mathrm{wp}\llbracket Body \rrbracket(V)\right) \tag{monotonicity of wp} \\
-        &\leq 1 + [G] \cdot \left(c + 1 + \frac{c + 1}{\epsilon} \cdot (V - \epsilon)\right) \tag{decrease condition} \\
-        &= 1 + [G] \cdot \left(c + 1 + \frac{c + 1}{\epsilon} \cdot V - (c + 1)\right) \tag{arithmetic} \\
-        &= 1 + [G] \cdot \frac{c + 1}{\epsilon} \cdot V \tag{simplify} \\
-        &= J \tag{arithmetic}
-\end{align*}
+\begin{aligned}
+    I(s)
+    &\geq \mathrm{ert}\llbracket \mathtt{while}\ G\ \{\mathtt{Body};\,\mathtt{reward}\,\epsilon\} \rrbracket(0)(s) \\
+    &= \mathrm{ert}\llbracket L \rrbracket(0)(s) + \epsilon \cdot \mathbb{E}_s[T].
+\end{aligned}
 $$
 
-So $J$ is an `ert`-superinvariant of $L$, and [Park induction](./induction.md) yields $\mathrm{ert}\llbracket L \rrbracket(0) \leq J$.
-
-</details>
-
-[^exact-body]: Caesar only accepts `@past` in settings where the loop body is exact; see [Proof Rule Approximations](./approximations.md#proof-rule-approximations).
-[^literature-condition-3]: Kaminski writes $\Phi_0(I) \leq [G] \cdot (I - \epsilon)$ instead for condition 3, where $\Phi_0$ is the loop-characteristic function with respect to postexpectation $0$. Our condition is equivalent to this, but simplified.
+Every nonterminating execution has $T = \infty$ because each execution of the body terminates.
+Since $\mathbb{E}_s[T] \leq I(s) / \epsilon < \infty$, the loop terminates almost surely.
