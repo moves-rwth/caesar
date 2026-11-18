@@ -5,6 +5,12 @@ sidebar_position: 2
 
 # Induction and k-Induction
 
+```mdx-code-block
+import ProofRuleGuarantee from '@site/src/components/ProofRuleGuarantee';
+```
+
+<ProofRuleGuarantee rule="induction" />
+
 _Induction_ and the more general _$k$-induction_ are built-in proof rules to reason about `while` loops.
 The *non-probabilistic* intuition goes as follows: induction requires an _invariant_ that is maintained by each loop iteration.
 The invariant must hold before the loop, and then we are guaranteed that the invariant holds after the loop.
@@ -109,7 +115,6 @@ Stated in terms of fixed points:
  * In `coproc`s, `@invariant` *over-approximates* the *least fixed-point* loop semantics.
 
 The same statements hold for _k-induction_ (`@k_induction(k, I)`).
-With an explicit `@uwlp` annotation, both rules under-approximate the greatest fixed point in either procedure direction: this supports sound verification in a `proc` and sound refutation in a `coproc`.
 
 ## Internal Details
 

@@ -4,6 +4,7 @@ import styles from './ProofRuleQuickCard.module.css';
 export type QuickRuleLink = {
   href: string;
   label: string;
+  qualifier?: string;
 };
 
 export type QuickRuleRow = {
@@ -41,6 +42,7 @@ function renderCodeLinks(items: QuickRuleLink[]): ReactNode[] {
     <span key={`${item.href}:${item.label}:${index}`}>
       {index > 0 ? ', ' : null}
       <a href={item.href}><code>{item.label}</code></a>
+      {item.qualifier && <> ({item.qualifier})</>}
     </span>
   ));
 }

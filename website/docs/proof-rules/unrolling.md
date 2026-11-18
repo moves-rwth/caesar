@@ -4,7 +4,13 @@ description: Loop unrolling and bounded model checking.
 sidebar_position: 3
 ---
 
+```mdx-code-block
+import ProofRuleGuarantee from '@site/src/components/ProofRuleGuarantee';
+```
+
 # Loop Unrolling and Bounded Model Checking
+
+<ProofRuleGuarantee rule="unroll" />
 
 *Loop unrolling* replaces a `while` loop by a fixed number of iterations `k` and a `terminator` expectation to be used if more than `k` iterations run.
 For example, it *under-approximates* least fixed-point semantics (`wp` and `ert`, using terminator `0`):
@@ -17,8 +23,6 @@ There are three main applications of loop unrolling:
 1. [**Approximating loop semantics**](#approximation): Approximating the expected value of loops to gain insight into the unbounded semantics.
 2. [**Verification**](#verification): Proving specifications of loops.
 3. [**Refutation**](#bounded-model-checking): Refuting specifications of loops. This is often called *bounded model checking*.
-
-Read the [*Soundness* section](#soundness) for details on the soundness of the proof rule.
 
 :::note Relation to Probabilistic Model Checking (Bounded)
 

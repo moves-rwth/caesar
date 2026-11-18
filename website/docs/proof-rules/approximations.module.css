@@ -86,12 +86,6 @@
   max-width: 100%;
 }
 
-.hoverHint {
-  border-bottom: 1px dotted var(--ifm-color-emphasis-700);
-  cursor: help;
-  text-decoration: none;
-}
-
 [data-theme='dark'] .fullSpectrumCode {
   --docusaurus-highlighted-code-line-bg: rgba(79, 221, 191, 0.16);
 }

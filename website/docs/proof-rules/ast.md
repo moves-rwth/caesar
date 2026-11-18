@@ -4,6 +4,12 @@ sidebar_position: 5
 
 # Almost-Sure Termination
 
+```mdx-code-block
+import ProofRuleGuarantee from '@site/src/components/ProofRuleGuarantee';
+```
+
+<ProofRuleGuarantee rule="ast" />
+
 _Almost-sure termination_ (AST for short) means that a program terminates with probability one.
 In our probabilistic setting, this does not necessarily mean that all executions terminate (we would call that _certain termination_), but only that the expected value to reach a terminating state is one.
 In terms of weakest pre-expectations, this means that `wp[C](1) = 1` holds for a program `C`.
@@ -23,7 +29,7 @@ With an encoding of standard weakest pre-expectation reasoning (`wp`), it is suf
 Since `wp[C](1) <= 1` always holds (by a property often called _feasibility_), `1 <= wp[C](1)` implies `wp[C](1) = 1`, i.e. almost-sure termination.
 
 Lower bounds on weakest pre-expectations need a proof rule like [omega-invariants](./omega-invariants.md) to reason about loops.
-To _refute_ a lower bound on weakest pre-expectations, [unrolling](./unrolling.md) (also known as bounded model checking) can be used.
+To _refute_ an upper bound on weakest pre-expectations, [unrolling](./unrolling.md) (also known as bounded model checking) can be used.
 
 ## A New Proof Rule for Almost-Sure Termination (`@ast` Annotation) {#new-proof-rule}
 

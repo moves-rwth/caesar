@@ -1,0 +1,136 @@
+.summary {
+  --summary-line: color-mix(in srgb, var(--ifm-color-emphasis-300) 70%, transparent);
+  margin-block: 0 1.55rem;
+  border: 1px solid var(--summary-line);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--caesar-surface-tint) 55%, var(--ifm-background-color));
+  font-size: 0.925em;
+  container-type: inline-size;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.matrix {
+  min-inline-size: 0;
+  padding: 0.4rem 0.85rem 0.48rem;
+}
+
+.summary .table {
+  display: table;
+  inline-size: 100%;
+  margin: 0;
+  border-collapse: collapse;
+}
+
+.summary .table :is(thead, tbody, tr, th, td) {
+  border: 0;
+  background: transparent;
+}
+
+.summary .table :is(th, td) {
+  padding: 0.34em 0.8rem 0.34em 0;
+  text-align: start;
+  vertical-align: top;
+}
+
+.summary .table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.summary .table thead th,
+.body strong {
+  color: var(--ifm-color-content-secondary);
+  font-weight: 600;
+}
+
+th.verify,
+.refuteHeading {
+  white-space: nowrap;
+}
+
+th.verify span {
+  color: var(--ifm-color-primary);
+}
+
+.refuteHeading span {
+  color: color-mix(in srgb, var(--ifm-color-danger) 60%, var(--ifm-color-content-secondary));
+}
+
+.headingLink,
+.calculi a {
+  color: inherit;
+}
+
+.headingLink:hover,
+.headingLink:focus-visible,
+.calculi a:hover,
+.calculi a:focus-visible {
+  color: var(--ifm-color-primary);
+}
+
+.summary a {
+  text-decoration: none;
+}
+
+.summary a:hover,
+.summary a:focus-visible {
+  text-decoration: underline;
+}
+
+.summary .table tbody tr {
+  border-block-start: 1px solid var(--summary-line);
+}
+
+.calculi code {
+  white-space: nowrap;
+}
+
+.body {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.22rem 0.6rem;
+  padding: 0.47rem 0.85rem;
+  border-block-start: 1px solid var(--summary-line);
+}
+
+@container (min-width: 33rem) {
+  .summary .table .verify {
+    padding-inline-start: 0.8rem;
+    border-inline-start: 1px solid var(--summary-line);
+  }
+}
+
+@container (min-width: 41rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 9rem;
+  }
+
+  .body {
+    flex-direction: column;
+    justify-content: flex-start;
+    padding-block: 0.72rem;
+    border-block-start: 0;
+    border-inline-start: 1px solid var(--summary-line);
+  }
+}
+
+@container (max-width: 32rem) {
+  .summary .table :is(th, td) {
+    padding-inline-end: 0.5rem;
+  }
+}
+
+@container (max-width: 21rem) {
+  .matrix,
+  .body {
+    padding-inline: 0.6rem;
+  }
+
+  .summary .table :is(th, td) {
+    padding-inline-end: 0.25rem;
+  }
+}

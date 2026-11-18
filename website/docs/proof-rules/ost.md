@@ -5,6 +5,12 @@ description: Proof rule for lower bounds on least fixpoints.
 
 # Optional Stopping Theorem
 
+```mdx-code-block
+import ProofRuleGuarantee from '@site/src/components/ProofRuleGuarantee';
+```
+
+<ProofRuleGuarantee rule="ost" />
+
 The `@ost` annotation proves lower bounds on the expected result of a loop: `I <= wp[while G { Body }](f)`.
 The candidate bound `I` must be finite, must not decrease in expectation during an iteration, and must be at most the postexpectation `f` on exit.
 The rule also requires a finite expected number of iterations and a constant bound on the expected absolute change of `I` in each iteration.

@@ -8,9 +8,20 @@ description: Approximations, sound verifications and refutations.
 import Mermaid from '@theme/Mermaid';
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+import Link from '@docusaurus/Link';
+import { Fragment } from 'react';
 import styles from './approximations.module.css';
 import { QuickGuide } from '@site/src/components/ProofRuleQuickCard';
 import { TokLFP, TokGFP, TokProc, TokCoproc, TokExact, TokOver, TokUnder, TokUnknown } from '@site/src/components/SemanticToken';
+import { FIXED_POINTS, PROOF_RULES } from '@site/src/data/proofRules';
+
+export function selectRuleCases(fixedPoint, approximation, refutation = false) {
+  return Object.values(PROOF_RULES).flatMap(rule => rule.cases
+    .filter(ruleCase => ruleCase.fixedPoint === fixedPoint
+      && ruleCase.approximation === approximation
+      && (!refutation || ruleCase.refutation))
+    .map(ruleCase => ({ rule, calculi: ruleCase.calculi })));
+}
 ```
 
 # Soundness of Proof Rules
@@ -35,91 +46,42 @@ For an overview of what Caesar does and does not check automatically, see [What 
 ## Quick Overview
 
 To verify or refute a lower/upper bound (<TokProc />/<TokCoproc />), the proof rules must induce the right approximation (<TokOver />/<TokUnder />) between original semantics ($orig$) and verification condition semantics ($vc$).
-The cards below are the quick reference; the detailed rule mapping appears later in [Proof Rule Approximations](#proof-rule-approximations).
+See [Proof Rule Approximations](#proof-rule-approximations) for the loop-body conditions.
 
 {(() => {
-  const procKind = <TokProc />;
-  const coprocKind = <TokCoproc />;
-
-  const underRows = [
-    {
-      id: 'lfp',
-      semantics: <TokLFP />,
-      calculi: [
-        { href: '#calculus-annotations', label: '@wp' },
-        { href: '#calculus-annotations', label: '@ert' },
-      ],
-      rules: [
-        { href: './unrolling', label: '@unroll' },
-        { href: './omega-invariants', label: '@omega_invariant' },
-        { href: './ost', label: '@ost' },
-        { href: './ast#new-proof-rule', label: '@ast' },
-      ],
-    },
-    {
-      id: 'gfp',
-      semantics: <TokGFP />,
-      calculi: [
-        { href: '#calculus-annotations', label: '@wlp' },
-        { href: '#calculus-annotations', label: '@uwlp' },
-      ],
-      rules: [
-        { href: '../heyvl/procs#calling-procedures', label: 'calls' },
-        { href: './induction', label: '@invariant' },
-        { href: './induction', label: '@k_induction' },
-      ],
-    },
-  ];
-
-  const overRows = [
-    {
-      id: 'lfp',
-      semantics: <TokLFP />,
-      calculi: [
-        { href: '#calculus-annotations', label: '@wp' },
-        { href: '#calculus-annotations', label: '@ert' },
-      ],
-      rules: [
-        { href: '../heyvl/procs#calling-procedures', label: 'calls' },
-        { href: './induction', label: '@invariant' },
-        { href: './induction', label: '@k_induction' },
-        { href: './past#past-from-ranking-superinvariants', label: '@past' },
-      ],
-    },
-    {
-      id: 'gfp',
-      semantics: <TokGFP />,
-      calculi: [
-        { href: '#calculus-annotations', label: '@wlp' },
-        { href: '#calculus-annotations', label: '@uwlp' },
-      ],
-      rules: [
-        { href: './unrolling', label: '@unroll' },
-        { href: './omega-invariants', label: '@omega_invariant' },
-      ],
-    },
-  ];
-
   const cards = [
-    { mode: 'Verification', kind: procKind, boundHint: 'lower bounds', approx: 'Under', rows: underRows },
-    { mode: 'Verification', kind: coprocKind, boundHint: 'upper bounds', approx: 'Over', rows: overRows },
-    { mode: 'Refutation', kind: procKind, boundHint: 'lower bounds', approx: 'Over', rows: overRows },
-    { mode: 'Refutation', kind: coprocKind, boundHint: 'upper bounds', approx: 'Under', rows: underRows },
+    { mode: 'Verification', kind: <TokProc />, boundHint: 'lower bounds', approx: 'Under' },
+    { mode: 'Verification', kind: <TokCoproc />, boundHint: 'upper bounds', approx: 'Over' },
+    { mode: 'Refutation', kind: <TokProc />, boundHint: 'lower bounds', approx: 'Over' },
+    { mode: 'Refutation', kind: <TokCoproc />, boundHint: 'upper bounds', approx: 'Under' },
   ];
-  return <QuickGuide cards={cards} />;
+
+  return <QuickGuide cards={cards.map(card => ({
+    ...card,
+    rows: FIXED_POINTS.map(({ id, calculi }) => ({
+      id,
+      semantics: id === 'lfp' ? <TokLFP /> : <TokGFP />,
+      calculi: calculi.map(label => ({ href: '#calculus-annotations', label })),
+      rules: selectRuleCases(id, card.approx, card.mode === 'Refutation')
+        .flatMap(({ rule, calculi: ruleCalculi }) => {
+          const labels = rule.annotations.length ? rule.annotations : ['calls'];
+          const qualifier = ruleCalculi.length < calculi.length ? ruleCalculi.join(', ') : undefined;
+          return labels.map(label => ({ href: rule.href, label, qualifier }));
+        }),
+    })),
+  }))} />;
 })()}
 
 <div className={styles.exampleBox}>
 <div className={styles.exampleBoxTitle}>Example: Sound and Unsound Proofs and Refutations</div>
 
-All four examples share the same geometric loop and [`@invariant` annotation](./induction.md); only kind (`proc`/`coproc`) and `pre` differ, so each one is an <TokOver /> approximation of the original loop semantics.
+In all four examples, the geometric loop continues with probability $1/2$ on each iteration, so the expected final value of `x` is `init_x + 1`.
 
 <Tabs groupId="full-spectrum-outcomes">
   <TabItem value="sound-proof" label="Sound Proof">
 <div className={styles.fullSpectrumCode}>
 
-Caesar reports _sound verification_: We show that `init_x + 2` is an upper bound (`coproc`) on the expected value of `x` on termination (`@wp`).
-The actual expected value is `init_x + 1`.
+Caesar verifies that `init_x + 2` is an upper bound using the superinvariant `ite(cont, x + 1, x)`.
 
 ```heyvl {1-2}
 @wp coproc sound_proof(init_x: UInt) -> (x: UInt)
@@ -140,17 +102,17 @@ The actual expected value is `init_x + 1`.
   <TabItem value="sound-refutation" label="Sound Refutation">
 <div className={styles.fullSpectrumCode}>
 
-Caesar reports _a counter-example to the property_: We refute that `init_x + 2` is a lower bound (`proc`) on the expected value of `x` on termination (`@wp`).
-The actual expected value is `init_x + 1`.
+At `init_x = 0`, the unrolling gives a lower bound of $1/4$ from executions that continue once and then exit.
+This exceeds the proposed upper bound `init_x`, so Caesar reports a _counterexample to the property_.
 
 ```heyvl {1-2}
-@wp proc sound_refutation(init_x: UInt) -> (x: UInt)
-    pre init_x + 2
+@wp coproc sound_refutation(init_x: UInt) -> (x: UInt)
+    pre init_x
     post x
 {
     x = init_x
     var cont: Bool = true
-    @invariant(ite(cont, x + 1, x))
+    @unroll(3, 0)
     while cont {
         cont = flip(0.5)
         if cont { x = x + 1 } else {}
@@ -162,7 +124,8 @@ The actual expected value is `init_x + 1`.
   <TabItem value="unsound-proof" label="Unsound Proof">
 <div className={styles.fullSpectrumCode}>
 
-Caesar reports _unsound verification_: We want to verify that `init_x + 1` is a lower bound (`proc`) on the expected value of `x` on termination (`@wp`), but Park induction does not give us this guarantee.
+The subinvariant check succeeds for the candidate `ite(cont, x + 1, x)`.
+Caesar reports _unsound verification_ because the subinvariant conditions alone cannot establish a lower bound on the least fixed point used by `@wp`.
 
 ```heyvl {1-2}
 @wp proc unsound_proof(init_x: UInt) -> (x: UInt)
@@ -183,8 +146,8 @@ Caesar reports _unsound verification_: We want to verify that `init_x + 1` is a 
   <TabItem value="unsound-refutation" label="Unsound Refutation">
 <div className={styles.fullSpectrumCode}>
 
-Caesar reports _a counter-example to verification_: it is a <abbr className={styles.hoverHint} title="init_x = 0, cont = false, x = 2" aria-label="Counterexample details: init_x equals 0, cont equals false, x equals 2">counterexample</abbr> against `init_x + 1` as an upper bound (`coproc`) on the expected value of `x` on termination (`@wp`).
-But this is only because the `@invariant(1)` is not inductive (as Caesar reports), not because the specification does not hold.
+Caesar reports a _counterexample to verification_ because `1` fails the superinvariant check on exit states with `x > 1`.
+The proposed upper bound `init_x + 1` holds for the original loop.
 
 ```heyvl {1-2,7}
 @wp coproc unsound_refutation(init_x: UInt) -> (x: UInt)
@@ -394,15 +357,45 @@ The results also apply for <TokExact /> approximations.
 
 ## Proof Rule Approximations
 
-As explained above, proof rules such as `@invariant` may introduce approximations between the original semantics ($orig$) and the verification condition semantics ($vc$).
-Below, we summarize which of [Caesar's built-in proof rules](../proof-rules/) induce which approximations, and thus which proof rules are applicable for sound verification/refutation of lower/upper bounds.
+The table gives the approximations for sound verification in the indicated procedure kind.
+See the [Quick Overview](#quick-overview) for supported refutations.
 
-| Original Semantics | Approximation | Applicable Proof Rules |
-| --- | --- | --- |
-| <TokLFP /> | <TokOver /> | [Procedure Calls](../heyvl/procs#calling-procedures)<br/>[(k)-Induction](./induction) (`@invariant`, `@k_induction`)<br/>[Positive Almost-Sure Termination Rule](./past#past-from-ranking-superinvariants) (`@past`) |
-| <TokLFP /> | <TokUnder /> | [Loop Unrolling](./unrolling) (`@unroll`)<br/>[ω-invariants](./omega-invariants) (`@omega_invariant`)<br/>[Optional Stopping Theorem](./ost) (`@ost`)<br/>[Almost-Sure Termination Rule](./ast#new-proof-rule) (`@ast`) |
-| <TokGFP /> | <TokOver /> | [Loop Unrolling](./unrolling) (`@unroll`)<br/>[ω-invariants](./omega-invariants) (`@omega_invariant`) |
-| <TokGFP /> | <TokUnder /> | [Procedure Calls](../heyvl/procs#calling-procedures)<br/>[(k)-Induction](./induction) (`@invariant`, `@k_induction`) |
+<table>
+  <thead>
+    <tr>
+      <th>Original Semantics</th>
+      <th>Approximation</th>
+      <th>Rules for Verification</th>
+    </tr>
+  </thead>
+  <tbody>
+    {FIXED_POINTS.flatMap(({ id, calculi }) => ['Over', 'Under'].map(approximation => (
+      <tr key={`${id}:${approximation}`}>
+        <td>{id === 'lfp' ? <TokLFP /> : <TokGFP />}</td>
+        <td>
+          {approximation === 'Over' ? <TokOver /> : <TokUnder />}
+          {' in a '}
+          {approximation === 'Over' ? <TokCoproc /> : <TokProc />}
+        </td>
+        <td>
+          {selectRuleCases(id, approximation).map(({ rule, calculi: ruleCalculi }) => (
+            <div key={rule.href}>
+              <Link to={rule.href}>{rule.title}</Link>
+              {rule.annotations.length > 0 && (
+                <> ({rule.annotations.map((annotation, index) => (
+                  <Fragment key={annotation}>{index > 0 && ', '}<code>{annotation}</code></Fragment>
+                ))})</>
+              )}
+              {ruleCalculi.length < calculi.length && <> with <code>{ruleCalculi.join(', ')}</code></>}
+            </div>
+          ))}
+        </td>
+      </tr>
+    )))}
+  </tbody>
+</table>
+
+The [`@past` annotation](./past#past-from-ranking-superinvariants) checks positive almost-sure termination.
 
 For loops, the loop-body approximation must be compatible with the chosen rule.
 For example, for k-Induction under <TokLFP />, the loop body must be <TokOver /> so the whole loop is <TokOver />.

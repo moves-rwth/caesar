@@ -5,6 +5,12 @@ sidebar_position: 4
 
 # ω-Invariants
 
+```mdx-code-block
+import ProofRuleGuarantee from '@site/src/components/ProofRuleGuarantee';
+```
+
+<ProofRuleGuarantee rule="omega" />
+
 *ω-invariants* ("omega-invariants") are a built-in proof rule for `while` loops.
 The idea is to prove bounds on finite loop unfoldings by induction on the number of iterations.
 
@@ -65,12 +71,13 @@ Use the [calculus annotations](./approximations#calculus-annotations) `@wp`, `@w
 
 :::
 
-For every candidate invariant family, when the terminator is the appropriate initial value for the intended fixed-point semantics, the encoding gives:
+When the loop body has a [compatible approximation](./approximations#proof-rule-approximations) and the terminator is the appropriate initial value for the intended fixed-point semantics, the encoding gives:
 
 - With `@wp` or `@ert`: an under-approximation of the least fixed point, giving sound verification in a `proc`.
 - With `@wlp`: an over-approximation of the one-bounded greatest fixed point, giving sound verification in a `coproc`.
 - With `@uwlp`: an over-approximation of the unbounded greatest fixed point, giving sound verification in a `coproc`.
 
+For sound refutation, use the same calculus and terminator in the opposite procedure kind.
 Without a calculus annotation, `proc` selects least fixed-point semantics and `coproc` selects unbounded greatest fixed-point semantics, starting at infinity.
 
 ## Internal Details
