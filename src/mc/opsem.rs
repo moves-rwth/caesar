@@ -16,9 +16,7 @@ use crate::{
     mc::extract_embed,
 };
 
-use super::{
-    is_constant, specs::SpecAutomaton, translate_ident, ExprTranslator, JaniConversionError,
-};
+use super::{specs::SpecAutomaton, translate_ident, ExprTranslator, JaniConversionError};
 
 /// Intermediate structure to build the JANI automaton for pGCL semantics with
 /// expected rewards.
@@ -92,11 +90,9 @@ fn translate_stmt(
         StmtKind::Seq(block) => translate_stmts(automaton, block, next),
         StmtKind::Var(decl, init) => {
             let decl = decl.borrow();
+            // The initial value in the JANI model only applies at startup.
             match init {
-                Some(init) if !is_constant(init) => {
-                    translate_assign(automaton, translate_ident(decl.name), init, next)
-                }
-                Some(_) => Ok(next),
+                Some(init) => translate_assign(automaton, translate_ident(decl.name), init, next),
                 None => Err(JaniConversionError::NondetSelection(decl.span)),
             }
         }
