@@ -1,0 +1,166 @@
+// RUN: @caesar verify --function-encoding fuel-param-computation @file
+// Verify membership, extrema, and insertion for trees specified by domain axioms.
+
+domain Tree {
+    // Constructors for the empty tree and a node with two children.
+    func nil(): Tree
+    func node(left: Tree, value: Int, right: Tree): Tree
+
+    // Selectors recover the corresponding argument of a constructed node.
+    func left_child(tree: Tree): Tree
+    axiom left_child_node forall left: Tree, value: Int, right: Tree.
+        left_child(node(left, value, right)) == left
+
+    func root_value(tree: Tree): Int
+    axiom root_value_node forall left: Tree, value: Int, right: Tree.
+        root_value(node(left, value, right)) == value
+
+    func right_child(tree: Tree): Tree
+    axiom right_child_node forall left: Tree, value: Int, right: Tree.
+        right_child(node(left, value, right)) == right
+
+    // A tree is empty precisely when it equals nil().
+    func is_nil(tree: Tree): Bool
+    axiom is_nil_def forall tree: Tree.
+        is_nil(tree) == (tree == nil())
+
+    // A constructed node is never empty.
+    axiom node_not_nil forall left: Tree, value: Int, right: Tree.
+        node(left, value, right) != nil()
+
+    // Membership holds at the root or in either subtree.
+    func contains(tree: Tree, value: Int): Bool =
+        ite(
+            is_nil(tree),
+            false,
+            (value == root_value(tree)) ||
+            contains(left_child(tree), value) ||
+            contains(right_child(tree), value)
+        )
+
+    // Both subtrees are ordered, with left values below and right values above the root.
+    func is_bst(tree: Tree): Bool =
+        ite(
+            is_nil(tree),
+            true,
+            is_bst(left_child(tree)) &&
+            is_bst(right_child(tree)) &&
+            (forall value: Int. contains(left_child(tree), value) ==> (value < root_value(tree))) &&
+            (forall value: Int. contains(right_child(tree), value) ==> (root_value(tree) < value))
+        )
+
+    func min_value(tree: Tree): Int =
+        ite(is_nil(left_child(tree)), root_value(tree), min_value(left_child(tree)))
+
+    func max_value(tree: Tree): Int =
+        ite(is_nil(right_child(tree)), root_value(tree), max_value(right_child(tree)))
+
+}
+
+@uwlp
+proc get_min(tree: Tree) -> (result: Int)
+    pre ?(is_bst(tree) && !is_nil(tree))
+    post ?(
+        (result == min_value(tree)) &&
+        contains(tree, result) &&
+        (forall value: Int.
+            (contains(tree, value) && (value != result)) ==> (result < value))
+    )
+{
+    var left: Tree = left_child(tree)
+    var root: Int = root_value(tree)
+    if is_nil(left) {
+        result = root
+    } else {
+        result = get_min(left)
+    }
+}
+
+@uwlp
+proc contains_value(tree: Tree, value: Int) -> (present: Bool)
+    post ?(present == contains(tree, value))
+{
+    if is_nil(tree) {
+        present = false
+    } else {
+        var root: Int = root_value(tree)
+        if value == root {
+            present = true
+        } else {
+            var in_left: Bool = contains_value(left_child(tree), value)
+            if in_left {
+                present = true
+            } else {
+                present = contains_value(right_child(tree), value)
+            }
+        }
+    }
+}
+
+@uwlp
+proc insert_value(tree: Tree, value: Int) -> (result: Tree)
+    pre ?(is_bst(tree))
+    post ?(is_bst(result))
+    post ?(forall witness: Int.
+        contains(result, witness) == (contains(tree, witness) || (witness == value)))
+{
+    if is_nil(tree) {
+        result = node(nil(), value, nil())
+    } else {
+        var left: Tree = left_child(tree)
+        var root: Int = root_value(tree)
+        var right: Tree = right_child(tree)
+
+        if value < root {
+            var new_left: Tree = insert_value(left, value)
+            result = node(new_left, root, right)
+        } else {
+            if root < value {
+                var new_right: Tree = insert_value(right, value)
+                result = node(left, root, new_right)
+            } else {
+                result = tree
+            }
+        }
+    }
+}
+
+@uwlp
+proc get_max(tree: Tree) -> (result: Int)
+    pre ?(is_bst(tree) && !is_nil(tree))
+    post ?(
+        (result == max_value(tree)) &&
+        contains(tree, result) &&
+        (forall value: Int.
+            (contains(tree, value) && (value != result)) ==> (value < result))
+    )
+{
+    var right: Tree = right_child(tree)
+    var root: Int = root_value(tree)
+    if is_nil(right) {
+        result = root
+    } else {
+        result = get_max(right)
+    }
+}
+
+@uwlp
+proc insert_example() -> ()
+{
+    var tree: Tree = nil()
+    tree = insert_value(tree, 4)
+    tree = insert_value(tree, 2)
+    tree = insert_value(tree, 8)
+    tree = insert_value(tree, 6)
+
+    assert ?(is_bst(tree))
+    assert ?(contains(tree, 2))
+    assert ?(contains(tree, 4))
+    assert ?(contains(tree, 6))
+    assert ?(contains(tree, 8))
+
+    var least: Int = get_min(tree)
+    var greatest: Int = get_max(tree)
+    assert ?(least == 2)
+    assert ?(greatest == 8)
+}
