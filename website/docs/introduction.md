@@ -2,7 +2,17 @@
 sidebar_position: 1
 slug: /
 ---
+
 # Introduction
+
+```mdx-code-block
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+
+export const references = {
+  oopsla: sources.heyvl2023,
+};
+```
 
 Hello and welcome!
 This is the user documentation for [_Caesar_](https://github.com/moves-rwth/caesar), a deductive verification framework for probabilistic programs.
@@ -18,7 +28,10 @@ In the [Caesar section](./caesar/), we have documentation for the Caesar tool, i
 
 ### Our Theory Paper
 
-We have an OOPSLA 2023 paper on Caesar and its theory: [_A Deductive Verification Infrastructure for Probabilistic Programs_](https://doi.org/10.1145/3622870).
+Our OOPSLA 2023 paper introduces Caesar and its theory.
+
+<Citation {...references.oopsla} variant="full" />
+
 You can [find the preprint on arxiv](https://arxiv.org/abs/2309.07781).
 More information on the [publications page](./publications.md).
 

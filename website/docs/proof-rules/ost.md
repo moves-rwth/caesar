@@ -6,7 +6,20 @@ description: Proof rule for lower bounds on least fixpoints.
 # Optional Stopping Theorem
 
 ```mdx-code-block
+import Citation from '@site/src/components/Citation';
 import ProofRuleGuarantee from '@site/src/components/ProofRuleGuarantee';
+import {references as sources} from '@site/src/data/references';
+
+export const references = {
+  hark: {
+    ...sources.aimingLow2020,
+    href: "https://arxiv.org/pdf/1904.01117v3#page=17",
+  },
+  oopsla: {
+    ...sources.heyvl2023,
+    href: "https://arxiv.org/pdf/2309.07781v3#page=43",
+  },
+};
 ```
 
 <ProofRuleGuarantee rule="ost" />
@@ -15,7 +28,7 @@ The `@ost` annotation proves lower bounds on the expected result of a loop: `I <
 The candidate bound `I` must be finite, must not decrease in expectation during an iteration, and must be at most the postexpectation `f` on exit.
 The rule also requires a finite expected number of iterations and a constant bound on the expected absolute change of `I` in each iteration.
 
-The rule is based on the "Optional Stopping Theorem for Weakest Preexpectation Reasoning" by [Hark et al. (POPL 2020)](https://doi.org/10.1145/3371105).
+The rule is based on the "Optional Stopping Theorem for Weakest Preexpectation Reasoning" <Citation {...references.hark} href="https://doi.org/10.1145/3371105" />.
 For upper bounds on expected results, use [induction](./induction.md).
 
 ## Formal Theorem
@@ -119,8 +132,8 @@ If these conditions hold, `I <= wp[while G { Body }](f)`.
 Use `@ost(I, PAST_I, c, f)` to check the four conditions above.
 Caesar generates five procedures because it checks finiteness of `PAST_I` separately from its superinvariant condition.
 
-The following [geometric loop](https://arxiv.org/pdf/1904.01117v3#page=19) stops with probability $0.5$ in each iteration and otherwise increments `b`.
-The invariant `b + [a]` gives a lower bound on the expected final value of `b`.
+The following geometric loop <Citation {...references.hark} href="https://arxiv.org/pdf/1904.01117v3#page=19" locator="Example 39" /> stops with probability $0.5$ in each iteration and otherwise increments `b`.
+The invariant `b + [a]` gives a lower bound on the expected value of `b` on termination.
 
 ```heyvl
 @wp
@@ -180,7 +193,7 @@ $$
 
 The extra $1$ in the second check counts each iteration, so $\mathtt{PAST\_I}$ bounds the expected number of iterations.
 In the third check, $I(s)$ is the value before the iteration, and $\mathrm{ert}$ adds the body ticks to the expected absolute change of $I$.
-The triangle inequality then gives the change bound needed to apply optional stopping to accumulated ticks plus $I$. [Hark et al., Theorem 32(b)](https://arxiv.org/pdf/1904.01117v3#page=15)
+The triangle inequality then gives the change bound needed to apply optional stopping to accumulated ticks plus $I$ <Citation {...references.hark} href="https://arxiv.org/pdf/1904.01117v3#page=15" locator="Theorem 32(b)" />.
 
 ## Soundness
 
@@ -188,13 +201,13 @@ The theorem assumes that `Body` terminates almost surely and contains no nondete
 Caesar does not check these assumptions.
 Caesar checks finiteness of `I` and `PAST_I` directly; `f` need not be finite.
 
-The proof rule generalizes [Hark et al., Theorem 38(b)](https://arxiv.org/pdf/1904.01117v3#page=17), and simplifies the OST encoding in [Schröer et al., *A Deductive Verification Infrastructure for Probabilistic Programs*, Appendix C.5](https://arxiv.org/pdf/2309.07781v3#page=43).
+The proof rule generalizes <Citation {...references.hark} locator="Theorem 38(b)" />, and simplifies the OST encoding in <Citation {...references.oopsla} locator="Appendix C.5" />.
 Cases (a) and (c) require a manual encoding.
 
 <details>
 <summary>Differences from the published formulations</summary>
 
-Compared with [Hark et al., Theorem 38(b) in the extended paper](https://arxiv.org/pdf/1904.01117v3#page=17) (Theorem 37(b) in the published paper):
+Compared with <Citation {...references.hark} locator="Theorem 38(b), extended version" /> (Theorem 37(b) in the published paper):
 
 - Caesar drops harmonization (`I = f` on exit).
   The exit inequality `I <= f` already follows from subinvariance.
@@ -223,12 +236,12 @@ The comparison with $f$ holds for nonnegative extended expectations, so $f$ may 
 
 </details>
 
-Compared with the [Encoding of the Optional Stopping Theorem for wp (Appendix C.5)](https://arxiv.org/pdf/2309.07781v3#page=43):
+Compared with the encoding of the Optional Stopping Theorem for wp <Citation {...references.oopsla} locator="Appendix C.5" />:
 
 - Caesar drops harmonization and checks `I < ∞` directly in place of the finiteness condition on $\Phi_f(I)$.
-- Caesar checks conditional difference boundedness only for states satisfying `G`, as in [Hark et al.'s Definition 35](https://arxiv.org/pdf/1904.01117v3#page=16).
+- Caesar checks conditional difference boundedness only for states satisfying `G`, as in <Citation {...references.hark} href="https://arxiv.org/pdf/1904.01117v3#page=16" locator="Definition 35" />.
   The unguarded check in Appendix C.5 can reject valid invariants whose change is unbounded outside the guard.
-- Appendix C.5 requires [finite expected runtime](https://arxiv.org/pdf/2309.07781v3#page=23) of the whole loop.
+- Appendix C.5 requires finite expected runtime of the whole loop <Citation {...references.oopsla} href="https://arxiv.org/pdf/2309.07781v3#page=23" />.
   Here, `Body` may have infinite expected runtime, provided it is AST and the expected number of outer-loop iterations is finite.
 
 </details>

@@ -5,6 +5,20 @@ description: Approximations, sound verifications and refutations.
 ---
 
 ```mdx-code-block
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+
+export const references = {
+  kaminski: {
+    ...sources.kaminski2019,
+    href: "https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=91",
+  },
+  reward: sources.totalExpectedRewards2024,
+  oopsla: {
+    ...sources.heyvl2023,
+    href: "/docs/publications#oopsla-23",
+  },
+};
 import Mermaid from '@theme/Mermaid';
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
@@ -200,8 +214,9 @@ These annotations let Caesar check additional soundness conditions for proof-rul
 :::note RECOMMENDED PAPERS
 We recommend reading the following literature for formal accounts of the above semantics:
 
-- **wp (LFP) and wlp (GFP) Semantics:** [Advanced Weakest Precondition Calculi for Probabilistic Programs](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=91), Chapter 4, Kaminski (2019).
-- **Least Fixpoint Semantics in Detail:** [J-P: MDP. FP. PP -- Characterizing Total Expected Rewards in Markov Decision Processes as Least Fixed Points with an Application to Operational Semantics of Probabilistic Programs](https://doi.org/10.1007/978-3-031-75783-9_11), Batz et al. (2024).
+- <Citation {...references.kaminski} locator="Chapter 4" variant="full">Formal accounts of wp (least fixed-point) and wlp (greatest fixed-point) semantics.</Citation>
+
+- <Citation {...references.reward} variant="full">A detailed account of least fixed-point semantics for total expected rewards.</Citation>
 :::
 
 ### How Caesar Selects Original Semantics
@@ -219,7 +234,7 @@ Correct results &mdash; sound verification or sound refutation &mdash; depend on
 The verification condition semantics is the semantics of the verification conditions that Caesar generates and reasons about.
 
 :::note RECOMMENDED READING
- Our paper [_A Deductive Verification Infrastructure for Probabilistic Programs_](../publications#oopsla-23) explains the verification condition semantics in detail and covers several of the proof rules.
+ Our paper <Citation {...references.oopsla} /> explains the verification condition semantics in detail and covers several of the proof rules.
 :::
 
 
@@ -402,7 +417,7 @@ Additionally, the rules [Almost-Sure Termination Rule](./ast#new-proof-rule), [P
 ## What Is Checked By Caesar {#what-is-checked}
 
 HeyVL is designed as an intermediate verification language and intentionally allows dangerous constructs.
-See our [OOPSLA '23 paper](../publications#oopsla-23) for more background.
+See our OOPSLA '23 paper <Citation {...references.oopsla} /> for more background.
 
 Caesar checks many proof-rule soundness conditions automatically, but not all modeling assumptions.
 

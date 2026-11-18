@@ -20,6 +20,15 @@ Fun fact: Caesar's slicing feature was developed with the project name *Brutus* 
 **In this document:**
 
 ```mdx-code-block
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+
+export const references = {
+  oopsla: {
+    ...sources.heyvl2023,
+    href: "/docs/publications#oopsla-23",
+  },
+};
 import TOCInline from '@theme/TOCInline';
 
 <TOCInline toc={toc} />
@@ -348,7 +357,7 @@ Our theory of slicing for HeyVL aims to give clear correctness criteria for slic
 :::info
 
 The theory is based on the verification condition semantics of HeyVL.
-You can find some information in the [statements documentation](../heyvl/statements.md) and all relevant formal background in our [OOPSLA '23 paper](../publications.md#oopsla-23).
+You can find some information in the [statements documentation](../heyvl/statements.md) and all relevant formal background in our OOPSLA '23 paper <Citation {...references.oopsla} />.
 We are working on an academic publication about these ideas that goes into more detail.
 
 :::

@@ -5,7 +5,13 @@ sidebar_position: 3
 ---
 
 ```mdx-code-block
+import Citation from '@site/src/components/Citation';
 import ProofRuleGuarantee from '@site/src/components/ProofRuleGuarantee';
+import {references as sources} from '@site/src/data/references';
+
+export const references = {
+  kinduction: sources.kInduction2021,
+};
 ```
 
 # Loop Unrolling and Bounded Model Checking
@@ -128,6 +134,7 @@ In the following example, we use loop unrolling to refute an upper bound (`copro
 Because we want to approximate least fixed-point semantics, we use `0` as our `terminator` (c.f. [*Usage*](#usage)).
 
 ```heyvl
+@wp
 coproc geo1_bmc(init_c: UInt) -> (c: UInt)
     pre init_c + 0.99
     post c
@@ -224,4 +231,4 @@ However, loop unrolling is *complete* for *refuting* specifications when the sem
 This is the case for `wp`, `ert`, and one-bounded `wlp` semantics.
 Then, any *wrong* bound on the pre can be refuted by *some* value of `k`.[^bmc-completeness]
 
-[^bmc-completeness]: See [_Latticed k-Induction with an Application to Probabilistic Programs_](https://link.springer.com/chapter/10.1007/978-3-030-81688-9_25) (CAV 2021) for more information on the theory of *bounded model checking* on probabilistic programs.
+[^bmc-completeness]: See <Citation {...references.kinduction} /> for more information on the theory of *bounded model checking* on probabilistic programs.

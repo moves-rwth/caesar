@@ -4,6 +4,18 @@ sidebar_position: 1
 
 # Debugging
 
+```mdx-code-block
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+
+export const references = {
+  oopsla: {
+    ...sources.heyvl2023,
+    href: "https://arxiv.org/pdf/2309.07781#page=23",
+  },
+};
+```
+
 Follow this guide if you are debugging verification with Caesar.
 
 ## Disabling Slicing
@@ -26,7 +38,7 @@ Caesar's incompleteness comes from incompleteness of the underlying SMT solver w
 At the moment, Caesar's translation of HeyVL verification problems is rather direct: most expressions are translated as one would intuitively expect.
 If operators have a direct correspondence in [SMT-LIB](https://smt-lib.org/), then we translate directly to those.
 Otherwise, usually only additional simple case distinctions are introduced.
-We have some more explanations in [Section 5 of our paper on HeyVL](https://arxiv.org/pdf/2309.07781#page=23).
+We have some more explanations in our paper on HeyVL <Citation {...references.oopsla} locator="§5" />.
 
 As a consequence, it is usually pretty simple to predict which [SMT-LIB theories](https://smt-lib.org/theories.shtml) will be used for the SMT query done by Caesar.
 [Caesar supports Z3 probes](#z3-probes) to help you check in which theory your problem falls.

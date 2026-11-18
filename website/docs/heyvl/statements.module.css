@@ -47,14 +47,22 @@
 }
 
 .syntax {
+  --syntax-background: #e6f5ec;
+  --syntax-border: #a7d2ba;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.9fr);
   align-items: start;
   gap: 1rem 2rem;
   margin: 0.75rem 0 1.25rem;
   padding: 1rem 1.15rem;
+  border: 1px solid var(--syntax-border);
   border-radius: 0.25rem;
-  background: var(--caesar-surface-hover);
+  background: var(--syntax-background);
+}
+
+[data-theme='dark'] .syntax {
+  --syntax-background: #143c2e;
+  --syntax-border: #327859;
 }
 
 .syntax > p {
@@ -70,7 +78,7 @@
   position: absolute;
   top: 0.35rem;
   left: 0.75rem;
-  color: var(--ifm-color-emphasis-700);
+  color: var(--ifm-color-primary);
   font-family: var(--ifm-heading-font-family);
   font-size: 0.875rem;
   font-weight: 500;
@@ -99,6 +107,7 @@
 }
 
 .reference .syntax > :global(.theme-code-block) {
+  --prism-background-color: transparent !important;
   width: 100%;
   min-width: 0;
   margin: 0;
@@ -110,9 +119,9 @@
 .syntax pre {
   margin: 0;
   padding: 0 0 0 1rem;
-  border-left: 2px solid var(--ifm-color-emphasis-300);
+  border-left: 2px solid var(--syntax-border);
   border-radius: 0;
-  background: transparent;
+  background: transparent !important;
 }
 
 .rules {
@@ -169,11 +178,13 @@
   margin-top: 1.5rem;
 }
 
-@container (max-width: 40rem) {
+@container (max-width: 48rem) {
   .dualRules {
     grid-template-columns: 1fr;
   }
+}
 
+@container (max-width: 40rem) {
   .syntax {
     grid-template-columns: 1fr;
     gap: 0.6rem;

@@ -6,7 +6,21 @@ sidebar_position: 2
 # Induction and k-Induction
 
 ```mdx-code-block
+import Citation from '@site/src/components/Citation';
 import ProofRuleGuarantee from '@site/src/components/ProofRuleGuarantee';
+import {references as sources} from '@site/src/data/references';
+
+export const references = {
+  kinduction: sources.kInduction2021,
+  oopsla: {
+    ...sources.heyvl2023,
+    href: "https://arxiv.org/abs/2309.07781",
+  },
+  kaminski: {
+    ...sources.kaminski2019,
+    href: "https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=121",
+  },
+};
 ```
 
 <ProofRuleGuarantee rule="induction" />
@@ -26,7 +40,7 @@ A dual version exists for `wp` and `ert` semantics.
 The same inequality holds with `uwlp` in place of `wlp`, using the full `EUReal` lattice instead of the one-bounded lattice.
 
 *$k$-induction* is a strictly stronger version of induction.
-Refer to the [CAV 2021 paper presenting *latticed k-induction*](https://link.springer.com/chapter/10.1007/978-3-030-81688-9_25) for more details.
+Refer to the paper presenting latticed k-induction <Citation {...references.kinduction} /> for more details.
 It allows us to reason about multiple loop iterations: the invariant is not required to be re-established after just one loop iteration, but may be re-established after $1$, $2$, ..., up to $k$ loop iterations.
 
 ## Usage
@@ -87,7 +101,7 @@ Just like induction, the `@k_induction` annotation will result in a HeyVL encodi
 Again, Caesar will encode the *super-invariant* version for upper bounds in a `coproc` and the *sub-invariant* version for lower bounds in a `proc`.
 Check the [soundness section](#soundness) and the [details section](#internal-details) below for more details.
 
-We recommend reading the [*Latticed k-induction* paper](https://link.springer.com/chapter/10.1007/978-3-030-81688-9_25) for more details on the principle of k-induction applied to the verification of probabilistic programs.
+We recommend reading the latticed k-induction paper <Citation {...references.kinduction} /> for more details on the principle of k-induction applied to the verification of probabilistic programs.
 
 ## Soundness
 
@@ -123,7 +137,7 @@ We describe the [encoding](#heyvl-encoding) of the proof rules in HeyVL, the [ve
 
 :::note
 
-More polished formal details on the HeyVL encodings and the (simplified) semantics of the above proof rules are provided in the [extended version of our OOPSLA '23 paper](https://arxiv.org/abs/2309.07781), both in the main text and in Appendix C.
+More polished formal details on the HeyVL encodings and the (simplified) semantics of the above proof rules are provided in the extended version of our OOPSLA '23 paper <Citation {...references.oopsla} locator="Appendix C" />, both in the main text and in Appendix C.
 
 :::
 
@@ -179,7 +193,7 @@ $$
     \forall \sigma \in \mathsf{States}.\quad I(\sigma) \leq ([G] \cdot \mathrm{wlp}\llbracket B \rrbracket(I) + [\neg G] \cdot f)(\sigma)~.
 $$
 
-[^common-park-induction]: A thorough exposition on the usual definition of *inductive invariants* for probabilistic programming is found in [Benjamin Kaminski's PhD thesis at Definition 5.1](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=121).
+[^common-park-induction]: A thorough exposition on the usual definition of *inductive invariants* for probabilistic programming is found in <Citation {...references.kaminski} locator="Definition 5.1" />.
 
 ### Local Inductive Invariants
 
@@ -282,7 +296,7 @@ For the very similar encoding of procedure calls, we give [an example where remo
 The encoding is similar for k-induction (`@k_induction`).
 It also evaluates to `I` if the invariant is *k-inductive* and to $0$ otherwise.
 
-Refer to the [k-induction paper](https://link.springer.com/chapter/10.1007/978-3-030-81688-9_25) for the precise definition and properties of k-inductive invariants.
+Refer to the k-induction paper <Citation {...references.kinduction} /> for the precise definition and properties of k-inductive invariants.
 
 For *2-induction* for lower bounds, one obtains an encoding of the following form:
 ```heyvl
@@ -337,4 +351,4 @@ The above explanation follows the version of $k$-induction for lower bounds on g
 However, in the literature, $k$-induction is often defined for upper bounds on least fixed-point semantics.[^literature-kind-upper-bounds]
 Then, the explanation is dual, and the encoding is similar, but essentially just with the angelic choices `if ⊔ { ... } else { ... }` replaced by demonic choices `if ⊓ { ... } else { ... }`.
 
-[^literature-kind-upper-bounds]: For example, the [Latticed k-induction paper](https://link.springer.com/chapter/10.1007/978-3-030-81688-9_25) defines and interprets latticed $k$-induction only for upper bounds on least fixed-point semantics.
+[^literature-kind-upper-bounds]: For example, the latticed k-induction paper <Citation {...references.kinduction} /> defines and interprets latticed $k$-induction only for upper bounds on least fixed-point semantics.

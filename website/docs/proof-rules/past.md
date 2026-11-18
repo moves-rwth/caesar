@@ -5,8 +5,19 @@ sidebar_position: 6
 # Positive Almost-Sure Termination
 
 ```mdx-code-block
+import Citation from '@site/src/components/Citation';
 import ProofRuleGuarantee from '@site/src/components/ProofRuleGuarantee';
+import {references as sources} from '@site/src/data/references';
 import TOCInline from '@theme/TOCInline';
+
+export const references = {
+  kaminski: {
+    ...sources.kaminski2019,
+    href: "https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=143",
+  },
+  martingales: sources.martingales2013,
+  fioriti: sources.probabilisticTermination2015,
+};
 ```
 
 <ProofRuleGuarantee rule="past" />
@@ -33,8 +44,8 @@ The [soundness proof](#past-via-ert-superinvariants) derives these guarantees by
 
 If the `coproc` omits its calculus annotation, `@past` selects least-fixed-point semantics.
 
-The rule follows the ranking-superinvariant argument in [Kaminski (2019), Theorem 6.3](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=143).
-Related results use the term *ranking supermartingale* [Chakarov and Sankaranarayanan (2013), Theorem 4](https://doi.org/10.1007/978-3-642-39799-8_34) and [Ferrer Fioriti and Hermanns (2015), Theorem 5.6](https://doi.org/10.1145/2676726.2677001).
+The rule follows the ranking-superinvariant argument <Citation {...references.kaminski} locator="Theorem 6.3" />.
+Related results use the term *ranking supermartingale* <Citation {...references.martingales} locator="Theorem 4" />, <Citation {...references.fioriti} locator="Theorem 5.6" />.
 
 ### Verification Conditions {#formal-theorem}
 

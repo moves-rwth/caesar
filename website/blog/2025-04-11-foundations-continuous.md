@@ -24,7 +24,7 @@ In addition to theoretical results such as convergence and completeness of the a
 ## Encoding Riemann Sums in HeyVL
 
 The HeyVL encoding of the Riemann sum approximation is simple.
-Consider sampling the variable `x` from the *continuous* uniform distribution over the $[0,1]$.
+Consider sampling the variable `x` from the *continuous* uniform distribution over $[0,1]$.
 
 The original sampling interval $[0,1]$ is divided into $N$ equally sized subintervals, where $N\ge1$.
 For example, the following encoding uses $N=8$:
@@ -41,7 +41,7 @@ Its bounds must be integer literals, so the code uses `unif(0, 7)`.
 The sampled integer $j$ is then used to select the closed subinterval $I = [j/N, (j+1)/N]$.
 The `cohavoc` and `coassume` statements take the supremum of the postexpectation over all values $x\in I$, giving an upper approximation on that subinterval.
 
-Increasing the parameter $N$ leads to a more precise approximation of the expected value, but incurs a slowdown in the verification time.
+Finer partitions can give sharper bounds on the expected value, at the cost of larger verification conditions.
 
 The above encodes the Riemann sum over-approximation of the expected value of a function $f$ when sampling uniformly from the continuous interval $[0,1]$.
 Formally:
@@ -62,10 +62,11 @@ A more detailed explanation can be found in [Section 9.1 of the paper](https://d
 As long as the hare did not overtake the tortoise, the hare flips a fair coin to decide whether to move or not.
 If the hare decides to move, it samples a distance uniformly at random from $[0, 10]$.
 The tortoise always moves exactly one step.
-The following HeyVL code encodes a proof that $$\mathrm{wp}\llbracket\texttt{tortoise\_hare}\rrbracket(\texttt{count}) \leq 3.38 \cdot (t - h + 2)~,$$ where $h$ and $t$ are the initial positions of the tortoise and hare, respectively.
+For initial positions $h\le t$, the following HeyVL code encodes a proof that $$\mathrm{wp}\llbracket\texttt{tortoise\_hare}\rrbracket(\texttt{count}) \leq 3.38 \cdot (t - h + 2)~,$$ where $h$ and $t$ are the initial positions of the hare and tortoise, respectively.
 Here, we chose the parameter $N = 8$ for the Riemann sum approximation.
 
 ```heyvl
+@wp
 coproc tortoise_hare(init_h: UReal, init_t: UReal) -> (count: UReal)
     pre 3.38*((init_t - init_h) + 2)
     post count

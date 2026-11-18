@@ -6,6 +6,20 @@ sidebar_position: 2
 # Guide to HeyVL
 
 ```mdx-code-block
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+
+export const references = {
+  oopsla: {
+    ...sources.heyvl2023,
+    href: "https://arxiv.org/pdf/2309.07781.pdf",
+  },
+  cav: {
+    ...sources.caesar2026,
+    href: "https://link.springer.com/content/pdf/10.1007/978-3-032-32537-2_27.pdf?pdf=inline%20link",
+    venue: "CAV",
+  },
+};
 import Link from '@docusaurus/Link';
 ```
 
@@ -13,7 +27,7 @@ For a short introduction to running Caesar and interpreting a verification resul
 This guide explains HeyVL in more detail, using a *lossy list traversal* to introduce user-defined types and functions, quantitative specifications, and loop invariants.
 It then explains the verification statements used to encode proofs in HeyVL.
 
-#### Contents of This Guide
+**Contents of This Guide**
 
 ```mdx-code-block
 import TOCInline from '@theme/TOCInline';
@@ -26,7 +40,7 @@ import TOCInline from '@theme/TOCInline';
 ### Architecture
 
 <figure style={{"maxWidth": "400px", "float": "right", "width": "100%", "margin": "1em 0 1em 1.5em", "border": "1px solid gray", "padding": "1em", "borderRadius": "5px"}}>
-    <h3 style={{"textAlign": "center"}}>Architecture of Caesar</h3>
+    <figcaption style={{"textAlign": "center"}}>Architecture of Caesar</figcaption>
     <img src="/img/architecture-oopsla23.svg" />
 </figure>
 
@@ -61,8 +75,8 @@ That is the advantage of using an intermediate verification language such as Hey
 
 :::info
 
-Our [OOPSLA '23 paper](../publications.md#oopsla-23) ([PDF](https://arxiv.org/pdf/2309.07781.pdf)) gives the formal foundations of HeyVL and explains how to prove that its encodings represent the intended verification problems.
-The [CAV 2026 tool paper](https://link.springer.com/content/pdf/10.1007/978-3-032-32537-2_27.pdf?pdf=inline%20link) describes Caesar's architecture and current capabilities.
+Our OOPSLA '23 paper <Citation {...references.oopsla} /> gives the formal foundations of HeyVL and explains how to prove that its encodings represent the intended verification problems.
+The CAV 2026 tool paper <Citation {...references.cav} /> describes Caesar's architecture and current capabilities.
 
 :::
 
@@ -223,13 +237,14 @@ Remember that we want to verify that the probability of a successful run without
 How do we specify such a property in HeyVL?
 
 HeyVL uses *expectation-based reasoning*, which is a kind of deductive reasoning that talks about expected values of random variables.
-We describe the full theoretical details in our [OOPSLA '23 publication](../publications.md#oopsla-23).
+We describe the full theoretical details in our OOPSLA '23 publication <Citation {...references.oopsla} href="/docs/publications#oopsla-23" />.
 For now though, we'll provide some intuition.
 
 #### Specifications
 
 We extend our `lossy_list` declaration as follows with a `pre` and a `post` attribute:
 ```heyvl
+@uwlp
 proc lossy_list(init_l: List) -> (l: List)
     pre [len(init_l) == 1] * 0.5
     post [true]
@@ -296,7 +311,7 @@ Before we do so, a warning.
 :::caution
 
 HeyVL is an intermediate verification language and proof rules like Park induction must only be applied where it is sound with respect to the language semantics that we are considering.
-In this case, by using Park induction in a `proc`, we implicitly assumed *greatest fixed point* semantics on unbounded non-negative expected values for the loop.
+Here, the [`@uwlp` annotation](../proof-rules/approximations.md#calculus-annotations) explicitly selects *greatest fixed point* semantics on unbounded non-negative expected values for the loop.
 It assigns an infinite expected value to nonterminating executions.
 Then, Park induction is sound for lower bound reasoning only.
 
@@ -326,6 +341,7 @@ domain List {
     axiom list_pop forall l: List. len(pop(l)) == len(l) - 1
 }
 
+@uwlp
 proc lossy_list(init_l: List) -> (l: List)
     pre [len(init_l) == 1] * 0.5
     post [true]
@@ -364,6 +380,7 @@ HeyVL also has dual `co`-versions of its [verification statements](#verification
 
 Consider the following `coproc` example (with the domain declarations from above omitted):
 ```heyvl
+@wp
 coproc lossy_list_up(init_l: List) -> (l: List)
     pre 0
     post len(l)
@@ -410,7 +427,7 @@ For reference-level documentation, refer to the [HeyVL statements documentation]
 
 :::info
 
-Our [OOPSLA '23 paper](../publications.md#oopsla-23) ([PDF](https://arxiv.org/pdf/2309.07781.pdf)) gives a formal treatment of HeyVL's verification statements.
+Our OOPSLA '23 paper <Citation {...references.oopsla} /> gives a formal treatment of HeyVL's verification statements.
 
 :::
 

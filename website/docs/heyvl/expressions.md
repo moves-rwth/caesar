@@ -5,6 +5,22 @@ sidebar_position: 3
 
 # Expressions
 
+```mdx-code-block
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+
+export const references = {
+  oopsla: {
+    ...sources.heyvl2023,
+    href: "https://arxiv.org/pdf/2309.07781.pdf#page=5",
+  },
+  complete: {
+    ...sources.expressiveLanguage2021,
+    href: "https://dl.acm.org/doi/10.1145/3434320",
+  },
+};
+```
+
 HeyVL expressions can be used inside [specifications](./procs.md) and [statements](./statements.md) and evaluate to values in some program state.
 
 ## Expression Syntax
@@ -104,7 +120,7 @@ The most precise grammar specification can be found in Caesar's source code ([`s
 
 ## Semantics and Under-Specified Expressions
 
-In [our paper on HeyVL (cf. Section 2)](https://arxiv.org/pdf/2309.07781.pdf#page=5), we give a formal semantics for *HeyLo*, our logic for reasoning about expected values.
+In our paper on HeyVL <Citation {...references.oopsla} locator="§2" />, we give a formal semantics for *HeyLo*, our logic for reasoning about expected values.
 HeyLo includes operators such as `==>`, `<==`, `!`, `~`, `?(e)`, and more.
 Caesar's expressions are a superset of HeyLo.
 In particular, the paper explains in detail the lattice and Heyting algebra operators that Caesar supports.
@@ -169,13 +185,13 @@ For more information on how triggers/patterns work in general, see the [Z3 User 
 
 ## Relative Completeness
 
-Caesar's expression syntax is based on [the expressive assertion language for probabilistic verification by Batz et al](https://dl.acm.org/doi/10.1145/3434320).
+Caesar's expression syntax is based on the expressive assertion language for probabilistic verification <Citation {...references.complete} />.
 In theory, *expressiveness* means that for many programs and properties, we know that we can express *all* pre-expectations and invariants in the expression syntax when a post-expectation is written in that syntax.
 
 Formally, we have that the [weakest pre-expectation calculus](../proof-rules/approximations#calculus-annotations) `wp` is *relatively complete* with respect to this language, which means that `wp[P](post)` is effectively constructible for all programs `P` and expectations `post` in their syntax.
 
 Their syntax includes enough constructs to specify many interesting properties, such as termination probabilities or the distribution over final states, even including stuff like harmonic numbers.
-See [the paper's Section 12 for more details](https://dl.acm.org/doi/pdf/10.1145/3434320#page=26).
+See <Citation {...references.complete} href="https://dl.acm.org/doi/pdf/10.1145/3434320#page=26" locator="§12" /> for more details.
 
 Of course, this does not mean that all of these verification problems are decidable.
 It just means that in theory, the undecidable part is *only* in the final inequality check `pre <= wp[P](post)` instead of the computation of `wp[P](post)`.

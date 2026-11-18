@@ -4,6 +4,20 @@ description: Procedures are HeyVL's logical units of code.
 sidebar_position: 1
 ---
 
+```mdx-code-block
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+
+export const references = {
+  complete: sources.expressiveLanguage2021,
+  morgan: sources.programmingFromSpecifications,
+  oopsla: {
+    ...sources.heyvl2023,
+    href: "/docs/publications#oopsla-23",
+  },
+};
+```
+
 # Procedures and Coprocedures
 
 HeyVL [statements](statements.md) are placed inside the body of _(co)procedures_ or _(co)procs_ for short.
@@ -85,7 +99,7 @@ This allows us to reason about various kinds expected values of probabilistic pr
 However, all of these expected values are limited to non-negative values.
 This is seldom a practical limitation.[^on-negative-numbers]
 
-HeyVL supports the syntax of the [*relatively complete assertion language* by Batz et al](https://doi.org/10.1145/3434320).
+HeyVL supports the syntax of the relatively complete assertion language <Citation {...references.complete} />.
 This means we can express practically all expected values of interest in our syntax.
 For more information, read the [Caesar documentation on relative completeness](./expressions.md#relative-completeness).
 
@@ -240,7 +254,9 @@ This allows us to follow a programming methodology called *programming from spec
 We can start with just a specification and step-by-step fill in executable code.
 A procedure call to a procedure without a body then corresponds to what is known in the literature as the *specification statement*, which is the basis for the *programming from specifications* methodology.
 
-[^programming-from-specifications]: The book *Programming from Specifications* by Carroll Morgan details the methodology in a very approachable way (for non-probabilistic programs). It is available online at https://www.cs.ox.ac.uk/publications/books/PfS/ in PostScript format (you can convert to PDF using `ps2pdf` command). ISBN: 978-0-13-123274-7.
+[^programming-from-specifications]: The book *Programming from Specifications* <Citation {...references.morgan} /> details the methodology in a very approachable way (for non-probabilistic programs).
+    It is available online in PostScript format (you can convert to PDF using `ps2pdf` command).
+    ISBN: 978-0-13-123274-7.
 
 :::warning Infeasible Procedures
 
@@ -355,7 +371,7 @@ This generalizes the Boolean setting:
     <summary>Example: Why <code>validate</code> is needed for soundness.</summary>
 
     The `validate` statement has no effect in the Boolean setting, but it is crucial for soundness in the quantitative setting.
-    The formal proof of soundness can be found in the [OOPSLA '23 paper](../publications.md#oopsla-23).
+    The formal proof of soundness can be found in the OOPSLA '23 paper <Citation {...references.oopsla} />.
     Here, we show an example where omitting the `validate` statement leads to unsoundness.
 
     Consider the following procedure `P` that has a pre of `1` and a post of `2`.
@@ -423,15 +439,17 @@ This generalizes the Boolean setting:
 </details>
 
 The encoding of [Park induction](../proof-rules/induction.md#internal-details) for the verification of while loops makes use of the same statements as the procedure call encoding plus some additional statements.
-A more formal treatment of the encoding and semantics of procedure calls can be found in our [OOPSLA '23 paper](../publications.md#oopsla-23).
+A more formal treatment of the encoding and semantics of procedure calls can be found in our OOPSLA '23 paper <Citation {...references.oopsla} />.
 
 [^spec-combination]: The combination of specifications is a logical consequence of their encodings in HeyVL. When *verifying* a procedure, `pre` annotations will be translated to `assume` and `post` annotations will be translated to `assert` statements.
 One can prove that the HeyVL statements `assume A1; assume A2` are equivalent to `assume (A1 ⊓ A2)`, and also that the sequence `assert A1; assert A2` is equivalent to `assert (A1 ⊓ A2)`.
 The same equalities can be used for the procedure *call* encoding.
 
-[^on-negative-numbers]: Many verification tasks that require reasoning with negative numbers can be embedded in this framework. First, note that we can still have negative numbers in our program states, we just have to ensure that the `post` is non-negative. [Chapter 11 of the paper _"Relatively Complete Verification for Probabilistic Programs"_](https://dl.acm.org/doi/pdf/10.1145/3434320#page=24) by Batz et al. might be of interest for further reading.
+[^on-negative-numbers]: Many verification tasks that require reasoning with negative numbers can be embedded in this framework.
+    First, note that we can still have negative numbers in our program states, we just have to ensure that the `post` is non-negative.
+    <Citation {...references.complete} href="https://dl.acm.org/doi/pdf/10.1145/3434320#page=24" locator="§11" /> might be of interest for further reading.
 
 [^bang-question-operator]: `!?(b)` is not a special kind of operator, it is simply the `!` operator applied to `?(b)`, i.e. `!(?(b))`.
 The negation operator `!` is defined on `EUReal` by $!0 = \infty$ and $!x = 0$ for all $x \neq 0$.
 Thus, `!?(b)` is logically equivalent to `?(!b)`.
-In the [OOPSLA '23 paper](../publications.md#oopsla-23), we denoted `!?(b)` by $\mathrm{co?}(b)$.
+In the OOPSLA '23 paper <Citation {...references.oopsla} />, we denoted `!?(b)` by $\mathrm{co?}(b)$.

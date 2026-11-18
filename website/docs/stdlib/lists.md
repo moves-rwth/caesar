@@ -65,6 +65,7 @@ The built-in API is enough for many length-preserving transformations.
 For example, `fill` rewrites every valid index with the same value:
 
 ```heyvl
+@uwlp
 proc fill(list: []UInt, value: UInt) -> (res: []UInt)
     post ?(len(res) == len(list))
     post ?(forall k: UInt. (k < len(list)) ==> (select(res, k) == value))

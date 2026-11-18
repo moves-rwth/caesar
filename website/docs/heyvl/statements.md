@@ -6,6 +6,32 @@ sidebar_position: 2
 # Statements
 
 ```mdx-code-block
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+
+export const references = {
+  construction: sources.correctnessByConstruction,
+  oopsla: {
+    ...sources.heyvl2023,
+    href: "/docs/publications#oopsla-23",
+  },
+  cav: {
+    ...sources.caesar2026,
+    href: "https://link.springer.com/content/pdf/10.1007/978-3-032-32537-2_27.pdf?pdf=inline%20link",
+    venue: "CAV",
+  },
+  weighted: sources.weightedProgramming,
+  game: {
+    ...sources.heyvlGame2024,
+    href: "/docs/publications#aisola-24-a-game-based-semantics-for-the-probabilistic-intermediate-verification-language-heyvl",
+    venue: "AISoLA",
+  },
+  slicing: {
+    ...sources.slicing2026,
+    href: "/docs/publications#esop-26-error-localization-certificates-and-hints-for-probabilistic-program-verification-via-slicing",
+    venue: "ESOP",
+  },
+};
 import styles from './statements.module.css';
 ```
 
@@ -129,7 +155,7 @@ The other distributions require numeric literals.
 Arbitrary finite discrete probabilistic choices can be implemented using only fair binary probabilistic choice (`flip(0.5)`) and iteration (`while` loops)[^sampling-with-just-flips].
 You can also use [`weigh`] statements and the additive choice statement (`if +`) to implement any finite discrete distribution, as shown in the [example below](#sampling-with-weights).
 
-[^sampling-with-just-flips]: See [_Correctness by construction for probabilistic programs_ by McIver and Morgan](https://doi.org/10.1007/978-3-030-61362-4_12), Section 4.
+[^sampling-with-just-flips]: See <Citation {...references.construction} locator="§4" />.
 
 <div className={styles.syntax}>
 
@@ -294,7 +320,7 @@ $8$, the sum of both rewards.
 For ASCII spellings, use `\cap` for `⊓`, `\cup` for `⊔`, and `\oplus` for `+`.
 Additive choice also accepts `⊕`.
 
-One can use the additive choice operator and the [`weigh`](#weights) statement to implement any sampling from finite discrete distributions.
+One can use the additive choice operator and the [`weigh`](#weigh) statement to implement any sampling from finite discrete distributions.
 The [example below](#sampling-with-weights) applies this to implement a `x = flip(0.3)` assignment.
 
 <details id="sampling-with-weights">
@@ -605,7 +631,7 @@ assert I
 assume 0
 ```
 
-Reading backwards, `assume 0` transforms any continuation into $\infty$, and `assert I` then yields $\min(I,\infty)=I$.
+Reading backwards, `assume 0` transforms any postexpectation into $\infty$, and `assert I` then yields $\min(I,\infty)=I$.
 Proof-rule encodings use this to finish a branch after introducing its obligation.
 The dual fragment is:
 
@@ -616,7 +642,7 @@ coassert I
 coassume \infty
 ```
 
-`coassume` makes the continuation $0$, and `coassert I` gives $\max(I,0)=I$.
+`coassume` transforms any postexpectation into $0$, and `coassert I` gives $\max(I,0)=I$.
 For complete encodings, see [procedure calls](./procs.md#assert-assume-understanding-of-procedure-calls) and [Park induction](../proof-rules/induction.md#internal-details).
 
 </details>
@@ -754,7 +780,7 @@ This pattern appears in [procedure-call encodings](./procs.md#assert-assume-unde
 
 ## Game Semantics {#game-semantics}
 
-HeyVL programs describe a [game between two players](../publications.md#aisola-24-a-game-based-semantics-for-the-probabilistic-intermediate-verification-language-heyvl): the *demonic* player minimizes expected reward, and the *angelic* player maximizes it.
+HeyVL programs describe a game between two players <Citation {...references.game} />: the *demonic* player minimizes expected reward, and the *angelic* player maximizes it.
 For the core HeyVL language, the game's value is the [pre-expectation](#semantics) defined above.
 
 **Programs and choices.**
@@ -834,11 +860,15 @@ Negation statements can break this property and make calls unsound.
 
 ## Further Reading
 
-- [OOPSLA '23](../publications.md#oopsla-23): formal statement semantics and how `assert`, `havoc`, `validate`, and `assume` encode procedure calls.
-- [CAV '26](../publications.md#cav-26-caesar-a-deductive-verifier-for-probabilistic-programs) ([PDF](https://link.springer.com/content/pdf/10.1007/978-3-032-32537-2_27.pdf?pdf=inline%20link)): how HeyVL proof encodings connect to Caesar's verification backends and editor support.
-- [Weighted programming](https://arxiv.org/pdf/2608.18971): how `weigh` and additive choice express weighted programs beyond probabilities.
-- [Game semantics (AISoLA '24)](../publications.md#aisola-24-a-game-based-semantics-for-the-probabilistic-intermediate-verification-language-heyvl): interpreting verification statements as a game between two players, with a referee for assumptions and validations.
-- [Slicing (ESOP '26)](../publications.md#esop-26-error-localization-certificates-and-hints-for-probabilistic-program-verification-via-slicing): why a failed proof can involve several statements and paths, and how slicing finds them.
+- <Citation {...references.oopsla} variant="full">Formal statement semantics and how `assert`, `havoc`, `validate`, and `assume` encode procedure calls.</Citation>
+
+- <Citation {...references.cav} variant="full">How HeyVL proof encodings connect to Caesar's verification backends and editor support.</Citation>
+
+- <Citation {...references.weighted} variant="full">How `weigh` and additive choice express weighted programs beyond probabilities.</Citation>
+
+- <Citation {...references.game} variant="full">Interpreting verification statements as a game between two players, with a referee for assumptions and validations.</Citation>
+
+- <Citation {...references.slicing} variant="full">Why a failed proof can involve several statements and paths, and how slicing finds them.</Citation>
 
 [^assertion-game]: The paper models assertions with referee decisions (Section 4.2, Table 1).
     Here we use an equivalent stop-or-continue choice.

@@ -5,21 +5,30 @@ sidebar_position: 5
 # Almost-Sure Termination
 
 ```mdx-code-block
+import Citation from '@site/src/components/Citation';
 import ProofRuleGuarantee from '@site/src/components/ProofRuleGuarantee';
+import {references as sources} from '@site/src/data/references';
+import TOCInline from '@theme/TOCInline';
+
+export const references = {
+  kaminski: {
+    ...sources.kaminski2019,
+    href: "https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=139",
+  },
+  mciver: sources.almostSureTermination2018,
+};
 ```
 
 <ProofRuleGuarantee rule="ast" />
 
 _Almost-sure termination_ (AST for short) means that a program terminates with probability one.
-In our probabilistic setting, this does not necessarily mean that all executions terminate (we would call that _certain termination_), but only that the expected value to reach a terminating state is one.
+Infinite executions may exist, provided the set of such executions has probability zero.
 In terms of weakest pre-expectations, this means that `wp[C](1) = 1` holds for a program `C`.
-For a nice overview of details and proof rules that are available in the literature, we refer to [Chapter 6 of Benjamin Kaminski's PhD thesis](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=139).
+For a nice overview of details and proof rules that are available in the literature, we refer to <Citation {...references.kaminski} locator="Chapter 6" />.
 
 In Caesar, there are several ways to prove almost-sure termination:
 
 ```mdx-code-block
-import TOCInline from '@theme/TOCInline';
-
 <TOCInline toc={toc} maxHeadingLevel="2" />
 ```
 
@@ -34,8 +43,8 @@ To _refute_ an upper bound on weakest pre-expectations, [unrolling](./unrolling.
 ## A New Proof Rule for Almost-Sure Termination (`@ast` Annotation) {#new-proof-rule}
 
 The `@ast` annotation proves almost-sure termination of a loop from every initial state satisfying a Boolean invariant $\mathtt{I}$.
-Caesar's `@ast` rule adapts the _"new proof rule for almost-sure termination"_ by [McIver et al. (POPL 2018)](https://dl.acm.org/doi/10.1145/3158121).
-An [extended version of the paper](https://arxiv.org/pdf/1711.03588.pdf) is available on arXiv.
+Caesar's `@ast` rule adapts the new proof rule for almost-sure termination <Citation {...references.mciver} />.
+An extended version of the paper is available on arXiv <Citation {...references.mciver} href="https://arxiv.org/pdf/1711.03588.pdf" />.
 
 The rule uses a _loop variant_ $\mathtt{V}$ to measure progress towards termination.
 If an iteration starts with variant value $v$, it must exit or decrease $\mathtt{V}$ by at least $\mathtt{decrease}(v)$ with probability at least $\mathtt{prob}(v)$.
@@ -158,9 +167,10 @@ If these conditions hold, `while G { Body }` terminates almost surely from every
 ### Usage
 
 Use `@ast(I, V, v, prob(v), decrease(v))` to generate the five checks above.
-The following program encodes the "escaping spline" example from [Section 5.4 of the paper](https://dl.acm.org/doi/pdf/10.1145/3158121#page=18).
+The following program encodes the "escaping spline" example from <Citation {...references.mciver} href="https://dl.acm.org/doi/pdf/10.1145/3158121#page=18" locator="§5.4" />.
 
 ```heyvl
+@wp
 proc ast_example4() -> ()
     pre 1
     post 1
@@ -210,17 +220,17 @@ A formal soundness proof for these adaptations is still pending.
 
 These comparisons use the same `I`, `V`, `prob`, and `decrease`.
 
-Compared with [McIver et al., POPL 2018, Theorem 4.1](https://arxiv.org/pdf/1711.03588.pdf#page=7):
+Compared with <Citation {...references.mciver} href="https://arxiv.org/pdf/1711.03588.pdf#page=7" locator="Theorem 4.1" />:
 
 - **Function assumptions → conditions 1–2:** unchanged.
 - **(i), invariant → condition 3:** unchanged; `I` is preserved and the body terminates almost surely under `I && G`.
 - **(ii), positive active variant:** the paper requires `I && G ==> V > 0`; Caesar allows `V = 0` while the guard holds.
 - **(iii), progress → condition 5:** the paper counts only `V + decrease(v) <= v` as progress; Caesar also counts `!G`.
 - **(iv), supermartingale → condition 4:** the paper requires `[I && G] * (H ⊖ V) <= wp[Body](H ⊖ V)` for every `H > 0`, where `H ⊖ V = max(H - V, 0)`.
-  With body termination from condition 3, this is equivalent to `awp[Body](V) <= V` under `I && G` ([Lemma B.1](https://arxiv.org/pdf/1711.03588.pdf#page=33)).
+  With body termination from condition 3, this is equivalent to `awp[Body](V) <= V` under `I && G` (<Citation {...references.mciver} href="https://arxiv.org/pdf/1711.03588.pdf#page=33" locator="Lemma B.1" />).
   Caesar instead checks `awp[Body]([G] * V) <= V`, so exit values do not affect the bound.
 
-Compared with [Kaminski's thesis, Theorem 6.8](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=149):
+Compared with <Citation {...references.kaminski} href="https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=149" locator="Theorem 6.8" />:
 
 - **Function assumptions → conditions 1–2:** the bounds are the same, but the thesis additionally requires antitonicity at zero.
 - **(a), invariant → condition 3:** unchanged, including body termination under `I && G`.

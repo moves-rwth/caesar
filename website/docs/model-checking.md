@@ -6,6 +6,15 @@ description: Caesar can export models to the JANI format.
 # Model Checking
 
 ```mdx-code-block
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+
+export const references = {
+  kaminski: {
+    ...sources.kaminski2019,
+    href: "https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=115",
+  },
+};
 import Link from '@docusaurus/Link';
 ```
 
@@ -337,6 +346,6 @@ In particular, the following constructs are *not* supported:
 
 [^1]: We use the `--exact` and `--sound` flags to ensure that Storm is forced to use exact arithmetic and only sound algorithms to produce the solution. Consult your chosen model checker's documentation to see which guarantees they give.
 [^2]: We always use least-fixed point semantics because encoding greatest fixpoint/weakest *liberal* pre-expectation semantics seems to be impossible with a single JANI property right now.
-[^3]: [Corollary 4.26 of Benjamin Kaminski's PhD thesis](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=115) states that (one-bounded) `wlp` can be computed via `wp` plus the probability of divergence.
+[^3]: <Citation {...references.kaminski} locator="Corollary 4.26" /> states that (one-bounded) `wlp` can be computed via `wp` plus the probability of divergence.
 [^4]: This is similar to the qualitative wlp, which evaluates to the top element of the Boolean lattice (`true`) if the loop has a possibility of nontermination. In the quantitative setting, we have $\infty$ as our top element of the [`EUReal`](./stdlib/numbers.md#eureal) lattice.
 [^5]: Storm currently does not support the qualitative analysis required for the `can_diverge` property and will throw an error. The feature is tracked in the issue [moves-rwth/storm#529](https://github.com/moves-rwth/storm/issues/529).

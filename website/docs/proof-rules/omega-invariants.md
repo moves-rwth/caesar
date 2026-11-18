@@ -6,7 +6,16 @@ sidebar_position: 4
 # ω-Invariants
 
 ```mdx-code-block
+import Citation from '@site/src/components/Citation';
 import ProofRuleGuarantee from '@site/src/components/ProofRuleGuarantee';
+import {references as sources} from '@site/src/data/references';
+
+export const references = {
+  kaminski: {
+    ...sources.kaminski2019,
+    href: "https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=122",
+  },
+};
 ```
 
 <ProofRuleGuarantee rule="omega" />
@@ -28,7 +37,7 @@ $$
 Here, $\Phi_f(X) = [G] \cdot \mathrm{wp}\llbracket Body \rrbracket(X) + [\neg G] \cdot f$ is the loop's characteristic functional for postexpectation $f$.
 The same rule applies to `ert`, and a dual version proves upper bounds for `wlp` and `uwlp` semantics.
 
-For more details on the proof rule, see the discussion following [Definition 5.3 of Benjamin Kaminski's PhD thesis](https://publications.rwth-aachen.de/record/755408/files/755408.pdf#page=122).
+For more details on the proof rule, see the discussion following <Citation {...references.kaminski} locator="Definition 5.3" />.
 
 ## Usage
 

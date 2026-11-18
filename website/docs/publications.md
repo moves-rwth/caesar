@@ -3,6 +3,16 @@ title: Publications
 sidebar_position: 9
 ---
 
+```mdx-code-block
+import Citation from '@site/src/components/Citation';
+import {references} from '@site/src/data/references';
+
+export const theoryPaper = {
+  ...references.heyvl2023,
+  venue: 'Proceedings of the ACM on Programming Languages 7, OOPSLA 2023',
+};
+```
+
 # Academic Publications
 
 Caesar is a collaboration of the [Chair for Software Modeling and Verification (MOVES)](https://moves.rwth-aachen.de/) at RWTH Aachen University, the [QUAVE group](https://quave.cs.uni-saarland.de/) at Saarland University, the [SSE section](https://www.compute.dtu.dk/english/research/research-sections/software-systems-engineering) at the Technical University of Denmark, the [PPLV group](http://pplv.cs.ucl.ac.uk/welcome/) at University College London, and the [Theory of Correct Systems group](https://uol.de/en/computingscience/groups/theorie-korrekter-systeme) at the University of Oldenburg.
@@ -11,9 +21,8 @@ If you are interested in collaborations or simply have some questions, please re
 
 :::note Citing Caesar
 
-For publications about Caesar, please cite our [OOPSLA '23 paper](#oopsla-23) ([BibTeX file](https://dblp.org/rec/journals/pacmpl/SchroerBKKM23.html?view=bibtex)):
-
-> Philipp Schröer, Kevin Batz, Benjamin Lucien Kaminski, Joost-Pieter Katoen, Christoph Matheja. *A Deductive Verification Infrastructure for Probabilistic Programs.* Proceedings of the ACM on Programming Languages 7, OOPSLA 2023. DOI: https://doi.org/10.1145/3622870.
+For Caesar as a verifier, cite the [CAV 2026 tool paper](#cav-26-caesar-a-deductive-verifier-for-probabilistic-programs) ([BibTeX](https://dblp.org/rec/conf/cav/SchroerBDHKKM26.html?view=bibtex)).
+For HeyVL and the foundations of the verification infrastructure, cite the [OOPSLA 2023 paper](#oopsla-23) ([BibTeX](https://dblp.org/rec/journals/pacmpl/SchroerBKKM23.html?view=bibtex)).
 
 :::
 
@@ -29,7 +38,9 @@ import TOCInline from '@theme/TOCInline';
 
 ### ITP '26: Securing the Foundations of an Intermediate Language for Probabilistic Program Verification
 
-The paper [_"Securing the Foundations of an Intermediate Language for Probabilistic Program Verification"_](https://doi.org/10.4230/LIPIcs.ITP.2026.29) by Oliver Bøving and Christoph Matheja was published at [ITP 2026](https://itp-conference-2026.github.io/), held in Lisbon, Portugal.
+<Citation {...references.heyvlFoundations2026} variant="full" />
+
+The paper was published at [ITP 2026](https://itp-conference-2026.github.io/), held in Lisbon, Portugal.
 
 The paper develops mechanized foundations in Lean for proving the correctness of HeyVL encodings and probabilistic-program verification techniques.
 It formalizes Markov decision processes and their probability spaces, characterizes expected total costs as least fixed points, and uses these results to verify weakest-precondition calculi and existing HeyVL encodings.
@@ -40,7 +51,9 @@ See also [our blog post about the paper](/blog/2026/07/22/itp26-securing-foundat
 
 ### CAV '26: Caesar: A Deductive Verifier for Probabilistic Programs
 
-The tool paper [_"Caesar: A Deductive Verifier for Probabilistic Programs"_](https://doi.org/10.1007/978-3-032-32537-2_27) by Philipp Schröer, Kevin Batz, Umut Yiğit Dural, Darion Haase, Benjamin Lucien Kaminski, Joost-Pieter Katoen, and Christoph Matheja was published at [CAV 2026](https://conferences.i-cav.org/2026/) in Lisbon, Portugal.
+<Citation {...references.caesar2026} variant="full" />
+
+The tool paper was published at [CAV 2026](https://conferences.i-cav.org/2026/) in Lisbon, Portugal.
 
 The [published paper is available as an open-access PDF](https://link.springer.com/content/pdf/10.1007/978-3-032-32537-2_27.pdf?pdf=inline%20link).
 A [preprint is also available on arXiv](https://arxiv.org/abs/2605.15827).
@@ -56,9 +69,11 @@ See also:
 
 ### FM '26: Highly Incremental: A Simple Programmatic Approach for Many Objectives
 
-The paper [_"Highly Incremental: A Simple Programmatic Approach for Many Objectives"_](https://doi.org/10.1007/978-3-032-26204-2_29) by Philipp Schröer and Joost-Pieter Katoen was published at [_FM 2026)_](https://conf.researchr.org/home/fm-2026) in Tokyo, Japan.
+<Citation {...references.incremental2026} variant="full" />
 
-An **extended version with a detailed appendix of proofs and case studies** is available on arXiv: [_"Highly Incremental: A Simple Programmatic Approach for Many Objectives (Extended Version)"_](https://arxiv.org/abs/2603.02405).
+The paper was published at [FM 2026](https://conf.researchr.org/home/fm-2026) in Tokyo, Japan.
+
+An **extended version with a detailed appendix of proofs and case studies** is [available on arXiv](https://arxiv.org/abs/2603.02405).
 
 The paper present a one-fits-all programmatic approach to reason about a plethora of objectives on probabilistic programs.
 The first ingredient is to add a reward-statement to the language.
@@ -72,8 +87,9 @@ See also our [blog post about the paper](/blog/2026/03/04/highly-incremental) fo
 
 ### POPL '26: Verifying Almost-Sure Termination for Randomized Distributed Algorithms
 
-The paper [_"Verifying Almost-Sure Termination for Randomized Distributed Algorithms"_](https://doi.org/10.1145/3776691) was presented at the [POPL 2026](https://popl26.sigplan.org/).
-The authors are Constantin Enea (LIX, CNRS, Ecole Polytechnique), Rupak Majumdar (MPI-SWS), Harshit Jitendra Motwani (MPI-SWS), V.R. Sathiyanarayana (MPI-SWS).
+<Citation {...references.distributedTermination2026} variant="full" />
+
+The paper was presented at [POPL 2026](https://popl26.sigplan.org/).
 
 The paper presents a verification technique for liveness properties of randomized distributed algorithms.
 It introduces a proof rule for fair almost-sure termination of distributed systems, combining martingale-based arguments for probabilistic termination with reasoning about weak fairness.
@@ -83,9 +99,11 @@ See also [our blog post for more details](/blog/2026/01/15/popl26-ast-distribute
 
 ### ESOP '26: Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing
 
-The paper [_"Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing"_](https://arxiv.org/abs/2512.20214) by Philipp Schröer, Darion Haase, and Joost-Pieter Katoen was accepted at the [ESOP 2026](https://etaps.org/2026/conferences/esop/) to be held in Turin, Italy.
+<Citation {...references.slicing2026} variant="full" />
 
-An **extended version with proofs and additional material** is available on arXiv: [Error Localization, Certificates, and Hints for Probabilistic Program Verification via Slicing (Extended Version) — arXiv:2512.20214](https://arxiv.org/abs/2512.20214).
+The paper was accepted at [ESOP 2026](https://etaps.org/2026/conferences/esop/), to be held in Turin, Italy.
+
+An **extended version with proofs and additional material** is [available on arXiv](https://arxiv.org/abs/2512.20214).
 
 The paper presents theoretical foundations and the implementation of our slicing-based user diagnostics in Caesar, dubbed *Brutus*, and introduces different kinds of slices: error-witnessing (for error localization), verification-witnessing (for proof simplification), and verification-preserving (to maintain successful verification results).
 
@@ -97,7 +115,9 @@ See also:
 
 ### OOPSLA '25: Foundations for Deductive Verification of Continuous Probabilistic Programs
 
-The paper [_"Foundations for Deductive Verification of Continuous Probabilistic Programs: From Lebesgue to Riemann and Back"_](https://dl.acm.org/doi/10.1145/3720429) by Kevin Batz, Joost-Pieter Katoen, Francesca Randone, and Tobias Winkler was recently published at [OOPSLA 2025](https://2025.splashcon.org/track/OOPSLA). DOI: https://doi.org/10.1145/3720429.
+<Citation {...references.continuous2025} variant="full" />
+
+The paper was recently published at [OOPSLA 2025](https://2025.splashcon.org/track/OOPSLA), with DOI [10.1145/3720429](https://doi.org/10.1145/3720429).
 
 This paper lays out the formal foundations for us to verify probabilistic programs that sample from continuous distributions, with support for loops, and conditioning.
 One challenge is to integrate the integrals for the expected values that arise from continuous distributions into the deductive verification framework of Caesar.
@@ -108,8 +128,9 @@ In addition to theoretical results such as convergence and completeness of the a
 
 ### AISoLA '24: A Game-Based Semantics for the Probabilistic Intermediate Verification Language HeyVL
 
-The publication [_"A Game-Based Semantics for the Probabilistic
-Intermediate Verification Language HeyVL"_](https://doi.org/10.1007/978-3-031-75434-0_17) by Christoph Matheja was published at [AISoLA 2024](https://2024-isola.isola-conference.org/). DOI: https://doi.org/10.1007/978-3-031-75434-0_17.
+<Citation {...references.heyvlGame2024} variant="full" />
+
+The publication appeared at [AISoLA 2024](https://2024-isola.isola-conference.org/).
 
 Quoting from its abstract:
 
@@ -121,14 +142,12 @@ This new operational semantics is aimed at improved intuition and ergonomics of 
 
 ### OOPSLA '23: A Deductive Verification Infrastructure for Probabilistic Programs {#oopsla-23}
 
-HeyVL and Caesar were first published at [OOPSLA '23](https://2023.splashcon.org/track/splash-2023-oopsla): [A Deductive Verification Infrastructure for Probabilistic Programs](https://doi.org/10.1145/3622870) by Schröer et al.
+<Citation {...theoryPaper} variant="full" />
+
+HeyVL and Caesar were first published at [OOPSLA '23](https://2023.splashcon.org/track/splash-2023-oopsla).
 This paper introduces HeyLo and HeyVL with formal semantics, and explains how different proof rule encodings work.
 
-For publication, please cite as follows ([BibTeX file](https://dblp.org/rec/journals/pacmpl/SchroerBKKM23.html?view=bibtex)):
-
-> Philipp Schröer, Kevin Batz, Benjamin Lucien Kaminski, Joost-Pieter Katoen, Christoph Matheja. *A Deductive Verification Infrastructure for Probabilistic Programs.* Proceedings of the ACM on Programming Languages 7, OOPSLA 2023. DOI: https://doi.org/10.1145/3622870.
-
-An **extended version with proofs, details on encodings, and typo fixes** is available on arXiv: [A Deductive Verification Infrastructure for Probabilistic Programs (Extended Version) — arXiv:2309.07781](https://arxiv.org/abs/2309.07781).
+An **extended version with proofs, details on encodings, and typo fixes** is [available on arXiv](https://arxiv.org/abs/2309.07781).
 
 **The artifact** for our OOPSLA '23 publication is [available on Zenodo](https://zenodo.org/record/8146987).
 [It has received the *Distinguished Artifact* award](/blog/2023/10/27/oopsla23-distinguished-artifact), praising exceptionally high quality of the artifact.
@@ -151,7 +170,8 @@ Below are some selected theses that contributed to the development of Caesar and
 
 ### Master Thesis '25: Effective Quantifier-based Reasoning for Quantitative Deductive Verification
 
-[_"Effective quantifier-based reasoning for quantitative deductive verification"_](https://publications.rwth-aachen.de/record/1016969) is a Master thesis written by Emil Beothy-Elo at RWTH Aachen University.
+<Citation {...references.beothyElo2025} variant="full" />
+
 This thesis investigates different encodings of user-defined recursive functions as limited functions to avoid matching loops in the context of Caesar.
 It provides formal definitions and soundness proofs for several encodings used by other verifiers, and examines how one of the encodings can be modified to obtain finite and constructible counterexamples involving recursive functions.
 The results of this thesis [have been implemented in Caesar](./caesar/debugging.md#function-encodings-and-limited-functions) (as of [Caesar 3.0.0](/blog/2025/07/29/caesar-3-0)).
@@ -166,7 +186,8 @@ Caesar is a deductive verifier for probabilistic programs. It builds on modern S
 
 ### Master Thesis '25: Practical Probabilistic Program Verification using Caesar
 
-[_"Practical Probabilistic Program Verification using Caesar"_](https://purl.utwente.nl/essays/106318) is a Master thesis by Franka van Jaarsveld written at the University of Twente.
+<Citation {...references.vanJaarsveld2025} variant="full" />
+
 It uses the *Bounded Retransmission Protocol* (BRP) as a case study to explore the practical verification of probabilistic programs using Caesar and gives insights into the strengths and limitations of Caesar in practice.
 
 The PDF file is available via the [UT Student Theses website](https://purl.utwente.nl/essays/106318).
@@ -180,7 +201,9 @@ This thesis explores the practical verification of probabilistic programs using 
 
 ### Master Thesis '22: A Deductive Verifier for Probabilistic Programs
 
-Caesar is based on a 2022 Master thesis by Philipp Schroer entitled [_"A Deductive Verifier for Probabilistic Programs"_](https://publications.rwth-aachen.de/record/998370).
+<Citation {...references.schroer2022} variant="full" />
+
+Caesar is based on this thesis.
 This thesis contains the foundations for Caesar, HeyVL, and HeyLo, including encodings for Park induction, k-induction, and bounded model checking.
 It also discusses the implementation of Caesar with its prenexing-based quantifier elimination and presents early experimental results.
 
@@ -199,16 +222,21 @@ Compared to the [OOPSLA '23 paper](#oopsla-23):
  * The thesis still uses negation statements, whereas the paper switches to `validate` statements to encode comparisons.
    * `validate` statements have monotonic semantics (in contrast to negation statements), which is easier to work with in general.
 
-Citations:
-* DOI: https://doi.org/10.18154/RWTH-2024-11340.
-* BibTeX: https://publications.rwth-aachen.de/record/998370/export/hx?ln=en
+Citation metadata is available via the [DOI](https://doi.org/10.18154/RWTH-2024-11340) and as [BibTeX](https://publications.rwth-aachen.de/record/998370/export/hx?ln=en).
 
 ## Related Work and Further Reading
 
 For more background on the weakest pre-expectation-based approach to reasoning about probabilistic programs, we recommend the following publications:
- * [_"Advanced weakest precondition calculi for probabilistic programs"_](https://publications.rwth-aachen.de/record/755408/). PhD thesis by Benjamin Lucien Kaminski (RWTH Aachen University, 2019). [PDF file is available online](https://publications.rwth-aachen.de/record/755408/files/755408.pdf).
- * [_"Automated deductive verification of probabilistic programs"_](https://publications.rwth-aachen.de/record/1002329/). PhD thesis by Kevin Batz (RWTH Aachen University, 2024). [PDF file is available online](https://publications.rwth-aachen.de/record/1002329/files/1002329.pdf).
+
+- <Citation {...references.kaminski2019} variant="full">
+  The [PDF file is available online](https://publications.rwth-aachen.de/record/755408/files/755408.pdf).
+  </Citation>
+
+- <Citation {...references.batz2024} variant="full">
+  The [PDF file is available online](https://publications.rwth-aachen.de/record/1002329/files/1002329.pdf).
+  </Citation>
 
 Caesar uses SMT solvers as backends.
 For more information on SMT solving, we recommend:
- * [_"Satisfiability Modulo Theories: A Beginner’s Tutorial"_](https://doi.org/10.1007/978-3-031-71177-0_31) by Barrett et al. (2024).
+
+- <Citation {...references.smtTutorial2024} variant="full" />
