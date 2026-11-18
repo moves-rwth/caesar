@@ -109,16 +109,7 @@ async fn wait_for_oom(mem_limit: MemorySize) {
                 }
             }
             None => {
-                // We have observed that the call `ProcessStats::get()` fails on
-                // x86 Linux-based Docker images running virtualized in an ARM
-                // environment on Apple M1 chips. This seems to be due to
-                // `procfs` failing to parse `/proc/self/stat` for some reason.
-                // Since we have not been able to track down this bug after
-                // several hours, we just disable memory limit checking in such
-                // cases. This seems acceptable since it's a very specific set
-                // of circumstances and likely a bug in QEMU that is going to be
-                // fixed.
-                error!("Could not fetch process stats to check memory limit. Memory limit checking is disabled. This error may occur in virtual machines. For memory limit checking, please consider using a native environment.");
+                error!("Could not read process memory usage. Memory limit checking is disabled for this run.");
                 pending().await // do not terminate this function
             }
         }

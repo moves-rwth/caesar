@@ -62,7 +62,9 @@ regex = "1.11.1"
 tempfile = "3.16.0"
 os_info = "3.11.0"
 petgraph = "0.8.0"
-memory-stats = "1.2.0"
+# Linux's /proc/self/statm can report less precise RSS than /proc/self/smaps.
+# It works under QEMU user-mode emulation, where smaps reports zero RSS.
+memory-stats = { version = "1.2.0", features = ["always_use_statm"] }
 
 [build-dependencies]
 lalrpop = "0.23"
