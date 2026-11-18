@@ -735,6 +735,36 @@ fn test_ost_passes_unchanged_parameters_to_generated_procedures() {
 }
 
 #[test]
+fn test_ost_weak_invariant_does_not_refute_the_property() {
+    let source = "@wp proc main() -> () pre 1 post 1 { @ost(0, 0, 0, 1) while false {} }";
+    let (result, server) = verify_test(source);
+    assert!(!result.unwrap());
+    assert!(server.diagnostics.iter().any(|diagnostic| diagnostic
+        .to_string()
+        .contains("Counter-example to verification found")));
+}
+
+#[test]
+fn test_ost_expected_runtime() {
+    let source = r#"
+        @ert proc countdown(n: UInt) -> (x: UInt)
+            pre n
+            post 0
+        {
+            x = n
+            @ost(x, 2 * x, 2, 0)
+            while x > 0 {
+                tick 1
+                x = x - 1
+            }
+        }
+    "#;
+    let (result, server) = verify_test(source);
+    assert!(result.unwrap());
+    assert!(server.diagnostics.is_empty());
+}
+
+#[test]
 fn test_past_transform() {
     let mut test_string = String::from(
         r#"

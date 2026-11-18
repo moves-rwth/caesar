@@ -14,7 +14,7 @@ For upper bounds on expected results, use [induction](./induction.md).
 
 ## Formal Theorem
 
-Consider a loop `while G { Body }` whose `Body` is purely probabilistic (without nondeterministic choices) and [AST](./ast.md).
+For the `@wp` rule, consider a loop `while G { Body }` whose `Body` terminates [almost surely](./ast.md) and contains no ticks or nondeterministic choices.
 Choose finite expectations `I` and `PAST_I`, a nonnegative postexpectation `f` that may take the value infinity, and a finite constant $c \geq 0$.
 In the encodings below, `vars` denotes the variables used by the loop or annotation, excluding loop-local variables.
 
@@ -153,8 +153,28 @@ The four parameters are:
 - `cdb`: The bound `c`, given as a `UReal` literal.
 - `post`: The postexpectation `f`, which may take the value infinity.
 
-Use `@ost` with `@wp` and an [exact loop-body encoding](./approximations.md#proof-rule-approximations).
+Use `@ost` in a `proc` with `@wp` or [`@ert`](#rewards-and-expected-runtimes) and an [exact loop-body encoding](./approximations.md#proof-rule-approximations).
 The annotated loop must be the last statement of its procedure.
+
+## Expected Runtime {#rewards-and-expected-runtimes}
+
+For a loop $L$, `@ost` with `@ert` proves $I \leq \mathrm{ert}\llbracket L\rrbracket(f)$.
+Set $f = 0$ to bound the loop's expected ticks.
+
+The finiteness checks and the exit inequality $I \leq f$ are as above.
+For each state $s$ satisfying $G$, Caesar checks
+
+$$
+\begin{aligned}
+    I(s) &\leq \mathrm{ert}\llbracket \mathtt{Body}\rrbracket(I)(s), \\
+    \mathrm{ert}\llbracket \mathtt{Body}\rrbracket(1 + \mathtt{PAST\_I})(s) &\leq \mathtt{PAST\_I}(s), \\
+    \mathrm{ert}\llbracket \mathtt{Body}\rrbracket(|I - I(s)|)(s) &\leq c.
+\end{aligned}
+$$
+
+The extra $1$ in the second check counts each iteration, so $\mathtt{PAST\_I}$ bounds the expected number of iterations.
+In the third check, $I(s)$ is the value before the iteration, and $\mathrm{ert}$ adds the body ticks to the expected absolute change of $I$.
+The triangle inequality then gives the change bound needed to apply optional stopping to accumulated ticks plus $I$. [Hark et al., Theorem 32(b)](https://arxiv.org/pdf/1904.01117v3#page=15)
 
 ## Soundness
 
@@ -204,14 +224,5 @@ Compared with the [Encoding of the Optional Stopping Theorem for wp (Appendix C.
   The unguarded check in Appendix C.5 can reject valid invariants whose change is unbounded outside the guard.
 - Appendix C.5 requires [finite expected runtime](https://arxiv.org/pdf/2309.07781v3#page=23) of the whole loop.
   Here, `Body` may have infinite expected runtime, provided it is AST and the expected number of outer-loop iterations is finite.
-
-#### Rewards and expected runtimes
-
-For a purely probabilistic program $P$ and a nonnegative expectation $X$, [Hark et al., Section 8](https://arxiv.org/pdf/1904.01117v3#page=22) give
-$$
-\mathrm{ert}\llbracket P\rrbracket(X)
-=\mathrm{ert}\llbracket P\rrbracket(0)+\mathrm{wp}\llbracket P\rrbracket(X).
-$$
-For nonnegative rewards, retain the cost term in subinvariance and use ordinary $\mathrm{wp}$ for iteration counts and absolute changes.
 
 </details>

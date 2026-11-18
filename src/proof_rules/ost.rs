@@ -97,14 +97,13 @@ impl Encoding for OSTAnnotation {
         inner_approximation_kind: ApproximationKind,
         calculus: Option<Calculus>,
     ) -> ApproximationKind {
-        // @ost is only sound with @wp; @ert also uses LFP but is not appropriate here.
         if let Some(c) = calculus {
-            if !matches!(c.calculus_type, CalculusType::Wp) {
+            if !matches!(c.calculus_type, CalculusType::Wp | CalculusType::Ert) {
                 return ApproximationKind::UNKNOWN;
             }
         }
         match (fixpoint_kind, inner_approximation_kind) {
-            (FixpointKind::Least, ApproximationKind::EXACT) => ApproximationKind::EXACT,
+            (FixpointKind::Least, ApproximationKind::EXACT) => ApproximationKind::UNDER,
             _ => ApproximationKind::UNKNOWN,
         }
     }
