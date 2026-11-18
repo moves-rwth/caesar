@@ -109,11 +109,7 @@ impl Module {
     ) -> &mut [Item<SourceUnit>] {
         let old_items_len = self.items.len();
         self.items.extend(iter);
-        if self.items.len() > old_items_len {
-            &mut self.items[old_items_len + 1..]
-        } else {
-            &mut []
-        }
+        &mut self.items[old_items_len..]
     }
 
     /// Parse a file and add the contents to this module.
