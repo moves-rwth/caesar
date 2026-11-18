@@ -1,0 +1,121 @@
+---
+title: Two-Sided Random Walks
+description: Almost-sure termination and expected numbers of coin flips for walks that can move toward or away from their targets.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import source from '@site/../tests/loop-rules/ast2018/demonically_fair.heyvl?raw';
+import download from '@site/../tests/loop-rules/ast2018/demonically_fair.heyvl?download';
+import driftSource from '@site/../tests/loop-rules/induction/rdwalk.heyvl?raw';
+import driftDownload from '@site/../tests/loop-rules/induction/rdwalk.heyvl?download';
+import paritySource from '@site/../tests/loop-rules/ast2018/ast-flipflop.heyvl?raw';
+import parityDownload from '@site/../tests/loop-rules/ast2018/ast-flipflop.heyvl?download';
+
+export const references = {
+  termination: {
+    ...sources.almostSureTermination2018,
+    href: "https://arxiv.org/pdf/1711.03588#page=14",
+    locator: "§5.2",
+  },
+};
+
+<ExampleMetadata exampleId="two-sided-random-walks" />
+
+A random walk can move away from its target, so progress made on one step may be lost on the next.
+Our first program moves two places toward a target or one place away, using a fair coin to choose the direction.
+
+We bound the expected number of flips needed to reach the target, then ask whether related walks terminate with probability one when choices are adversarial or steps depend on parity.
+
+## Positive Drift {#positive-drift-cost}
+
+The procedure `drift_walk` starts at `init_x` and stops when `x >= init_n`.
+A fair coin flip increases `x` by two or decreases it by one.
+At zero, the downward step leaves `x` unchanged.
+
+With the [`@ert` annotation](../../proof-rules/approximations.md#calculus-annotations), each `tick 1` counts one flip.
+The `coproc` specification bounds the expected number of flips from above by `2 * ((init_n + 1) - init_x)`.
+
+<ExampleSources exampleId="two-sided-random-walks" sources={[
+  {
+    variantId: 'positive-drift', code: driftSource, downloadUrl: driftDownload,
+    title: 'Expected number of coin flips: specification and invariant',
+    start: '@ert\ncoproc drift_walk(', highlight: '1,3-4,12',
+  },
+]} />
+
+The [`@invariant` annotation](../../proof-rules/induction.md) supplies `I = 2 * ((n + 1) - x)`.
+The `n + 1` in `I` allows for a final step to overshoot the target by one.
+The expected cost including the tick is at most
+
+$$
+1+\tfrac12\cdot(I-4)+\tfrac12\cdot(I+2)=I.
+$$
+
+At exit, $I\ge0$ bounds `post 0`.
+
+## Demonic Choice {#demonic-walk-termination}
+
+The *demonically fair walk*, implemented by `demonic_walk`, starts at `init_x` and stops at zero.
+A fair coin decides whether to decrease `x` by one or make a demonic choice between increasing it by one and staying put.
+
+With `pre 1`, `post 1`, and the [`@ast` annotation](../../proof-rules/ast.md), Caesar proves almost-sure termination under every resolution of the demonic choice.
+
+<ExampleSources exampleId="two-sided-random-walks" sources={[
+  {
+    variantId: 'main', code: source, downloadUrl: download,
+    title: 'Almost-sure termination annotation',
+    start: '@wp\nproc demonic_walk(', highlight: '1,3-4,10',
+  },
+]} />
+
+The variant `x` decreases by one with probability $1/2$.
+Its expected value is at most
+
+$$
+\tfrac12\cdot(x-1)+\tfrac12\cdot(x+1)=x.
+$$
+
+Choosing to stay put gives a smaller expectation, so either demonic choice satisfies the expected-value condition.
+
+This walk also models a recursive process in which `x` counts pending calls <Citation {...references.termination} />.
+A call either returns or is replaced by one or two further calls, with the number of new calls chosen demonically.
+
+## Parity-Dependent Steps {#parity-walk-termination}
+
+The final walk uses different steps at even and odd positions.
+The procedure `parity_walk` starts at any nonnegative integer `init_x` and stops at ten.
+
+At even positions it moves down or up by two with equal probability.
+At odd positions it moves up by one without flipping a coin.
+
+Caesar again proves almost-sure termination with `pre 1`, `post 1`, and the [`@ast` annotation](../../proof-rules/ast.md).
+
+<ExampleSources exampleId="two-sided-random-walks" sources={[
+  {
+    variantId: 'parity', code: paritySource, downloadUrl: parityDownload,
+    title: 'Termination annotation using distance and parity',
+    start: '@wp\nproc parity_walk(', highlight: '1,3-4,10',
+  },
+]} />
+
+- **Odd positions:** the term `3 * ite(x % 2 != 0, 1, 0)` compensates for a step away from ten.
+  It drops by three at the next even position, so the variant decreases by at least two.
+- **Even positions:** a decrease by two has probability at least $1/2$, and the expected variant does not increase.
+
+## See Also
+
+- [One-Sided Random Walks](./one-sided-random-walks.mdx) studies walks that never move away from the target.
+- [Escaping Spline](./escaping-spline.mdx) is another two-sided walk, with upward steps and a state-dependent probability of jumping directly to zero.
+- [Rabin’s Mutual-Exclusion Algorithm](./rabin-mutual-exclusion.mdx) illustrates a probability bound whose proof leaves termination open.
+
+## References
+
+- <Citation {...references.termination} variant="full">
+  The demonically fair random walk illustrates termination under every resolution of the demonic choice.
+  </Citation>

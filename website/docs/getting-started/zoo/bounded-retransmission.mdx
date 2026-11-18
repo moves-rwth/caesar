@@ -1,0 +1,256 @@
+---
+title: Bounded Retransmission Protocol
+description: Bound message failure and failed transmissions, then examine packet-level retries and optional abstract packet-sequence proofs.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import ExecutionDiagram from '@site/src/heyvl-examples/figures/ExecutionDiagram';
+import combinedSource from '@site/../tests/case-studies/brp/combined.heyvl?raw';
+import combinedDownload from '@site/../tests/case-studies/brp/combined.heyvl?download';
+import terminationSource from '@site/../tests/case-studies/brp/termination.heyvl?raw';
+import terminationDownload from '@site/../tests/case-studies/brp/termination.heyvl?download';
+import successSource from '@site/../tests/case-studies/brp/success.heyvl?raw';
+import successDownload from '@site/../tests/case-studies/brp/success.heyvl?download';
+import failedSource from '@site/../tests/case-studies/brp/failed.heyvl?raw';
+import failedDownload from '@site/../tests/case-studies/brp/failed.heyvl?download';
+import sentSource from '@site/../tests/case-studies/brp/sent.heyvl?raw';
+import sentDownload from '@site/../tests/case-studies/brp/sent.heyvl?download';
+
+export const references = {
+  toolpaper: {
+    ...sources.caesar2026,
+    locator: "Figure 1",
+  },
+  thesis: {
+    ...sources.vanJaarsveld2025,
+    href: "https://essay.utwente.nl/fileshare/file/106318/vanJaarsveld_MA_EEMCS.pdf",
+    locator: "Chapters 4–6",
+  },
+  protocol: sources.dataLinkProtocol1994,
+  refinement: sources.successiveRefinements2001,
+  heyvl: {
+    ...sources.heyvl2023,
+    href: "https://arxiv.org/abs/2309.07781",
+    locator: "§4",
+  },
+};
+
+<ExampleMetadata exampleId="bounded-retransmission" />
+
+A sender retries a packet if no acknowledgement arrives.
+The *bounded retransmission protocol* gives each packet a limited number of transmission attempts <Citation {...references.protocol} href="https://www.cs.ru.nl/~herman/PUBS/NijmegenTypes.pdf#page=183" locator={undefined} />.
+If all attempts for one packet fail, the sender abandons the remaining packets.
+
+How likely is success, and how many attempts are made on average?
+We first bound message failure and failed attempts in a complete retry loop, then examine the probability and cost of retrying an individual packet.
+The [optional final section](#an-abstract-model-of-packet-delivery) studies packet sequences that summarize each packet attempt by one probabilistic step.
+
+## A Complete Message in One Loop {#combined-message}
+
+The following model sends `packets` packets, allowing at most `maxTries` transmission attempts per packet <Citation {...references.toolpaper} />.
+Each attempt independently succeeds with probability $0.99$.
+Success means that the packet arrives and its acknowledgement returns.
+
+### Probability of Abandoning the Message {#message-failure}
+
+For `maxTries > 0`, we bound the probability of exhausting a packet's retry limit.
+
+<ExampleSources exampleId="bounded-retransmission" sources={[{
+  variantId: 'combined', code: combinedSource, downloadUrl: combinedDownload,
+  title: 'Complete message: failure probability',
+  start: '@wp\ncoproc brp(', end: '\n@wp\ncoproc brp_failed_transmissions(',
+  highlight: '4-6,13-18,23-27',
+}]} />
+
+After each successful transmission, `sent` increases and `fail` resets to zero, giving the next packet its full retry allowance.
+The counter `totalFail` keeps failures across all packets.
+At exit, `fail == maxTries` means that the sender abandoned the message.
+The loop makes at most `packets * maxTries` transmissions, so it always terminates.
+
+One packet fails all $m=\mathtt{maxTries}$ attempts with probability $0.01^m$.
+Successfully sending all $n=\mathtt{packets}$ packets therefore has probability $(1-0.01^m)^n$.
+The `coproc` specification verifies the complementary upper bound
+
+$$
+\Pr(\mathtt{fail}=m)\le 1-\bigl(1-0.01^m\bigr)^n.
+$$
+
+For `packets == 0`, no transmission is made and the bound is zero.
+
+The invariant uses probability one when the current packet has exhausted its attempts and zero when all packets have been sent.
+While transmission continues, the factor `1 - pow(0.01, maxTries - fail)` is the current packet's success probability within its remaining attempts.
+The factor `pow(1 - pow(0.01, maxTries), (packets - sent) - 1)` covers all later packets.
+Their product gives the success probability for the whole message.
+Subtracting it from one gives the remaining failure probability.
+
+### Expected Number of Failed Attempts {#message-failed-transmissions}
+
+The next procedure bounds the expected number of failed attempts across the whole message.
+The excerpt shows its specification and invariant for the same transmission loop.
+
+<ExampleSources exampleId="bounded-retransmission" sources={[{
+  variantId: 'combined', code: combinedSource, downloadUrl: combinedDownload,
+  title: 'Complete message: count failed attempts',
+  start: '@wp\ncoproc brp_failed_transmissions(', end: '\n    while sent < packets',
+  highlight: '4-5,13-16',
+}]} />
+
+Caesar verifies
+
+$$
+\mathbb{E}[\mathtt{totalFail}]\le 0.01\cdot m\cdot n.
+$$
+
+The counter includes failed attempts before a later success.
+The bound allows all $n\cdot m$ transmission slots, although successful delivery or abandoning the message can leave some unused.
+It also applies when either input is zero.
+
+The invariant retains `totalFail` and adds an allowance of $0.01$ for each remaining transmission slot.
+The term `maxTries * (packets - sent) - fail` removes slots already consumed on the current packet.
+A failed transmission consumes one slot and increments the counter; a success can discard the unused slots of that packet.
+The expected counter increase is therefore covered by the decrease in the allowance.
+
+## Packet-Level Retry Proofs {#retrying-one-packet}
+
+The following variants isolate the retry loop for one packet, then combine these retries in a nested message loop.
+The transmission probability `p()` and retry limit `MAX()` are symbolic <Citation {...references.thesis} locator="§4.1" />.
+
+<ExecutionDiagram kind="packet-retries">
+
+Each transmission succeeds independently with probability `p()`, where $0\le\mathtt{p}()\le1$.
+The procedure `sendPacket` stops after the first success or after `MAX()` failures, with `MAX()` a nonnegative integer.
+With `MAX() == 0`, it makes no attempt and returns `success == false`.
+
+</ExecutionDiagram>
+
+### Success Probability for One Packet {#packet-success}
+
+Caesar verifies a success probability of at least `packet_success()`, defined as `1 - pow(1 - p(), MAX())`.
+
+<ExampleSources exampleId="bounded-retransmission" sources={[{variantId: "success", code: successSource, downloadUrl: successDownload, title: "Send one packet: success probability", start: "@wlp\nproc sendPacket(", end: "@wlp\nproc BRP(", highlight: "3-4,10-12"}]} />
+
+The loop makes at most `MAX()` attempts, so the [`@wlp` annotation](../../proof-rules/approximations.md#calculus-annotations) gives a bound on success probability without requiring a separate termination proof.
+The [`@invariant` annotation](../../proof-rules/induction.md) uses probability one after success and `1 - pow(1 - p(), MAX() - failed)` for success within the remaining attempts.
+With $m>0$ attempts remaining and $p=\mathtt{p}()$, its preservation follows from
+
+$$
+p+(1-p)\cdot\bigl(1-(1-p)^{m-1}\bigr)=1-(1-p)^m.
+$$
+
+If all attempts fail, the bound is zero.
+
+<span id="sending-a-sequence-with-retries" />
+
+### Success Probability for All Packets {#success-probability}
+
+The procedure `BRP` applies the retry loop to each of $N$ packets, stopping when all succeed or one uses all its attempts without success.
+Caesar verifies a probability of at least $\mathtt{packet\_success}()^N$ for successfully sending the whole sequence.
+
+<ExampleSources exampleId="bounded-retransmission" sources={[{variantId: "success", code: successSource, downloadUrl: successDownload, title: "Send all packets: nested retry annotations", start: "@wlp\nproc BRP(", highlight: "3-4,10-12,17-20"}]} />
+
+The outer invariant uses `pow(packet_success(), N - sent)` for all unsent packets and becomes zero after a packet fails.
+The inner invariant multiplies the current packet's success bound by `pow(packet_success(), (N - sent) - 1)` for all later packets.
+
+There are at most $N$ packet attempts, each with at most `MAX()` transmissions, so the loop terminates.
+For $N=0$, no packet is attempted and `success` remains true.
+
+For `p() == 0.99`, `MAX() == maxTries`, and `N == packets`, this success bound is the complement of the failure bound in the [single-loop model](#message-failure).
+
+### Expected Number of Transmission Attempts {#expected-iterations}
+
+When `p() > 0`, Caesar verifies that the expected number of transmission attempts for one packet is at most `MAX() ⊓ (1 / p())`.
+
+<ExampleSources exampleId="bounded-retransmission" sources={[{variantId: "termination", code: terminationSource, downloadUrl: terminationDownload, title: "sendPacket: expected number of transmission attempts", start: "@ert\ncoproc sendPacket(", end: "\n// Count packet attempts", highlight: "3-4,10,17"}]} />
+
+With the [`@ert` annotation](../../proof-rules/approximations.md#calculus-annotations), one `reward 1` per transmission makes the expected cost count transmission attempts.
+At most `MAX() - failed` further attempts are possible.
+Writing $p=\mathtt{p}()$, the expected number of attempts until success without a retry limit is $1/p$, since
+
+$$
+1+(1-p)\cdot\frac{1}{p}=\frac{1}{p}.
+$$
+
+The invariant bounds the remaining attempts by both quantities, and success ends the wait.
+With `MAX() == 0`, the bound is zero.
+
+### Expected Number of Failed Attempts {#transmission-counts}
+
+Caesar verifies that the expected number of unsuccessful transmission attempts, recorded by `failed`, is at most `MAX() * (1 - p())`.
+
+<ExampleSources exampleId="bounded-retransmission" sources={[{variantId: "failed", code: failedSource, downloadUrl: failedDownload, title: "sendPacket: specification and invariant for failed transmissions", start: "@wp\ncoproc sendPacket(", end: "\n// Bound the expected value of totalFailed", highlight: "3-4,10-12,17"}]} />
+
+While retrying, `(1 - p()) * (MAX() - failed)` bounds further failures by allowing every remaining transmission, even though success can stop the loop earlier.
+At exit, the invariant equals `failed`.
+
+## Optional: Abstract Packet Sequences {#an-abstract-model-of-packet-delivery}
+
+The remaining `BRP` procedures summarize each packet attempt by one `flip(s())`, without tracking individual retries <Citation {...references.thesis} locator="§§2.4, 4.1" />.
+The packet success probability satisfies $0\le\mathtt{s}()\le1$ and is not related to `p()` or `MAX()` in these files.
+
+These procedures stop after $N$ successful packet attempts or the first failure.
+Thus, they make at most $N$ packet attempts, with no attempt when $N=0$.
+
+### Expected Number of Packet Attempts {#expected-packet-attempts}
+
+When `s() < 1`, Caesar verifies that the expected number of packet attempts is at most `N ⊓ (1 / (1 - s()))`.
+
+<ExampleSources exampleId="bounded-retransmission" sources={[{variantId: "termination", code: terminationSource, downloadUrl: terminationDownload, title: "Abstract sequence: expected packet attempts", start: "@ert\ncoproc BRP(", highlight: "3-4,10,17"}]} />
+
+Here one `reward 1` counts a whole packet attempt, including an unsuccessful final attempt.
+At most `N - sent` further packets can be attempted.
+Writing $s=\mathtt{s}()$, waiting for the first failed packet attempt with no packet limit has expected cost $1/(1-s)$.
+One attempt adds one reward unit and continues with probability `s()`, so preservation uses $1+s/(1-s)=1/(1-s)$.
+Completing all packets can stop the sequence sooner.
+In particular, the bound is zero for $N=0$.
+
+### Expected Number of Sent Packets {#delivered-packets}
+
+Caesar verifies that the expected number of successfully sent packets, recorded by `sent`, is at most `N * s()`.
+
+<ExampleSources exampleId="bounded-retransmission" sources={[{variantId: "sent", code: sentSource, downloadUrl: sentDownload, title: "BRP: specification and invariant for sent packets", start: "@wp\ncoproc BRP(", highlight: "3-4,10-12,17-19"}]} />
+
+The term `s() * (N - sent)` bounds further successes by allowing all remaining packet attempts, even though the first failure stops the sequence.
+
+### Fixed Cost per Packet Attempt {#accumulated-cost}
+
+In `failed.heyvl`, each packet attempt adds the fixed nonnegative integer `f()` to `totalFailed`, including an unsuccessful attempt.
+The file does not relate `f()` to individual transmission failures.
+Caesar verifies that the expected value of this counter is at most `N * f()`.
+
+<ExampleSources exampleId="bounded-retransmission" sources={[{variantId: "failed", code: failedSource, downloadUrl: failedDownload, title: "Abstract sequence: accumulate f() per packet attempt", start: "@wp\ncoproc BRP(", highlight: "3-4,11-12,15,17,20"}]} />
+
+Every packet attempt either increments `sent` or stops the sequence, so `f() * (N - sent)` covers all remaining cost.
+
+## See Also
+
+- [Zeroconf Address Allocation](./zeroconf.mdx) bounds collision-detection probabilities after a fixed number of probes.
+- [Geometric Loop](./geometric-loop.mdx) shows how invariants bound a repeated coin-flipping process.
+
+## References
+
+- <Citation {...references.toolpaper} variant="full">
+  Presents the single-loop message model and its failure specification.
+  The complete proof in the accompanying artifact supplies the failure invariant and the generic boundedness axiom for powers used here.
+  </Citation>
+
+- <Citation {...references.thesis} variant="full">
+  Develops the two models, their bounds, and the original HeyVL proofs, available in the [companion artifact](https://doi.org/10.5281/zenodo.15408743).
+  </Citation>
+
+- <Citation {...references.protocol} variant="full">
+  Specifies the protocol and verifies it in Coq.
+  </Citation>
+
+- <Citation {...references.refinement} variant="full">
+  The [PRISM BRP case study](https://www.prismmodelchecker.org/casestudies/brp.php) provides the corresponding model with separate sender, receiver, data channel, and acknowledgment channel.
+  </Citation>
+
+- <Citation {...references.heyvl} variant="full">
+  Explains the HeyVL encodings of weakest preexpectations and weakest liberal preexpectations used by these proofs.
+  </Citation>

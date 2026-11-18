@@ -1,0 +1,100 @@
+---
+title: Morris Approximate Counting
+description: Bound the expected estimate returned by Morris's approximate counting algorithm.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleSourceExcerpt from '@site/src/heyvl-examples/ExampleSourceExcerpt';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import source from '@site/../tests/case-studies/morris-counting.heyvl?raw';
+import download from '@site/../tests/case-studies/morris-counting.heyvl?download';
+
+export const references = {
+  original: sources.morris1978,
+  analysis: {
+    ...sources.approximateCounting2022,
+    href: "https://arxiv.org/pdf/2010.02116#page=4",
+    locator: "§1.2",
+  },
+};
+
+<ExampleMetadata exampleId="morris-counting" />
+
+An exact counter increments after every event.
+*Morris counting* instead increments a counter `c` with probability $2^{-c}$ and estimates the number of events by $2^c-1$ <Citation {...references.original} />.
+As the counter grows, increments become rarer and represent larger changes to the estimate.
+
+How does a counter that often ignores an event still track the number of events in expectation?
+We verify that after `n` events, the expected estimate is at most `n`.
+
+## The Program
+
+The function `exp2(c)` represents $2^c$ using the domain axioms explained below.
+The variable `remaining` counts the events still to process.
+Each iteration processes one event and increments `c` with probability `1/exp2(c)`.
+
+<ExampleSources exampleId="morris-counting" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Morris counting and its expected-value upper bound',
+  start: '@wp coproc morris(', end: '\n\n// The estimate', highlight: '2-3,8',
+}]} />
+
+The `@wp coproc` specification bounds the expected final value of `exp2(c)` by `n + 1`.
+The loop terminates after exactly `n` iterations because `remaining` decreases from `n` to zero.
+Subtracting one gives the stated bound on the estimate:
+
+$$
+\mathbb{E}(2^c-1)\le n.
+$$
+
+The proof covers every unsigned input `n`, including zero.
+
+## Why the Invariant Works
+
+The [`@invariant`](../../proof-rules/induction.md) annotation uses `exp2(c) + remaining`.
+The first term is the current estimate plus one, and the second allows an expected increase of one for each remaining event.
+
+Suppose the current value of `exp2(c)` is $z=2^c$.
+Incrementing `c` doubles it to $2\cdot z$, while leaving `c` unchanged keeps it at $z$.
+The expected value after the event is
+
+$$
+\frac1z\cdot2\cdot z+\left(1-\frac1z\right)\cdot z=z+1.
+$$
+
+At the same time, `remaining` decreases by one, preserving the invariant in expectation.
+Initially `exp2(0) == 1`, giving `n + 1`.
+At exit, `remaining == 0`, leaving the postexpectation `exp2(c)`.
+
+## Axioms for Exponentiation
+
+The [domain declaration](../../heyvl/domains.md) supplies the equations needed to relate the state-dependent probability to the change in the estimate.
+
+<ExampleSourceExcerpt source={source} start="domain Exponentials {" end={'\n\n@wp'} title="Exponentiation axioms" />
+
+The base and recurrence equations describe powers of two on natural exponents.
+The additional axiom `exp2(c) >= 1` lets the solver establish that `1/exp2(c)` lies between zero and one.
+These axioms hold for the intended interpretation `exp2(c) = 2^c`.
+
+The verified specification establishes an upper bound on the expected estimate.
+For the algorithm's exact mean, variance, and space analysis, see the literature <Citation {...references.analysis} />.
+
+## See Also
+
+- [Reservoir Sampling](./reservoir-sampling.mdx) samples one stream position uniformly using a state-dependent replacement probability.
+- [Coupon Collector](./coupon-collector.mdx) combines user-defined functions with an invariant for the expected number of draws.
+
+## References
+
+- <Citation {...references.original} variant="full">
+  Introduces approximate counting with small registers.
+  </Citation>
+
+- <Citation {...references.analysis} variant="full">
+  Section 1.2 describes the base-two counter and its expected value and variance.
+  </Citation>

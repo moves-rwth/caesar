@@ -1,0 +1,135 @@
+---
+title: Binary Search Trees
+description: Define trees with a HeyVL domain and verify recursive lookup, minimum, maximum, and insertion.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import ExampleSourceExcerpt from '@site/src/heyvl-examples/ExampleSourceExcerpt';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import source from '@site/../tests/boolean/algorithms/binary_search_trees.heyvl?raw';
+import download from '@site/../tests/boolean/algorithms/binary_search_trees.heyvl?download';
+
+export const references = {
+  algorithms: {
+    ...sources.algorithms,
+    locator: "§3.2, “Binary Search Trees”",
+  },
+  datatypes: {
+    ...sources.programmingZ3,
+    locator: "§3.5, “Algebraic Datatypes”",
+  },
+};
+
+<ExampleMetadata exampleId="binary-search-trees" />
+
+A *binary search tree* keeps a set of values ordered for lookup, insertion, and minimum and maximum queries <Citation {...references.algorithms} locator={undefined} />.
+Here a HeyVL domain specifies the trees, and recursive procedures implement these operations.
+Do the membership, minimum, and maximum procedures return the right answers, and does insertion keep the tree ordered?
+
+Caesar verifies partial correctness under the tree axioms, using the specifications of recursive calls.
+The [`@uwlp` annotation](../../proof-rules/approximations.md#calculus-annotations) selects unbounded greatest fixed point semantics for the Boolean specifications written with `?(...)`.
+
+## Representing Trees {#representing-trees}
+
+The [`Tree` domain](../../heyvl/domains.md) declares an empty tree `nil()`, a node constructor `node`, and selectors for each node's integer value and children:
+
+<ExampleSourceExcerpt source={source} start="domain Tree {" end="    // Membership" title="Tree Constructors and Selectors" />
+
+These axioms do not say that every tree is built from finitely many nodes.
+The proofs therefore do not establish that recursion terminates for every value of type `Tree`.
+
+## Checking Membership {#checking-membership}
+
+The recursive function `contains` specifies whether a value occurs at the root or in either subtree:
+
+<ExampleSourceExcerpt source={source} start="    // Membership" end="    // Both subtrees" title="Membership Predicate" />
+
+The procedure `contains_value` checks the root, then searches the subtrees until it finds the value.
+It needs no ordering assumption on its input:
+
+<ExampleSources exampleId="binary-search-trees" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Membership specification', start: '@uwlp\nproc contains_value(', end: '\n@uwlp\nproc insert_value(', highlight: '1,3',
+}]} />
+
+Each recursive call gives the membership result for its subtree.
+Combining those results with the comparison at the root proves the caller's postcondition.
+
+## Finding the Minimum and Maximum {#finding-extrema}
+
+Both queries require a nonempty tree satisfying `is_bst`:
+
+<ExampleSourceExcerpt source={source} start="    // Both subtrees" end="    func min_value(" title="Search-tree ordering" />
+
+The predicate requires both subtrees to be ordered, with all left values below the root and all right values above it.
+
+### Minimum {#finding-the-minimum}
+
+The function `min_value` follows left children:
+
+<ExampleSourceExcerpt source={source} start="    func min_value(" end="    func max_value(" title="Minimum function" />
+
+The procedure `get_min` finds this minimum:
+
+<ExampleSources exampleId="binary-search-trees" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Minimum specification', start: '@uwlp\nproc get_min(', end: '\n@uwlp\nproc contains_value(', highlight: '1,3-9',
+}]} />
+
+If the left child is empty, the root is the minimum.
+Otherwise, the recursive call gives the minimum of the nonempty left child.
+By `is_bst`, that value is also smaller than the root and every member of the right subtree.
+
+### Maximum {#finding-the-maximum}
+
+The function `max_value` follows right children:
+
+<ExampleSourceExcerpt source={source} start="    func max_value(" end={'\n}'} title="Maximum function" />
+
+The procedure `get_max` verifies that this value is the largest member:
+
+<ExampleSources exampleId="binary-search-trees" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Maximum specification', start: '@uwlp\nproc get_max(', end: '\n@uwlp\nproc insert_example(', highlight: '1,3-9',
+}]} />
+
+The proof mirrors the minimum query, using the right child's specification and the ordering of the left subtree.
+
+## Inserting a Value {#inserting-a-value}
+
+The procedure `insert_value` adds the supplied value to a tree satisfying `is_bst`.
+Its two `post` clauses require the result to remain ordered and describe exactly which values it contains:
+
+<ExampleSources exampleId="binary-search-trees" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Insertion specification', start: '@uwlp\nproc insert_value(', end: '\n@uwlp\nproc get_max(', highlight: '1,3-6',
+}]} />
+
+The recursive call tells us which values are in the modified child and that they are ordered.
+The comparison with the root ensures that rebuilding the parent preserves `is_bst`.
+The result contains exactly the old members together with the inserted value.
+
+The complete source also includes `insert_example`, which inserts `4`, `2`, `8`, and `6`, then uses these specifications to check membership, minimum `2`, and maximum `8`.
+
+## See Also
+
+- [Left Padding](/docs/getting-started/zoo?q=Left+Padding) verifies that padding preserves the original list as a suffix.
+- [Symbolic list operations](/docs/getting-started/zoo?q=Symbolic+List+Operations) uses constructors, selectors, and recursive specifications for linked lists.
+
+## References
+
+- <Citation {...references.algorithms} variant="full">
+  Introduces binary search trees as an implementation of ordered symbol tables.
+  </Citation>
+
+- <Citation {...references.datatypes} variant="full">
+  Introduces native SMT datatypes using a binary tree and explains their constructor and finiteness properties.
+  </Citation>
+
+- [Domains](../../heyvl/domains.md) explains how to declare types, functions, and axioms in HeyVL.
+- [Boolean procedure specifications](../../heyvl/procs.md#embedding-boolean-specifications) explains the `pre ?(...)` and `post ?(...)` notation used by the tree operations.

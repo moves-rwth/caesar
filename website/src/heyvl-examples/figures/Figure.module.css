@@ -1,0 +1,122 @@
+.context {
+  container-type: inline-size;
+  margin-block: 0 1.25rem;
+}
+
+.layout {
+  display: grid;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+}
+
+.prose > :last-child {
+  margin-bottom: 0;
+}
+
+.layout svg {
+  display: block;
+  width: min(100%, var(--diagram-width));
+  height: auto;
+  overflow: visible;
+  color: var(--ifm-font-color-base);
+  font-family: KaTeX_Main, serif;
+  font-size: 24px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+.edge,
+.arrow {
+  fill: none;
+  stroke: var(--ifm-color-emphasis-700);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.state {
+  fill: var(--ifm-background-color);
+  stroke: var(--ifm-color-emphasis-700);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.layout text {
+  fill: currentColor;
+}
+
+.probability {
+  font-size: 0.95em;
+}
+
+.layout .note {
+  font-size: 21px;
+  fill: var(--ifm-color-content-secondary);
+}
+
+.layout .plot {
+  font-size: 16px;
+}
+
+.plotAxis {
+  fill: none;
+  stroke: var(--ifm-color-emphasis-600);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.plotCurve {
+  fill: none;
+  stroke: var(--ifm-color-primary);
+  stroke-width: 1.7;
+  vector-effect: non-scaling-stroke;
+}
+
+.plotPoint {
+  fill: var(--ifm-color-primary);
+}
+
+.plotThreshold {
+  stroke: var(--ifm-color-danger-dark);
+  stroke-dasharray: 4 4;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.plot .plotBound {
+  fill: var(--ifm-color-danger-dark);
+  text-anchor: start;
+}
+
+.jumpInterval {
+  fill: var(--ifm-color-primary);
+  fill-opacity: 0.22;
+}
+
+.jumpThreshold {
+  stroke: currentColor;
+  stroke-dasharray: 3 2;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.retryBaseline {
+  fill: none;
+  stroke: var(--ifm-color-content-secondary);
+  stroke-dasharray: 4 3;
+  stroke-width: 1.7;
+  vector-effect: non-scaling-stroke;
+}
+
+@container (min-width: 21rem) {
+  .portrait {
+    grid-template-columns: minmax(0, 1fr) var(--diagram-width);
+    align-items: start;
+    column-gap: 0.75rem;
+  }
+}
+
+@container (min-width: 36rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) var(--diagram-width);
+  }
+}

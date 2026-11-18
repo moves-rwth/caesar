@@ -1,0 +1,129 @@
+---
+title: Reservoir Sampling
+description: Prove that Algorithm R samples each stream position with equal probability.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleSourceExcerpt from '@site/src/heyvl-examples/ExampleSourceExcerpt';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import source from '@site/../tests/case-studies/reservoir-sampling.heyvl?raw';
+import download from '@site/../tests/case-studies/reservoir-sampling.heyvl?download';
+
+export const references = {
+  algorithm: {
+    ...sources.reservoirSampling1985,
+    locator: "§2",
+  },
+};
+
+<ExampleMetadata exampleId="reservoir-sampling" />
+
+This example uses *reservoir sampling* to choose a uniformly random item from a stream while keeping only one candidate.
+For a reservoir of size one, *Algorithm R* selects the first item and replaces the current sample with each later item at position $i$ with probability $1/i$ <Citation {...references.algorithm} locator={undefined} />.
+The replacement probability uses only the current position, so the algorithm need not know the final stream length in advance.
+
+We represent a nonempty stream by its positions `1` through `n` and verify that each position `x` is the final sample with probability exactly $1/n$.
+Caesar proves an upper probability bound and a matching lower bound using a loop invariant.
+A separate termination proof lets us combine these bounds into an equality.
+
+## The Program
+
+The variable `c` holds the selected position, with zero marking the initial state before any item is processed.
+The variable `i` is the next position to process.
+Each iteration selects that position with probability `1/i`, then advances `i`.
+The parameter `x` identifies the position whose final selection probability we want to verify.
+It appears only in the specification and invariant, so sampling does not depend on `x`.
+
+<ExampleSources exampleId="reservoir-sampling" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Algorithm R and its upper probability bound',
+  start: '@wp coproc algorithm_r(', end: '\n\n@wlp', highlight: '2-4,9',
+}]} />
+
+The postexpectation `[c == x]` is one when the final sample is `x` and zero otherwise.
+Its expected value is therefore the probability of returning `x`.
+The `@wp coproc` specification bounds this probability from above by `1/n` for every valid position $1\le x\le n$.
+The first `pre` clause expresses this restriction, which also ensures that the stream is nonempty.
+
+## Why the Invariant Works
+
+At each loop head, the [`@invariant`](../../proof-rules/induction.md) annotation bounds the probability of eventually returning `x` from the current state.
+Its `ite` expression distinguishes whether position `x` is still to come or has already been processed:
+
+$$
+I(i,c)=
+\begin{cases}
+  1/n & \text{if } i\le x,\\
+  \dfrac{i-1}{n}\cdot[c=x] & \text{if } i>x.
+\end{cases}
+$$
+
+If `i > x`, position `x` has already been processed.
+When `c != x`, it cannot be selected again, so its final selection probability is zero.
+When `c == x`, it remains the final sample precisely when no later item replaces it.
+At each remaining position $j$, the probability of keeping it is $1-1/j$.
+The probability of surviving all positions from `i` through `n` is
+
+$$
+\prod_{j=i}^{n}\left(1-\frac1j\right)=\frac{i-1}{n}.
+$$
+
+This gives the second case, `((i - 1)/n) * [c == x]`.
+At loop exit, `i == n + 1` and there are no remaining positions, so the product is one and this expression equals the postexpectation `[c == x]`.
+
+If `i <= x`, position `x` has yet to be processed.
+It will be selected at iteration `x` with probability $1/x$, then survive the later replacements with probability $x/n$.
+Their product is $(1/x)\cdot(x/n)=1/n$, giving the first case.
+Iterations before `x` cannot affect this probability because they only choose among earlier positions.
+Initially `i == 1`, so this case gives the required upper bound `1/n`.
+
+The additional condition `1 <= i && i <= n + 1 && c < i` records the valid index range and ensures that `c` is either zero or an earlier position.
+Outside these states, `!?(...)` makes the upper invariant infinite, so it imposes no bound there.
+
+## The Matching Lower Bound
+
+To prove that `x` is selected with probability at least `1/n`, we reuse the same `ite` expression in a `proc` under [`@wlp`](../../heyvl/procs.md#calculus-annotations).
+The invariant uses `?(...) ⊓` to give value zero outside the valid index range, as required for a lower bound.
+
+<ExampleSourceExcerpt source={source} start="@wlp proc algorithm_r_lower(" end={'\n    while i <= n'} title="Lower probability bound under wlp" highlight="2-4,9" />
+
+Under `wlp`, nontermination contributes one to the expected value.
+This specification therefore proves that the probability of returning `x` or not terminating is at least $1/n$.
+We still need to rule out nontermination to obtain the claimed lower bound on returning `x`.
+
+## Termination and Uniformity
+
+The loop processes exactly `n` positions: `i` starts at one and increases by one on every iteration, regardless of the random choice.
+The following specification verifies termination with probability one.
+
+<ExampleSourceExcerpt source={source} start="@wp proc algorithm_r_terminates(" end={'\n    while i <= n'} title="Almost-sure termination" highlight="2-3,8" />
+
+The [`@ast`](../../proof-rules/ast.md) annotation uses `(n + 1) - i`, the number of remaining items, as its variant.
+It is positive while the guard holds and decreases by one with probability one on every iteration.
+Since the program terminates almost surely, `wp` and `wlp` agree.
+The verified bounds therefore give
+
+$$
+\Pr(c=x)\le\frac1n
+\quad\text{and}\quad
+\Pr(c=x)\ge\frac1n,
+$$
+
+so every stream position is selected with probability exactly $1/n$.
+
+## See Also
+
+- [Morris Counting](./morris-counting.mdx) estimates the number of stream events using a randomized counter.
+- [Geometric Loop](./geometric-loop.mdx) combines matching upper and lower bounds on an expected value.
+
+## References
+
+- <Citation {...references.algorithm} variant="full">
+  Section 2 describes Algorithm R for a reservoir of arbitrary size.
+  This example uses a reservoir containing one item.
+  </Citation>

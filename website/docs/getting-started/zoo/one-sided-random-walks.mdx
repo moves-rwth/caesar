@@ -1,0 +1,156 @@
+---
+title: One-Sided Random Walks
+description: Termination and expected numbers of coin flips for walks that move toward a target or stay put.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import pastSource from '@site/../tests/loop-rules/past2013/annotated.heyvl?raw';
+import pastDownload from '@site/../tests/loop-rules/past2013/annotated.heyvl?download';
+import astSource from '@site/../tests/loop-rules/ast2018/negative_binomial.heyvl?raw';
+import astDownload from '@site/../tests/loop-rules/ast2018/negative_binomial.heyvl?download';
+import costSource from '@site/../tests/loop-rules/induction/sprdwalk.heyvl?raw';
+import costDownload from '@site/../tests/loop-rules/induction/sprdwalk.heyvl?download';
+import twoStepSource from '@site/../tests/loop-rules/induction/linear01.heyvl?raw';
+import twoStepDownload from '@site/../tests/loop-rules/induction/linear01.heyvl?download';
+import ExecutionDiagram from '@site/src/heyvl-examples/figures/ExecutionDiagram';
+
+export const references = {
+  termination: {
+    ...sources.almostSureTermination2018,
+    href: "https://arxiv.org/pdf/1711.03588#page=12",
+    locator: "§5.1",
+  },
+  heyvl: {
+    ...sources.heyvl2023,
+    href: "https://arxiv.org/pdf/2309.07781#page=26",
+    locator: "Table 2",
+  },
+};
+
+<ExampleMetadata exampleId="one-sided-random-walks" />
+
+Obtaining several successes from repeated independent trials may take arbitrarily many attempts.
+Our countdown models this with a fair coin: a counter records how many heads are still needed, decreasing on heads and staying unchanged on tails <Citation {...references.termination} locator={undefined} />.
+
+Does the countdown reach zero with probability one, and is the expected number of flips finite?
+We prove both properties, then derive numerical bounds for two related walks.
+
+## Countdown with Pauses {#countdown-termination}
+
+<ExecutionDiagram kind="countdown">
+
+The procedure `countdown` starts at the nonnegative integer `init_x` and stops at zero, when all required heads have occurred.
+Each iteration makes one coin flip.
+
+</ExecutionDiagram>
+
+### Almost-Sure Termination {#countdown-ast}
+
+With `pre 1`, `post 1`, and the [`@ast` annotation](../../proof-rules/ast.md), Caesar proves that the countdown reaches zero with probability one.
+The [`@wp` annotation](../../proof-rules/approximations.md#calculus-annotations) selects the calculus in which `post 1` measures the termination probability.
+
+<ExampleSources exampleId="one-sided-random-walks" sources={[
+  {
+    variantId: 'ast', code: astSource, downloadUrl: astDownload,
+    title: 'Almost-sure termination annotation',
+    start: '@wp\nproc countdown(', highlight: '1,3-4,10',
+  },
+]} />
+
+The variant is `x`.
+For $x>0$, one iteration decreases it by one with probability $1/2$, and its expected value is
+
+$$
+\tfrac12\cdot(x-1)+\tfrac12\cdot x=x-\tfrac12\le x.
+$$
+
+These establish the progress and expected-value conditions of the almost-sure termination rule.
+
+### Positive Almost-Sure Termination {#past-finite-expected-number-of-coin-flips}
+
+The countdown charges `reward 1` per flip, and Caesar verifies that the expected number of flips is at most `3 * init_x + 1`.
+The [`@past` annotation](../../proof-rules/past.md) proves positive almost-sure termination and supplies this upper bound for the `@ert coproc`.
+
+<ExampleSources exampleId="one-sided-random-walks" sources={[
+  {
+    variantId: 'past', code: pastSource, downloadUrl: pastDownload,
+    title: 'Positive almost-sure termination and an upper bound on flips',
+    start: '@ert\ncoproc countdown(', end: '\n        var step: Bool', highlight: '1,3-4,9,11',
+  },
+]} />
+
+On heads, the ranking superinvariant `3 * x + 1` drops by $3$.
+After charging for the flip, its expected decrease is $\tfrac12\cdot 3 - 1 = \tfrac12$.
+It is above the threshold $K=1$ while the loop is active and equals $K$ at exit.
+
+## Expected Number of Coin Flips to Reach a Target {#forward-walk-cost}
+
+We now count up to a target instead of counting down to zero.
+The procedure `forward_walk` starts at `init_x` and stops when `x >= init_n`.
+Each fair coin flip either increases `x` by one or leaves it unchanged.
+
+With the [`@ert` annotation](../../proof-rules/approximations.md#calculus-annotations), each `tick 1` counts one flip.
+The `coproc` specification bounds the expected number of flips by `2 * (init_n - init_x)`.
+Subtraction on `UInt` stops at zero, so the bound is zero if the target has already been reached.
+
+<ExampleSources exampleId="one-sided-random-walks" sources={[
+  {
+    variantId: 'expected-cost', code: costSource, downloadUrl: costDownload,
+    title: 'Expected number of coin flips: specification and invariant',
+    start: '@ert\ncoproc forward_walk(', highlight: '1,3-4,9',
+  },
+]} />
+
+The [`@invariant` annotation](../../proof-rules/induction.md) supplies `I = 2 * (n - x)` as a bound on the expected number of coin flips still needed.
+Its expected decrease covers the current `tick 1`:
+
+$$
+1+\tfrac12\cdot(I-2)+\tfrac12\cdot I=I.
+$$
+
+At exit the invariant is zero, matching `post 0`.
+
+## Expected Number of Coin Flips with Steps of One or Two {#two-step-countdown-cost}
+
+The final countdown has no pauses: a biased coin flip decreases `x` by one with probability $1/3$ and by two with probability $2/3$.
+It stops when `x` is zero or one, and each flip still counts as one tick.
+
+The `coproc` specification bounds the expected number of flips by $0.6\cdot\mathtt{init\_x}$.
+
+<ExampleSources exampleId="one-sided-random-walks" sources={[
+  {
+    variantId: 'two-step', code: twoStepSource, downloadUrl: twoStepDownload,
+    title: 'Expected number of coin flips: specification and invariant',
+    start: '@ert\ncoproc countdown(', highlight: '1,3-4,10',
+  },
+]} />
+
+The `@invariant` annotation supplies $I(x)=0.6\cdot x$, which covers the tick because
+
+$$
+1+\tfrac13\cdot I(x-1)+\tfrac23\cdot I(x-2)=I(x)
+\qquad(x\ge2).
+$$
+
+At exit, $I(x)\ge0$ bounds `post 0`.
+
+## See Also
+
+- [Geometric Loop](./geometric-loop.mdx) is the countdown with pauses when one head is required, counting tails before that head rather than all coin flips.
+- [Two-Sided Random Walks](./two-sided-random-walks.mdx) includes steps away from the target and adversarial choices.
+
+## References
+
+- <Citation {...references.termination} variant="full">
+  The negative-binomial loop is the countdown with pauses verified using the `@ast` annotation.
+  </Citation>
+
+- <Citation {...references.heyvl} variant="full">
+  The benchmark `linear01` is the countdown with steps of one or two.
+  </Citation>

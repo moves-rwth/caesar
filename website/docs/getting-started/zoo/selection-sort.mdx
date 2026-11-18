@@ -1,0 +1,72 @@
+---
+title: Selection Sort
+description: Verify sortedness and preservation of length using Boolean loop invariants.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import source from '@site/../tests/boolean/algorithms/selection_sort.heyvl?raw';
+import download from '@site/../tests/boolean/algorithms/selection_sort.heyvl?download';
+
+<ExampleMetadata exampleId="selection-sort" />
+
+Selection sort repeatedly finds the smallest remaining element and swaps it into the next position.
+Starting with `[3, 2, 5, 1, 4]`, the first pass produces `[1, 2, 5, 3, 4]`, then leaves the first position fixed while sorting the remaining suffix.
+How can loop invariants connect these local choices to a nondecreasing output of the same length?
+
+The example uses [Boolean specifications](../../heyvl/procs.md#embedding-boolean-specifications) and the [`@invariant` annotation](../../proof-rules/induction.md) for both the minimum search and the sorting loop.
+The verified specification establishes sortedness and preservation of length on termination.
+It does not establish that the output is a permutation of the input or prove termination.
+
+## Finding the Minimum
+
+The helper `min_index_from` searches the suffix beginning at `start` in an integer list `input`.
+The list operations `len` and `select` give its length and read an element.
+
+<ExampleSources exampleId="selection-sort" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Minimum Search: Specification and Invariant',
+  start: 'proc min_index_from(', end: '\nproc selection_sort(', highlight: '2-8,13-20',
+}]} />
+
+The precondition requires a nonempty suffix.
+The postcondition places `index` within that suffix and requires its value to be no greater than every other suffix element.
+This specification lets the sorting procedure use the helper's result without repeating the search proof.
+
+During the search, `j` marks the end of the scanned range.
+The quantified invariant says that `select(input, index)` is no greater than every element between `start` and `j`, excluding `j`.
+The bounds on `index` keep it within the suffix, while `start <= j` and `j <= len(input)` keep the scanned range valid.
+If the element at `j` is smaller, the branch makes it the new candidate before extending the scanned range.
+At exit, `j == len(input)`, so the quantified condition covers the entire suffix.
+
+## Extending the Sorted Prefix
+
+The sorting loop keeps the positions before `i` fixed and selects the next minimum from the suffix beginning at `i`.
+The two `store` assignments exchange that minimum with the element currently at `i`.
+
+<ExampleSources exampleId="selection-sort" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Selection Sort: Specification and Invariant',
+  start: 'proc selection_sort(', end: '\nproc selection_sort_example(', highlight: '2-6,11-18,20-25',
+}]} />
+
+The first quantified condition says that the prefix before `i` is nondecreasing.
+The second connects that prefix to the unfinished suffix: every prefix element is no greater than every suffix element.
+Sortedness of the prefix alone would not justify appending another element, since that element might be smaller than the prefix's last value.
+
+The helper's specification gives the minimum of the suffix.
+The second invariant condition puts that minimum above every existing prefix element, and the helper puts it below every remaining suffix element.
+Swapping it into position `i` therefore extends the sorted prefix while preserving both conditions.
+The `store` operations preserve the list's length.
+
+At exit, `i == len(sorted)`, so the sorted-prefix condition covers the whole output.
+Together with `len(input) == len(sorted)`, it gives the stated postcondition.
+The complete source also checks these properties for the five-element input used in the opening example.
+
+## See Also
+
+- [Binary Search Trees](./binary-search-trees.mdx) verifies ordered data structures using recursive specifications.
+- [Loop Invariants](../../proof-rules/induction.md) explains the proof rule behind the annotations.

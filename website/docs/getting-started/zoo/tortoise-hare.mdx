@@ -1,0 +1,122 @@
+---
+title: Continuous Tortoise–Hare Race
+description: Bound the expected final round count of a race with continuous random moves using upper Riemann sums.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleSourceExcerpt from '@site/src/heyvl-examples/ExampleSourceExcerpt';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import Citation from '@site/src/components/Citation';
+import TortoiseHareJump from '@site/src/heyvl-examples/figures/TortoiseHareJump';
+import {references as sources} from '@site/src/data/references';
+import source from '@site/../tests/case-studies/tortoise-hare.heyvl?raw';
+import download from '@site/../tests/case-studies/tortoise-hare.heyvl?download';
+
+export const references = {
+  continuous: {
+    ...sources.continuous2025,
+    href: "https://arxiv.org/html/2502.19388v1#S9.SS2.SSS3",
+    locator: "§§9.2.3–9.3 and Appendix C.24",
+  },
+};
+
+<ExampleMetadata exampleId="tortoise-hare" />
+
+A tortoise advances one unit per round, while a hare flips a fair coin to decide whether to move.
+When the hare moves, its jump is sampled uniformly from the continuous interval $[0,10]$.
+The race ends when the hare is ahead after both have moved <Citation {...references.continuous} locator={undefined} />.
+We want an upper bound on the expected final round count.
+
+:::warning Reusing this encoding
+
+Caesar checks the encoding, whose soundness relies on the [conditions below](#soundness-conditions).
+Check these conditions when adapting the encoding to another continuous program.
+
+:::
+
+## The Program {#the-program-and-its-specification}
+
+The program starts at positions `init_h` and `init_t`, counts completed rounds in `count`, and approximates the hare's continuous jumps using eight intervals.
+
+<ExampleSources exampleId="tortoise-hare" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Race with an upper approximation of continuous sampling',
+  start: '@wp', highlight: '3-4,11,19-21,23-24',
+}]} />
+
+For `init_h <= init_t`, the `pre` clause bounds the expected final `count` by `3.38 * ((init_t - init_h) + 2)`.
+If the hare starts ahead, the loop is skipped and the count is zero.
+Under [`@wp`](../../proof-rules/approximations.md#calculus-annotations), nonterminating runs contribute zero, so this bound does not prove termination.
+
+## Continuous Sampling {#approximating-the-continuous-move}
+
+<TortoiseHareJump>
+
+Suppose the hare starts a round at 0 and the tortoise moves from 2 to 3.
+The hare must jump more than 3 units to end the race.
+The highlighted interval $[2.5,3.75]$ contains jumps that lead to both outcomes.
+
+</TortoiseHareJump>
+
+The hare's jump is ten times a draw from $[0,1]$.
+The encoding divides that interval into eight equal parts.
+
+<ExampleSourceExcerpt source={source.replace(/^ {12}/gm, '')} start="var inc: UReal" end={'\n        } else {}'} title="Upper Riemann approximation of the hare's jump" />
+
+The [`unif(0, 7)`](../../stdlib/distributions.md#uniform) draw chooses each interval with probability $1/8$.
+Then [`cohavoc`](../../heyvl/statements.md#havoc) and [`coassume`](../../heyvl/statements.md#assumptions) take the supremum over all values in the selected interval.
+For a measurable expectation $f$, this gives the upper sum
+
+$$
+\int_0^1 f(u)\,du
+\le \frac18\cdot\sum_{j=0}^{7}
+\sup_{u\in[j/8,(j+1)/8]} f(u).
+$$
+
+The supremum accounts for every possible move within an interval, including jumps that change whether the race continues.
+
+## Soundness Conditions {#soundness-conditions}
+
+The paper's source programs use the following constructs, expressed here in HeyVL notation <Citation {...references.continuous} href="https://arxiv.org/html/2502.19388v1#S4.SS1" locator="Definition 4.1" />:
+
+- Assignments to `UReal` variables, sequential composition, `if`, and `while`.
+- Probabilistic choice, written as `flip(p)` followed by `if`, with fixed rational $p\in[0,1]$.
+- Continuous uniform draws from $[0,1]$ using the encoding above, and hard observations written as `assert ?(b)`.
+
+Assignments, guards, and postexpectations must be measurable.
+The race meets this requirement through polynomial arithmetic and comparisons, with postexpectation `count`.
+
+## Verification {#bounding-the-remaining-rounds}
+
+Let $I$ denote the expectation in the [`@invariant` annotation](../../proof-rules/induction.md).
+While `h <= t`, its term `3.38 * ((t - h) + 2)` bounds the expected rounds still to come, in addition to those already counted.
+
+Let $C$ be the original continuous loop and $B$ its body after the sampling encoding above.
+Caesar checks the following inequality whenever `h <= t`:
+
+$$
+\operatorname{vp}\llbracket B\rrbracket(I)\le I.
+$$
+
+At loop exit, $I=\mathtt{count}$, giving the required postexpectation.
+The factor `3.38` satisfies these checks with eight intervals <Citation {...references.continuous} href="https://arxiv.org/html/2502.19388v1#S9.T2" locator="Table 2" />.
+
+The paper's upper-bound theorem <Citation {...references.continuous} href="https://arxiv.org/html/2502.19388v1#S6" locator="Theorem 6.2(1)" /> then gives
+
+$$
+\operatorname{wp}\llbracket C\rrbracket(\mathtt{count})\le I.
+$$
+
+## See Also
+
+- [Two-Sided Random Walks](./two-sided-random-walks.mdx) bounds round counts for a walk with discrete steps.
+- [The continuous-programs article](/blog/2025/04/11/foundations-continuous) introduces the general encoding and further case studies.
+
+## References
+
+- <Citation {...references.continuous} variant="full">
+  Develops sound Riemann approximations and gives the race's analysis, bound, and HeyVL encoding.
+  </Citation>

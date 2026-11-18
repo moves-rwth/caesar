@@ -6,6 +6,8 @@
     "docusaurus": "docusaurus",
     "start": "node scripts/start.mjs",
     "build": "docusaurus build",
+    "test:examples": "node --test src/heyvl-examples/exampleFilters.test.mjs",
+    "check:examples": "node scripts/check-examples.mjs",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",

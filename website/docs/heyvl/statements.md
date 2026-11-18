@@ -246,6 +246,8 @@ Rewards accumulate along an execution.
 With `post 0`, `reward 2; reward 3` has total reward $5$.
 A nonzero `post` adds a final reward.
 
+The [Retry Latency and Higher Moments example](../getting-started/zoo/retry-moments.mdx) models elapsed time with rewards and transforms them to bound the expected squared time.
+
 ### Weights {#weigh}
 
 <div className={styles.syntax}>

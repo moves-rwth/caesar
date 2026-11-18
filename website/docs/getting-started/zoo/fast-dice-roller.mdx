@@ -1,0 +1,474 @@
+---
+title: Fast Dice Roller
+description: Compare rejection sampling and Fast Dice Roller, then prove uniformity from fair bits for every positive range size.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+toc_max_heading_level: 4
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import FastDiceRollerPrefix from '@site/src/heyvl-examples/figures/FastDiceRollerPrefix';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import slowSource from '@site/../tests/case-studies/slow-dice-roller.heyvl?raw';
+import slowDownload from '@site/../tests/case-studies/slow-dice-roller.heyvl?download';
+import bitsSource from '@site/../tests/case-studies/power-of-two-sampling.heyvl?raw';
+import bitsDownload from '@site/../tests/case-studies/power-of-two-sampling.heyvl?download';
+import source from '@site/../tests/case-studies/fast-dice-roller.heyvl?raw';
+import download from '@site/../tests/case-studies/fast-dice-roller.heyvl?download';
+
+export const references = {
+  algorithm: {...sources.fastDiceRoller2013, href: 'https://arxiv.org/html/1304.1916#S1', locator: '§1'},
+  termination: sources.almostSureTermination2018,
+};
+
+<ExampleMetadata exampleId="fast-dice-roller" />
+
+Given a positive natural number `n`, we want to use fair coin flips to return each integer from `0` through `n - 1` with probability $1/n$.
+We develop and verify three samplers:
+
+1. [Binary sampling](#sampling-from-a-power-of-two-range) builds an integer from a fixed number of bits.
+2. [Slow Dice Roller](#slow-dice-roller) rejects out-of-range results and starts over.
+3. [Fast Dice Roller](#fast-dice-roller) reuses the randomness in rejected results <Citation {...references.algorithm} />.
+
+## Sampling from a Power-of-Two Range
+
+### Program
+
+Three fair coin flips give eight equally likely bit strings, `000` through `111`, representing the integers zero through seven.
+
+Let $m\in\mathbb N$ be the number of coin flips.
+Starting from `result = 0`, each flip doubles `result` and adds the new bit.
+The counter `left` records the remaining flips.
+
+```heyvl title="Binary sampling without proof annotations"
+proc sample_bits(m: UInt) -> (result: UInt)
+{
+    result = 0
+    var left: UInt = m
+    while left > 0 {
+        var bit: Bool = flip(1/2)
+        result = 2 * result + ite(bit, 1, 0)
+        left = left - 1
+    }
+}
+```
+
+### Verification
+
+Fix $k\in\mathbb N$ such that $k<2^m$, and let $C$ be `sample_bits(m)`.
+We prove $\Pr(C\text{ returns }k)=1/2^m$.
+
+#### Upper Bound
+
+The `@wp coproc` specification checks $\operatorname{wp}\llbracket C\rrbracket([\mathtt{result}=k])\le1/2^m$.
+The example's helper function `pow2(m)` represents $2^m$.
+
+<ExampleSources exampleId="fast-dice-roller" sources={[{
+  variantId: 'power-of-two', code: bitsSource, downloadUrl: bitsDownload,
+  title: 'Binary sampler: upper probability bound',
+  start: '@wp\ncoproc uniform_bits_upper(', end: '\n    while left > 0', highlight: '3-5,10-13',
+}]} />
+
+The remaining `left` bits give $2^{\mathtt{left}}$ equally likely completions of `result`, yielding the invariant
+
+$$
+I(\mathtt{result},\mathtt{left})=[\mathtt{result}\cdot2^{\mathtt{left}}\le k<(\mathtt{result}+1)\cdot2^{\mathtt{left}}]
+\cdot\frac1{2^{\mathtt{left}}}.
+$$
+
+For $\mathtt{left}>0$, the loop body $B$ selects one of the interval's two halves:
+
+$$
+\begin{aligned}
+&\operatorname{wp}\llbracket B\rrbracket(I)\\
+={}&\tfrac12\cdot I(2\cdot\mathtt{result},\mathtt{left}-1)\\
+&+\tfrac12\cdot I(2\cdot\mathtt{result}+1,\mathtt{left}-1)\\
+={}&I(\mathtt{result},\mathtt{left})
+&&\text{(the halves partition the interval)}.
+\end{aligned}
+$$
+
+The initial and final values are
+
+$$
+I(0,m)=\frac1{2^m},
+\qquad
+I(\mathtt{result},0)=[\mathtt{result}=k].
+$$
+
+[Park induction](../../proof-rules/induction.md) therefore gives the specified upper bound.
+
+#### Lower Bound
+
+Since $B$ terminates, $\operatorname{wlp}\llbracket B\rrbracket(I)=I$ for $\mathtt{left}>0$.
+Park coinduction gives $\operatorname{wlp}\llbracket C\rrbracket([\mathtt{result}=k])\ge1/2^m$.
+
+<ExampleSources exampleId="fast-dice-roller" sources={[{
+  variantId: 'power-of-two', code: bitsSource, downloadUrl: bitsDownload,
+  title: 'Binary sampler: lower probability bound',
+  start: '@wlp\nproc uniform_bits_lower(', end: '\n{', highlight: '3-5',
+}]} />
+
+#### Termination
+
+The counter `left` decreases from $m$ to zero, so the loop terminates after exactly $m$ iterations.
+The [`@ast`](../../proof-rules/ast.md) annotation checks $\operatorname{wp}\llbracket C\rrbracket(1)=1$ using $\mathtt{left}$ as its variant:
+
+<ExampleSources exampleId="fast-dice-roller" sources={[{
+  variantId: 'power-of-two', code: bitsSource, downloadUrl: bitsDownload,
+  title: 'Binary sampler: termination',
+  start: '@wp\nproc uniform_bits_terminates(', end: '\n    while left > 0', highlight: '3-4,9',
+}]} />
+
+#### Exact Probability
+
+Termination gives the equality in
+
+$$
+\frac1{2^m}
+\le\operatorname{wlp}\llbracket C\rrbracket([\mathtt{result}=k])
+=\operatorname{wp}\llbracket C\rrbracket([\mathtt{result}=k])
+\le\frac1{2^m}.
+$$
+
+## Slow Dice Roller
+
+### Program
+
+To sample from zero through five, draw a three-bit number and accept it if it is below six.
+On six or seven, discard the attempt and start over.
+This *rejection sampling* extends the binary sampler to any positive range size `n`.
+
+The program first computes `width`, the smallest power of two at least `n`, and `bits`, the number of flips needed to sample that range.
+Each attempt resets `result` to zero, samples `bits` fair bits, and accepts if `result < n`.
+
+```heyvl title="Slow Dice Roller without proof annotations"
+proc slow_dice_roller(n: UInt) -> (result: UInt)
+{
+    var width: UInt = 1
+    var bits: UInt = 0
+    while width < n {
+        width = 2 * width
+        bits = bits + 1
+    }
+
+    result = 0
+    var done: Bool = false
+    while !done {
+        result = 0
+        var left: UInt = bits
+        while left > 0 {
+            var bit: Bool = flip(1/2)
+            result = 2 * result + ite(bit, 1, 0)
+            left = left - 1
+        }
+        if result < n {
+            done = true
+        } else {}
+    }
+}
+```
+
+### Verification
+
+Fix $k\in\mathbb N$ with $k<n$, and let $C$ be the initialized sampler.
+The preparation loop gives $\mathtt{width}=2^{\mathtt{bits}}\ge n$, so the binary sampler draws each candidate with probability $1/\mathtt{width}$.
+We prove that $\operatorname{wp}\llbracket C\rrbracket([\mathtt{result}=k])=1/n$.
+
+#### Upper Bound
+
+The outer loop has invariant
+
+$$
+I=\begin{cases}
+1/n,&\neg\mathtt{done},\\
+[\mathtt{result}=k],&\mathtt{done}.
+\end{cases}
+$$
+
+For its body $A$, with `done = false`, binary sampling gives
+
+$$
+\begin{aligned}
+\operatorname{wp}\llbracket A\rrbracket(I)
+&=\frac1{\mathtt{width}}
++\left(1-\frac n{\mathtt{width}}\right)\cdot\frac1n\\
+&=\frac1n.
+\end{aligned}
+$$
+
+[Park induction](../../proof-rules/induction.md) therefore gives $\operatorname{wp}\llbracket C\rrbracket([\mathtt{result}=k])\le1/n$.
+
+<ExampleSources exampleId="fast-dice-roller" sources={[{
+  variantId: 'slow', code: slowSource, downloadUrl: slowDownload,
+  title: 'Slow Dice Roller: upper probability bound',
+  start: '@wp\ncoproc slow_probability_upper(', end: '\n    while !done', highlight: '3-5',
+}]} />
+
+#### Lower Bound
+
+Since $A$ terminates after `bits` flips, the same invariant gives $\operatorname{wlp}\llbracket C\rrbracket([\mathtt{result}=k])\ge1/n$ by Park coinduction.
+
+<ExampleSources exampleId="fast-dice-roller" sources={[{
+  variantId: 'slow', code: slowSource, downloadUrl: slowDownload,
+  title: 'Slow Dice Roller: matching lower bound',
+  start: '@wlp\nproc slow_probability_lower(', end: '\n{', highlight: '3-5',
+}]} />
+
+#### Termination
+
+Preparation terminates because `width` starts at one and doubles until it reaches `n`.
+Let $T$ be the total number of coin flips.
+Caesar checks $\mathbb E[T]\le2\cdot n$ by counting each flip with `reward 1`:
+
+<ExampleSources exampleId="fast-dice-roller" sources={[{
+  variantId: 'slow', code: slowSource, downloadUrl: slowDownload,
+  title: 'Slow Dice Roller: finite expected number of flips',
+  start: '@wp\ncoproc slow_expected_bits_all_inputs(', end: '\n{', highlight: '3-5',
+}]} />
+
+For $n\ge2$, every attempt uses at least one flip, so nontermination implies $T=\infty$.
+The finite expectation gives $\Pr(C\text{ diverges})\le\Pr(T=\infty)=0$.
+For $n=1$, it returns immediately.
+
+#### Exact Probability
+
+Almost-sure termination gives the equality in
+
+$$
+\frac1n
+\le\operatorname{wlp}\llbracket C\rrbracket([\mathtt{result}=k])
+=\operatorname{wp}\llbracket C\rrbracket([\mathtt{result}=k])
+\le\frac1n.
+$$
+
+## Fast Dice Roller
+
+### Program
+
+Suppose we want one of five outcomes, `0` through `4`.
+Three fair flips produce the eight candidates `0` through `7` with equal probability.
+[Slow Dice Roller](#slow-dice-roller) accepts `0` through `4` and starts over on `5`, `6`, or `7`.
+
+Fast Dice Roller subtracts `5` from a rejected value, leaving one of `0`, `1`, or `2`.
+Conditional on rejection, those three values are equally likely, so the sampler can keep the value it already has and build on that smaller range <Citation {...references.algorithm} />.
+One fresh bit doubles the range from three values to six, enough to try accepting again.
+
+In the program, `v` is the size of the current range and `c` is the value held by this run, with $0\le c<v$.
+Each flip doubles `v` and changes `c` to twice its old value plus the new bit.
+When the doubled range has at least `n` values, the sampler returns if `c < n` and otherwise subtracts `n` from both `v` and `c`.
+For `n = 1`, it returns zero without flipping a coin.
+
+```heyvl title="Unannotated HeyVL program"
+proc fdr(n: UInt) -> (result: UInt)
+{
+    var v: UInt = 1
+    var c: UInt = 0
+    var done: Bool = n == 1
+    result = 0
+    while !done {
+        v = 2 * v
+        var bit: Bool = flip(1/2)
+        c = 2 * c + ite(bit, 1, 0)
+        if v >= n {
+            if c < n {
+                result = c
+                done = true
+            } else {
+                v = v - n
+                c = c - n
+            }
+        } else {}
+    }
+}
+```
+
+Each strip shows one value for every equally likely bit sequence that reaches that flip.
+On a recycled tile, the value after the arrow is the starting value of `c` for the next flip.
+
+<FastDiceRollerPrefix />
+
+If the sampler returns on flip 3, each of the five outputs is equally likely because each has one green tile on that strip.
+The same holds if it returns on flip 4.
+
+### Verification {#fast-proof}
+
+For every positive $n$ and every $k\in\{0,\ldots,n-1\}$, we want
+
+$$
+\Pr(\text{Fast Dice Roller returns }k)=\frac1n.
+$$
+
+For $n=1$, the program returns zero immediately.
+For $n\ge2$, Caesar checks an upper bound, a lower bound, and almost-sure termination.
+The two bounds use the same loop invariant and imply equality once termination is established.
+
+#### Prefix Sums {#constructing-the-invariants}
+
+In the figure's “After flip 2” row, the first three tiles $0,1,2$ form a *prefix* of length three.
+For a range of size $v$, the prefix of length $t$ is the part to the left of the cut.
+
+$$
+\underbrace{0,\ldots,t-1}_{\text{prefix}}\quad\big|\quad t,\ldots,v-1.
+$$
+
+Imagine one run from each value to the left of the cut.
+Add their chances of returning $k$.
+The HeyVL function `prefix(n, v, t, k)`, written $F(v,t)$, is a candidate for that total.
+For $0\le t\le v<n$, the endpoint values are
+
+$$
+F(v,0)=0,\qquad F(v,v)=\frac{v}{n}.
+$$
+
+In the figure, the starts $0,1,2$ produce the first six tiles on flip 3.
+For $0<t<v$, let $w=2\cdot v$ be the doubled range size and $s=2\cdot t$ the number of updated values from the prefix.
+Then $2\cdot F(v,t)$ equals
+
+$$
+\begin{cases}
+F(w,s), & w<n,\\
+[k<s], & s<n\le w,\\
+1+F(w-n,s-n), & n\le s.
+\end{cases}
+$$
+
+The two outcomes from each of the first $t$ starting values cover $0,\ldots,s-1$, with weight $1/2$ per branch.
+When $w<n$, all these values continue.
+When $w\ge n$, values below $n$ return, and the rest form a new prefix after subtracting $n$.
+
+The recurrence also holds at both endpoints.
+At $t=0$, there are no contributions.
+At $t=v$, the first case gives $w/n$, and the case with returns gives $1+(w-n)/n=w/n$.
+Both equal $2\cdot F(v,v)$.
+
+Each recursive call doubles the positive gap $v-t$ while keeping the range size below $n$.
+Caesar checks that the natural-number rank $n-(v-t)$ decreases, so the definition is well-founded.
+
+#### The Loop Invariant
+
+To reason about one running state with $0\le c<v<n$, take the difference of the two prefix sums that differ by the starting value $c$.
+
+$$
+D(v,c)=F(v,c+1)-F(v,c).
+$$
+
+Write $w=2\cdot v$ for the doubled range size and $d$ for the accumulator after appending the bit.
+For $0\le d<w$, define the value contributed by that branch as
+
+$$
+S_w(d)=
+\begin{cases}
+D(w,d), & w<n,\\
+[d=k], & d<n\le w,\\
+D(w-n,d-n), & n\le d.
+\end{cases}
+$$
+
+A continuing prefix occupies the first $s$ values of its new range, of size $u$.
+Summing $D(u,j)$ over those values cancels all intermediate terms and leaves $F(u,s)-F(u,0)=F(u,s)$.
+Combining that sum with any return indicators gives the recurrence in the following form for $0\le t\le v$.
+
+$$
+2\cdot F(v,t)=\sum_{d=0}^{2\cdot t-1}S_w(d).
+$$
+
+Subtract the equation at $t=c$ from the one at $t=c+1$.
+The only terms left are $S_w(2\cdot c)$ for bit zero and $S_w(2\cdot c+1)$ for bit one, so
+
+$$
+D(v,c)=\frac{S_w(2\cdot c)+S_w(2\cdot c+1)}{2}.
+$$
+
+The actual invariant applies the same shift and scale to the running value and to the return indicator.
+
+$$
+\begin{aligned}
+\text{Running}\quad &\frac{(1+F(v,c+1))-F(v,c)}{2},\\
+\text{At exit}\quad &Q=\frac{1+[\mathtt{result}=k]}{2}.
+\end{aligned}
+$$
+
+The transformation $x\mapsto(1+x)/2$ preserves the average of the two branches, so the invariant before an iteration equals its expected value after the iteration.
+Since $F$ takes values in $[0,1]$, adding one makes $1+F(v,c+1)$ at least $F(v,c)$, so HeyVL's unsigned subtraction leaves the numerator intact.
+Dividing by two puts the invariant in $[0,1]$, as required for the lower bound under `wlp`.
+
+<ExampleSources exampleId="fast-dice-roller" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Upper bound and loop invariant',
+  start: '@wp\ncoproc fdr_probability_upper(', end: '\n    while !done', highlight: '3-5,11-15',
+}]} />
+
+In the annotation, the Boolean condition describes the valid states, and `ite(done, ...)` selects the exit or running expression above.
+The `@wp coproc` checks the upper bound on the expectation of $Q$.
+The `@wlp proc` in the full source checks the matching lower bound with the same invariant value on valid states.
+
+The recurrence helpers in the full source are checked separately, including at $t=0$ and $t=v$.
+The loop calls them at $t=c$ and $t=c+1$ to supply exactly the two equations used in the subtraction.
+Their specifications pass the invariant value through each call, and their empty bodies leave the sampler state unchanged.
+
+<details>
+<summary>Five-outcome example</summary>
+
+For $n=5$, $k=0$, and $v=4$, the first two starting values yield $0,\ldots,3$ on flip 3.
+The branch that produces zero contributes $1/2$ to $F(4,2)$.
+From the additional start $c=2$, bit zero returns $4$ and bit one recycles $5$ to width $3$ and accumulator $0$.
+The recycled state has $D(3,0)=F(3,1)-F(3,0)=1/2$, since its next bit returns zero or one.
+
+$$
+\begin{aligned}
+F(4,2)&=\frac12,\\
+F(4,3)&=\frac{1+1/2}{2}=\frac34,\\
+D(4,2)&=\frac34-\frac12\\
+      &=\frac{0+1/2}{2}=\frac14.
+\end{aligned}
+$$
+
+</details>
+
+#### Almost-Sure Termination
+
+At each continuing loop head, $0\le c<v<n$.
+Appending a bit $b$ changes the positive difference $v-c$ to $2\cdot(v-c)-b$, and recycling leaves that difference unchanged.
+A zero bit either ends the loop or doubles $v-c$.
+
+The [`@ast` annotation](../../proof-rules/ast.md) uses the variant $n-(v-c)$, taken to be zero on exit.
+It checks that the variant never increases and decreases by at least one with probability at least $1/2$ <Citation {...references.termination} />.
+
+<ExampleSources exampleId="fast-dice-roller" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Almost-sure termination',
+  start: '@wp\nproc fdr_terminates(', end: '\n    while !done', highlight: '3-5,11-17',
+}]} />
+
+#### Exact Probability from the Caesar Bounds
+
+For $n\ge2$, the initial difference is $D(1,0)=F(1,1)-F(1,0)=1/n$.
+Under `wp`, divergence contributes zero to the expectation, and under `wlp` it contributes one.
+Almost-sure termination makes that contribution zero under both calculi, so the upper and lower bounds meet at $(1+1/n)/2$.
+For the initialized sampler $C$, this gives
+
+$$
+\begin{aligned}
+\frac{1+1/n}{2}
+&\le \operatorname{wlp}\llbracket C\rrbracket(Q)\\
+&= \operatorname{wp}\llbracket C\rrbracket(Q) &&\text{(almost-sure termination)}\\
+&\le \frac{1+1/n}{2}.
+\end{aligned}
+$$
+
+The expected value of $Q$ is $(1+\Pr(C\text{ returns }k))/2$, since $Q$ gives $1$ on a match and $1/2$ on every other return.
+It follows that $\Pr(C\text{ returns }k)=1/n$.
+
+## See Also
+
+- [Reservoir Sampling](./reservoir-sampling.mdx) proves uniform selection from a stream using a state-dependent replacement probability.
+- [Assertions](../../heyvl/statements.md#assert-and-assume) can discard unwanted samples through conditioning.
+
+## References
+
+- <Citation {...references.algorithm} variant="full">The original algorithm and its correctness proof.</Citation>
+- <Citation {...references.termination} variant="full">The almost-sure termination rule used by the fast sampler.</Citation>

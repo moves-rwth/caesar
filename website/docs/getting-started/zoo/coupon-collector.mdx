@@ -1,0 +1,158 @@
+---
+title: Coupon Collector
+description: An upper bound on the expected number of draws needed to collect every coupon.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleSourceExcerpt from '@site/src/heyvl-examples/ExampleSourceExcerpt';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import source from '@site/../tests/case-studies/coupon-collector.heyvl?raw';
+import download from '@site/../tests/case-studies/coupon-collector.heyvl?download';
+import uniformSource from '@site/../tests/case-studies/coupon-collector-uniform.heyvl?raw';
+import uniformDownload from '@site/../tests/case-studies/coupon-collector-uniform.heyvl?download';
+import manualDownload from '@site/../tests/case-studies/coupon-collector-manual.heyvl?download';
+
+export const references = {
+  background: sources.couponCollector,
+  runtime2016: {
+    ...sources.expectedRuntime2016,
+    href: "https://users.dcc.uchile.cl/~folmedo/pubs/2016.ESOP.pdf#page=23",
+    locator: "§7.2",
+  },
+  runtime2018: {
+    ...sources.expectedRuntime2018,
+    href: "https://discovery.ucl.ac.uk/id/eprint/10089685/1/main.pdf#page=33",
+    locator: "§9.1",
+  },
+  heyvl: {
+    ...sources.heyvl2023,
+    href: "https://arxiv.org/pdf/2309.07781#page=2",
+    locator: "Example 1.2 and Figure 3",
+  },
+};
+
+<ExampleMetadata exampleId="coupon-collector" />
+
+Completing a set of coupons from cereal boxes can take many draws because the same coupon may appear repeatedly.
+The *coupon collector's problem* models this process with $N\ge1$ different coupons, each equally likely on every independent draw <Citation {...references.background} />.
+
+As the collection grows, a draw is less likely to find a new coupon.
+How many draws are needed on average to collect all $N$ coupons?
+We count every draw with `tick 1`, including one that finds a new coupon.
+
+## The Program
+
+The variable `x` counts how many coupons are still missing.
+A draw finds a new coupon with probability `x / N`, so we use `flip(x / N)` to decide whether this happens.
+We only record whether the coupon is new, without choosing a coupon number.
+
+The inner loop draws until it finds a coupon not yet in the collection.
+The outer loop repeats this until the collection is complete, decreasing `x` after each new coupon.
+
+We verify that the expected number of draws is at most $N\cdot H_N$, where $H_N=\sum_{j=1}^{N}1/j$ is the $N$-th harmonic number, written `harmonic(N)` in the source.
+
+<ExampleSources exampleId="coupon-collector" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Simplified sampling and loop invariants',
+  start: '@ert', highlight: '3-5,10,15',
+}]} />
+
+## Verification {#expected-number-of-draws-to-collect-every-type}
+
+The clause `pre !?(N > 0)` restricts the claim to positive `N`, and `pre N * harmonic(N)` supplies the bound.
+
+The two highlighted [`@invariant`](../../proof-rules/induction.md) annotations bound the draws still needed at the outer and inner loops.
+We first check the inner loop, whose bound is then used to verify the outer loop.
+
+### Finding One New Coupon {#waiting-for-one-new-type}
+
+The inner loop waits for a new coupon using this invariant:
+
+<ExampleSourceExcerpt source={source} start="        @invariant(ite(found_new," end={'\n        while !found_new'} title="Invariant for finding a new coupon" />
+
+For $0<x\le N$, a draw finds a new coupon with probability $x/N$.
+We bound the expected number of draws until this happens by $N/x$.
+One draw costs one tick, and with probability $1-x/N$ we must keep drawing:
+
+$$
+1+\left(1-\frac{x}{N}\right)\cdot\frac{N}{x}=\frac{N}{x}.
+$$
+
+The inner invariant adds $N\cdot H_{x-1}$ for the coupons still missing after we find the next new one.
+Once `found_new` is true, `ite(found_new, 0, N / x)` removes the waiting cost, so only the bound for later coupons remains.
+
+### Collecting the Remaining Coupons {#collecting-all-remaining-types}
+
+The outer loop collects the remaining coupons using this invariant:
+
+<ExampleSourceExcerpt source={source} start="    @invariant(!?(x <= N)" end={'\n    while x > 0'} title="Invariant for collecting the remaining coupons" />
+
+The term `N * harmonic(x)` bounds the draws needed for all `x` missing coupons.
+The condition `x <= N` ensures that `flip(x / N)` uses a valid probability.
+
+For $x>0$, the term `N * harmonic(x)` combines the bounds for the next new coupon and all later coupons:
+
+$$
+\frac{N}{x}+N\cdot H_{x-1}=N\cdot H_x.
+$$
+
+After the inner loop finds a new coupon, the expected number of remaining draws is at most $N\cdot H_{x-1}$.
+Updating `x` to `x - 1` makes this the outer invariant for the new value of `x`.
+
+- **Initialization:** `x == N` gives the specified bound.
+- **Exit:** at `x == 0`, `harmonic(0) == 0` gives the zero bound required by `post 0`.
+
+## Explicit Uniform Draws {#uniform-draws}
+
+We replace `flip(x / N)` with a sampler that draws uniformly from `1` through `N`.
+Labels `1` through `x` represent the missing coupons, so `found_new = coupon <= x` records whether the draw is new.
+The surrounding collection loops are unchanged, so the excerpt shows only one draw and its sampling loop.
+
+<ExampleSources exampleId="coupon-collector" sources={[{
+  variantId: 'uniform', code: uniformSource, downloadUrl: uniformDownload,
+  title: 'Explicit uniform sampling and its invariant',
+  start: '            tick 1', end: '\n        }\n        x = x - 1', highlight: '5-14',
+}]} />
+
+Starting at `coupon = N`, the sampler accepts each candidate with probability `1 / coupon` and otherwise tries the next smaller index, with `1` as the fallback.
+For each index $j$, reaching it has probability $j/N$, so selecting it has probability $(j/N)\cdot(1/j)=1/N$.
+Its internal flips add no ticks, so the same $N\cdot H_N$ bound still counts coupon draws.
+
+The term `N / x` bounds the further draws needed after a duplicate, while `N * harmonic(x - 1)` covers the draws after the next new coupon.
+Before selection, $\max(\mathtt{coupon}-x,0)/\mathtt{coupon}$ is the fraction of remaining indices that are duplicates.
+After selection, `[coupon > x]` records whether the drawn index is a duplicate.
+
+At `coupon = N`, adding the preceding tick gives $1+(N-x)/x=N/x$, recovering the waiting cost.
+At sampler exit, assigning `found_new = coupon <= x` recovers the invariant for finding the next new coupon.
+
+## Earlier Version {#original-proof}
+
+An <a href={manualDownload} download>earlier version</a> uses a specification for uniform sampling and a separate summation lemma.
+The [sampling loop above](#uniform-draws) proves the same bound without that lemma or explicit sums.
+
+## See Also
+
+- [Geometric Loop](./geometric-loop.mdx) bounds the expected number of tails before the first heads.
+- [One-Sided Random Walks](./one-sided-random-walks.mdx#countdown-termination) distinguishes almost-sure termination from a finite expected number of iterations.
+- [Bounded Retransmission Protocol](./bounded-retransmission.mdx) uses nested retry loops to bound delivery probabilities and costs.
+
+## References
+
+- <Citation {...references.background} variant="full">
+  Introduces the problem and derives the expected total by summing the expected numbers of draws between new coupons.
+  </Citation>
+
+- <Citation {...references.runtime2016} variant="full" />
+
+- <Citation {...references.runtime2018} variant="full">
+  Both papers analyze coupon collection with a cost model that also charges for assignments and guard evaluations.
+  </Citation>
+
+- <Citation {...references.heyvl} variant="full">
+  The paper presents the coupon collector as a HeyVL case study.
+  </Citation>

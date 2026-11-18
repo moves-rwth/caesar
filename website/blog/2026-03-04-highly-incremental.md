@@ -264,3 +264,5 @@ coproc retry2_second_moment() -> (done: Bool)
 ```
 
 Both programs have expected runtime $2$, but their variances are $6 - 2^2 = 2$ and $4.75 - 2^2 = 0.75$, so the second program is more predictable.
+
+The [Retry Latency and Higher Moments example](/docs/getting-started/zoo/retry-moments) develops this comparison with downloadable HeyVL files and explains the loop invariants checked by Caesar.

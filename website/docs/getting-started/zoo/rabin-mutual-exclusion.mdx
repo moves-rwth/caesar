@@ -1,0 +1,93 @@
+---
+title: Rabin’s Mutual-Exclusion Algorithm
+description: An upper bound on the probability that Rabin’s voting stage ends with no survivors.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import nestedSource from '@site/../tests/loop-rules/induction/rabin_hurd2004.heyvl?raw';
+import nestedDownload from '@site/../tests/loop-rules/induction/rabin_hurd2004.heyvl?download';
+
+export const references = {
+  algorithm: sources.mutualExclusion1992,
+  voting: {
+    ...sources.guardedCommands2004,
+    href: "https://cgi.cse.unsw.edu.au/~carrollm/probs/Papers/Hurd-05a.pdf#page=16",
+    locator: "§4",
+  },
+  heyvl: {
+    ...sources.heyvl2023,
+    href: "https://arxiv.org/pdf/2309.07781#page=2",
+    locator: "Example 1.1 and Figure 2",
+  },
+};
+
+<ExampleMetadata exampleId="rabin-mutual-exclusion" />
+
+Mutual exclusion allows only one processor at a time to enter a shared critical section.
+We study a sequential model of the voting stage in Rabin’s mutual-exclusion algorithm <Citation {...references.algorithm} />.
+In each *voting round*, every contender flips a fair coin to decide whether to withdraw <Citation {...references.voting} locator={undefined} />.
+One survivor wins, several survivors vote again, and no survivors means that the election has failed.
+How likely is voting to end with no survivors?
+
+## The Program
+
+The outer loop runs the voting rounds.
+The inner loop makes one withdrawal decision for each contender present at the start of the round.
+The variable `i` counts contenders who have not withdrawn, and `n` counts decisions still to be made in the round.
+
+<ExampleSources exampleId="rabin-mutual-exclusion" sources={[{variantId: "nested", code: nestedSource, downloadUrl: nestedDownload, title: "Specification and voting rounds", start: "@wlp\nproc rabin(", highlight: "3-4,8,13-20"}]} />
+
+## Verification {#success-bound}
+
+For `init_i > 1`, the probability of terminating with no survivors is at most $1/3$.
+
+<span id="what-the-bound-means" />
+
+The [`@wlp` annotation](../../proof-rules/approximations.md#calculus-annotations) verifies the complementary lower bound of $2/3$, counting both one survivor and nontermination.
+It does not establish that voting terminates.
+
+<span id="how-the-proof-works" />
+
+The outer [`@invariant`](../../proof-rules/induction.md) annotation uses $I=[i=1]+\tfrac23\cdot[i>1]$.
+
+A round starting with $k\ge2$ contenders leaves zero or one survivors with probabilities $2^{-k}$ and $k\cdot2^{-k}$, respectively.
+Its expected invariant value is therefore
+
+$$
+k\cdot2^{-k}
++\frac23\cdot\left(1-(k+1)\cdot2^{-k}\right)
+=\frac23+\frac{k-2}{3\cdot2^k}
+\ge\frac23.
+$$
+
+For `n <= i`, the inner invariant uses `rec_pown_2(n)` for $2^{-n}$.
+
+- $([i=n]\cdot n+[i=n+1])\cdot2^{-n}$ gives the probability that the round ends with one survivor.
+  With `i == n`, one remaining contender must stay, whereas with `i == n + 1`, all must withdraw.
+- $\tfrac23\cdot(1-([i=n]\cdot(n+1)+[i=n+1])\cdot2^{-n})$ accounts for rounds with at least two survivors.
+- `[n <= i]` restricts the calculation to states with enough contenders for the remaining flips.
+
+## See Also
+
+- [Two-Sided Random Walks](./two-sided-random-walks.mdx) shows how almost-sure termination is proved separately.
+- [Zeroconf Address Allocation](./zeroconf.mdx) verifies a probability bound using specifications for recursive procedures.
+
+## References
+
+- <Citation {...references.algorithm} variant="full">
+  Develops the mutual-exclusion algorithm underlying this voting model.
+  </Citation>
+
+- <Citation {...references.voting} variant="full">
+  Verifies the voting stage using nested-loop invariants.
+  </Citation>
+
+- <Citation {...references.heyvl} variant="full">
+  Presents the HeyVL encoding and its liberal $2/3$ bound.
+  </Citation>

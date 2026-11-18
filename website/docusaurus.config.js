@@ -4,6 +4,7 @@
 import {themes as prismThemes} from 'prism-react-renderer';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import {examples, groups} from './src/heyvl-examples/catalog.mjs';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -34,7 +35,10 @@ const config = {
     mermaid: true,
   },
   themes: ['@docusaurus/theme-mermaid'],
-  plugins: [require.resolve('./plugins/homepage-metadata')],
+  plugins: [
+    require.resolve('./plugins/homepage-metadata'),
+    require.resolve('./plugins/heyvl-examples/index.cjs'),
+  ],
 
   presets: [
     [
@@ -43,6 +47,43 @@ const config = {
       ({
         docs: {
           sidebarPath: require.resolve('./sidebars.js'),
+          sidebarItemsGenerator: async ({defaultSidebarItemsGenerator, ...args}) => {
+            const exampleId = 'getting-started/zoo';
+            const detailDocs = args.docs.filter((doc) => doc.id.startsWith(`${exampleId}/`));
+            const detailDocIds = new Set(detailDocs.map((doc) => doc.id));
+            const exampleGroups = groups.map((group) => ({
+              type: 'category',
+              label: group.label,
+              collapsible: true,
+              collapsed: true,
+              items: examples
+                .filter((example) => example.group === group.id && example.detailSlug && detailDocIds.has(`${exampleId}/${example.detailSlug}`))
+                .map((example) => ({type: 'doc', id: `${exampleId}/${example.detailSlug}`})),
+            })).filter((group) => group.items.length);
+            const items = await defaultSidebarItemsGenerator({
+              ...args,
+              docs: args.docs.filter((doc) => !doc.id.startsWith(`${exampleId}/`)),
+            });
+            function addExampleHierarchy(sidebarItems) {
+              return sidebarItems.map((item) => {
+                if (item.type === 'doc' && item.id === exampleId) {
+                  return {
+                    type: 'category',
+                    label: 'HeyVL Examples',
+                    link: {type: 'doc', id: exampleId},
+                    collapsible: true,
+                    collapsed: true,
+                    className: 'example-sidebar-group',
+                    items: exampleGroups,
+                  };
+                }
+                return item.type === 'category'
+                  ? {...item, items: addExampleHierarchy(item.items)}
+                  : item;
+              });
+            }
+            return addExampleHierarchy(items);
+          },
           editUrl:
             'https://github.com/moves-rwth/caesar/tree/main/website/',
           remarkPlugins: [remarkMath],
@@ -127,6 +168,30 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       image: 'img/social-card-v2.png',
+      mermaid: {
+        options: {
+          xyChart: {
+            width: 340,
+            height: 220,
+            xAxis: {labelFontSize: 14, titleFontSize: 14},
+            yAxis: {labelFontSize: 14, titleFontSize: 14},
+          },
+          themeVariables: {
+            xyChart: {
+              backgroundColor: 'transparent',
+              plotColorPalette: 'var(--ifm-color-primary)',
+              xAxisLabelColor: 'var(--ifm-font-color-base)',
+              xAxisTitleColor: 'var(--ifm-font-color-base)',
+              xAxisTickColor: 'var(--ifm-color-emphasis-600)',
+              xAxisLineColor: 'var(--ifm-color-emphasis-600)',
+              yAxisLabelColor: 'var(--ifm-font-color-base)',
+              yAxisTitleColor: 'var(--ifm-font-color-base)',
+              yAxisTickColor: 'var(--ifm-color-emphasis-600)',
+              yAxisLineColor: 'var(--ifm-color-emphasis-600)',
+            },
+          },
+        },
+      },
       metadata: [
         {property: 'og:image:width', content: '1200'},
         {property: 'og:image:height', content: '630'},
@@ -148,6 +213,7 @@ const config = {
         },
         items: [
           {to: '/docs/getting-started', label: 'Getting Started', position: 'left'},
+          {to: '/docs/getting-started/zoo', label: 'Examples', position: 'left'},
           {
             type: 'docSidebar',
             sidebarId: 'docsSidebar',

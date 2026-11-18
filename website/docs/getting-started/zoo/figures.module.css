@@ -1,0 +1,47 @@
+.withFigure {
+  display: flow-root;
+  container-type: inline-size;
+  margin-block: 1.5rem 0.5rem;
+}
+
+.withFigure > p:last-child {
+  margin-bottom: 0;
+}
+
+.figure {
+  box-sizing: border-box;
+  width: min(100%, 22rem);
+  margin: 0 auto 1.5rem;
+  padding: 0.9rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--caesar-surface-tint) 30%, var(--ifm-background-color));
+  break-inside: avoid;
+}
+
+.figure svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.figure figcaption {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-content-secondary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.figure figcaption p {
+  margin: 0;
+}
+
+@container (min-width: 42rem) {
+  .figure {
+    float: right;
+    width: 21rem;
+    margin: 0 0 0.5rem 1.75rem;
+  }
+}

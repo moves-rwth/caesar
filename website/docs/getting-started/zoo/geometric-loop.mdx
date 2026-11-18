@@ -1,0 +1,187 @@
+---
+title: Geometric Loop
+description: Bounds on the expected number of tails before a fair coin first shows heads.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import ExecutionDiagram from '@site/src/heyvl-examples/figures/ExecutionDiagram';
+import UnrollingPlot from '@site/src/heyvl-examples/figures/UnrollingPlot';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import invariantSource from '@site/../tests/loop-rules/induction/geometric.heyvl?raw';
+import invariantDownload from '@site/../tests/loop-rules/induction/geometric.heyvl?download';
+import inductionSource from '@site/../tests/loop-rules/k_induction/geo1.heyvl?raw';
+import inductionDownload from '@site/../tests/loop-rules/k_induction/geo1.heyvl?download';
+import recursiveSource from '@site/../tests/case-studies/geo-recursive.heyvl?raw';
+import recursiveDownload from '@site/../tests/case-studies/geo-recursive.heyvl?download';
+import stoppingSource from '@site/../tests/loop-rules/ost2019/annotated.heyvl?raw';
+import stoppingDownload from '@site/../tests/loop-rules/ost2019/annotated.heyvl?download';
+import refutationSource from '@site/../tests/loop-rules/bmc/refute-geo2_bmc.heyvl?raw';
+import refutationDownload from '@site/../tests/loop-rules/bmc/refute-geo2_bmc.heyvl?download';
+
+export const references = {
+  runtime: {
+    ...sources.expectedRuntime2016,
+    href: "https://users.dcc.uchile.cl/~folmedo/pubs/2016.ESOP.pdf#page=2",
+    locator: "§§1, 7.2",
+  },
+  induction: {
+    ...sources.kInduction2021,
+    href: "https://arxiv.org/pdf/2105.14100#page=14",
+    locator: "Example 2",
+  },
+  stopping: {
+    ...sources.aimingLow2020,
+    href: "https://verify.rwth-aachen.de/giesl/papers/POPL2020.pdf#page=18",
+    locator: "Example 39",
+  },
+};
+
+<ExampleMetadata exampleId="geometric-loop" />
+
+The *geometric loop* makes independent flips of a fair coin until the first heads.
+It can make arbitrarily many flips, yet the expected number is finite <Citation {...references.runtime} locator={undefined} />.
+How many tails occur on average before the first heads?
+
+## The Program
+
+```heyvl title="Unannotated HeyVL program"
+proc geometric(init_count: UInt, init_running: Bool) -> (count: UInt, running: Bool) {
+    count = init_count
+    running = init_running
+    while running {
+        var stop: Bool = flip(0.5)
+        if stop {
+            running = false
+        } else {
+            count = count + 1
+        }
+    }
+}
+```
+
+<ExecutionDiagram kind="geometric-loop">
+
+Each flip showing tails increments `count`, while heads sets `running` to false.
+If `init_running` is false, the loop performs no flips and returns `init_count` unchanged.
+An active loop terminates with probability one.
+
+</ExecutionDiagram>
+
+Starting with `count = 0` and `running = true`, the expected counter is one, as the verification below establishes.
+The expected number of all flips is two, since it also includes the final heads.
+One `tick 1` per flip would measure that second quantity.
+
+Exactly $k$ tails followed by heads has probability $2^{-(k+1)}$.
+Every additional flip showing tails halves the probability of that outcome.
+
+## Verification
+
+Caesar first bounds the expected counter from above using Park induction, then verifies a simpler candidate with two-step induction.
+The later variants prove a matching lower bound and refute an incorrect upper bound.
+Each specification uses [`@wp`](../../proof-rules/approximations.md#calculus-annotations) to select least fixed point semantics, where nontermination contributes zero.
+
+### Park Induction {#invariant}
+
+For [Park induction](../../proof-rules/induction.md), the `@invariant` annotation bounds the expected final counter by `count + [running]`.
+The term `[running]` bounds the expected number of tails still to come.
+
+<ExampleSources exampleId="geometric-loop" sources={[{
+  variantId: 'invariant', code: invariantSource, downloadUrl: invariantDownload,
+  title: 'Upper-bound specification and Park induction',
+  start: '@wp\ncoproc geometric(', end: '\n        var stop: Bool', highlight: '1,3-4,9',
+}]} />
+
+From an active state with `count = c`, heads gives invariant value $c$ and tails gives $c+2$.
+Their average is $\tfrac12\cdot c+\tfrac12\cdot(c+2)=c+1$, the invariant's value before the iteration.
+At exit, the invariant equals the postexpectation `count`.
+
+### Two-Step Induction {#k-induction}
+
+The simpler candidate `count + 1` does not check whether the loop is still running.
+
+<ExampleSources exampleId="geometric-loop" sources={[{
+  variantId: 'k-induction', code: inductionSource, downloadUrl: inductionDownload,
+  title: 'Upper-bound specification and @k_induction annotation',
+  start: '@wp\ncoproc geometric(', end: '\n        var stop: Bool', highlight: '1,3-4,9',
+}]} />
+
+Its average value grows by one half after one iteration, because even after heads it still adds one to the counter.
+Park induction therefore fails for this candidate.
+
+[Two-step induction](../../proof-rules/induction.md#using-k-induction), selected by the `@k_induction(2, count + 1)` annotation, checks the loop guard again.
+On the heads branch, the loop has finished, so it uses the postexpectation `count` instead of the candidate <Citation {...references.induction} />.
+If the loop starts inactive, this upper bound is one above the unchanged counter.
+
+### Optional Stopping {#optional-stopping}
+
+The `proc` specification gives the matching lower bound, using the same expectation `count + [running]`.
+A subinvariant alone is insufficient, so the [`@ost`](../../proof-rules/ost.md) annotation checks additional side conditions <Citation {...references.stopping} />.
+
+<ExampleSources exampleId="geometric-loop" sources={[{
+  variantId: 'optional-stopping', code: stoppingSource, downloadUrl: stoppingDownload,
+  title: 'Lower-bound specification and @ost annotation',
+  start: '@wp\nproc geometric(', end: '\n        var stop: Bool', highlight: '1,3-4,12',
+}]} />
+
+- The second argument, `2 * [running]`, bounds the expected number of remaining coin flips by two for an active loop and zero otherwise.
+- The third argument, `1`, bounds each iteration's absolute change to the subinvariant.
+
+The upper and lower bounds match for every initial count and value of `running`.
+In particular, an active loop starting at zero has expected count one.
+
+### Refuting the Upper Bound `init_count + 0.99` {#refutation}
+
+Finite unrolling can also reject a proposed bound without first computing the exact expectation <Citation {...references.induction} />.
+The next variant proposes the upper bound `init_count + 0.99`.
+
+<ExampleSources exampleId="geometric-loop" sources={[{
+  variantId: 'refutation', code: refutationSource, downloadUrl: refutationDownload,
+  title: 'Incorrect specification and @unroll annotation',
+  start: '@wp\ncoproc geometric(', end: '\n        var stop: Bool', highlight: '1,3,10',
+}]} />
+
+<UnrollingPlot>
+
+For an active loop starting at zero, the [`@unroll(12, 0)`](../../proof-rules/unrolling.md) annotation gives the lower approximation $509/512>0.99$.
+The eleventh unfolding is still below the proposed bound.
+The twelfth refutes it.
+
+</UnrollingPlot>
+
+## Recursive Formulation {#recursion}
+
+The same coin-flipping process can be written using recursive calls in place of the loop.
+Each call uses the procedure specification to bound the expected number of tails still to come.
+
+<ExampleSources exampleId="geometric-loop" sources={[{
+  variantId: 'recursive', code: recursiveSource, downloadUrl: recursiveDownload,
+  title: 'Recursive specification',
+  start: '@wp\ncoproc geometric(', highlight: '1,3-4',
+}]} />
+
+An inactive call returns the counter unchanged, while an active call increases it by at most one in expectation over the entire recursive execution.
+The verified upper bound is the same as for Park induction.
+
+## See Also
+
+- [Coupon Collector](./coupon-collector.mdx) bounds the expected number of draws needed to collect each new coupon.
+- [One-Sided Random Walks](./one-sided-random-walks.mdx) generalizes waiting for one head to several required heads and bounds the total number of coin flips.
+
+## References
+
+- <Citation {...references.runtime} variant="full">
+  Explains why arbitrarily long executions can have finite expected runtimes and analyzes the coupon collector.
+  </Citation>
+
+- <Citation {...references.induction} variant="full">
+  The geometric loop demonstrates an upper bound that requires two-step induction.
+  </Citation>
+
+- <Citation {...references.stopping} variant="full">
+  The paper proves the lower bound by optional stopping.
+  </Citation>

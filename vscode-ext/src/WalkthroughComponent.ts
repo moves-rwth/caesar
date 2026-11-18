@@ -52,6 +52,7 @@ export class WalkthroughComponent {
     private async openExampleFile() {
         const content = `// save as geo.heyvl
 
+@wp
 coproc geo(init_c: UInt) -> (c: UInt)
     pre init_c + 1
     post c

@@ -1,0 +1,142 @@
+---
+title: Retry Latency and Higher Moments
+description: Comparing database retries with the same expected runtime and different variances.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import Citation from '@site/src/components/Citation';
+import RetryLatencyPlot from '@site/src/heyvl-examples/figures/RetryLatencyPlot';
+import {references as sources} from '@site/src/data/references';
+import source from '@site/../tests/case-studies/retry-moments.heyvl?raw';
+import download from '@site/../tests/case-studies/retry-moments.heyvl?download';
+
+export const references = {
+  incremental: {
+    ...sources.incremental2026,
+    href: "https://arxiv.org/html/2603.02405v1#A2.SS2",
+    locator: "Appendix B.2",
+  },
+};
+
+<ExampleMetadata exampleId="retry-moments" />
+
+A web server retries a database request until it succeeds.
+Each request takes one second and succeeds independently with probability $1/2$.
+Adding a cache takes half a second initially and raises the success probability to $2/3$ <Citation {...references.incremental} locator={undefined} />.
+Both designs take two seconds on average, but does the cache make the response time more predictable?
+
+## Expected Runtime
+
+The [`reward`](../../heyvl/statements.md#reward-and-weigh) statement collects the modeled runtime: one second for every request, including the successful one.
+Other program statements add no time in this model.
+With postexpectation `0`, the [`@wp`](../../heyvl/procs.md) specification bounds the expected accumulated reward.
+
+<ExampleSources exampleId="retry-moments" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Expected runtime without a cache',
+  start: '@wp\ncoproc retry_mean(', end: '\n\n@wp\ncoproc cached_retry_mean(', highlight: '3-4,7,9-10',
+}]} />
+
+The invariant `2 * [!done]` bounds the expected remaining runtime by two seconds while requests are still needed.
+One iteration incurs one second and leaves another two seconds to be paid with probability $1/2$, giving $1+\tfrac12\cdot2=2$.
+
+In the cached variant, the expected number of requests is $3/2$.
+Its half-second initialization cost brings the same upper bound of two seconds.
+
+<ExampleSources exampleId="retry-moments" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Expected runtime with a cache',
+  start: '@wp\ncoproc cached_retry_mean(', end: '\n\n// Incremental squared costs', highlight: '3,7-8,10-11',
+}]} />
+
+## Second Moments
+
+For runtime $T$, its second moment $\mathbb{E}[T^2]$ measures the expected squared runtime.
+Together with the mean, it determines the variance:
+
+$$
+\operatorname{Var}(T)=\mathbb{E}[T^2]-\mathbb{E}[T]^2.
+$$
+
+To collect the square incrementally, introduce a fresh ghost variable `tau` that records elapsed time.
+The original guards, probabilities, and assignments do not read `tau`.
+An additional second increases the square by $(\mathtt{tau}+1)^2-\mathtt{tau}^2=2\cdot\mathtt{tau}+1$.
+Replacing `reward 1` by this increment makes the accumulated reward equal $T^2$ on every terminating execution <Citation {...references.incremental} />.
+
+Apply the transformation to every original reward, including initialization costs.
+
+<ExampleSources exampleId="retry-moments" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Second moment without a cache',
+  start: '@wp\ncoproc retry_second_moment(', end: '\n\n@wp\ncoproc cached_retry_second_moment(', highlight: '3,7-8,10-11',
+}]} />
+
+For an unfinished request sequence, the invariant `6 + 4 * tau` bounds the squared-time increments still to come.
+One iteration collects `2 * tau + 1` and continues with probability $1/2$:
+
+$$
+\begin{aligned}
+&(2\cdot\mathtt{tau}+1)\\
+&\quad+\tfrac12\cdot\bigl(6+4\cdot(\mathtt{tau}+1)\bigr)\\
+&=6+4\cdot\mathtt{tau}.
+\end{aligned}
+$$
+
+Starting at `tau = 0` gives the verified upper bound of six squared seconds.
+On a nonterminating execution, these incremental rewards also grow without bound.
+A single `reward tau * tau` after the loop would never be reached on that execution and would collect no reward.
+
+For the cached design, `tau` starts at `0.5` and `reward 0.25` accounts for the square of the initialization time.
+The loop uses the same increments, with an invariant adapted to the larger success probability.
+
+<ExampleSources exampleId="retry-moments" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Second moment with a cache',
+  start: '@wp\ncoproc cached_retry_second_moment(', highlight: '3,7-9,11-12',
+}]} />
+
+## Comparing the Designs
+
+The procedures above prove upper bounds on the first two moments.
+To determine the variance, we also need matching lower bounds.
+We omit those proofs here and use the exact moment values calculated below <Citation {...references.incremental} />.
+
+If each request succeeds independently with probability $0<p\le1$, the number $K$ of requests up to and including the first success satisfies
+
+$$
+\mathbb{E}[K]=\frac1p,
+\qquad
+\mathbb{E}[K^2]=\frac{2-p}{p^2}.
+$$
+
+<RetryLatencyPlot>
+
+Without caching, $T=K$ and $p=1/2$.
+With caching, $T=1/2+K$ and $p=2/3$, so $\mathbb{E}[T^2]=1/4+\mathbb{E}[K]+\mathbb{E}[K^2]$.
+
+At 1 second, half the uncached requests have finished, while cached requests take at least 1.5 seconds.
+At 2.5 seconds, $1/4$ of uncached requests are still waiting, compared with $1/9$ of cached requests.
+
+</RetryLatencyPlot>
+
+| Design | Mean runtime | Second moment | Variance |
+| --- | --- | --- | --- |
+| Without a cache | $2$ s | $6$ s$^2$ | $2$ s$^2$ |
+| With a cache | $2$ s | $4.75$ s$^2$ | $0.75$ s$^2$ |
+
+The cache reduces the variance while preserving the mean.
+
+## See Also
+
+- [Geometric Loop](./geometric-loop.mdx) compares upper and lower bounds for the number of unsuccessful coin flips.
+- [Programmatic Reward Transformations](/blog/2026/03/04/highly-incremental#programmatic-reward-transformations) explains the general construction and further objectives.
+
+## References
+
+- <Citation {...references.incremental} variant="full">
+  Introduces the retry/cache comparison and gives the reward transformation, exact moment calculations, and HeyVL proofs.
+  </Citation>

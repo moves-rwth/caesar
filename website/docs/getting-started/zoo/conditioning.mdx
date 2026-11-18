@@ -1,0 +1,129 @@
+---
+title: Conditioning on Queue Completion
+description: Bound the expected rounds until an unbounded queue empties, conditioned on completing before the server fails.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleSourceExcerpt from '@site/src/heyvl-examples/ExampleSourceExcerpt';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import source from '@site/../tests/case-studies/conditioning.heyvl?raw';
+import download from '@site/../tests/case-studies/conditioning.heyvl?download';
+
+export const references = {
+  queue: {...sources.queueDisasters2014, locator: 'Section 2'},
+  conditioning: sources.conditioning2018,
+};
+
+<ExampleMetadata exampleId="conditioning" />
+
+A server processes a queue while new jobs arrive, and it can fail before the queue empties.
+For $n$ initial jobs, we prove at most $5\cdot n/3$ rounds on average, conditioned on completing before failure.
+For any positive initial size, successful runs can still reach arbitrarily large queues and take arbitrarily many rounds.
+
+## Queue Example
+
+Each round fails with probability $1/5$; otherwise, an arrival or service completion occurs with equal probability.
+We stop at failure or an empty queue, using a discrete version of a queue with disasters <Citation {...references.queue} locator={undefined} />.
+
+```heyvl title="Queue conditioned on completing before failure"
+proc observed_queue(initial: UInt) -> (pending: UInt, rounds: UInt, healthy: Bool) {
+    pending = initial
+    rounds = 0
+    healthy = true
+    while pending > 0 && healthy {
+        rounds = rounds + 1
+        healthy = flip(4/5)
+        if healthy {
+            var arrival: Bool = flip(1/2)
+            if arrival { pending = pending + 1 }
+            else { pending = pending - 1 }
+        }
+    }
+    assert ?(healthy)
+}
+```
+
+The final [`assert`](../../heyvl/statements.md#assert-and-assume) gives failed runs zero contribution.
+Call emptying the queue before failure *success*, and let $R$ be the final round count and $n$ the input `initial`.
+
+## Encode Conditional Expected Values
+
+For $f\ge0$ and a program $C$ with observations but no nondeterministic choices, use <Citation {...references.conditioning} />:
+
+$$
+\operatorname{cwp}\llbracket C\rrbracket(f)
+=\frac{\operatorname{wp}\llbracket C\rrbracket(f)}
+      {\operatorname{wlp}\llbracket C\rrbracket(1)}
+\le\frac UL.
+$$
+
+Verify the same inputs, program body, and observations against two specifications:
+
+- $\operatorname{wp}\llbracket C\rrbracket(f)\le U$: `@wp coproc` with `pre U`, `post f`.
+- $0<L\le\operatorname{wlp}\llbracket C\rrbracket(1)$: `@wlp proc` with `pre L`, `post 1`.
+
+The `@wlp` denominator includes nonterminating runs that have not violated an observation.
+When nontermination has probability zero, the ratio is the ordinary conditional expectation.
+
+## Verify the Queue Bounds {#verification}
+
+The source represents $2^{-n}$ by the following recursive function:
+
+<ExampleSourceExcerpt source={source} start="domain QueueConditioning" end={'\n\n@wlp'} title="Power of one half" />
+
+### Bound the Denominator
+
+The probability proof uses the queue updates from `observed_queue` with this specification and annotation:
+
+<ExampleSourceExcerpt source={source} start={'@wlp\nproc evidence_lower'} end={'\n        rounds = rounds + 1'} title="Lower bound on the success probability" highlight="3-4,9" />
+
+The final `assert ?(healthy)` retains successful runs, and `post 1` counts them.
+Consequently,
+
+$$
+\operatorname{wlp}\llbracket C\rrbracket(1)
+=\Pr(\text{success})\ge2^{-n}>0,
+$$
+
+where $C$ is `observed_queue`.
+Each round fails with probability $1/5$, so nontermination has probability zero.
+Thus $L=2^{-n}$.
+
+### Bound the Numerator
+
+Next, bound the rounds contributed by successful runs:
+
+<ExampleSources exampleId="conditioning" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Upper bound on the successful runs’ round count',
+  start: '@wp\ncoproc rounds_upper', end: '\n        rounds = rounds + 1', highlight: '3-4,9',
+}]} />
+
+With the observation, `post rounds` measures $\mathbb E[R\cdot[\text{success}]]$.
+The invariant is zero after failure and equals `rounds` at successful exit.
+The procedure proves
+
+$$
+\mathbb E[R\cdot[\text{success}]]
+\le U=2^{-n}\cdot\frac{5\cdot n}{3}.
+$$
+
+Dividing by the positive denominator bound gives
+
+$$
+\mathbb E[R\mid\text{success}]
+\le\frac{2^{-n}\cdot(5\cdot n/3)}{2^{-n}}
+=\frac{5\cdot n}{3}.
+$$
+
+For three initial jobs, this is at most five rounds on average among successful runs.
+
+## References
+
+- <Citation {...references.queue} variant="full">Queueing context; our program stops at the first failure or empty queue and counts discrete rounds.</Citation>
+- <Citation {...references.conditioning} variant="full">Conditioning as a ratio of weakest preexpectations.</Citation>

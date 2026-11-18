@@ -5,6 +5,7 @@
 The expected value of the counter `c` increases by at most one. [**Open in editor**](command:caesar.openExampleFileBeside)
 
 ```heyvl
+@wp
 coproc geo(init_c: UInt) -> (c: UInt)
     pre init_c + 1
     post c
@@ -25,4 +26,4 @@ coproc geo(init_c: UInt) -> (c: UInt)
 
 ## More Examples
 
-You can find more examples in our [Zoo of HeyVL Examples](https://www.caesarverifier.org/docs/getting-started/zoo-of-heyvl-examples).
+You can find more examples in our [Zoo of HeyVL Examples](https://www.caesarverifier.org/docs/getting-started/zoo).

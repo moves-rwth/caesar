@@ -1,0 +1,140 @@
+.sources {
+  min-width: 0;
+  max-inline-size: var(--caesar-docs-code-width);
+  margin: 1.25rem 0;
+  margin-inline: auto;
+}
+
+.preview {
+  --caesar-source-background: #fff;
+  --docusaurus-highlighted-code-line-bg: color-mix(in srgb, var(--ifm-color-primary) 6%, var(--caesar-source-background));
+  min-width: 0;
+}
+
+:global([data-theme='dark']) .preview {
+  --caesar-source-background: var(--ifm-background-color);
+}
+
+.preview + .preview {
+  margin-top: 1.25rem;
+}
+
+.previewHeader,
+.previewFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  padding: 0.5rem 0;
+}
+
+.previewHeader {
+  padding-top: 0;
+  color: var(--ifm-color-content-secondary);
+  font-size: 0.8rem;
+}
+
+.previewHeader strong {
+  font-weight: 500;
+}
+
+.outcome {
+  color: var(--ifm-color-primary);
+  font-size: 0.75rem;
+}
+
+.outcome[data-outcome='refutation'] {
+  color: var(--ifm-color-warning-darkest);
+}
+
+:global([data-theme='dark']) .outcome[data-outcome='refutation'] {
+  color: var(--ifm-color-warning-lightest);
+}
+
+.codePanel {
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 4px;
+}
+
+.codePanel > :global(div.theme-code-block) {
+  --prism-background-color: var(--caesar-source-background) !important;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.preview :global(pre) {
+  --ifm-pre-background: var(--caesar-source-background);
+  background-color: var(--caesar-source-background) !important;
+  border-radius: 0;
+}
+
+.preview :global(.theme-code-block-highlighted-line) {
+  --ifm-pre-background: var(--docusaurus-highlighted-code-line-bg);
+  box-shadow: inset 2px 0 var(--ifm-color-primary);
+}
+
+.omission {
+  display: block;
+  width: 100%;
+  padding: 0.1rem 1rem 0.1rem 4rem;
+  border: 0;
+  background: var(--caesar-source-background);
+  color: var(--ifm-color-content-secondary);
+  font: 1rem var(--ifm-font-family-monospace);
+  text-align: left;
+  cursor: pointer;
+}
+
+.omission:hover {
+  background: var(--docusaurus-highlighted-code-line-bg);
+  color: var(--ifm-color-primary);
+}
+
+.previewFooter {
+  font-size: 0.75rem;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+
+.actions :is(a, button) {
+  color: var(--ifm-color-content-secondary);
+}
+
+.actions button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.actions :is(a, button):hover {
+  color: var(--ifm-color-primary);
+  text-decoration: underline;
+}
+
+.preview :is(a, button):focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
+}
+
+.command {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.command > :global(div.theme-code-block) {
+  --prism-background-color: var(--caesar-source-background) !important;
+  width: 100%;
+  min-width: 0;
+  margin: 0.25rem 0 0;
+}

@@ -416,6 +416,15 @@ See the [proof rules documentation](../proof-rules/).
 
 :::
 
+## Conditioning
+
+An observation restricts a probabilistic model to executions consistent with what we learned.
+In HeyVL, `assert ?(observed)` removes the contribution of executions that violate an observation.
+Conditional probabilities also require normalization by the retained probability.
+
+[Conditioning on Queue Completion](./zoo/conditioning.mdx) bounds the expected number of processing rounds given that a queue empties before the server fails.
+It verifies the successful runs' contribution and the observation probability, then divides to obtain the conditional bound.
+
 ## Verification Statements {#verification-statements}
 
 In addition to HeyVL's "normal" programming constructs such as assignments `x = e`, `if (b) { ... } else { ... }`, Caesar has statements that are specific to program verification.
@@ -530,3 +539,12 @@ Together, these choices make the `pre 2` specification an upper bound on the exp
 
 Caesar also accepts `tick` as an alias for `reward`.
 See [Reward and Weigh](../heyvl/statements.md#reward-and-weigh) for the statement reference.
+
+## Continue with the Examples
+
+Read these examples in order:
+
+1. [Geometric Loop](./zoo/geometric-loop.mdx): prove an upper bound with ordinary induction before exploring the other proof techniques.
+2. [One-Sided Random Walks](./zoo/one-sided-random-walks.mdx): distinguish almost-sure termination, a finite expected number of loop iterations, and a numerical bound on that expectation.
+
+For more problems and proof techniques, browse the [example gallery](./zoo.md).

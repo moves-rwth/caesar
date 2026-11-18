@@ -20,6 +20,6 @@ Start with a short example, then use the guide to learn how to express your own 
 
    Specifications, invariants, types, functions, and verification statements in detail.
 
-4. ### [Explore More Examples](./zoo-of-heyvl-examples.md)
+4. ### [Explore More Examples](./zoo.md)
 
    Worked examples of probability bounds, termination proofs, and model checking.

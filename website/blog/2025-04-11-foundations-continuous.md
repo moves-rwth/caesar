@@ -23,6 +23,13 @@ In addition to theoretical results such as convergence and completeness of the a
 
 ## Encoding Riemann Sums in HeyVL
 
+:::warning Reusing the encoding
+
+This is a manual encoding of continuous sampling.
+Check the [soundness conditions](/docs/getting-started/zoo/tortoise-hare#soundness-conditions) before adapting it to another model.
+
+:::
+
 The HeyVL encoding of the Riemann sum approximation is simple.
 Consider sampling the variable `x` from the *continuous* uniform distribution over $[0,1]$.
 
@@ -64,6 +71,7 @@ If the hare decides to move, it samples a distance uniformly at random from $[0,
 The tortoise always moves exactly one step.
 For initial positions $h\le t$, the following HeyVL code encodes a proof that $$\mathrm{wp}\llbracket\texttt{tortoise\_hare}\rrbracket(\texttt{count}) \leq 3.38 \cdot (t - h + 2)~,$$ where $h$ and $t$ are the initial positions of the hare and tortoise, respectively.
 Here, we chose the parameter $N = 8$ for the Riemann sum approximation.
+The [Tortoise-Hare Race case study](/docs/getting-started/zoo/tortoise-hare) provides the complete checked source and explains the approximation and the meaning of the final-count bound.
 
 ```heyvl
 @wp

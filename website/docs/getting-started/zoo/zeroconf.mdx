@@ -1,0 +1,116 @@
+---
+title: Zeroconf Address Allocation
+description: An upper bound on the probability of avoiding an undetected address collision, verified with recursive procedures.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import ExecutionDiagram from '@site/src/heyvl-examples/figures/ExecutionDiagram';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import source from '@site/../tests/case-studies/zeroconf.heyvl?raw';
+import download from '@site/../tests/case-studies/zeroconf.heyvl?download';
+
+export const references = {
+  rfc: {
+    ...sources.rfc3927,
+    locator: "§§1, 2.2",
+  },
+  prism: sources.prismZeroconf,
+  cost: {
+    ...sources.zeroconfCost2003,
+    locator: "§3.1, Figure 1",
+  },
+  timing: {
+    ...sources.digitalClocks2006,
+    locator: "§6.1",
+  },
+  heyvl: {
+    ...sources.heyvl2023,
+    href: "https://arxiv.org/pdf/2309.07781#page=26",
+    locator: "Table 2",
+  },
+};
+
+<ExampleMetadata exampleId="zeroconf" />
+
+IPv4 Zeroconf lets devices choose local network addresses without manual configuration or a DHCP server <Citation {...references.rfc} locator={undefined} />.
+A device sends *probes* to check whether another device already uses its chosen address.
+
+Lost probes or replies can leave a conflict unnoticed, while additional probes cost traffic and delay <Citation {...references.prism} />.
+For one address choice and a fixed probe limit, we verify an upper bound on the probability that the address is free or the collision is detected.
+Both outcomes count as `success`.
+
+## The Program
+
+The functions `probCollision()` and `probMessageLost()` give the collision probability $c$ and the probability $q$ that a probe fails to detect it.
+This can happen if the probe or its reply is lost.
+The function `maxTries()` gives the probe limit $M$.
+The helper `exp(q, k)` denotes $q^k$.
+
+<ExecutionDiagram kind="zeroconf">
+
+The procedure `zeroconf` first samples whether the address is occupied.
+For an occupied address, it calls `arp(maxTries())` to try to detect the collision.
+
+</ExecutionDiagram>
+
+<ExampleSources exampleId="zeroconf" sources={[{variantId: "main", code: source, downloadUrl: download, title: "Choosing an address and checking for a collision", start: "@wp\ncoproc zeroconf()", highlight: "3-4,9"}]} />
+
+Choosing another address after detecting a collision is outside this model.
+
+## Verification {#verification}
+
+Both coprocedures use the [`@wp` annotation](../../proof-rules/approximations.md#calculus-annotations) to verify upper bounds on the probability that `success` is true.
+
+### Upper Bound for the Address Choice {#avoiding-an-undetected-collision}
+
+Caesar verifies the upper bound
+
+$$
+\Pr(\mathtt{success})\le (1-c)+c\cdot\left(1-q^M\right).
+$$
+
+The term $1-c$ accounts for a free address, which immediately succeeds.
+The term $c\cdot(1-q^M)$ accounts for an occupied address, using the bound in `arp`'s specification for $M$ probes.
+
+### Bounding Collision Detection Recursively {#detecting-a-collision}
+
+The helper `arp(triesRemaining)` probes an occupied address, stopping when a collision is detected or no probes remain.
+
+<ExampleSources exampleId="zeroconf" sources={[{variantId: "main", code: source, downloadUrl: download, title: "Detecting a collision with the remaining probes", start: "@wp\ncoproc arp(", end: "\n@wp\ncoproc zeroconf()", highlight: "3-4,6-8,13"}]} />
+
+With $k$ independent probes left, the collision remains undetected if all fail, an event of probability $q^k$.
+With no probes remaining, `arp` returns `false`, matching the bound zero.
+For $k>0$, a probe detects the collision with probability $1-q$; otherwise, we use the recursive specification with one fewer probe:
+
+$$
+(1-q)+q\cdot\left(1-q^{k-1}\right)=1-q^k.
+$$
+
+Each recursive call decreases `triesRemaining`, so the procedure terminates after at most that many probes.
+Caesar uses the recursive definition of `exp` for $q^k$ and the axiom `exp_bounded` for $q^k\le1$.
+
+## See Also
+
+- [Bounded Retransmission Protocol](./bounded-retransmission.mdx) analyzes packet delivery with a retry limit.
+- [Geometric Loop](./geometric-loop.mdx) compares several ways to bound the effect of repeated independent trials.
+
+## References
+
+- <Citation {...references.rfc} variant="full" />
+
+- <Citation {...references.cost} variant="full">
+  Studies the tradeoff between reliable address allocation and expected cost.
+  </Citation>
+
+- <Citation {...references.timing} variant="full">
+  The [PRISM Zeroconf case study](https://www.prismmodelchecker.org/casestudies/zeroconf.php) describes the model with timing, message buffers, and address reconfiguration used in that analysis.
+  </Citation>
+
+- <Citation {...references.heyvl} variant="full">
+  Includes the recursive HeyVL case study used here.
+  </Citation>

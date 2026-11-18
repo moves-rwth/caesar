@@ -1,0 +1,77 @@
+---
+title: Finite Expected Runtime Does Not Compose
+description: A random generator and a countdown each have finite expected runtime, but their composition has infinite expected runtime.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import source from '@site/../tests/case-studies/ert-composition.heyvl?raw';
+import download from '@site/../tests/case-studies/ert-composition.heyvl?download';
+
+export const references = {
+  runtime: {
+    ...sources.expectedRuntime2016,
+    href: 'https://users.dcc.uchile.cl/~folmedo/pubs/2016.ESOP.pdf#page=2',
+  },
+};
+
+<ExampleMetadata exampleId="runtime-composition" />
+
+A *generator* starts with a counter of one, doubles it on every flip of a fair coin, and returns it after the first heads.
+A *countdown* decrements its input to zero.
+Each program has finite expected runtime for every fixed input.
+Running the countdown on the generator's output has infinite expected runtime <Citation {...references.runtime} locator={undefined} />.
+
+The counter is unbounded, and we count one tick per flip or decrement.
+With [`@ert`](../../proof-rules/approximations.md#calculus-annotations) and `post 0`, the specifications bound the expected tick count.
+
+## The Two Programs
+
+### The Generator
+
+Caesar verifies that the generator takes at most two coin flips on average.
+
+<ExampleSources exampleId="runtime-composition" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Generator Runtime Upper Bound',
+  start: '@ert\ncoproc generator(', end: '\n\n@ert\ncoproc countdown(', highlight: '1,3-4,8,10-12',
+}]} />
+
+### The Countdown
+
+The countdown takes one tick for each unit of its input, and Caesar verifies the upper bound.
+
+<ExampleSources exampleId="runtime-composition" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Countdown Runtime Upper Bound',
+  start: '@ert\ncoproc countdown(', end: '\n\n@ert\nproc composition(', highlight: '1,3-4,7,9-10',
+}]} />
+
+## Their Composition
+
+Caesar verifies that every natural number is a lower bound on the expected runtime of the composed program.
+The expected runtime is therefore infinite.
+
+<ExampleSources exampleId="runtime-composition" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Arbitrary Lower Bound on Expected Runtime',
+  start: '@ert\nproc composition(', highlight: '1,3-4,8,10-12,14,16-17',
+}]} />
+
+Stopping on flip $k$ has probability $2^{-k}$ and leaves $2^k$ decrements, so each possible stopping time contributes $2^{-k} \cdot 2^k = 1$ tick to the expected countdown cost.
+The generator's [omega invariant](../../proof-rules/omega-invariants.md) adds these contributions, and the countdown's supplies the cost when the generator stops.
+The target appears only in the proof, so every bound applies to the same program.
+
+The composition terminates almost surely because the first heads arrives with probability one and every resulting countdown is finite.
+
+## References
+
+- <Citation {...references.runtime} variant="full">
+  Introduces the failure of finite expected runtimes to compose and develops expected-runtime reasoning.
+  The [extended version](https://arxiv.org/pdf/1601.01001#page=17) gives a composition example in Example 6.
+  </Citation>

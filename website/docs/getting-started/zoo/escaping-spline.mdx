@@ -1,0 +1,110 @@
+---
+title: Escaping Spline
+description: Proving almost-sure termination with a state-dependent probability of reaching zero.
+displayed_sidebar: docsSidebar
+pagination_prev: getting-started/zoo
+pagination_next: null
+---
+
+import ExampleSources from '@site/src/heyvl-examples/ExampleSources';
+import ExampleMetadata from '@site/src/heyvl-examples/ExampleMetadata';
+import Citation from '@site/src/components/Citation';
+import {references as sources} from '@site/src/data/references';
+import source from '@site/../tests/loop-rules/ast2018/escaping_spline.heyvl?raw';
+import download from '@site/../tests/loop-rules/ast2018/escaping_spline.heyvl?download';
+import ExecutionDiagram from '@site/src/heyvl-examples/figures/ExecutionDiagram';
+
+export const references = {
+  termination: {
+    ...sources.almostSureTermination2018,
+    href: "https://arxiv.org/abs/1711.03588",
+    locator: "§5.4",
+  },
+};
+
+<ExampleMetadata exampleId="escaping-spline" />
+
+<ExecutionDiagram kind="escaping-spline">
+
+The *escaping spline* becomes less likely to stop after each unsuccessful attempt <Citation {...references.termination} href="https://arxiv.org/pdf/1711.03588#page=18" locator={undefined} />.
+While its position `x` is positive, each iteration jumps to zero with probability $1/(x+1)$ and otherwise increases `x` by one.
+Does the loop still terminate with probability one?
+
+</ExecutionDiagram>
+
+## The Program
+
+The procedure starts at the nonnegative integer `init_x` and repeats this step while `x` is positive.
+
+```heyvl title="Unannotated HeyVL program"
+proc escaping_spline(init_x: UInt) -> (x: UInt) {
+    x = init_x
+    while x > 0 {
+        var stop: Bool = flip(1 / (x + 1))
+        if stop {
+            x = 0
+        } else {
+            x = x + 1
+        }
+    }
+}
+```
+
+If `init_x` is zero, the loop performs no iterations.
+
+## Verification {#almost-sure-termination}
+
+With the [`@wp` annotation](../../heyvl/procs.md) and postexpectation `1`, the weakest preexpectation is the termination probability.
+Caesar verifies `pre 1`, establishing almost-sure termination (termination with probability one) for every `init_x`.
+
+The [`@ast` annotation](../../proof-rules/ast.md) uses variant `x`:
+
+<ExampleSources exampleId="escaping-spline" sources={[{
+  variantId: 'main', code: source, downloadUrl: download,
+  title: 'Almost-sure termination specification and @ast annotation',
+  start: '@wp\nproc escaping_spline(', end: '\n        var stop: Bool', highlight: '1,3-4,7-13',
+}]} />
+
+For the highlighted annotation, Caesar checks:
+
+- **Progress:** for positive integer `x`, the jump to zero decreases the variant by at least one with probability `1/(x+1)`.
+- **Expected variant:** one iteration does not increase its expected value:
+
+  $$
+  \frac{1}{x+1}\cdot 0+\frac{x}{x+1}\cdot(x+1)=x.
+  $$
+
+The functions `1/(v+1)` and `1` are positive and nonincreasing for $v\ge0$, with `1/(v+1) <= 1`.
+
+## Expected Number of Iterations {#stopping-probability-and-waiting-time}
+
+Almost-sure termination alone does not imply a finite expected number of iterations.
+For this loop, the separate calculation below shows that the expected number is infinite whenever the initial value is positive.
+
+Starting at $m>0$, let $T$ count the loop iterations.
+Executing more than $n$ iterations requires $n$ consecutive increments:
+
+$$
+\Pr(T>n)=\prod_{k=0}^{n-1}\frac{m+k}{m+k+1}=\frac{m}{m+n}
+\qquad(n\ge 0).
+$$
+
+Summing these probabilities gives the expected number of iterations:
+
+$$
+\mathbb{E}[T]=\sum_{n=0}^{\infty}\Pr(T>n)
+=\sum_{n=0}^{\infty}\frac{m}{m+n}=\infty.
+$$
+
+The harmonic series diverges, so the loop is not [positively almost-surely terminating](../../proof-rules/past.md) for $m>0$.
+
+## See Also
+
+- [One-Sided Random Walks](./one-sided-random-walks.mdx) starts with a constant probability of making progress.
+- [Two-Sided Random Walks](./two-sided-random-walks.mdx) studies other members of this family, with steps toward or away from a target and adversarial choices.
+
+## References
+
+- <Citation {...references.termination} variant="full">
+  Proves almost-sure termination of the escaping spline using a state-dependent probability of progress.
+  </Citation>

@@ -1,0 +1,78 @@
+.figure {
+  margin-block: 1.25rem;
+  padding: clamp(0.7rem, 2vw, 1rem);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-global-radius);
+  background: var(--ifm-background-surface-color);
+  font-size: 0.875rem;
+}
+
+.caption,
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.9rem;
+}
+
+.caption {
+  justify-content: space-between;
+  margin-bottom: 0.8rem;
+}
+
+.legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.legend [aria-hidden] {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 2px;
+}
+
+.figure :is(.iterations, .strip) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.figure .iterations > li {
+  margin: 0;
+}
+
+.figure .iterations {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.heading {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.strip {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.figure .strip > li {
+  margin: 0 1px;
+  padding-block: 0.2rem;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+.returned {
+  background: color-mix(in srgb, var(--ifm-color-primary) 16%, var(--ifm-background-surface-color));
+}
+
+.continuing {
+  background: var(--ifm-color-emphasis-200);
+}
+
+.strip > .returned + .continuing {
+  border-inline-start: 1px solid var(--ifm-color-emphasis-700);
+}
