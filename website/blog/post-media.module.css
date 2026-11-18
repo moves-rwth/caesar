@@ -1,0 +1,26 @@
+.codeFigure {
+  --figure-width: min(100cqi, 46rem);
+  inline-size: var(--figure-width);
+  margin-inline: calc((100% - var(--figure-width)) / 2);
+}
+
+.codeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: 2rem;
+  align-items: start;
+}
+
+.screenshot {
+  display: block;
+  max-inline-size: min(100%, var(--screenshot-width));
+  block-size: auto;
+  margin: 0 auto 1rem;
+}
+
+@container (min-width: 38rem) {
+  .screenshot {
+    float: right;
+    margin: 0 0 0 1em;
+  }
+}

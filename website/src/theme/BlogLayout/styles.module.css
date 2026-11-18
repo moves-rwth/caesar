@@ -1,0 +1,53 @@
+.layout {
+  display: flex;
+  flex: 1;
+}
+
+.content {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.posts {
+  container-type: inline-size;
+  min-inline-size: 0;
+}
+
+.posts > :is(article, :global(.pagination-nav)) {
+  max-inline-size: var(--caesar-docs-reading-width);
+  margin-inline: auto;
+}
+
+.posts :global(.katex-display) {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.posts :global(.markdown) :global(.button) {
+  white-space: normal;
+}
+
+.posts iframe[width='560'][height='315'] {
+  max-inline-size: 100%;
+  block-size: auto;
+  aspect-ratio: 16 / 9;
+}
+
+.sidebar {
+  display: none;
+}
+
+@media (min-width: 997px) {
+  .sidebar {
+    display: block;
+    flex: 0 0 var(--doc-sidebar-width, 300px);
+    background-color: var(--caesar-surface-doc-sidebar);
+    border-inline-end: 1px solid var(--ifm-toc-border-color);
+  }
+
+  .sidebar > aside {
+    max-inline-size: 100%;
+    block-size: 100%;
+    padding: 1rem 1.25rem;
+  }
+}

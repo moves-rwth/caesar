@@ -4,6 +4,8 @@ authors: phisch
 tags: [publications]
 ---
 
+import styles from './post-media.module.css';
+
 Our new paper [_"Highly Incremental: A Simple Programmatic Approach for Many Objectives"_](https://doi.org/10.1007/978-3-032-26204-2_29) by Philipp Schröer and Joost-Pieter Katoen presents a one-fits-all approach for quantitative objectives on probabilistic programs, applicable to verification with Caesar.
 
 The paper [will be presented](https://conf.researchr.org/details/fm-2026/fm-2026-research-paper/31/Highly-Incremental-A-Simple-Programmatic-Approach-for-Many-Objectives) at [_The 27th International Symposium on Formal Methods (FM 2026)_](https://conf.researchr.org/home/fm-2026) in Tokyo, Japan.
@@ -39,15 +41,8 @@ To capture that difference, we need higher moments: the _second moment_ $\mathbb
 
 Consider the three different runtime encodings in the following figure.
 
-<figure>
-<div
-  style={{
-    display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
-    gap: "2rem",
-    alignItems: "start",
-  }}
->
+<figure className={styles.codeFigure}>
+<div className={styles.codeGrid}>
 
   <div>
     <h4 style={{ textAlign: "center" }}>
@@ -121,15 +116,8 @@ This directly captures quantities such as the second moment, which is useful for
 
 The idea is shown in the following sketch:
 
-<figure>
-<div
-  style={{
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: "2rem",
-    alignItems: "start",
-  }}
->
+<figure className={styles.codeFigure}>
+<div className={styles.codeGrid}>
 
   <div>
     <h4 style={{ textAlign: "center" }}>
