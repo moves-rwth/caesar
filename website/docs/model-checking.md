@@ -87,6 +87,8 @@ Expected reward from Storm: ≈ 0.9999995232
 ```
 The result is approximate because it was computed via floating-point arithmetic.
 To get exact results at the expense of slower computation, you can add the `--storm-exact` flag.
+With Storm 2.0 and later, Caesar also displays solution bounds reported by Storm.
+When a state limit is used, these bounds describe the truncated model.
 
 You can also use the `--run-storm` flag with the [`verify` command](./caesar/README.md#subcommand-caesar-verify) or with [our LSP server](./caesar/vscode-and-lsp.md).
 Furthermore, you can set the `--no-verify` flag to only run model checking and not run Caesar's deductive verification.

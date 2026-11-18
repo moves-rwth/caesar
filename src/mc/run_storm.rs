@@ -208,39 +208,146 @@ fn parse_property_results(
         .collect()
 }
 
+fn parse_property_result<'a>(
+    output: &'a str,
+    property: &str,
+) -> Option<(&'a str, Option<&'a str>)> {
+    let header = format!("Model checking property \"{property}\"");
+    let mut lines = output.lines();
+    lines.find(|line| line.starts_with(&header))?;
+    // A missing result must not be replaced by a later property's result.
+    let result = lines
+        .take_while(|line| !line.starts_with("Model checking property "))
+        .find_map(|line| line.strip_prefix("Result (for initial states):"))?
+        .trim();
+
+    // Multiple initial states can produce a list of values or a range.
+    if result.starts_with(['{', '[']) {
+        return Some((result, None));
+    }
+
+    // The scalar comes first, followed by optional approximations and solution bounds.
+    let value = result.split_whitespace().next()?.trim_end_matches('.');
+    let bounds = result
+        .split_once("Solution bounds: [")
+        .and_then(|(_, bounds)| bounds.split_once(']'))
+        .map(|(bounds, _)| bounds);
+    Some((value, bounds))
+}
+
 fn find_property_result(
     options: &ModelCheckingOptions,
     output: &str,
     property: &str,
 ) -> StormValue {
-    const RESULT_TEXT: &str = "Result (for initial states):";
-
-    let search_string = format!("Model checking property \"{property}\"");
-    if let Some(start) = output.find(&search_string) {
-        if let Some(result_start) = output[start..].find(RESULT_TEXT) {
-            let result_start = start + result_start + RESULT_TEXT.len();
-            if let Some(result_end) = output[result_start..].find('\n') {
-                let mut result = &output[result_start..result_start + result_end];
-                if result.contains("(approx. ") {
-                    result = result.split("(approx. ").next().unwrap();
-                };
-                let mut result = result.trim().to_string();
-                if options.storm_exact {
-                    if let Ok(value) = result.parse::<BigRational>() {
-                        let pretty = PrettyRational::from(value);
-                        result = pretty.to_string()
-                    }
-                }
-                let operator = match (options.storm_exact, options.storm_state_limit) {
-                    (true, None) => "",
-                    (true, Some(_)) => "≥ ",
-                    (false, Some(_)) => "⪆ ",
-                    (false, None) => "≈ ",
-                };
-                let result = format!("{operator}{result}");
-                return StormValue::Value(result);
-            }
+    let Some((value, bounds)) = parse_property_result(output, property) else {
+        return StormValue::NotFound;
+    };
+    let mut value = value.to_string();
+    if options.storm_exact {
+        if let Ok(rational) = value.parse::<BigRational>() {
+            value = PrettyRational::from(rational).to_string();
         }
     }
-    StormValue::NotFound
+    let operator = match (options.storm_exact, options.storm_state_limit) {
+        (true, None) => "",
+        (true, Some(_)) => "≥ ",
+        (false, Some(_)) => "⪆ ",
+        (false, None) => "≈ ",
+    };
+    let mut result = format!("{operator}{value}");
+    if let Some(bounds) = bounds {
+        let label = if options.storm_state_limit.is_some() {
+            "bounds for truncated model"
+        } else {
+            "bounds"
+        };
+        result.push_str(&format!(" ({label}: [{bounds}])"));
+    }
+    StormValue::Value(result)
+}
+
+#[cfg(test)]
+mod test {
+    use super::{find_property_result, ModelCheckingOptions, StormValue};
+
+    #[test]
+    fn property_result_formats() {
+        for (result, exact, limited, expected) in [
+            ("0.9999995232", false, false, "≈ 0.9999995232"),
+            (
+                "0.9999995232. Exact solution.",
+                false,
+                false,
+                "≈ 0.9999995232",
+            ),
+            (
+                "10/3 (approx. 3.333333333)",
+                true,
+                false,
+                "3.3\u{305} (10/3)",
+            ),
+            (
+                "10/3 (approx. 3.333333333). Exact solution.",
+                true,
+                false,
+                "3.3\u{305} (10/3)",
+            ),
+            (
+                "3.333333531. Solution bounds: [0, ?].",
+                false,
+                false,
+                "≈ 3.333333531 (bounds: [0, ?])",
+            ),
+            (
+                "10/3 (approx. 3.333333333). Solution bounds: [10/3, ?] (approx. [3.333333333, ?]).",
+                true,
+                true,
+                "≥ 3.3\u{305} (10/3) (bounds for truncated model: [10/3, ?])",
+            ),
+            (
+                "{2. Exact solution., 1. Exact solution.}",
+                false,
+                false,
+                "≈ {2. Exact solution., 1. Exact solution.}",
+            ),
+            (
+                "{2 (approx. 2). Exact solution., 1 (approx. 1). Exact solution.}",
+                true,
+                false,
+                "{2 (approx. 2). Exact solution., 1 (approx. 1). Exact solution.}",
+            ),
+            (
+                "[0, 15] (approx. [0, 15]) (range). Exact solution.",
+                true,
+                false,
+                "[0, 15] (approx. [0, 15]) (range). Exact solution.",
+            ),
+        ] {
+            let output = format!(
+                "Model checking property \"reward\": Rmin=? [C] ...\n\
+                 Result (for initial states): {result}"
+            );
+            let options = ModelCheckingOptions {
+                storm_exact: exact,
+                storm_state_limit: limited.then_some(100),
+                ..Default::default()
+            };
+            let StormValue::Value(value) = find_property_result(&options, &output, "reward") else {
+                panic!("Missing result for {result}");
+            };
+            assert_eq!(value, expected);
+        }
+    }
+
+    #[test]
+    fn missing_property_result() {
+        let output = "Model checking property \"reward\": Rmin=? [C] ...\n\
+            Model checking property \"later\": P=? [F \"target\"] ...\n\
+            Result (for initial states): 1. Exact solution.\n";
+        assert!(matches!(
+            find_property_result(&ModelCheckingOptions::default(), output, "reward"),
+            StormValue::NotFound
+        ));
+    }
 }
