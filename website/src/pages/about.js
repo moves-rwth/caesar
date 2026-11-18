@@ -8,8 +8,8 @@ import styles from './about.module.css';
 
 export default function About() {
   return (
-    <Layout title="About Caesar" description="About Caesar">
-      <main className={`container padding-top--md padding-bottom--lg ${styles.about} ${styles.layout}`}>
+    <Layout title="About Caesar" description="About Caesar" wrapperClassName={styles.about}>
+      <main className={`container padding-top--md padding-bottom--lg ${styles.layout}`}>
         <article className={styles.article}>
           <TOCCollapsible className={`theme-doc-toc-mobile ${styles.mobileContents}`} toc={toc} />
           <div className="theme-doc-markdown markdown">

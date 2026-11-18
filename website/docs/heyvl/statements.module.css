@@ -47,7 +47,7 @@
 }
 
 .syntax {
-  --syntax-background: #e6f5ec;
+  --syntax-background: #f5f7f5;
   --syntax-border: #a7d2ba;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.9fr);
@@ -61,7 +61,7 @@
 }
 
 [data-theme='dark'] .syntax {
-  --syntax-background: #143c2e;
+  --syntax-background: #282c2a;
   --syntax-border: #327859;
 }
 

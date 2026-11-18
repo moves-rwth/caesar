@@ -22,6 +22,8 @@
 
   --caesar-surface-tint: #e9f1ec;
   --caesar-surface-navigation: #f2f6f3;
+  --caesar-surface-reading: #fdfcfb;
+  --caesar-surface-doc-sidebar: #f7f8f6;
   --caesar-surface-active: #e9f1ec;
   --caesar-surface-hover: #f2f6f3;
   --caesar-surface-footer: #233c33;
@@ -58,8 +60,15 @@
 
   --caesar-surface-tint: #1b2722;
   --caesar-surface-navigation: #202a25;
+  --caesar-surface-reading: #222323;
+  --caesar-surface-doc-sidebar: #282a29;
   --caesar-surface-active: #2c4036;
   --caesar-surface-hover: #24362d;
+}
+
+.plugin-docs .theme-layout-main,
+.plugin-blog .theme-layout-main {
+  background-color: var(--caesar-surface-reading);
 }
 
 .footer--dark {

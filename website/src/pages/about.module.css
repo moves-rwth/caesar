@@ -1,3 +1,7 @@
+.about {
+  background-color: var(--caesar-surface-reading);
+}
+
 .article {
   min-width: 0;
 }

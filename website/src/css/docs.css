@@ -4,6 +4,10 @@
   --caesar-docs-code-width: var(--caesar-docs-reading-width);
 }
 
+.theme-doc-sidebar-container {
+  background-color: var(--caesar-surface-doc-sidebar);
+}
+
 article:has(> .theme-doc-markdown) {
   container-type: inline-size;
 }
