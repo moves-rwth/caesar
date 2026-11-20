@@ -30,6 +30,7 @@ struct ExprGen {
 
 impl ExprGen {
     fn new() -> Self {
+        let builder = ExprBuilder::new(Span::dummy_span());
         let bool_names: Vec<Ident> = ["a", "b", "c", "d"]
             .iter()
             .map(|n| Ident::with_dummy_span(Symbol::intern(n)))
@@ -40,11 +41,11 @@ impl ExprGen {
             .collect();
         let bool_exprs = bool_names
             .iter()
-            .map(|name| ident_to_expr(*name, TyKind::Bool))
+            .map(|name| builder.var_ty(*name, TyKind::Bool))
             .collect();
         let eureal_exprs = eureal_names
             .iter()
-            .map(|name| ident_to_expr(*name, TyKind::EUReal))
+            .map(|name| builder.var_ty(*name, TyKind::EUReal))
             .collect();
         ExprGen {
             bool_names,
@@ -184,14 +185,6 @@ fn ite_strategy(
 ) -> impl Strategy<Value = Expr> {
     (cond, element.clone(), element).prop_map(move |(cond, lhs, rhs)| {
         ExprBuilder::new(Span::dummy_span()).ite(Some(ty.clone()), cond, lhs, rhs)
-    })
-}
-
-fn ident_to_expr(ident: Ident, ty: TyKind) -> Expr {
-    Shared::new(ExprData {
-        kind: ExprKind::Var(ident),
-        ty: Some(ty),
-        span: Span::dummy_span(),
     })
 }
 
