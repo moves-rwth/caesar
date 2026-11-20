@@ -7,8 +7,9 @@ use crate::{
     ast::{
         util::VariableCollector,
         visit::{walk_stmt, VisitorMut},
-        DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprData, ExprKind, Ident, Label, Param,
-        ProcSpec, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind, Symbol, VarDecl, VarKind,
+        DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprBuilder, ExprData, ExprKind, Ident,
+        Label, Param, ProcSpec, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind, Symbol,
+        VarDecl, VarKind,
     },
     slicing::{wrap_with_error_message, wrap_with_success_message},
     tyctx::TyCtx,
@@ -201,9 +202,8 @@ impl<'tcx> SpecCall<'tcx> {
 
                 // finally, push all compares
                 {
-                    let lhs_exprs = lhses
-                        .iter()
-                        .map(|ident| ident_to_expr(self.tcx, span, *ident));
+                    let builder = ExprBuilder::new(span);
+                    let lhs_exprs = lhses.iter().map(|ident| builder.var(*ident, self.tcx));
                     let output_subst = proc.outputs.node.iter().zip(lhs_exprs);
                     let substs: Vec<(&Param, Expr)> =
                         stable_inputs.into_iter().chain(output_subst).collect();
@@ -241,20 +241,8 @@ impl<'tcx> SpecCall<'tcx> {
         });
         self.tcx.declare(DeclKind::VarDecl(decl.clone()));
         let stmt = Spanned::new(span, StmtKind::Var(decl, Some(value)));
-        (stmt, ident_to_expr(self.tcx, span, name))
+        (stmt, ExprBuilder::new(span).var(name, self.tcx))
     }
-}
-
-fn ident_to_expr(tcx: &TyCtx, span: Span, ident: Ident) -> Expr {
-    let ty = match tcx.get(ident).unwrap().as_ref() {
-        DeclKind::VarDecl(var_ref) => var_ref.borrow().ty.clone(),
-        _ => todo!(),
-    };
-    Shared::new(ExprData {
-        kind: ExprKind::Var(ident),
-        ty: Some(ty),
-        span,
-    })
 }
 
 fn subst<'a>(expr: Expr, iter: impl IntoIterator<Item = (&'a Param, Expr)>) -> Expr {

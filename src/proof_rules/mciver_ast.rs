@@ -289,10 +289,10 @@ impl AstEncoding<'_> {
         let builder = ExprBuilder::new(span);
 
         let a_ident = self.tcx.clone_var(self.free_var, span, VarKind::Input);
-        let a_expr = ident_to_expr(self.tcx, span, a_ident);
+        let a_expr = builder.var(a_ident, self.tcx);
 
         let b_ident = self.tcx.clone_var(self.free_var, span, VarKind::Input);
-        let b_expr = ident_to_expr(self.tcx, span, b_ident);
+        let b_expr = builder.var(b_ident, self.tcx);
 
         let mut function_variables = VariableCollector::new();
         for expr in [self.invariant, self.prob, self.decrease] {

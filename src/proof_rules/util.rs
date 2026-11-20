@@ -8,9 +8,9 @@ use num::{BigInt, BigRational, Zero};
 use crate::{
     ast::{
         util::{is_bot_lit, is_top_lit, remove_casts},
-        DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprBuilder, ExprData, ExprKind, FileId,
-        Ident, Label, LitKind, Param, ProcDecl, Shared, Span, SpanVariant, Spanned, Stmt, StmtKind,
-        Symbol, TyKind, VarDecl, VarKind,
+        DeclKind, DeclRef, Diagnostic, Direction, Expr, ExprBuilder, ExprKind, FileId, Ident,
+        Label, LitKind, Param, ProcDecl, Span, SpanVariant, Spanned, Stmt, StmtKind, Symbol,
+        TyKind, VarDecl, VarKind,
     },
     opt::constfold::is_one_lit,
     tyctx::TyCtx,
@@ -223,9 +223,10 @@ pub fn encode_initial_state(
     variables: &[Ident],
 ) -> (Vec<Ident>, Vec<Stmt>) {
     let inputs = get_init_idents(tcx, span, variables);
+    let builder = ExprBuilder::new(span);
     let values = inputs
         .iter()
-        .map(|ident| ident_to_expr(tcx, span, *ident))
+        .map(|ident| builder.var(*ident, tcx))
         .collect();
     let assignments = multiple_assign(span, variables.to_vec(), values);
     (inputs, assignments)
@@ -242,19 +243,6 @@ pub fn multiple_assign(span: Span, lhses: Vec<Ident>, rhses: Vec<Expr>) -> Vec<S
     buf
 }
 
-/// Construct an variable [`Expr`] from the given [`Ident`]
-pub fn ident_to_expr(tcx: &TyCtx, span: Span, ident: Ident) -> Expr {
-    let ty = match tcx.get(ident).unwrap().as_ref() {
-        DeclKind::VarDecl(var_ref) => var_ref.borrow().ty.clone(),
-        _ => panic!(),
-    };
-    Shared::new(ExprData {
-        kind: ExprKind::Var(ident),
-        ty: Some(ty),
-        span,
-    })
-}
-
 /// Construct an expression from the given expression
 /// in which all variables given in the variables input are replaced by init versions of the corresponding variable
 pub fn to_init_expr(tcx: &TyCtx, span: Span, expr: &Expr, variables: &[Ident]) -> Expr {
@@ -263,7 +251,7 @@ pub fn to_init_expr(tcx: &TyCtx, span: Span, expr: &Expr, variables: &[Ident]) -
     // Construct "init_{}" versions of variables in the invariant parameters and transform them into expressions
     let init_expressions: Vec<Expr> = get_init_idents(tcx, span, variables)
         .iter()
-        .map(|ident| ident_to_expr(tcx, span, *ident))
+        .map(|ident| builder.var(*ident, tcx))
         .collect();
 
     // To substitute the variables with init versions, create a mapping by zipping the two vectors
