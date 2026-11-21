@@ -1,5 +1,6 @@
 //! (CLI) command and option declarations to run Caesar with.
 
+pub mod dafny;
 pub mod model_check;
 pub mod options;
 pub mod refinement;
@@ -19,6 +20,7 @@ use clap::{crate_description, Args, CommandFactory, Parser, Subcommand};
 use crate::{
     ast::FileId,
     driver::commands::{
+        dafny::{run_dafny_command, DafnyCommand},
         model_check::{run_model_checking_command, ModelCheckCommand},
         options::{DebugOptions, InputOptions},
         refinement::run_verify_entailment_command,
@@ -62,6 +64,7 @@ impl CaesarCli {
         match options.command {
             CaesarCommand::Verify(options) => run_verify_command(options).await,
             CaesarCommand::Entailment(options) => run_verify_entailment_command(options).await,
+            CaesarCommand::Dafny(options) => run_dafny_command(options),
             CaesarCommand::Mc(options) => run_model_checking_command(options),
             CaesarCommand::Lsp(options) => run_lsp_command(options).await,
             CaesarCommand::ShellCompletions(options) => run_shell_completions_command(options),
@@ -91,6 +94,9 @@ pub enum CaesarCommand {
     Verify(VerifyCommand),
     /// Check refinement via entailment between `coproc`/`proc` pairs.
     Entailment(VerifyCommand),
+    /// Export HeyVL files to Dafny and optionally run `dafny verify`.
+    #[clap(visible_alias = "to-dafny")]
+    Dafny(DafnyCommand),
     /// Model checking via JANI, can run Storm directly.
     #[clap(visible_alias = "to-jani")]
     Mc(ModelCheckCommand),
@@ -109,6 +115,7 @@ impl CaesarCommand {
         match &self {
             CaesarCommand::Verify(verify_options) => Some(&verify_options.debug_options),
             CaesarCommand::Entailment(verify_options) => Some(&verify_options.debug_options),
+            CaesarCommand::Dafny(dafny_options) => Some(&dafny_options.debug_options),
             CaesarCommand::Lsp(verify_options) => Some(&verify_options.debug_options),
             CaesarCommand::Mc(mc_options) => Some(&mc_options.debug_options),
             CaesarCommand::ShellCompletions(_) => None,

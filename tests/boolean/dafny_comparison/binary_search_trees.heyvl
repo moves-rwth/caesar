@@ -1,0 +1,181 @@
+// RUN: @caesar @file
+// Curated from an external Caesar/Dafny comparison corpus.
+// This file groups small operations over a symbolic binary-search tree domain.
+
+domain Tree {
+    func nil(): Tree
+    func node(left: Tree, value: Int, right: Tree): Tree
+
+    func left_child(tree: Tree): Tree
+    axiom left_child_node forall left: Tree, value: Int, right: Tree.
+        left_child(node(left, value, right)) == left
+
+    func root_value(tree: Tree): Int
+    axiom root_value_node forall left: Tree, value: Int, right: Tree.
+        root_value(node(left, value, right)) == value
+
+    func right_child(tree: Tree): Tree
+    axiom right_child_node forall left: Tree, value: Int, right: Tree.
+        right_child(node(left, value, right)) == right
+
+    func is_nil(tree: Tree): Bool
+    axiom is_nil_def forall tree: Tree.
+        is_nil(tree) == (tree == nil())
+
+    axiom node_not_nil forall left: Tree, value: Int, right: Tree.
+        node(left, value, right) != nil()
+
+    func contains(tree: Tree, value: Int): Bool =
+        ite(
+            is_nil(tree),
+            false,
+            (value == root_value(tree)) ||
+            contains(left_child(tree), value) ||
+            contains(right_child(tree), value)
+        )
+
+    func within(tree: Tree, has_lower: Bool, lower: Int, has_upper: Bool, upper: Int): Bool =
+        ite(
+            is_nil(tree),
+            true,
+            (!has_lower || (lower < root_value(tree))) &&
+            (!has_upper || (root_value(tree) < upper)) &&
+            within(left_child(tree), has_lower, lower, true, root_value(tree)) &&
+            within(right_child(tree), true, root_value(tree), has_upper, upper)
+        )
+
+    func is_bst(tree: Tree): Bool =
+        ite(
+            is_nil(tree),
+            true,
+            is_bst(left_child(tree)) &&
+            is_bst(right_child(tree)) &&
+            (forall value: Int. contains(left_child(tree), value) ==> (value < root_value(tree))) &&
+            (forall value: Int. contains(right_child(tree), value) ==> (root_value(tree) < value))
+        )
+
+    func structural_bst(tree: Tree): Bool =
+        within(tree, false, 0, false, 0)
+
+    func min_value(tree: Tree): Int =
+        ite(is_nil(left_child(tree)), root_value(tree), min_value(left_child(tree)))
+
+    func max_value(tree: Tree): Int =
+        ite(is_nil(right_child(tree)), root_value(tree), max_value(right_child(tree)))
+
+}
+
+proc get_min(tree: Tree) -> (result: Int)
+    pre ?(is_bst(tree) && !is_nil(tree))
+    post ?(
+        (result == min_value(tree)) &&
+        contains(tree, result) &&
+        (forall value: Int.
+            (contains(tree, value) && (value != result)) ==> (result < value))
+    )
+{
+    var left: Tree = left_child(tree)
+    var root: Int = root_value(tree)
+    if is_nil(left) {
+        result = root
+    } else {
+        result = get_min(left)
+    }
+}
+
+proc contains_value(tree: Tree, value: Int) -> (present: Bool)
+    post ?(present == contains(tree, value))
+{
+    if is_nil(tree) {
+        present = false
+    } else {
+        var root: Int = root_value(tree)
+        if value == root {
+            present = true
+        } else {
+            var in_left: Bool = contains_value(left_child(tree), value)
+            if in_left {
+                present = true
+            } else {
+                present = contains_value(right_child(tree), value)
+            }
+        }
+    }
+}
+
+proc insert_in_range(
+    tree: Tree,
+    value: Int,
+    has_lower: Bool,
+    lower: Int,
+    has_upper: Bool,
+    upper: Int
+) -> (result: Tree)
+    pre ?(within(tree, has_lower, lower, has_upper, upper))
+    pre ?((!has_lower || (lower < value)) && (!has_upper || (value < upper)))
+    post ?(within(result, has_lower, lower, has_upper, upper))
+    post ?(contains(result, value))
+    post ?(forall witness: Int. contains(tree, witness) ==> contains(result, witness))
+{
+    if is_nil(tree) {
+        result = node(nil(), value, nil())
+    } else {
+        var left: Tree = left_child(tree)
+        var root: Int = root_value(tree)
+        var right: Tree = right_child(tree)
+
+        if value < root {
+            var new_left: Tree = insert_in_range(left, value, has_lower, lower, true, root)
+            result = node(new_left, root, right)
+        } else {
+            if root < value {
+                var new_right: Tree = insert_in_range(right, value, true, root, has_upper, upper)
+                result = node(left, root, new_right)
+            } else {
+                result = tree
+            }
+        }
+    }
+}
+
+proc insert_value(tree: Tree, value: Int) -> (result: Tree)
+    pre ?(structural_bst(tree))
+    post ?(structural_bst(result))
+    post ?(contains(result, value))
+    post ?(forall witness: Int. contains(tree, witness) ==> contains(result, witness))
+{
+    result = insert_in_range(tree, value, false, 0, false, 0)
+}
+
+proc get_max(tree: Tree) -> (result: Int)
+    pre ?(is_bst(tree) && !is_nil(tree))
+    post ?(
+        (result == max_value(tree)) &&
+        contains(tree, result) &&
+        (forall value: Int.
+            (contains(tree, value) && (value != result)) ==> (value < result))
+    )
+{
+    var right: Tree = right_child(tree)
+    var root: Int = root_value(tree)
+    if is_nil(right) {
+        result = root
+    } else {
+        result = get_max(right)
+    }
+}
+
+proc insert_example() -> ()
+{
+    var tree: Tree = nil()
+    tree = insert_value(tree, 4)
+    tree = insert_value(tree, 2)
+    tree = insert_value(tree, 8)
+    tree = insert_value(tree, 6)
+
+    assert ?(structural_bst(tree))
+    assert ?(contains(tree, 2))
+    assert ?(contains(tree, 4))
+    assert ?(contains(tree, 6))
+    assert ?(contains(tree, 8))
+}

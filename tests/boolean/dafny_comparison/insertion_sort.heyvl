@@ -1,0 +1,80 @@
+// RUN: @caesar verify --function-encoding fuel-param-computation --max-fuel 8 @file
+// Invented for the Caesar/Dafny comparison corpus.
+// This file keeps a small insertion-sort development over a symbolic cons-list model.
+
+domain List {
+    func nil(): List
+    func cons(head: Int, tail: List): List
+
+    func head(list: List): Int
+    axiom head_cons forall value: Int, rest: List.
+        head(cons(value, rest)) == value
+
+    func tail(list: List): List
+    axiom tail_cons forall value: Int, rest: List.
+        tail(cons(value, rest)) == rest
+
+    func is_nil(list: List): Bool
+    axiom is_nil_def forall list: List.
+        is_nil(list) == (list == nil())
+
+    axiom cons_not_nil forall value: Int, rest: List.
+        cons(value, rest) != nil()
+
+    func insert_sorted(value: Int, list: List): List =
+        ite(
+            is_nil(list),
+            cons(value, nil()),
+            ite(
+                value <= head(list),
+                cons(value, list),
+                cons(head(list), insert_sorted(value, tail(list)))
+            )
+        )
+
+    func insertion_sorted(list: List): List =
+        ite(
+            is_nil(list),
+            nil(),
+            insert_sorted(head(list), insertion_sorted(tail(list)))
+        )
+}
+
+proc insert_sorted_value(value: Int, list: List) -> (result: List)
+    post ?(result == insert_sorted(value, list))
+{
+    if is_nil(list) {
+        result = cons(value, nil())
+    } else {
+        var first: Int = head(list)
+        var rest: List = tail(list)
+        if value <= first {
+            result = cons(value, list)
+        } else {
+            var inserted_rest: List = insert_sorted_value(value, rest)
+            result = cons(first, inserted_rest)
+        }
+    }
+}
+
+proc insertion_sort(list: List) -> (result: List)
+    post ?(result == insertion_sorted(list))
+{
+    if is_nil(list) {
+        result = nil()
+    } else {
+        var first: Int = head(list)
+        var rest: List = tail(list)
+        var sorted_rest: List = insertion_sort(rest)
+        result = insert_sorted_value(first, sorted_rest)
+    }
+}
+
+proc insertion_sort_example() -> ()
+{
+    var input: List =
+        cons(3, cons(2, cons(5, cons(1, cons(4, nil())))))
+
+    var result: List = insertion_sort(input)
+    assert ?(result == cons(1, cons(2, cons(3, cons(4, cons(5, nil()))))))
+}

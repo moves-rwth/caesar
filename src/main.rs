@@ -8,6 +8,7 @@ use std::process::ExitCode;
 use crate::driver::commands::CaesarCli;
 
 mod ast;
+mod dafny;
 mod depgraph;
 mod driver;
 mod front;

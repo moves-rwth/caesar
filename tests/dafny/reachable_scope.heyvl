@@ -1,0 +1,22 @@
+// RUN: bash -c 'dir=$(mktemp -d); @caesar dafny --filter "root$" @file --dafny-dir "$dir"; out="$dir/tests/dafny/reachable_scope.dfy"; grep -q "method helper" "$out" && grep -q "method root" "$out" && ! grep -q "method unused" "$out"'
+
+proc helper(x: UInt) -> (y: UInt)
+    pre ?(true)
+    post ?(y == x)
+{
+    y = x
+}
+
+proc root(x: UInt) -> (y: UInt)
+    pre ?(true)
+    post ?(y == x)
+{
+    y = helper(x)
+}
+
+proc unused(x: UInt) -> (y: UInt)
+    pre ?(true)
+    post ?(y == x)
+{
+    y = x
+}
