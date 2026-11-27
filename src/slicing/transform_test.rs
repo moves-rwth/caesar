@@ -14,8 +14,7 @@ use super::{
 use crate::{
     ast::{
         visit::VisitorMut, BinOpKind, Block, DeclKind, DeclRef, Direction, Expr, ExprBuilder,
-        ExprData, ExprKind, Ident, Shared, Span, Spanned, Stmt, StmtKind, Symbol, TyKind, UnOpKind,
-        VarDecl, VarKind,
+        Ident, Span, Spanned, Stmt, StmtKind, Symbol, TyKind, UnOpKind, VarDecl, VarKind,
     },
     resource_limits::LimitsRef,
     smt::{
@@ -79,6 +78,7 @@ struct TransformTestCtx {
 impl TransformTestCtx {
     fn new() -> Self {
         let tcx = TyCtx::new(TyKind::EUReal);
+        let builder = ExprBuilder::new(Span::dummy_span());
         let names: Vec<Ident> = ["post", "exp1", "exp2"]
             .iter()
             .map(|&s| Ident::with_dummy_span(Symbol::intern(s)))
@@ -94,9 +94,9 @@ impl TransformTestCtx {
         }
         Self {
             tcx,
-            post: ident_to_expr(names[0], TyKind::EUReal),
-            exp1: ident_to_expr(names[1], TyKind::EUReal),
-            exp2: ident_to_expr(names[2], TyKind::EUReal),
+            post: builder.var_ty(names[0], TyKind::EUReal),
+            exp1: builder.var_ty(names[1], TyKind::EUReal),
+            exp2: builder.var_ty(names[2], TyKind::EUReal),
         }
     }
 }
@@ -241,20 +241,13 @@ fn transform_stmt(
 }
 
 fn slice_variable_to_expr(slice_stmt: &SliceStmt) -> Expr {
-    ident_to_expr(slice_stmt.ident, TyKind::Bool)
+    let builder = ExprBuilder::new(Span::dummy_span());
+    builder.var_ty(slice_stmt.ident, TyKind::Bool)
 }
 
 fn negate(expr: Expr) -> Expr {
     let builder = ExprBuilder::new(Span::dummy_span());
     builder.unary(UnOpKind::Not, Some(TyKind::Bool), expr)
-}
-
-fn ident_to_expr(ident: Ident, ty: TyKind) -> Expr {
-    Shared::new(ExprData {
-        kind: ExprKind::Var(ident),
-        ty: Some(ty),
-        span: Span::dummy_span(),
-    })
 }
 
 fn hey_const(expr: &Expr, tcx: &TyCtx) -> Vec<Stmt> {

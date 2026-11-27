@@ -382,7 +382,7 @@ impl<'a> OstEncoding<'a> {
             subinvariant.name(),
             self.call_inputs
                 .iter()
-                .map(|ident| ident_to_expr(self.tcx, span, *ident)),
+                .map(|ident| builder.var(*ident, self.tcx)),
             self.tcx,
         );
         Spanned::new(
